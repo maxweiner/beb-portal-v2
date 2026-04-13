@@ -7,13 +7,70 @@ import type { Store } from '@/types'
 
 interface Employee { id: string; store_id: string; name: string; phone: string; email: string }
 
+// Load Google Maps script once
+function useGoogleMaps() {
+  const [loaded, setLoaded] = useState(false)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if ((window as any).google?.maps?.places) { setLoaded(true); return }
+    const existing = document.querySelector('script[src*="maps.googleapis.com"]')
+    if (existing) { existing.addEventListener('load', () => setLoaded(true)); return }
+    const script = document.createElement('script')
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}&libraries=places`
+    script.async = true
+    script.onload = () => setLoaded(true)
+    document.head.appendChild(script)
+  }, [])
+  return loaded
+}
+
+// Address autocomplete input component
+function AddressAutocomplete({ onSelect }: {
+  onSelect: (data: { address: string; city: string; state: string; zip: string; lat: number; lng: number }) => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const mapsLoaded = useGoogleMaps()
+
+  useEffect(() => {
+    if (!mapsLoaded || !inputRef.current) return
+    const autocomplete = new (window as any).google.maps.places.Autocomplete(inputRef.current, {
+      types: ['address'],
+      componentRestrictions: { country: 'us' },
+      fields: ['address_components', 'formatted_address', 'geometry'],
+    })
+    autocomplete.addListener('place_changed', () => {
+      const place = autocomplete.getPlace()
+      if (!place.address_components) return
+      const get = (type: string) => place.address_components.find((c: any) => c.types.includes(type))?.long_name || ''
+      const getShort = (type: string) => place.address_components.find((c: any) => c.types.includes(type))?.short_name || ''
+      const streetNum = get('street_number')
+      const streetName = get('route')
+      onSelect({
+        address: `${streetNum} ${streetName}`.trim(),
+        city: get('locality') || get('sublocality') || get('neighborhood'),
+        state: getShort('administrative_area_level_1'),
+        zip: get('postal_code'),
+        lat: place.geometry?.location?.lat() || 0,
+        lng: place.geometry?.location?.lng() || 0,
+      })
+    })
+  }, [mapsLoaded, onSelect])
+
+  return (
+    <input ref={inputRef} type="text" placeholder="Start typing store address…" />
+  )
+}
+
 export default function Stores() {
   const { stores, events, reload } = useApp()
   const [selected, setSelected] = useState<Store | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
-  const [newStore, setNewStore] = useState({ name: '', city: '', state: '' })
+  const [newStore, setNewStore] = useState({
+    name: '', address: '', city: '', state: '', zip: '', lat: 0, lng: 0
+  })
+  const [addressPicked, setAddressPicked] = useState(false)
 
   const filtered = stores.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -21,14 +78,24 @@ export default function Stores() {
     (s.state || '').toLowerCase().includes(search.toLowerCase())
   )
 
+  const handleAddressSelect = (data: any) => {
+    setNewStore(p => ({ ...p, ...data }))
+    setAddressPicked(true)
+  }
+
   const createStore = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newStore.name) return
+    if (!newStore.name) { alert('Store name is required.'); return }
+    if (!addressPicked || !newStore.address || !newStore.city || !newStore.state || !newStore.zip) {
+      alert('Please select a complete address from the autocomplete dropdown.')
+      return
+    }
     setSaving(true)
     await supabase.from('stores').insert(newStore)
     setSaving(false)
     setShowForm(false)
-    setNewStore({ name: '', city: '', state: '' })
+    setNewStore({ name: '', address: '', city: '', state: '', zip: '', lat: 0, lng: 0 })
+    setAddressPicked(false)
     reload()
   }
 
@@ -57,23 +124,27 @@ export default function Stores() {
         <div className="card mb-5" style={{ border: '2px solid var(--green3)', marginBottom: 20 }}>
           <div className="card-title">New Jewelry Store</div>
           <form onSubmit={createStore}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 80px', gap: 12, marginBottom: 16 }}>
-              <div className="field">
-                <label className="fl">Store Name</label>
-                <input value={newStore.name} onChange={e => setNewStore(p => ({ ...p, name: e.target.value }))} placeholder="Premier Fine Jewelry" required />
-              </div>
-              <div className="field">
-                <label className="fl">City</label>
-                <input value={newStore.city} onChange={e => setNewStore(p => ({ ...p, city: e.target.value }))} placeholder="Atlanta" />
-              </div>
-              <div className="field">
-                <label className="fl">State</label>
-                <input value={newStore.state} onChange={e => setNewStore(p => ({ ...p, state: e.target.value.toUpperCase() }))} placeholder="GA" maxLength={2} />
-              </div>
+            <div className="field">
+              <label className="fl">Store Name *</label>
+              <input value={newStore.name} onChange={e => setNewStore(p => ({ ...p, name: e.target.value }))}
+                placeholder="Premier Fine Jewelry" required />
             </div>
+            <div className="field">
+              <label className="fl">Store Address *</label>
+              <AddressAutocomplete onSelect={handleAddressSelect} />
+            </div>
+            {addressPicked && (
+              <div className="notice notice-jade" style={{ marginBottom: 14 }}>
+                ✓ {newStore.address}, {newStore.city}, {newStore.state} {newStore.zip}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 8 }}>
-              <button type="submit" className="btn-primary btn-sm" disabled={saving}>{saving ? 'Adding…' : 'Add Store'}</button>
-              <button type="button" className="btn-outline btn-sm" onClick={() => setShowForm(false)}>Cancel</button>
+              <button type="submit" className="btn-primary btn-sm" disabled={saving}>
+                {saving ? 'Adding…' : 'Add Store'}
+              </button>
+              <button type="button" className="btn-outline btn-sm" onClick={() => { setShowForm(false); setAddressPicked(false) }}>
+                Cancel
+              </button>
             </div>
           </form>
         </div>
@@ -97,21 +168,14 @@ export default function Stores() {
               {filtered.map(s => {
                 const ec = events.filter(e => e.store_id === s.id).length
                 return (
-                  <tr key={s.id} onClick={() => setSelected(s)}
-                    style={{ cursor: 'pointer' }}
+                  <tr key={s.id} onClick={() => setSelected(s)} style={{ cursor: 'pointer' }}
                     onMouseOver={e => (e.currentTarget as HTMLElement).style.background = 'var(--cream2)'}
                     onMouseOut={e => (e.currentTarget as HTMLElement).style.background = ''}>
-                    <td>
-                      <span style={{ color: 'var(--green-dark)', fontWeight: 700, fontSize: 14 }}>
-                        ◆ {s.name}
-                      </span>
-                    </td>
+                    <td><span style={{ color: 'var(--green-dark)', fontWeight: 700 }}>◆ {s.name}</span></td>
                     <td>{s.city}{s.city && s.state ? ', ' : ''}{s.state}</td>
                     <td>{ec}</td>
                     <td onClick={e => e.stopPropagation()}>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button className="btn-danger btn-xs" onClick={() => deleteStore(s.id)}>Delete</button>
-                      </div>
+                      <button className="btn-danger btn-xs" onClick={() => deleteStore(s.id)}>Delete</button>
                     </td>
                   </tr>
                 )
@@ -135,12 +199,7 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
   const fileRef = useRef<HTMLInputElement>(null)
   const imgRef = useRef<HTMLInputElement>(null)
   const [saving, setSaving] = useState<string | null>(null)
-  const [saved, setSaved] = useState<string | null>(null)
-
-  const showSaved = (key: string) => {
-    setSaved(key)
-    setTimeout(() => setSaved(null), 2000)
-  }
+  const mapsLoaded = useGoogleMaps()
 
   useEffect(() => {
     supabase.from('store_employees').select('*').eq('store_id', store.id).order('name')
@@ -156,7 +215,7 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
     }).eq('id', store.id)
     setSaving(null)
     if (error) { alert('Save failed: ' + error.message); return }
-    showSaved('info')
+    alert('Store info saved!')
     reload()
   }
 
@@ -167,7 +226,7 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
     }).eq('id', store.id)
     setSaving(null)
     if (error) { alert('Save failed: ' + error.message); return }
-    showSaved('owner')
+    alert('Owner info saved!')
     reload()
   }
 
@@ -176,16 +235,15 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
     const { error } = await supabase.from('stores').update({ calendar_feed_url: feedUrl }).eq('id', store.id)
     setSaving(null)
     if (error) { alert('Save failed: ' + error.message); return }
-    setSaved('feed')
-    setTimeout(() => setSaved(null), 2000)
+    alert('Feed URL saved!')
     reload()
   }
 
   const addEmployee = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newEmp.name) return
-    const { data } = await supabase.from('store_employees')
-      .insert({ ...newEmp, store_id: store.id }).select().single()
+    const { data, error } = await supabase.from('store_employees').insert({ ...newEmp, store_id: store.id }).select().single()
+    if (error) { alert('Error adding employee: ' + error.message); return }
     if (data) setEmployees(p => [...p, data])
     setNewEmp({ name: '', phone: '', email: '' })
   }
@@ -208,6 +266,11 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
     reader.readAsDataURL(file)
   }
 
+  const fullAddress = [details.address, details.city, details.state, details.zip].filter(Boolean).join(', ')
+  const mapUrl = fullAddress
+    ? `https://www.google.com/maps/embed/v1/place?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(fullAddress)}`
+    : null
+
   const field = (label: string, key: keyof typeof details, type = 'text', placeholder = '') => (
     <div className="field" key={key}>
       <label className="fl">{label}</label>
@@ -220,7 +283,7 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
     <div onClick={e => e.target === e.currentTarget && onClose()}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, overflowY: 'auto', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px' }}>
       <div onClick={e => e.stopPropagation()}
-        style={{ background: 'var(--cream)', borderRadius: 'var(--r2)', maxWidth: 720, width: '100%', boxShadow: 'var(--shadow-lg)', position: 'relative' }}>
+        style={{ background: 'var(--cream)', borderRadius: 'var(--r2)', maxWidth: 720, width: '100%', boxShadow: 'var(--shadow-lg)' }}>
 
         {/* Dark header */}
         <div style={{ background: 'var(--sidebar-bg)', padding: '20px 24px', borderRadius: 'var(--r2) var(--r2) 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -229,13 +292,17 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
             <div style={{ color: '#fff', fontSize: 18, fontWeight: 900, marginTop: 2 }}>{store.name}</div>
           </div>
           <button onClick={onClose}
-            style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 32, height: 32, borderRadius: '50%', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            ×
-          </button>
+            style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 32, height: 32, borderRadius: '50%', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
         </div>
 
-        {/* Scrollable content — stacked cards like old app */}
         <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+          {/* Google Map */}
+          {mapUrl && (
+            <div style={{ borderRadius: 'var(--r)', overflow: 'hidden', border: '1px solid var(--pearl)' }}>
+              <iframe src={mapUrl} width="100%" height="200" style={{ border: 0, display: 'block' }} allowFullScreen loading="lazy" />
+            </div>
+          )}
 
           {/* Store Information */}
           <div className="card card-accent" style={{ margin: 0 }}>
@@ -260,7 +327,7 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
                 style={{ resize: 'none' }} />
             </div>
             <button className="btn-primary btn-sm" onClick={saveInfo} disabled={saving === 'info'}>
-              {saving === 'info' ? 'Saving…' : saved === 'info' ? '✓ Saved!' : 'Save Store Info'}
+              {saving === 'info' ? 'Saving…' : 'Save Store Info'}
             </button>
           </div>
 
@@ -273,7 +340,7 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
               {field('Owner Email', 'owner_email', 'email', 'john@store.com')}
             </div>
             <button className="btn-primary btn-sm" onClick={saveOwner} disabled={saving === 'owner'}>
-              {saving === 'owner' ? 'Saving…' : saved === 'owner' ? '✓ Saved!' : 'Save Owner Info'}
+              {saving === 'owner' ? 'Saving…' : 'Save Owner Info'}
             </button>
           </div>
 
@@ -285,7 +352,6 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
                 <img src={store.store_image_url} alt="Store" style={{ maxWidth: 200, borderRadius: 'var(--r)', border: '1px solid var(--pearl)' }} />
               </div>
             )}
-            <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 12 }}>Upload a photo of the store.</p>
             <input ref={imgRef} type="file" accept="image/*" style={{ display: 'none' }}
               onChange={e => { if (e.target.files?.[0]) uploadFile(e.target.files[0], 'store_image_url') }} />
             <button className="btn-primary btn-sm" onClick={() => imgRef.current?.click()}>
@@ -296,22 +362,16 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
           {/* Employees */}
           <div className="card card-accent" style={{ margin: 0 }}>
             <div className="card-title">Store Employees</div>
-            <div>
-              {employees.length === 0 && (
-                <p style={{ color: 'var(--mist)', fontSize: 13, marginBottom: 14 }}>No employees added yet.</p>
-              )}
-              {employees.map(emp => (
-                <div key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--cream2)' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700 }}>{emp.name}</div>
-                    <div style={{ fontSize: 12, color: 'var(--mist)' }}>
-                      {emp.phone}{emp.phone && emp.email ? ' · ' : ''}{emp.email}
-                    </div>
-                  </div>
-                  <button className="btn-danger btn-xs" onClick={() => deleteEmployee(emp.id)}>Remove</button>
+            {employees.length === 0 && <p style={{ color: 'var(--mist)', fontSize: 13, marginBottom: 14 }}>No employees added yet.</p>}
+            {employees.map(emp => (
+              <div key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--cream2)' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700 }}>{emp.name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--mist)' }}>{emp.phone}{emp.phone && emp.email ? ' · ' : ''}{emp.email}</div>
                 </div>
-              ))}
-            </div>
+                <button className="btn-danger btn-xs" onClick={() => deleteEmployee(emp.id)}>Remove</button>
+              </div>
+            ))}
             <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--pearl)' }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ash)', marginBottom: 8 }}>Add Employee</div>
               <form onSubmit={addEmployee}>
@@ -334,11 +394,10 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
             <div className="field">
               <label className="fl">iCal Feed URL</label>
               <input value={feedUrl} onChange={e => setFeedUrl(e.target.value)}
-                placeholder="https://calendar.google.com/calendar/ical/.../.ics"
-                style={{ fontSize: 12 }} />
+                placeholder="https://calendar.google.com/calendar/ical/.../.ics" style={{ fontSize: 12 }} />
             </div>
             <button className="btn-primary btn-sm" onClick={saveFeed} disabled={saving === 'feed'}>
-              {saving === 'feed' ? 'Saving…' : saved === 'feed' ? '✓ Saved!' : 'Save Feed URL'}
+              {saving === 'feed' ? 'Saving…' : 'Save Feed URL'}
             </button>
           </div>
 
