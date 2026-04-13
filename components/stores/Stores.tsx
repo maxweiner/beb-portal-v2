@@ -340,23 +340,31 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
           {/* Store Image */}
           <div className="card card-accent" style={{ margin: 0 }}>
             <div className="card-title">Store Image</div>
-            {store.store_image_url && (
+            {store.store_image_url ? (
               <div style={{ marginBottom: 14 }}>
-                <img src={store.store_image_url} alt="Store" style={{ maxWidth: 200, borderRadius: 'var(--r)', border: '1px solid var(--pearl)' }} />
+                <img src={store.store_image_url} alt="Store" style={{ maxWidth: 200, borderRadius: 'var(--r)', border: '1px solid var(--pearl)', display: 'block', marginBottom: 10 }} />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn-primary btn-sm" onClick={() => imgRef.current?.click()}>Replace Image</button>
+                  <button className="btn-danger btn-sm" onClick={async () => {
+                    if (!confirm('Remove store image?')) return
+                    await supabase.from('stores').update({ store_image_url: '' }).eq('id', store.id)
+                    reload()
+                  }}>Remove</button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 12 }}>No store image uploaded yet.</p>
+                <button className="btn-primary btn-sm" onClick={() => imgRef.current?.click()}>Upload Image</button>
               </div>
             )}
             <input ref={imgRef} type="file" accept="image/*" style={{ display: 'none' }}
               onChange={e => { if (e.target.files?.[0]) uploadFile(e.target.files[0], 'store_image_url') }} />
-            <button className="btn-primary btn-sm" onClick={() => imgRef.current?.click()}>
-              {store.store_image_url ? 'Replace Image' : 'Upload Image'}
-            </button>
           </div>
 
           {/* Employees */}
           <div className="card card-accent" style={{ margin: 0 }}>
             <div className="card-title">Store Employees</div>
-
-            {/* Existing employees */}
             {employees.length === 0 && (
               <p style={{ color: 'var(--mist)', fontSize: 13, marginBottom: 14 }}>No employees added yet.</p>
             )}
@@ -370,8 +378,6 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
                 onDelete={() => deleteEmployee(emp.id)}
               />
             ))}
-
-            {/* Add multiple new employees */}
             <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--pearl)' }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ash)', marginBottom: 10 }}>Add Employees</div>
               <NewEmpRows onAdd={(emp) => {
@@ -390,39 +396,55 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
             <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 12 }}>
               Paste the <strong>Secret address in iCal format</strong> from Google Calendar Settings → Integrate calendar.
             </p>
+            {store.calendar_feed_url && (
+              <div className="notice notice-jade" style={{ marginBottom: 12, fontSize: 12, wordBreak: 'break-all' }}>
+                ✓ Current: {store.calendar_feed_url}
+              </div>
+            )}
             <div className="field">
               <label className="fl">iCal Feed URL</label>
               <input value={feedUrl} onChange={e => setFeedUrl(e.target.value)}
                 placeholder="https://calendar.google.com/calendar/ical/.../.ics" style={{ fontSize: 12 }} />
             </div>
-            <button className="btn-primary btn-sm" onClick={saveFeed} disabled={saving === 'feed'}>
-              {saving === 'feed' ? 'Saving…' : 'Save Feed URL'}
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn-primary btn-sm" onClick={saveFeed} disabled={saving === 'feed'}>
+                {saving === 'feed' ? 'Saving…' : 'Save Feed URL'}
+              </button>
+              {store.calendar_feed_url && (
+                <button className="btn-danger btn-sm" onClick={async () => {
+                  if (!confirm('Remove calendar feed URL?')) return
+                  await supabase.from('stores').update({ calendar_feed_url: '' }).eq('id', store.id)
+                  setFeedUrl('')
+                  reload()
+                }}>Remove</button>
+              )}
+            </div>
           </div>
 
-          {/* QR Code */}
+          {/* SimplyBook QR Code */}
           <div className="card card-accent" style={{ margin: 0 }}>
             <div className="card-title">SimplyBook QR Code</div>
             {storeImage ? (
               <div style={{ marginBottom: 14 }}>
-                <img src={storeImage} alt="QR Code" style={{ maxWidth: 180, borderRadius: 'var(--r)', border: '1px solid var(--pearl)' }} />
+                <img src={storeImage} alt="QR Code" style={{ maxWidth: 180, borderRadius: 'var(--r)', border: '1px solid var(--pearl)', display: 'block', marginBottom: 10 }} />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn-primary btn-sm" onClick={() => fileRef.current?.click()}>Replace QR Code</button>
+                  <button className="btn-danger btn-sm" onClick={async () => {
+                    if (!confirm('Remove QR code?')) return
+                    await supabase.from('stores').update({ qr_code_url: '' }).eq('id', store.id)
+                    setStoreImage('')
+                    reload()
+                  }}>Remove</button>
+                </div>
               </div>
             ) : (
-              <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 14 }}>No QR code uploaded yet.</p>
+              <div>
+                <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 12 }}>No QR code uploaded yet.</p>
+                <button className="btn-primary btn-sm" onClick={() => fileRef.current?.click()}>Upload QR Code</button>
+              </div>
             )}
-            <div className="field">
-              <label className="fl">Upload QR Code Image</label>
-              <input ref={fileRef} type="file" accept="image/*"
-                onChange={e => { if (e.target.files?.[0]) uploadFile(e.target.files[0], 'qr_code_url') }} />
-            </div>
-            {storeImage && (
-              <button className="btn-danger btn-sm" onClick={async () => {
-                if (!confirm('Remove QR code?')) return
-                await supabase.from('stores').update({ qr_code_url: '' }).eq('id', store.id)
-                setStoreImage('')
-                reload()
-              }}>Remove QR Code</button>
-            )}
+            <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
+              onChange={e => { if (e.target.files?.[0]) uploadFile(e.target.files[0], 'qr_code_url') }} />
           </div>
 
         </div>
