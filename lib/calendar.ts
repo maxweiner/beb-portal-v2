@@ -81,24 +81,27 @@ export function parseIcal(text: string): Appointment[] {
       const tzidMatch = raw.params.match(/TZID=([^;:]+)/)
       if (tzidMatch) {
         const tzid = tzidMatch[1].trim()
-        // Parse as a local time in the specified timezone using Intl
-        // We build an ISO string then correct for the offset
         try {
-          // Create a date as if UTC, then find the offset in the target tz
-          const fakeUtc = new Date(`${y}-${mo}-${d}T${h}:${m2}:${sec}Z`)
-          // Get what UTC time corresponds to this local time in tzid
-          const localStr = new Intl.DateTimeFormat('en-CA', {
+          // The time string represents local time in tzid timezone
+          // We need to find the UTC equivalent
+          // Strategy: binary search for the UTC time that, when displayed in tzid, matches our local time
+          const targetMs = Date.UTC(
+            parseInt(y), parseInt(mo) - 1, parseInt(d),
+            parseInt(h), parseInt(m2), parseInt(sec)
+          )
+          // Get the UTC offset for this timezone at approximately this time
+          const probe = new Date(targetMs)
+          const localParts = new Intl.DateTimeFormat('en-US', {
             timeZone: tzid,
-            year: 'numeric', month: '2-digit', day: '2-digit',
-            hour: '2-digit', minute: '2-digit', second: '2-digit',
+            year: 'numeric', month: 'numeric', day: 'numeric',
+            hour: 'numeric', minute: 'numeric', second: 'numeric',
             hour12: false,
-          }).format(fakeUtc)
-          // fakeUtc shows as localStr in tzid — find the offset
-          const fakeLocal = new Date(localStr.replace(',', '').replace(' ', 'T') + 'Z')
-          const offsetMs = fakeUtc.getTime() - fakeLocal.getTime()
-          return new Date(fakeUtc.getTime() + offsetMs)
+          }).formatToParts(probe)
+          const get = (type: string) => parseInt(localParts.find(p => p.type === type)?.value || '0')
+          const probeLocal = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second'))
+          const offsetMs = targetMs - probeLocal
+          return new Date(targetMs + offsetMs)
         } catch {
-          // Fallback: treat as UTC
           return new Date(`${y}-${mo}-${d}T${h}:${m2}:${sec}Z`)
         }
       }
