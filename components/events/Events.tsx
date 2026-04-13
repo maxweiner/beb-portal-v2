@@ -17,6 +17,7 @@ export default function Events() {
   const [newEvent, setNewEvent] = useState({ store_id: '', start_date: '' })
   const [saving, setSaving] = useState(false)
   const [workersOpen, setWorkersOpen] = useState<string | null>(null)
+  const [detail, setDetail] = useState<Event | null>(null)
 
   const today = new Date(); today.setHours(0,0,0,0)
   const weekMs = 7 * 24 * 60 * 60 * 1000
@@ -76,6 +77,7 @@ export default function Events() {
   }
 
   const fmt = (ds: string) => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const fmtDollars = (n: number) => `$${Math.round(n).toLocaleString()}`
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -85,16 +87,14 @@ export default function Events() {
         </h1>
         <div className="flex gap-2 flex-wrap">
           <select value={filter} onChange={e => setFilter(e.target.value as Filter)}
-            className="px-3 py-2 rounded-lg text-sm border"
-            style={{ background: 'var(--card-bg)', borderColor: 'var(--pearl)', color: 'var(--ink)' }}>
+            style={{ width: 'auto' }}>
             <option value="all">All Events</option>
             <option value="current">Current (±1 week)</option>
             <option value="future">Upcoming</option>
             <option value="past">Past</option>
           </select>
           <select value={sort} onChange={e => setSort(e.target.value as Sort)}
-            className="px-3 py-2 rounded-lg text-sm border"
-            style={{ background: 'var(--card-bg)', borderColor: 'var(--pearl)', color: 'var(--ink)' }}>
+            style={{ width: 'auto' }}>
             <option value="date-desc">Newest First</option>
             <option value="date-asc">Oldest First</option>
             <option value="name-asc">Store Name</option>
@@ -106,25 +106,21 @@ export default function Events() {
       </div>
 
       {showForm && (
-        <div className="rounded-xl p-5 mb-6" style={{ background: 'var(--card-bg)', border: '2px solid var(--green)' }}>
-          <h3 className="font-black text-base mb-4" style={{ color: 'var(--ink)' }}>New Event</h3>
+        <div className="card mb-5" style={{ border: '2px solid var(--green3)', marginBottom: 20 }}>
+          <div className="card-title">New Event</div>
           <form onSubmit={createEvent} className="flex gap-3 flex-wrap items-end">
-            <div>
+            <div className="field" style={{ minWidth: 200 }}>
               <label className="fl">Store</label>
-              <select value={newEvent.store_id} onChange={e => setNewEvent(p => ({ ...p, store_id: e.target.value }))} required
-                className="px-3 py-2.5 rounded-lg text-sm border"
-                style={{ background: 'var(--cream2)', borderColor: 'var(--pearl)', color: 'var(--ink)', minWidth: 200 }}>
+              <select value={newEvent.store_id} onChange={e => setNewEvent(p => ({ ...p, store_id: e.target.value }))} required>
                 <option value="">Select store…</option>
                 {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
-            <div>
+            <div className="field">
               <label className="fl">Start Date</label>
-              <input type="date" value={newEvent.start_date} onChange={e => setNewEvent(p => ({ ...p, start_date: e.target.value }))} required
-                className="px-3 py-2.5 rounded-lg text-sm border"
-                style={{ background: 'var(--cream2)', borderColor: 'var(--pearl)', color: 'var(--ink)' }} />
+              <input type="date" value={newEvent.start_date} onChange={e => setNewEvent(p => ({ ...p, start_date: e.target.value }))} required />
             </div>
-            <div className="flex gap-2">
+            <div style={{ display: 'flex', gap: 8 }}>
               <button type="submit" disabled={saving} className="btn-primary btn-sm">{saving ? 'Creating…' : 'Create Event'}</button>
               <button type="button" onClick={() => setShowForm(false)} className="btn-outline btn-sm">Cancel</button>
             </div>
@@ -148,8 +144,9 @@ export default function Events() {
           const wOpen = workersOpen === ev.id
 
           return (
-            <div key={ev.id} className="rounded-xl p-5"
-              style={{ background: 'var(--card-bg)', border: `1px solid ${cur ? 'var(--green)' : 'var(--pearl)'}`, boxShadow: cur ? '0 0 0 2px var(--green-pale)' : 'none' }}>
+            <div key={ev.id} className="card"
+              style={{ border: `1px solid ${cur ? 'var(--green)' : 'var(--pearl)'}`, boxShadow: cur ? '0 0 0 2px var(--green-pale)' : 'none', cursor: 'pointer' }}
+              onClick={() => setDetail(ev)}>
 
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div className="flex-1 min-w-0">
@@ -172,7 +169,11 @@ export default function Events() {
                   )}
                 </div>
                 <div className="flex gap-4">
-                  {[{ label: 'Days', value: ev.days.length }, { label: 'Purchases', value: purchases }, { label: 'Revenue', value: `$${(dollars/1000).toFixed(1)}k` }].map(({ label, value }) => (
+                  {[
+                    { label: 'Days', value: ev.days.length },
+                    { label: 'Purchases', value: purchases },
+                    { label: 'Revenue', value: fmtDollars(dollars) },
+                  ].map(({ label, value }) => (
                     <div key={label} className="text-center">
                       <div className="text-xl font-black" style={{ color: 'var(--green)' }}>{value}</div>
                       <div className="text-xs" style={{ color: 'var(--mist)' }}>{label}</div>
@@ -182,7 +183,7 @@ export default function Events() {
               </div>
 
               {/* Day dots */}
-              <div className="flex gap-2 mt-4">
+              <div className="flex gap-2 mt-4" onClick={e => e.stopPropagation()}>
                 {[1, 2, 3].map(d => {
                   const day = ev.days.find(x => x.day_number === d)
                   return (
@@ -195,10 +196,11 @@ export default function Events() {
                 })}
               </div>
 
+              {/* Workers panel */}
               {wOpen && (
-                <div className="mt-4 p-4 rounded-xl" style={{ background: 'var(--cream2)', border: '1px solid var(--pearl)' }}>
+                <div className="mt-4 p-4 rounded-xl" style={{ background: 'var(--cream2)', border: '1px solid var(--pearl)' }} onClick={e => e.stopPropagation()}>
                   <div className="fl">Who Worked This Event</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
                     {buyers.map(b => {
                       const on = evWorkers.some(w => w.id === b.id)
                       return (
@@ -216,21 +218,124 @@ export default function Events() {
               )}
 
               {/* Actions */}
-              <div className="flex gap-2 mt-3 pt-3 flex-wrap" style={{ borderTop: '1px solid var(--cream2)' }}>
-                <button onClick={() => setWorkersOpen(wOpen ? null : ev.id)}
+              <div className="flex gap-2 mt-3 pt-3 flex-wrap" style={{ borderTop: '1px solid var(--cream2)' }} onClick={e => e.stopPropagation()}>
+                <button onClick={e => { e.stopPropagation(); setWorkersOpen(wOpen ? null : ev.id) }}
                   className={wOpen ? 'btn-ghost btn-xs' : 'btn-outline btn-xs'}>
                   👤 Who Worked
                 </button>
-                <button onClick={() => copyLink(ev)} className="btn-outline btn-xs">
+                <button onClick={e => { e.stopPropagation(); copyLink(ev) }} className="btn-outline btn-xs">
                   🔗 Copy Link
                 </button>
                 {isAdmin && (
-                  <button onClick={() => deleteEvent(ev.id)} className="btn-danger btn-xs">Delete</button>
+                  <button onClick={e => { e.stopPropagation(); deleteEvent(ev.id) }} className="btn-danger btn-xs">Delete</button>
                 )}
               </div>
             </div>
           )
         })}
+      </div>
+
+      {/* Detail Modal */}
+      {detail && (
+        <EventDetailModal ev={detail} stores={stores} onClose={() => setDetail(null)} fmtDollars={fmtDollars} />
+      )}
+    </div>
+  )
+}
+
+function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
+  ev: Event
+  stores: any[]
+  onClose: () => void
+  fmtDollars: (n: number) => string
+}) {
+  const store = stores.find(s => s.id === ev.store_id)
+  const days = [...(ev.days || [])].sort((a, b) => a.day_number - b.day_number)
+  const totalPurchases = days.reduce((s, d) => s + (d.purchases || 0), 0)
+  const totalCustomers = days.reduce((s, d) => s + (d.customers || 0), 0)
+  const totalDollars = days.reduce((s, d) => s + (d.dollars10 || 0) + (d.dollars5 || 0), 0)
+  const totalCommission = days.reduce((s, d) => s + (d.dollars10 || 0) * 0.10 + (d.dollars5 || 0) * 0.05, 0)
+  const closeRate = totalCustomers > 0 ? Math.round(totalPurchases / totalCustomers * 100) : 0
+
+  const fmt = (ds: string) => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+
+  return (
+    <div onClick={onClose}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, overflowY: 'auto', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px' }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{ background: 'var(--cream)', borderRadius: 'var(--r2)', maxWidth: 600, width: '100%', boxShadow: 'var(--shadow-lg)' }}>
+
+        {/* Header */}
+        <div style={{ background: 'var(--sidebar-bg)', padding: '20px 24px', borderRadius: 'var(--r2) var(--r2) 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ color: '#7EC8A0', fontSize: 14 }}>◆ Event Details</div>
+            <div style={{ color: '#fff', fontSize: 18, fontWeight: 900, marginTop: 2 }}>{ev.store_name}</div>
+            <div style={{ color: 'rgba(255,255,255,.5)', fontSize: 13, marginTop: 2 }}>{store?.city}, {store?.state} · {ev.start_date}</div>
+          </div>
+          <button onClick={onClose}
+            style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 32, height: 32, borderRadius: '50%', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+        </div>
+
+        <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+          {/* Summary stats */}
+          <div className="card card-accent" style={{ margin: 0 }}>
+            <div className="card-title">Event Summary</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              {[
+                ['Customers', totalCustomers.toLocaleString()],
+                ['Purchases', totalPurchases.toLocaleString()],
+                ['Close Rate', `${closeRate}%`],
+                ['Revenue', fmtDollars(totalDollars)],
+                ['Commission Due', fmtDollars(totalCommission)],
+                ['Days Entered', `${days.length} of 3`],
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', marginBottom: 2 }}>{label}</div>
+                  <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--ink)' }}>{value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Per day breakdown */}
+          {days.length > 0 && (
+            <div className="card card-accent" style={{ margin: 0 }}>
+              <div className="card-title">Day by Day</div>
+              {days.map(d => {
+                const dayDate = new Date(ev.start_date + 'T12:00:00')
+                dayDate.setDate(dayDate.getDate() + d.day_number - 1)
+                const dayDollars = (d.dollars10 || 0) + (d.dollars5 || 0)
+                const dayCR = d.customers > 0 ? Math.round(d.purchases / d.customers * 100) : 0
+                return (
+                  <div key={d.day_number} style={{ paddingBottom: 16, marginBottom: 16, borderBottom: '1px solid var(--cream2)' }}>
+                    <div style={{ fontWeight: 700, color: 'var(--green)', marginBottom: 8 }}>Day {d.day_number} — {fmt(dayDate.toISOString().slice(0, 10))}</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, fontSize: 13 }}>
+                      {[['Customers', d.customers || 0], ['Purchases', d.purchases || 0], ['Revenue', fmtDollars(dayDollars)], ['Close', `${dayCR}%`]].map(([l, v]) => (
+                        <div key={l as string}>
+                          <div style={{ color: 'var(--mist)', fontSize: 11, marginBottom: 2 }}>{l}</div>
+                          <div style={{ fontWeight: 700 }}>{v}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Workers */}
+          {(ev.workers || []).length > 0 && (
+            <div className="card card-accent" style={{ margin: 0 }}>
+              <div className="card-title">Who Worked</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {(ev.workers || []).map((w: any) => (
+                  <span key={w.id} className="badge badge-jade">{w.name}</span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
