@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/daily-report?secret=bebportal2024",
+      "schedule": "0 12 * * *"
+    }
+  ]
+}
