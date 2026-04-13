@@ -331,17 +331,10 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
             </button>
           </div>
 
-          {/* Store Owner */}
+          {/* Store Contacts */}
           <div className="card card-accent" style={{ margin: 0 }}>
-            <div className="card-title">Store Owner</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-              {field('Owner Name', 'owner_name', 'text', 'John Smith')}
-              {field('Owner Phone', 'owner_phone', 'tel', '(555) 000-0000')}
-              {field('Owner Email', 'owner_email', 'email', 'john@store.com')}
-            </div>
-            <button className="btn-primary btn-sm" onClick={saveOwner} disabled={saving === 'owner'}>
-              {saving === 'owner' ? 'Saving…' : 'Save Owner Info'}
-            </button>
+            <div className="card-title">Store Owners / Contacts</div>
+            <StoreContacts storeId={store.id} />
           </div>
 
           {/* Store Image */}
@@ -520,6 +513,137 @@ function NewEmpRows({ onAdd }: { onAdd: (emp: { name: string; phone: string; ema
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
         <button className="btn-primary btn-sm" onClick={saveAll}>Save Employees</button>
         <button className="btn-outline btn-sm" onClick={addRow}>+ Add Row</button>
+      </div>
+    </div>
+  )
+}
+
+/* ── STORE CONTACTS ── */
+interface Contact { id: string; store_id: string; name: string; phone: string; email: string; title: string }
+
+function StoreContacts({ storeId }: { storeId: string }) {
+  const [contacts, setContacts] = useState<Contact[]>([])
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    supabase.from('store_contacts').select('*').eq('store_id', storeId).order('created_at')
+      .then(({ data }) => { setContacts(data || []); setLoaded(true) })
+  }, [storeId])
+
+  const addContact = async (c: { name: string; phone: string; email: string; title: string }) => {
+    const { data, error } = await supabase.from('store_contacts')
+      .insert({ ...c, store_id: storeId }).select().single()
+    if (error) { alert('Error: ' + error.message); return }
+    if (data) setContacts(p => [...p, data])
+  }
+
+  const updateContact = async (id: string, updates: Partial<Contact>) => {
+    const { error } = await supabase.from('store_contacts').update(updates).eq('id', id)
+    if (error) { alert('Error: ' + error.message); return }
+    setContacts(p => p.map(c => c.id === id ? { ...c, ...updates } : c))
+  }
+
+  const deleteContact = async (id: string) => {
+    if (!confirm('Remove this contact?')) return
+    await supabase.from('store_contacts').delete().eq('id', id)
+    setContacts(p => p.filter(c => c.id !== id))
+  }
+
+  if (!loaded) return <div style={{ color: 'var(--mist)', fontSize: 13 }}>Loading…</div>
+
+  return (
+    <div>
+      {contacts.length === 0 && (
+        <p style={{ color: 'var(--mist)', fontSize: 13, marginBottom: 14 }}>No contacts added yet.</p>
+      )}
+      {contacts.map(c => (
+        <ContactRow key={c.id} contact={c}
+          onSave={(updates) => updateContact(c.id, updates)}
+          onDelete={() => deleteContact(c.id)}
+        />
+      ))}
+      <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--pearl)' }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ash)', marginBottom: 10 }}>Add Contacts</div>
+        <NewContactRows onAdd={addContact} />
+      </div>
+    </div>
+  )
+}
+
+function ContactRow({ contact, onSave, onDelete }: {
+  contact: Contact
+  onSave: (updates: Partial<Contact>) => void
+  onDelete: () => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [vals, setVals] = useState({ name: contact.name, phone: contact.phone, email: contact.email, title: contact.title })
+  const [saving, setSaving] = useState(false)
+
+  const save = async () => {
+    if (!vals.name) return
+    setSaving(true)
+    await onSave(vals)
+    setSaving(false)
+    setEditing(false)
+  }
+
+  if (editing) return (
+    <div style={{ padding: '10px 0', borderBottom: '1px solid var(--cream2)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
+        <input value={vals.name} onChange={e => setVals(p => ({ ...p, name: e.target.value }))} placeholder="Name *" style={{ fontSize: 13 }} />
+        <input value={vals.title} onChange={e => setVals(p => ({ ...p, title: e.target.value }))} placeholder="Title (e.g. Owner)" style={{ fontSize: 13 }} />
+        <input type="tel" value={vals.phone} onChange={e => setVals(p => ({ ...p, phone: e.target.value }))} placeholder="Phone" style={{ fontSize: 13 }} />
+        <input type="email" value={vals.email} onChange={e => setVals(p => ({ ...p, email: e.target.value }))} placeholder="Email" style={{ fontSize: 13 }} />
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button className="btn-primary btn-xs" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+        <button className="btn-outline btn-xs" onClick={() => setEditing(false)}>Cancel</button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--cream2)' }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 700 }}>{contact.name} {contact.title && <span style={{ fontSize: 12, color: 'var(--mist)', fontWeight: 400 }}>· {contact.title}</span>}</div>
+        <div style={{ fontSize: 12, color: 'var(--mist)' }}>{contact.phone}{contact.phone && contact.email ? ' · ' : ''}{contact.email}</div>
+      </div>
+      <button className="btn-outline btn-xs" onClick={() => setEditing(true)}>✎ Edit</button>
+      <button className="btn-danger btn-xs" onClick={onDelete}>Remove</button>
+    </div>
+  )
+}
+
+function NewContactRows({ onAdd }: { onAdd: (c: { name: string; phone: string; email: string; title: string }) => void }) {
+  const blank = () => ({ id: Math.random().toString(), name: '', phone: '', email: '', title: '' })
+  const [rows, setRows] = useState([blank()])
+
+  const update = (id: string, key: string, val: string) =>
+    setRows(p => p.map(r => r.id === id ? { ...r, [key]: val } : r))
+
+  const saveAll = () => {
+    const valid = rows.filter(r => r.name.trim())
+    if (valid.length === 0) { alert('Enter at least one name.'); return }
+    valid.forEach(r => onAdd({ name: r.name.trim(), phone: r.phone.trim(), email: r.email.trim(), title: r.title.trim() }))
+    setRows([blank()])
+  }
+
+  return (
+    <div>
+      {rows.map(row => (
+        <div key={row.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+          <input value={row.name} onChange={e => update(row.id, 'name', e.target.value)} placeholder="Name *" style={{ fontSize: 13 }} />
+          <input value={row.title} onChange={e => update(row.id, 'title', e.target.value)} placeholder="Title" style={{ fontSize: 13 }} />
+          <input type="tel" value={row.phone} onChange={e => update(row.id, 'phone', e.target.value)} placeholder="Phone" style={{ fontSize: 13 }} />
+          <input type="email" value={row.email} onChange={e => update(row.id, 'email', e.target.value)} placeholder="Email" style={{ fontSize: 13 }} />
+          {rows.length > 1
+            ? <button className="btn-danger btn-xs" onClick={() => setRows(p => p.filter(r => r.id !== row.id))}>✕</button>
+            : <div />}
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        <button className="btn-primary btn-sm" onClick={saveAll}>Save Contacts</button>
+        <button className="btn-outline btn-sm" onClick={() => setRows(p => [...p, blank()])}>+ Add Row</button>
       </div>
     </div>
   )
