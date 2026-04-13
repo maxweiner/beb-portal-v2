@@ -187,7 +187,7 @@ export default function DayEntry() {
           </div>
 
           <button type="submit" disabled={saving || !selectedEventId}
-            className="btn-primary btn-full"
+            className="btn-primary btn-full" style={{ textAlign: "center", justifyContent: "center" }}
             style={{ background: saved ? '#22c55e' : 'var(--green)' }}>
             {saving ? 'Saving…' : saved ? '✓ Saved!' : existing ? 'Update Day Data' : 'Submit Day Data'}
           </button>

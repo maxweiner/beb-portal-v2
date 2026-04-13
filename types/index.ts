@@ -31,6 +31,8 @@ export interface Store {
   calendar_feed_url?: string
   store_image_url?: string
   active?: boolean
+  lat?: number
+  lng?: number
 }
 
 export interface EventDay {
