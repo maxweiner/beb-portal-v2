@@ -362,26 +362,32 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
           {/* Employees */}
           <div className="card card-accent" style={{ margin: 0 }}>
             <div className="card-title">Store Employees</div>
-            {employees.length === 0 && <p style={{ color: 'var(--mist)', fontSize: 13, marginBottom: 14 }}>No employees added yet.</p>}
+
+            {/* Existing employees */}
+            {employees.length === 0 && (
+              <p style={{ color: 'var(--mist)', fontSize: 13, marginBottom: 14 }}>No employees added yet.</p>
+            )}
             {employees.map(emp => (
-              <div key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--cream2)' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700 }}>{emp.name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--mist)' }}>{emp.phone}{emp.phone && emp.email ? ' · ' : ''}{emp.email}</div>
-                </div>
-                <button className="btn-danger btn-xs" onClick={() => deleteEmployee(emp.id)}>Remove</button>
-              </div>
+              <EmpRow key={emp.id} emp={emp}
+                onSave={async (updated) => {
+                  const { error } = await supabase.from('store_employees').update(updated).eq('id', emp.id)
+                  if (error) { alert('Error: ' + error.message); return }
+                  setEmployees(p => p.map(e => e.id === emp.id ? { ...e, ...updated } : e))
+                }}
+                onDelete={() => deleteEmployee(emp.id)}
+              />
             ))}
-            <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--pearl)' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ash)', marginBottom: 8 }}>Add Employee</div>
-              <form onSubmit={addEmployee}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 10 }}>
-                  <div className="field"><label className="fl">Name</label><input value={newEmp.name} onChange={e => setNewEmp(p => ({ ...p, name: e.target.value }))} placeholder="Jane Smith" required /></div>
-                  <div className="field"><label className="fl">Phone</label><input type="tel" value={newEmp.phone} onChange={e => setNewEmp(p => ({ ...p, phone: e.target.value }))} placeholder="(555) 000-0000" /></div>
-                  <div className="field"><label className="fl">Email</label><input type="email" value={newEmp.email} onChange={e => setNewEmp(p => ({ ...p, email: e.target.value }))} placeholder="jane@store.com" /></div>
-                </div>
-                <button type="submit" className="btn-primary btn-sm">Add Employee</button>
-              </form>
+
+            {/* Add multiple new employees */}
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--pearl)' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ash)', marginBottom: 10 }}>Add Employees</div>
+              <NewEmpRows onAdd={(emp) => {
+                supabase.from('store_employees').insert({ ...emp, store_id: store.id }).select().single()
+                  .then(({ data, error }) => {
+                    if (error) { alert('Error: ' + error.message); return }
+                    if (data) setEmployees(p => [...p, data])
+                  })
+              }} />
             </div>
           </div>
 
@@ -427,6 +433,93 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
           </div>
 
         </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── EMPLOYEE ROW (edit inline) ── */
+function EmpRow({ emp, onSave, onDelete }: {
+  emp: Employee
+  onSave: (updated: Partial<Employee>) => Promise<void>
+  onDelete: () => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [vals, setVals] = useState({ name: emp.name, phone: emp.phone, email: emp.email })
+  const [saving, setSaving] = useState(false)
+
+  const save = async () => {
+    if (!vals.name) return
+    setSaving(true)
+    await onSave(vals)
+    setSaving(false)
+    setEditing(false)
+  }
+
+  if (editing) return (
+    <div style={{ padding: '10px 0', borderBottom: '1px solid var(--cream2)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
+        <input value={vals.name} onChange={e => setVals(p => ({ ...p, name: e.target.value }))} placeholder="Name" required style={{ fontSize: 13 }} />
+        <input type="tel" value={vals.phone} onChange={e => setVals(p => ({ ...p, phone: e.target.value }))} placeholder="Phone" style={{ fontSize: 13 }} />
+        <input type="email" value={vals.email} onChange={e => setVals(p => ({ ...p, email: e.target.value }))} placeholder="Email" style={{ fontSize: 13 }} />
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button className="btn-primary btn-xs" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+        <button className="btn-outline btn-xs" onClick={() => setEditing(false)}>Cancel</button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--cream2)' }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 700 }}>{emp.name}</div>
+        <div style={{ fontSize: 12, color: 'var(--mist)' }}>{emp.phone}{emp.phone && emp.email ? ' · ' : ''}{emp.email}</div>
+      </div>
+      <button className="btn-outline btn-xs" onClick={() => setEditing(true)}>✎ Edit</button>
+      <button className="btn-danger btn-xs" onClick={onDelete}>Remove</button>
+    </div>
+  )
+}
+
+/* ── NEW EMPLOYEE ROWS (add multiple at once) ── */
+function NewEmpRows({ onAdd }: { onAdd: (emp: { name: string; phone: string; email: string }) => void }) {
+  const blank = () => ({ id: Math.random().toString(), name: '', phone: '', email: '' })
+  const [rows, setRows] = useState([blank()])
+
+  const update = (id: string, key: string, val: string) =>
+    setRows(p => p.map(r => r.id === id ? { ...r, [key]: val } : r))
+
+  const addRow = () => setRows(p => [...p, blank()])
+
+  const removeRow = (id: string) => setRows(p => p.filter(r => r.id !== id))
+
+  const saveAll = () => {
+    const valid = rows.filter(r => r.name.trim())
+    if (valid.length === 0) return
+    valid.forEach(r => onAdd({ name: r.name.trim(), phone: r.phone.trim(), email: r.email.trim() }))
+    setRows([blank()])
+  }
+
+  return (
+    <div>
+      {rows.map((row, i) => (
+        <div key={row.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+          <input value={row.name} onChange={e => update(row.id, 'name', e.target.value)}
+            placeholder="Name *" style={{ fontSize: 13 }} />
+          <input type="tel" value={row.phone} onChange={e => update(row.id, 'phone', e.target.value)}
+            placeholder="Phone" style={{ fontSize: 13 }} />
+          <input type="email" value={row.email} onChange={e => update(row.id, 'email', e.target.value)}
+            placeholder="Email" style={{ fontSize: 13 }} />
+          {rows.length > 1
+            ? <button className="btn-danger btn-xs" onClick={() => removeRow(row.id)}>✕</button>
+            : <div />
+          }
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        <button className="btn-primary btn-sm" onClick={saveAll}>Save Employees</button>
+        <button className="btn-outline btn-sm" onClick={addRow}>+ Add Row</button>
       </div>
     </div>
   )
