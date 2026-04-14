@@ -17,6 +17,7 @@ export default function Events() {
   const [newEvent, setNewEvent] = useState({ store_id: '', start_date: '' })
   const [saving, setSaving] = useState(false)
   const [workersOpen, setWorkersOpen] = useState<string | null>(null)
+  const [spendOpen, setSpendOpen] = useState<string | null>(null)
   const [detail, setDetail] = useState<Event | null>(null)
 
   const today = new Date(); today.setHours(0,0,0,0)
@@ -223,6 +224,10 @@ export default function Events() {
                   className={wOpen ? 'btn-ghost btn-xs' : 'btn-outline btn-xs'}>
                   👤 Who Worked
                 </button>
+                <button onClick={e => { e.stopPropagation(); setSpendOpen(spendOpen === ev.id ? null : ev.id) }}
+                  className={spendOpen === ev.id ? 'btn-ghost btn-xs' : 'btn-outline btn-xs'}>
+                  💰 Ad Spend
+                </button>
                 <button onClick={e => { e.stopPropagation(); copyLink(ev) }} className="btn-outline btn-xs">
                   🔗 Copy Link
                 </button>
@@ -230,6 +235,11 @@ export default function Events() {
                   <button onClick={e => { e.stopPropagation(); deleteEvent(ev.id) }} className="btn-danger btn-xs">Delete</button>
                 )}
               </div>
+
+              {/* Spend panel */}
+              {spendOpen === ev.id && (
+                <SpendPanel ev={ev} onClose={() => setSpendOpen(null)} reload={reload} />
+              )}
             </div>
           )
         })}
@@ -324,6 +334,29 @@ function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
             </div>
           )}
 
+          {/* Spend */}
+          {(ev.spend_vdp || ev.spend_newspaper || ev.spend_postcard || ev.spend_spiffs) ? (
+            <div className="card card-accent" style={{ margin: 0 }}>
+              <div className="card-title">Ad Spend & Spiffs</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                {[
+                  ['VDP Spend', ev.spend_vdp],
+                  ['Newspaper Spend', ev.spend_newspaper],
+                  ['Postcard Spend', ev.spend_postcard],
+                  ['Spiffs Paid', ev.spend_spiffs],
+                ].map(([label, value]) => value ? (
+                  <div key={label as string}>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', marginBottom: 2 }}>{label}</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--ink)' }}>${Math.round(Number(value)).toLocaleString()}</div>
+                  </div>
+                ) : null)}
+              </div>
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--cream2)', fontSize: 13, fontWeight: 700, color: 'var(--mist)' }}>
+                Total Spend: <span style={{ color: 'var(--ink)' }}>${Math.round((ev.spend_vdp || 0) + (ev.spend_newspaper || 0) + (ev.spend_postcard || 0) + (ev.spend_spiffs || 0)).toLocaleString()}</span>
+              </div>
+            </div>
+          ) : null}
+
           {/* Workers */}
           {(ev.workers || []).length > 0 && (
             <div className="card card-accent" style={{ margin: 0 }}>
@@ -336,6 +369,74 @@ function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
             </div>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── SPEND PANEL ── */
+function SpendPanel({ ev, onClose, reload }: { ev: Event; onClose: () => void; reload: () => void }) {
+  const [spend, setSpend] = useState({
+    spend_vdp:       String(ev.spend_vdp       || ''),
+    spend_newspaper: String(ev.spend_newspaper || ''),
+    spend_postcard:  String(ev.spend_postcard  || ''),
+    spend_spiffs:    String(ev.spend_spiffs    || ''),
+  })
+  const [saving, setSaving] = useState(false)
+
+  const save = async () => {
+    setSaving(true)
+    const { error } = await supabase.from('events').update({
+      spend_vdp:       parseFloat(spend.spend_vdp)       || 0,
+      spend_newspaper: parseFloat(spend.spend_newspaper) || 0,
+      spend_postcard:  parseFloat(spend.spend_postcard)  || 0,
+      spend_spiffs:    parseFloat(spend.spend_spiffs)    || 0,
+    }).eq('id', ev.id)
+    setSaving(false)
+    if (error) { alert('Error: ' + error.message); return }
+    reload()
+    onClose()
+  }
+
+  const totalSpend = (parseFloat(spend.spend_vdp) || 0) +
+    (parseFloat(spend.spend_newspaper) || 0) +
+    (parseFloat(spend.spend_postcard) || 0) +
+    (parseFloat(spend.spend_spiffs) || 0)
+
+  const inp = (label: string, key: keyof typeof spend) => (
+    <div key={key}>
+      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', marginBottom: 4 }}>{label}</label>
+      <div style={{ position: 'relative' }}>
+        <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)', fontSize: 14 }}>$</span>
+        <input type="number" min="0" step="0.01" value={spend[key]}
+          onChange={e => setSpend(p => ({ ...p, [key]: e.target.value }))}
+          placeholder="0.00"
+          style={{ paddingLeft: 24, fontSize: 14 }} />
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="mt-4 p-4 rounded-xl" style={{ background: 'var(--cream2)', border: '1px solid var(--pearl)' }} onClick={e => e.stopPropagation()}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div className="fl" style={{ margin: 0 }}>Ad Spend & Spiffs</div>
+        {totalSpend > 0 && (
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>
+            Total: ${Math.round(totalSpend).toLocaleString()}
+          </div>
+        )}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+        {inp('VDP Spend', 'spend_vdp')}
+        {inp('Newspaper Spend', 'spend_newspaper')}
+        {inp('Postcard Spend', 'spend_postcard')}
+        {inp('Spiffs Paid', 'spend_spiffs')}
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="btn-primary btn-sm" onClick={save} disabled={saving}>
+          {saving ? 'Saving…' : 'Save Spend'}
+        </button>
+        <button className="btn-outline btn-sm" onClick={onClose}>Cancel</button>
       </div>
     </div>
   )

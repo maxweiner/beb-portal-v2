@@ -54,12 +54,17 @@ export interface EventDay {
   entered_at?: string
 }
 
+
 export interface Event {
   id: string
   store_id: string
   store_name: string
   start_date: string
   workers?: { id: string; name: string }[]
+spend_vdp?: number
+  spend_newspaper?: number
+  spend_postcard?: number
+  spend_spiffs?: number
   days: EventDay[]
   calendar_feed_url?: string
   created_by?: string
