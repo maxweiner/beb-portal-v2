@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import { createContext, useContext, useEffect, useState, useRef, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { User, Store, Event, Shipment, Theme, Brand, AppState } from '@/types'
 
@@ -10,7 +10,6 @@ interface AppContextType extends AppState {
   setBrand: (b: Brand) => void
   reload: (brand?: Brand) => Promise<void>
   setUser: (u: User | null) => void
-  // Expose individual setters so child components can update slices directly
   setStores: (stores: Store[]) => void
   setEvents: (events: Event[]) => void
 }
@@ -29,11 +28,9 @@ const DEFAULT_PERMS = {
   admin:      { buyer: false, admin: true },
 }
 
-// Liberty-specific theme defaults
 const LIBERTY_DEFAULT_THEME: Theme = 'liberty'
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  // ── Split state into individual pieces to avoid batching/overwrite races ──
   const [user, setUserState] = useState<User | null>(null)
   const [users, setUsers] = useState<User[]>([])
   const [stores, setStoresState] = useState<Store[]>([])
@@ -45,32 +42,54 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [brand, setBrandState] = useState<Brand>('beb')
 
+  // ── CRITICAL: use refs to avoid stale closures in reload ──
   const brandRef = useRef(brand)
-  useEffect(() => { brandRef.current = brand }, [brand])
+  brandRef.current = brand // update on every render, no useEffect needed
 
-  // ── reload: fetches all data and sets each piece independently ──
-  // Using individual setters means no single setState call can clobber another slice.
-  const reload = useCallback(async (overrideBrand?: Brand) => {
+  const themeRef = useRef(theme)
+  themeRef.current = theme
+
+  // ── reload: fetches all data with fresh queries ──
+  // Stored in a ref so it always has current brand without useCallback deps
+  const reloadRef = useRef<(overrideBrand?: Brand) => Promise<void>>(async () => {})
+
+  reloadRef.current = async (overrideBrand?: Brand) => {
     const currentBrand = overrideBrand || brandRef.current || 'beb'
     try {
+      // Create fresh query builders each time — never reuse
       const [usersRes, storesRes, eventsRes, shipmentsRes, permsRes] = await Promise.all([
         supabase.from('users').select('*').order('name'),
         supabase.from('stores').select('*').eq('brand', currentBrand).order('name'),
-        supabase.from('events').select('*, days:event_days(*), buyer_entries(*)').eq('brand', currentBrand).order('start_date', { ascending: false }),
-        supabase.from('shipments').select('*').eq('brand', currentBrand).order('ship_date', { ascending: false }),
+        supabase
+          .from('events')
+          .select('*, days:event_days(*), buyer_entries(*)')
+          .eq('brand', currentBrand)
+          .order('start_date', { ascending: false }),
+        supabase
+          .from('shipments')
+          .select('*')
+          .eq('brand', currentBrand)
+          .order('ship_date', { ascending: false }),
         supabase.from('settings').select('value').eq('key', 'permissions').maybeSingle(),
       ])
 
-      // Each setter is independent — no risk of one overwriting another
       if (usersRes.data) setUsers(usersRes.data)
       if (storesRes.data) setStoresState(storesRes.data)
-      if (eventsRes.data) setEventsState(eventsRes.data.map((e: any) => ({ ...e, days: e.days || [] })))
+      if (eventsRes.data) {
+        setEventsState(eventsRes.data.map((e: any) => ({ ...e, days: e.days || [] })))
+      }
       if (shipmentsRes.data) setShipments(shipmentsRes.data)
       setPermissions(permsRes.data?.value || DEFAULT_PERMS)
       setLoading(false)
     } catch (err) {
       console.error('reload error:', err)
+      setLoading(false)
     }
+  }
+
+  // Stable function reference that delegates to the ref
+  const reload = useMemo(() => {
+    return (overrideBrand?: Brand) => reloadRef.current(overrideBrand)
   }, [])
 
   // Safety net — never show spinner for more than 5 seconds
@@ -79,6 +98,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(t)
   }, [])
 
+  // Read saved preferences from localStorage
   useEffect(() => {
     const savedTheme = localStorage.getItem('beb-theme') as Theme || 'original'
     const savedBrand = localStorage.getItem('beb-brand') as Brand || 'beb'
@@ -86,7 +106,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setBrandState(savedBrand)
   }, [])
 
-  // Auth listener
+  // ── Auth listener ──
   useEffect(() => {
     let mounted = true
 
@@ -110,7 +130,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setUserState(userData)
       setBrandState(effectiveBrand)
       setLoading(false)
-      reload(effectiveBrand)
+      reloadRef.current(effectiveBrand)
     }).catch(() => {
       if (mounted) setLoading(false)
     })
@@ -133,7 +153,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (userData?.active && mounted) {
           setUserState(userData)
           setLoading(false)
-          reload()
+          reloadRef.current()
         }
       }
     })
@@ -144,15 +164,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const setTheme = useCallback((t: Theme) => {
+  // ── Theme setter ──
+  const setTheme = (t: Theme) => {
     localStorage.setItem('beb-theme', t)
     setThemeState(t)
-  }, [])
+  }
 
-  const setBrand = useCallback((b: Brand) => {
+  // ── Brand switcher with theme pairing ──
+  const setBrand = (b: Brand) => {
     localStorage.setItem('beb-brand', b)
-    const currentTheme = theme
+    const currentTheme = themeRef.current
     let newTheme = currentTheme
+
     if (b === 'liberty' && !currentTheme.startsWith('liberty')) {
       const savedLibertyTheme = localStorage.getItem('beb-liberty-theme') as Theme || LIBERTY_DEFAULT_THEME
       newTheme = savedLibertyTheme
@@ -162,28 +185,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       newTheme = savedBebTheme
       localStorage.setItem('beb-theme', newTheme)
     }
+
     if (b === 'liberty') localStorage.setItem('beb-beb-theme', currentTheme)
     if (b === 'beb') localStorage.setItem('beb-liberty-theme', currentTheme)
 
     setBrandState(b)
     setThemeState(newTheme)
-    reload(b)
-  }, [theme, reload])
+    reloadRef.current(b)
+  }
 
-  const setYear = useCallback((y: string) => setYearState(y), [])
-  const setUser = useCallback((u: User | null) => setUserState(u), [])
-
-  // Expose these so children can update stores/events directly after mutations
-  const setStores = useCallback((s: Store[]) => setStoresState(s), [])
-  const setEvents = useCallback((e: Event[]) => setEventsState(e), [])
+  const setYear = (y: string) => setYearState(y)
+  const setUser = (u: User | null) => setUserState(u)
+  const setStores = (s: Store[]) => setStoresState(s)
+  const setEvents = (e: Event[]) => setEventsState(e)
 
   const themeClass = brand === 'liberty'
     ? (theme.startsWith('liberty') ? `theme-${theme}` : 'theme-liberty')
     : (theme !== 'original' ? `theme-${theme}` : '')
 
-  // ── CRITICAL FIX: memoize the context value ──
-  // Without this, every render creates a new object reference,
-  // which forces ALL consumers to re-render on every keystroke.
+  // ── CRITICAL: memoize the context value ──
   const ctxValue = useMemo<AppContextType>(() => ({
     user, users, stores, events, shipments, permissions,
     theme, year, loading, brand,
@@ -192,8 +212,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }), [
     user, users, stores, events, shipments, permissions,
     theme, year, loading, brand,
-    setTheme, setYear, setBrand, reload, setUser,
-    setStores, setEvents,
+    reload,
   ])
 
   return (

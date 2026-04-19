@@ -8,11 +8,20 @@ import type { Event } from '@/types'
 type Filter = 'active' | 'all' | 'current' | 'past' | 'future' | 'days30' | 'days60'
 type Sort = 'date-desc' | 'date-asc' | 'name-asc'
 
+// ── Timeout wrapper: prevents permanent UI hangs from supabase deadlocks ──
+const withTimeout = <T,>(promise: Promise<T>, ms = 10000): Promise<T> => {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error('Request timed out')), ms)
+    ),
+  ])
+}
+
 export default function Events() {
   const { stores, users, user, brand, setEvents: setContextEvents } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
 
-  // ── FIX: local events state, fetched directly ──
   const [events, setEvents] = useState<Event[]>([])
   const [eventsLoaded, setEventsLoaded] = useState(false)
 
@@ -29,22 +38,27 @@ export default function Events() {
   const today = new Date(); today.setHours(0,0,0,0)
   const buyers = users.filter(u => u.active && u.is_buyer !== false)
 
-  // ── FIX: direct fetch function, no reload() dependency ──
+  // ── Direct fetch — fresh query builder each time ──
   const fetchEvents = useCallback(async () => {
-    const { data } = await supabase
-      .from('events')
-      .select('*, days:event_days(*), buyer_entries(*)')
-      .eq('brand', brand)
-      .order('start_date', { ascending: false })
-    if (data) {
-      const mapped = data.map((e: any) => ({ ...e, days: e.days || [] }))
-      setEvents(mapped)
-      setContextEvents(mapped) // keep context in sync for other pages
+    try {
+      const { data } = await withTimeout(
+        supabase
+          .from('events')
+          .select('*, days:event_days(*), buyer_entries(*)')
+          .eq('brand', brand)
+          .order('start_date', { ascending: false })
+      )
+      if (data) {
+        const mapped = data.map((e: any) => ({ ...e, days: e.days || [] }))
+        setEvents(mapped)
+        setContextEvents(mapped)
+      }
+    } catch (err) {
+      console.error('fetchEvents error:', err)
     }
     setEventsLoaded(true)
   }, [brand, setContextEvents])
 
-  // Fetch on mount and when brand changes
   useEffect(() => {
     fetchEvents()
   }, [fetchEvents])
@@ -77,35 +91,43 @@ export default function Events() {
     return (a.store_name || '').localeCompare(b.store_name || '')
   })
 
-  // ── FIX: createEvent re-fetches events table directly ──
+  // ── CRITICAL: fresh insert + direct re-fetch, no reload() ──
   const createEvent = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log('[CREATE] start', newEvent)
-    if (!newEvent.store_id || !newEvent.start_date) { console.log('[CREATE] validation fail'); return }
+    if (!newEvent.store_id || !newEvent.start_date) return
     setSaving(true)
-    console.log('[CREATE] saving set, about to insert')
     try {
       const store = stores.find(s => s.id === newEvent.store_id)
-      console.log('[CREATE] found store:', store?.name, 'inserting...')
-      console.log('[CREATE] supabase client exists:', !!supabase, 'from fn:', typeof supabase.from)
-      const insertPromise = supabase.from('events').insert({
-        brand,
-        store_id: newEvent.store_id,
-        store_name: store?.name || '',
-        start_date: newEvent.start_date,
-        created_by: user?.id,
-      })
-      console.log('[CREATE] insert promise created, awaiting...')
-      const { error } = await insertPromise
-      console.log('[CREATE] insert completed, error:', error)
+
+      // Fresh query builder — never reuse
+      const { data, error } = await withTimeout(
+        supabase.from('events').insert({
+          brand,
+          store_id: newEvent.store_id,
+          store_name: store?.name || '',
+          start_date: newEvent.start_date,
+          created_by: user?.id,
+        }).select().single()
+      )
       if (error) { alert('Failed to create event: ' + error.message); return }
 
-      // Reset form FIRST
+      // Reset form
       setShowForm(false)
       setNewEvent({ store_id: '', start_date: '' })
 
-      // Then re-fetch events directly — no reload()
-      await fetchEvents()
+      // Re-fetch with a fresh query
+      const { data: freshEvents } = await withTimeout(
+        supabase
+          .from('events')
+          .select('*, days:event_days(*), buyer_entries(*)')
+          .eq('brand', brand)
+          .order('start_date', { ascending: false })
+      )
+      if (freshEvents) {
+        const mapped = freshEvents.map((ev: any) => ({ ...ev, days: ev.days || [] }))
+        setEvents(mapped)
+        setContextEvents(mapped)
+      }
     } catch (err: any) {
       alert('Error creating event: ' + (err?.message || 'unknown'))
     } finally {
@@ -113,17 +135,32 @@ export default function Events() {
     }
   }
 
-  // ── FIX: deleteEvent uses optimistic local update ──
+  // ── Optimistic delete ──
   const deleteEvent = async (id: string) => {
     if (!confirm('Delete this event? This cannot be undone.')) return
-    const { error } = await supabase.from('events').delete().eq('id', id)
-    if (error) { alert('Delete failed: ' + error.message); return }
+
+    const prev = events
     const updated = events.filter(ev => ev.id !== id)
     setEvents(updated)
     setContextEvents(updated)
+
+    try {
+      const { error } = await withTimeout(
+        supabase.from('events').delete().eq('id', id)
+      )
+      if (error) {
+        setEvents(prev)
+        setContextEvents(prev)
+        alert('Delete failed: ' + error.message)
+      }
+    } catch (err: any) {
+      setEvents(prev)
+      setContextEvents(prev)
+      alert('Delete failed: ' + (err?.message || 'timeout'))
+    }
   }
 
-  // ── FIX: toggleWorker uses local state update ──
+  // ── Toggle worker with local state update ──
   const toggleWorker = async (ev: Event, uid: string, name: string) => {
     const workers = ev.workers || []
     const exists = workers.find(w => w.id === uid)
@@ -150,8 +187,14 @@ export default function Events() {
       }
     }
     const updated = exists ? workers.filter(w => w.id !== uid) : [...workers, { id: uid, name }]
-    await supabase.from('events').update({ workers: updated }).eq('id', ev.id)
-    // Update locally instead of reload()
+    try {
+      await withTimeout(
+        supabase.from('events').update({ workers: updated }).eq('id', ev.id)
+      )
+    } catch (err: any) {
+      alert('Failed to update workers: ' + (err?.message || 'timeout'))
+      return
+    }
     const updatedEvents = events.map(e => e.id === ev.id ? { ...e, workers: updated } : e)
     setEvents(updatedEvents)
     setContextEvents(updatedEvents)
@@ -162,7 +205,6 @@ export default function Events() {
     alert('Event summary link copied to clipboard!')
   }
 
-  /** Check if an event is currently running (within its 3-day window) */
   const isCurrent = (ev: Event) => {
     const start = new Date(ev.start_date + 'T12:00:00')
     const end = new Date(ev.start_date + 'T12:00:00')
@@ -171,7 +213,6 @@ export default function Events() {
     return today >= start && today <= end
   }
 
-  /** Check if an event ended more than 7 days ago */
   const isStale = (ev: Event) => {
     const end = new Date(ev.start_date + 'T12:00:00')
     end.setDate(end.getDate() + 2)
@@ -380,7 +421,7 @@ export default function Events() {
                 </div>
               )}
 
-              {/* Spend panel — FIX: pass fetchEvents instead of reload */}
+              {/* Spend panel */}
               {spendOpen === ev.id && (
                 <SpendPanel ev={ev} onClose={() => setSpendOpen(null)} refetchEvents={fetchEvents} />
               )}
@@ -407,12 +448,12 @@ export default function Events() {
         })}
       </div>
 
-      {/* ── Detail Modal ── */}
+      {/* Detail Modal */}
       {detail && (
         <EventDetailModal ev={detail} stores={stores} onClose={() => setDetail(null)} fmtDollars={fmtDollars} />
       )}
 
-      {/* ── Day Edit Modal — FIX: pass fetchEvents instead of reload ── */}
+      {/* Day Edit Modal */}
       {dayEdit && (
         <DayEditModal
           ev={dayEdit.ev}
@@ -539,7 +580,6 @@ function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
 }
 
 /* ══ SPEND PANEL ══ */
-/* FIX: accepts refetchEvents instead of reload */
 function SpendPanel({ ev, onClose, refetchEvents }: { ev: Event; onClose: () => void; refetchEvents: () => Promise<void> }) {
   const [spend, setSpend] = useState({
     spend_vdp:       String(ev.spend_vdp       || ''),
@@ -551,19 +591,20 @@ function SpendPanel({ ev, onClose, refetchEvents }: { ev: Event; onClose: () => 
 
   const save = async () => {
     setSaving(true)
-    await supabase.auth.refreshSession()
     try {
-      const { error } = await supabase.from('events').update({
-        spend_vdp:       parseFloat(spend.spend_vdp)       || 0,
-        spend_newspaper: parseFloat(spend.spend_newspaper) || 0,
-        spend_postcard:  parseFloat(spend.spend_postcard)  || 0,
-        spend_spiffs:    parseFloat(spend.spend_spiffs)    || 0,
-      }).eq('id', ev.id).select()
+      const { error } = await withTimeout(
+        supabase.from('events').update({
+          spend_vdp:       parseFloat(spend.spend_vdp)       || 0,
+          spend_newspaper: parseFloat(spend.spend_newspaper) || 0,
+          spend_postcard:  parseFloat(spend.spend_postcard)  || 0,
+          spend_spiffs:    parseFloat(spend.spend_spiffs)    || 0,
+        }).eq('id', ev.id)
+      )
       if (error) { alert('Error: ' + error.message); setSaving(false); return }
       await refetchEvents()
       onClose()
     } catch (err: any) {
-      alert('Unexpected error: ' + err.message)
+      alert('Unexpected error: ' + (err?.message || 'timeout'))
     }
     setSaving(false)
   }
@@ -631,33 +672,34 @@ function DayEditModal({ ev, dayNumber, onClose, onSaved }: {
   })
 
   useEffect(() => {
-    supabase.from('event_days')
-      .select('*')
-      .eq('event_id', ev.id)
-      .eq('day_number', dayNumber)
-      .maybeSingle()
-      .then(({ data }) => {
-        const d = data || existing
-        if (d) {
-          setExisting(d)
-          setForm({
-            customers:       String(d.customers       || ''),
-            purchases:       String(d.purchases       || ''),
-            dollars10:       String(d.dollars10       || ''),
-            dollars5:        String(d.dollars5        || ''),
-            src_vdp:         String(d.src_vdp         || ''),
-            src_postcard:    String(d.src_postcard    || ''),
-            src_social:      String(d.src_social      || ''),
-            src_wordofmouth: String(d.src_wordofmouth || ''),
-            src_repeat:      String(d.src_repeat      || ''),
-            src_other:       String(d.src_other       || ''),
-            src_store:       String(d.src_store        || ''),
-            src_text:        String(d.src_text         || ''),
-            src_newspaper:   String(d.src_newspaper   || ''),
-          })
-        }
-        setLoading(false)
-      })
+    withTimeout(
+      supabase.from('event_days')
+        .select('*')
+        .eq('event_id', ev.id)
+        .eq('day_number', dayNumber)
+        .maybeSingle()
+    ).then(({ data }) => {
+      const d = data || existing
+      if (d) {
+        setExisting(d)
+        setForm({
+          customers:       String(d.customers       || ''),
+          purchases:       String(d.purchases       || ''),
+          dollars10:       String(d.dollars10       || ''),
+          dollars5:        String(d.dollars5        || ''),
+          src_vdp:         String(d.src_vdp         || ''),
+          src_postcard:    String(d.src_postcard    || ''),
+          src_social:      String(d.src_social      || ''),
+          src_wordofmouth: String(d.src_wordofmouth || ''),
+          src_repeat:      String(d.src_repeat      || ''),
+          src_other:       String(d.src_other       || ''),
+          src_store:       String(d.src_store        || ''),
+          src_text:        String(d.src_text         || ''),
+          src_newspaper:   String(d.src_newspaper   || ''),
+        })
+      }
+      setLoading(false)
+    }).catch(() => setLoading(false))
   }, [ev.id, dayNumber])
 
   const dayDate = new Date(ev.start_date + 'T12:00:00')
@@ -666,7 +708,6 @@ function DayEditModal({ ev, dayNumber, onClose, onSaved }: {
     `Day ${dayNumber} — ${dayDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`
 
   const handleSave = async () => {
-    await supabase.auth.refreshSession()
     if (!n(form.purchases) && !n(form.dollars10)) {
       alert('Enter at least purchases and dollar amount.')
       return
@@ -681,15 +722,24 @@ function DayEditModal({ ev, dayNumber, onClose, onSaved }: {
       src_repeat: n(form.src_repeat), src_other: n(form.src_other),
       src_store: n(form.src_store), src_text: n(form.src_text), src_newspaper: n(form.src_newspaper),
     }
-    if (existing) {
-      const { error } = await supabase.from('event_days').update(payload).eq('id', existing.id)
-      if (error) { alert('Save failed: ' + error.message); setSaving(false); return }
-    } else {
-      const { error } = await supabase.from('event_days').insert(payload)
-      if (error) { alert('Save failed: ' + error.message); setSaving(false); return }
+    try {
+      if (existing) {
+        const { error } = await withTimeout(
+          supabase.from('event_days').update(payload).eq('id', existing.id)
+        )
+        if (error) { alert('Save failed: ' + error.message); setSaving(false); return }
+      } else {
+        const { error } = await withTimeout(
+          supabase.from('event_days').insert(payload).select().single()
+        )
+        if (error) { alert('Save failed: ' + error.message); setSaving(false); return }
+      }
+      setSaving(false)
+      onSaved()
+    } catch (err: any) {
+      alert('Save failed: ' + (err?.message || 'timeout'))
+      setSaving(false)
     }
-    setSaving(false)
-    onSaved()
   }
 
   const inp = (label: string, key: keyof typeof form, hint?: string) => (

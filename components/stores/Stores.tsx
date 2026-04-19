@@ -7,6 +7,16 @@ import type { Store } from '@/types'
 
 interface Employee { id: string; store_id: string; name: string; phone: string; email: string }
 
+// ── Timeout wrapper: prevents permanent UI hangs from supabase deadlocks ──
+const withTimeout = <T,>(promise: Promise<T>, ms = 10000): Promise<T> => {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error('Request timed out')), ms)
+    ),
+  ])
+}
+
 /** Extract address components from a Google Places result */
 function parsePlaceAddress(place: any) {
   const comps = place.address_components || []
@@ -39,7 +49,7 @@ function useGoogleMaps() {
   return loaded
 }
 
-// Store name search with Google Places - fills all fields
+// Store name search with Google Places
 function StoreSearch({ onSelect }: {
   onSelect: (data: {
     name: string; address: string; city: string; state: string; zip: string;
@@ -76,7 +86,7 @@ function StoreSearch({ onSelect }: {
 
 export default function Stores() {
   const { events, brand, setStores: setContextStores } = useApp()
-  // ── FIX: local stores state, fetched directly ──
+
   const [stores, setStores] = useState<Store[]>([])
   const [storesLoaded, setStoresLoaded] = useState(false)
   const [selected, setSelected] = useState<Store | null>(null)
@@ -87,24 +97,24 @@ export default function Stores() {
     name: '', address: '', city: '', state: '', zip: '', lat: 0, lng: 0, website: '', owner_phone: ''
   })
   const [placePicked, setPlacePicked] = useState(false)
-
   const [sort, setSort] = useState<'name' | 'state' | 'spent'>('name')
 
-  // ── FIX: direct fetch function, no reload() dependency ──
+  // ── Direct fetch — fresh query builder each time ──
   const fetchStores = useCallback(async () => {
-    const { data } = await supabase
-      .from('stores')
-      .select('*')
-      .eq('brand', brand)
-      .order('name')
-    if (data) {
-      setStores(data)
-      setContextStores(data) // keep context in sync for other pages
+    try {
+      const { data } = await withTimeout(
+        supabase.from('stores').select('*').eq('brand', brand).order('name')
+      )
+      if (data) {
+        setStores(data)
+        setContextStores(data)
+      }
+    } catch (err) {
+      console.error('fetchStores error:', err)
     }
     setStoresLoaded(true)
   }, [brand, setContextStores])
 
-  // Fetch on mount and when brand changes
   useEffect(() => {
     fetchStores()
   }, [fetchStores])
@@ -142,7 +152,7 @@ export default function Stores() {
     setPlacePicked(true)
   }
 
-  // ── FIX: createStore re-fetches stores table directly ──
+  // ── CRITICAL: fresh insert + direct re-fetch, no reload() ──
   const createStore = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newStore.name) { alert('Store name is required.'); return }
@@ -152,16 +162,24 @@ export default function Stores() {
     }
     setSaving(true)
     try {
-      const { error } = await supabase.from('stores').insert({ ...newStore, brand })
+      const { data, error } = await withTimeout(
+        supabase.from('stores').insert({ ...newStore, brand }).select().single()
+      )
       if (error) { alert('Failed to create store: ' + error.message); return }
 
-      // Reset form FIRST
+      // Reset form
       setShowForm(false)
       setNewStore({ name: '', address: '', city: '', state: '', zip: '', lat: 0, lng: 0, website: '', owner_phone: '' })
       setPlacePicked(false)
 
-      // Then re-fetch stores directly — no reload()
-      await fetchStores()
+      // Re-fetch stores directly with a fresh query
+      const { data: freshStores } = await withTimeout(
+        supabase.from('stores').select('*').eq('brand', brand).order('name')
+      )
+      if (freshStores) {
+        setStores(freshStores)
+        setContextStores(freshStores)
+      }
     } catch (err: any) {
       alert('Error creating store: ' + (err?.message || 'unknown'))
     } finally {
@@ -169,14 +187,31 @@ export default function Stores() {
     }
   }
 
-  // ── FIX: deleteStore uses optimistic local update ──
+  // ── Optimistic delete ──
   const deleteStore = async (id: string) => {
     if (!confirm('Delete this store? This cannot be undone.')) return
-    const { error } = await supabase.from('stores').delete().eq('id', id)
-    if (error) { alert('Delete failed: ' + error.message); return }
-    setStores(prev => prev.filter(s => s.id !== id))
-    setContextStores(stores.filter(s => s.id !== id))
+
+    // Optimistic: remove from UI immediately
+    const prev = stores
+    setStores(s => s.filter(x => x.id !== id))
+    setContextStores(prev.filter(x => x.id !== id))
     if (selected?.id === id) setSelected(null)
+
+    try {
+      const { error } = await withTimeout(
+        supabase.from('stores').delete().eq('id', id)
+      )
+      if (error) {
+        // Revert on failure
+        setStores(prev)
+        setContextStores(prev)
+        alert('Delete failed: ' + error.message)
+      }
+    } catch (err: any) {
+      setStores(prev)
+      setContextStores(prev)
+      alert('Delete failed: ' + (err?.message || 'timeout'))
+    }
   }
 
   return (
@@ -282,14 +317,12 @@ export default function Stores() {
         </div>
       </div>
 
-      {/* ── FIX: pass fetchStores instead of reload ── */}
       {selected && <StoreModal store={selected} onClose={() => setSelected(null)} refetchStores={fetchStores} />}
     </div>
   )
 }
 
 /* ── STORE DETAIL MODAL ── */
-/* FIX: accepts refetchStores callback instead of reload */
 function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: () => void; refetchStores: () => Promise<void> }) {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [details, setDetails] = useState({ ...store })
@@ -298,7 +331,6 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
   const fileRef = useRef<HTMLInputElement>(null)
   const imgRef = useRef<HTMLInputElement>(null)
   const [saving, setSaving] = useState<string | null>(null)
-  const mapsLoaded = useGoogleMaps()
 
   useEffect(() => {
     supabase.from('store_employees').select('*').eq('store_id', store.id).order('name')
@@ -307,32 +339,48 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
 
   const saveInfo = async () => {
     setSaving('info')
-    const { error } = await supabase.from('stores').update({
-      name: details.name, website: details.website,
-      address: details.address, city: details.city,
-      state: details.state?.toUpperCase(), zip: details.zip, notes: details.notes,
-    }).eq('id', store.id)
-    setSaving(null)
-    if (error) { alert('Save failed: ' + error.message); return }
-    alert('Store info saved!')
-    await refetchStores()
+    try {
+      const { error } = await withTimeout(
+        supabase.from('stores').update({
+          name: details.name, website: details.website,
+          address: details.address, city: details.city,
+          state: details.state?.toUpperCase(), zip: details.zip, notes: details.notes,
+        }).eq('id', store.id)
+      )
+      if (error) { alert('Save failed: ' + error.message); return }
+      alert('Store info saved!')
+      await refetchStores()
+    } catch (e: any) {
+      alert('Save failed: ' + (e?.message || 'unknown'))
+    } finally {
+      setSaving(null)
+    }
   }
 
   const saveOwner = async () => {
     setSaving('owner')
-    const { error } = await supabase.from('stores').update({
-      owner_name: details.owner_name, owner_phone: details.owner_phone, owner_email: details.owner_email,
-    }).eq('id', store.id)
-    setSaving(null)
-    if (error) { alert('Save failed: ' + error.message); return }
-    alert('Owner info saved!')
-    await refetchStores()
+    try {
+      const { error } = await withTimeout(
+        supabase.from('stores').update({
+          owner_name: details.owner_name, owner_phone: details.owner_phone, owner_email: details.owner_email,
+        }).eq('id', store.id)
+      )
+      if (error) { alert('Save failed: ' + error.message); return }
+      alert('Owner info saved!')
+      await refetchStores()
+    } catch (e: any) {
+      alert('Save failed: ' + (e?.message || 'unknown'))
+    } finally {
+      setSaving(null)
+    }
   }
 
   const saveFeed = async () => {
     setSaving('feed')
     try {
-      const { error } = await supabase.from('stores').update({ calendar_feed_url: feedUrl }).eq('id', store.id)
+      const { error } = await withTimeout(
+        supabase.from('stores').update({ calendar_feed_url: feedUrl }).eq('id', store.id)
+      )
       if (error) { alert('Save failed: ' + error.message); return }
       alert('Feed URL saved!')
       await refetchStores()
@@ -345,7 +393,7 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
 
   const deleteEmployee = async (id: string) => {
     if (!confirm('Remove this employee?')) return
-    await supabase.from('store_employees').delete().eq('id', id)
+    await withTimeout(supabase.from('store_employees').delete().eq('id', id))
     setEmployees(p => p.filter(e => e.id !== id))
   }
 
@@ -353,7 +401,7 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
     const reader = new FileReader()
     reader.onload = async (e) => {
       const dataUrl = e.target?.result as string
-      await supabase.from('stores').update({ [field]: dataUrl }).eq('id', store.id)
+      await withTimeout(supabase.from('stores').update({ [field]: dataUrl }).eq('id', store.id))
       if (field === 'qr_code_url') setStoreImage(dataUrl)
       alert('Image uploaded!')
       await refetchStores()
@@ -454,7 +502,7 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
                   <button className="btn-primary btn-sm" onClick={() => imgRef.current?.click()}>Replace Image</button>
                   <button className="btn-danger btn-sm" onClick={async () => {
                     if (!confirm('Remove store image?')) return
-                    await supabase.from('stores').update({ store_image_url: '' }).eq('id', store.id)
+                    await withTimeout(supabase.from('stores').update({ store_image_url: '' }).eq('id', store.id))
                     await refetchStores()
                   }}>Remove</button>
                 </div>
@@ -478,7 +526,7 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
             {employees.map(emp => (
               <EmpRow key={emp.id} emp={emp}
                 onSave={async (updated) => {
-                  const { error } = await supabase.from('store_employees').update(updated).eq('id', emp.id)
+                  const { error } = await withTimeout(supabase.from('store_employees').update(updated).eq('id', emp.id))
                   if (error) { alert('Error: ' + error.message); return }
                   setEmployees(p => p.map(e => e.id === emp.id ? { ...e, ...updated } : e))
                 }}
@@ -488,11 +536,12 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
             <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--pearl)' }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ash)', marginBottom: 10 }}>Add Employees</div>
               <NewEmpRows onAdd={(emp) => {
-                supabase.from('store_employees').insert({ ...emp, store_id: store.id }).select().single()
-                  .then(({ data, error }) => {
-                    if (error) { alert('Error: ' + error.message); return }
-                    if (data) setEmployees(p => [...p, data])
-                  })
+                withTimeout(
+                  supabase.from('store_employees').insert({ ...emp, store_id: store.id }).select().single()
+                ).then(({ data, error }) => {
+                  if (error) { alert('Error: ' + error.message); return }
+                  if (data) setEmployees(p => [...p, data])
+                }).catch(err => alert('Error: ' + err.message))
               }} />
             </div>
           </div>
@@ -508,14 +557,11 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
                 ✓ Current: {store.calendar_feed_url}
               </div>
             )}
-            {/* Personal iCal URL */}
             <div className="field">
               <label className="fl">iCal Feed URL</label>
               <input value={feedUrl} onChange={e => setFeedUrl(e.target.value)}
                 placeholder="https://calendar.google.com/calendar/ical/.../.ics" style={{ fontSize: 12 }} />
             </div>
-
-
             <div style={{ display: 'flex', gap: 8 }}>
               <button className="btn-primary btn-sm" onClick={saveFeed} disabled={saving === 'feed'}>
                 {saving === 'feed' ? 'Saving…' : 'Save Feed URL'}
@@ -524,7 +570,7 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
                 <button className="btn-danger btn-sm" onClick={async () => {
                   if (!confirm('Remove calendar feed URL?')) return
                   try {
-                    await supabase.from('stores').update({ calendar_feed_url: '' }).eq('id', store.id)
+                    await withTimeout(supabase.from('stores').update({ calendar_feed_url: '' }).eq('id', store.id))
                     setFeedUrl('')
                     await refetchStores()
                   } catch (e: any) {
@@ -545,7 +591,7 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
                   <button className="btn-primary btn-sm" onClick={() => fileRef.current?.click()}>Replace QR Code</button>
                   <button className="btn-danger btn-sm" onClick={async () => {
                     if (!confirm('Remove QR code?')) return
-                    await supabase.from('stores').update({ qr_code_url: '' }).eq('id', store.id)
+                    await withTimeout(supabase.from('stores').update({ qr_code_url: '' }).eq('id', store.id))
                     setStoreImage('')
                     await refetchStores()
                   }}>Remove</button>
@@ -579,7 +625,6 @@ function EmpRow({ emp, onSave, onDelete }: {
 
   const save = async () => {
     if (!vals.name) return
-    await supabase.auth.refreshSession()
     setSaving(true)
     await onSave(vals)
     setSaving(false)
@@ -621,7 +666,6 @@ function NewEmpRows({ onAdd }: { onAdd: (emp: { name: string; phone: string; ema
     setRows(p => p.map(r => r.id === id ? { ...r, [key]: val } : r))
 
   const addRow = () => setRows(p => [...p, blank()])
-
   const removeRow = (id: string) => setRows(p => p.filter(r => r.id !== id))
 
   const saveAll = () => {
@@ -633,7 +677,7 @@ function NewEmpRows({ onAdd }: { onAdd: (emp: { name: string; phone: string; ema
 
   return (
     <div>
-      {rows.map((row, i) => (
+      {rows.map((row) => (
         <div key={row.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 8, marginBottom: 8, alignItems: 'center' }}>
           <input value={row.name} onChange={e => update(row.id, 'name', e.target.value)}
             placeholder="Name *" style={{ fontSize: 13 }} />
@@ -668,21 +712,24 @@ function StoreContacts({ storeId }: { storeId: string }) {
   }, [storeId])
 
   const addContact = async (c: { name: string; phone: string; email: string; title: string }) => {
-    const { data, error } = await supabase.from('store_contacts')
-      .insert({ ...c, store_id: storeId }).select().single()
+    const { data, error } = await withTimeout(
+      supabase.from('store_contacts').insert({ ...c, store_id: storeId }).select().single()
+    )
     if (error) { alert('Error: ' + error.message); return }
     if (data) setContacts(p => [...p, data])
   }
 
   const updateContact = async (id: string, updates: Partial<Contact>) => {
-    const { error } = await supabase.from('store_contacts').update(updates).eq('id', id)
+    const { error } = await withTimeout(
+      supabase.from('store_contacts').update(updates).eq('id', id)
+    )
     if (error) { alert('Error: ' + error.message); return }
     setContacts(p => p.map(c => c.id === id ? { ...c, ...updates } : c))
   }
 
   const deleteContact = async (id: string) => {
     if (!confirm('Remove this contact?')) return
-    await supabase.from('store_contacts').delete().eq('id', id)
+    await withTimeout(supabase.from('store_contacts').delete().eq('id', id))
     setContacts(p => p.filter(c => c.id !== id))
   }
 
@@ -718,7 +765,6 @@ function ContactRow({ contact, onSave, onDelete }: {
 
   const save = async () => {
     if (!vals.name) return
-    await supabase.auth.refreshSession()
     setSaving(true)
     await onSave(vals)
     setSaving(false)
