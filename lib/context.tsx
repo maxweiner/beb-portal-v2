@@ -1,14 +1,18 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { User, Store, Event, Shipment, Theme, AppState } from '@/types'
+import type { User, Store, Event, Shipment, Theme, Brand, AppState } from '@/types'
 
 interface AppContextType extends AppState {
   setTheme: (t: Theme) => void
   setYear: (y: string) => void
-  reload: () => Promise<void>
+  setBrand: (b: Brand) => void
+  reload: (brand?: Brand) => Promise<void>
   setUser: (u: User | null) => void
+  // Expose individual setters so child components can update slices directly
+  setStores: (stores: Store[]) => void
+  setEvents: (events: Event[]) => void
 }
 
 const AppContext = createContext<AppContextType | null>(null)
@@ -25,38 +29,45 @@ const DEFAULT_PERMS = {
   admin:      { buyer: false, admin: true },
 }
 
-export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AppState>({
-    user: null,
-    users: [],
-    stores: [],
-    events: [],
-    shipments: [],
-    permissions: null,
-    theme: 'original',
-    year: String(new Date().getFullYear()),
-    loading: true,
-  })
+// Liberty-specific theme defaults
+const LIBERTY_DEFAULT_THEME: Theme = 'liberty'
 
-  const reload = useCallback(async () => {
-    console.log('[Context] reload called', new Date().toISOString())
+export function AppProvider({ children }: { children: React.ReactNode }) {
+  // ── Split state into individual pieces to avoid batching/overwrite races ──
+  const [user, setUserState] = useState<User | null>(null)
+  const [users, setUsers] = useState<User[]>([])
+  const [stores, setStoresState] = useState<Store[]>([])
+  const [events, setEventsState] = useState<Event[]>([])
+  const [shipments, setShipments] = useState<Shipment[]>([])
+  const [permissions, setPermissions] = useState<any>(null)
+  const [theme, setThemeState] = useState<Theme>('original')
+  const [year, setYearState] = useState(String(new Date().getFullYear()))
+  const [loading, setLoading] = useState(true)
+  const [brand, setBrandState] = useState<Brand>('beb')
+
+  const brandRef = useRef(brand)
+  useEffect(() => { brandRef.current = brand }, [brand])
+
+  // ── reload: fetches all data and sets each piece independently ──
+  // Using individual setters means no single setState call can clobber another slice.
+  const reload = useCallback(async (overrideBrand?: Brand) => {
+    const currentBrand = overrideBrand || brandRef.current || 'beb'
     try {
       const [usersRes, storesRes, eventsRes, shipmentsRes, permsRes] = await Promise.all([
         supabase.from('users').select('*').order('name'),
-        supabase.from('stores').select('*').order('name'),
-        supabase.from('events').select('*, days:event_days(*)').order('start_date', { ascending: false }),
-        supabase.from('shipments').select('*').order('ship_date', { ascending: false }),
+        supabase.from('stores').select('*').eq('brand', currentBrand).order('name'),
+        supabase.from('events').select('*, days:event_days(*), buyer_entries(*)').eq('brand', currentBrand).order('start_date', { ascending: false }),
+        supabase.from('shipments').select('*').eq('brand', currentBrand).order('ship_date', { ascending: false }),
         supabase.from('settings').select('value').eq('key', 'permissions').maybeSingle(),
       ])
-      setState(prev => ({
-        ...prev,
-        users: usersRes.data || [],
-        stores: storesRes.data || [],
-        events: (eventsRes.data || []).map((e: any) => ({ ...e, days: e.days || [] })),
-        shipments: shipmentsRes.data || [],
-        permissions: permsRes.data?.value || DEFAULT_PERMS,
-        loading: false,
-      }))
+
+      // Each setter is independent — no risk of one overwriting another
+      if (usersRes.data) setUsers(usersRes.data)
+      if (storesRes.data) setStoresState(storesRes.data)
+      if (eventsRes.data) setEventsState(eventsRes.data.map((e: any) => ({ ...e, days: e.days || [] })))
+      if (shipmentsRes.data) setShipments(shipmentsRes.data)
+      setPermissions(permsRes.data?.value || DEFAULT_PERMS)
+      setLoading(false)
     } catch (err) {
       console.error('reload error:', err)
     }
@@ -64,14 +75,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Safety net — never show spinner for more than 5 seconds
   useEffect(() => {
-    const t = setTimeout(() => {
-      setState(prev => prev.loading ? { ...prev, loading: false } : prev)
-    }, 5000)
+    const t = setTimeout(() => setLoading(false), 5000)
     return () => clearTimeout(t)
   }, [])
+
   useEffect(() => {
-    const saved = localStorage.getItem('beb-theme') as Theme || 'original'
-    setState(prev => ({ ...prev, theme: saved }))
+    const savedTheme = localStorage.getItem('beb-theme') as Theme || 'original'
+    const savedBrand = localStorage.getItem('beb-brand') as Brand || 'beb'
+    setThemeState(savedTheme)
+    setBrandState(savedBrand)
   }, [])
 
   // Auth listener
@@ -80,71 +92,113 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!mounted) return
-
       if (!session) {
-        setState(prev => ({ ...prev, loading: false }))
+        setLoading(false)
         return
       }
-
       const email = session.user.email
       const { data: userData } = await supabase
-        .from('users')
-        .select('*')
-        .eq('email', email)
-        .maybeSingle()
-
+        .from('users').select('*').eq('email', email).maybeSingle()
       if (!mounted) return
-
       if (!userData || !userData.active) {
-        setState(prev => ({ ...prev, user: null, loading: false }))
+        setUserState(null)
+        setLoading(false)
         return
       }
-
-      setState(prev => ({ ...prev, user: userData, loading: false }))
-      reload()
+      const savedBrand = localStorage.getItem('beb-brand') as Brand || 'beb'
+      const effectiveBrand = savedBrand === 'liberty' && !userData.liberty_access ? 'beb' : savedBrand
+      setUserState(userData)
+      setBrandState(effectiveBrand)
+      setLoading(false)
+      reload(effectiveBrand)
     }).catch(() => {
-      if (mounted) setState(prev => ({ ...prev, loading: false }))
+      if (mounted) setLoading(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('[Auth] event:', event)
       if (!mounted) return
-      // Only react to explicit sign in/out — ignore TOKEN_REFRESHED to prevent reload loops
       if (event === 'SIGNED_OUT') {
-        setState(prev => ({ ...prev, user: null, users: [], stores: [], events: [], shipments: [], loading: false }))
+        setUserState(null)
+        setUsers([])
+        setStoresState([])
+        setEventsState([])
+        setShipments([])
+        setBrandState('beb')
+        setLoading(false)
         return
       }
       if (event === 'SIGNED_IN' && session?.user?.email) {
         const { data: userData } = await supabase
-          .from('users')
-          .select('*')
-          .eq('email', session.user.email)
-          .maybeSingle()
+          .from('users').select('*').eq('email', session.user.email).maybeSingle()
         if (userData?.active && mounted) {
-          setState(prev => ({ ...prev, user: userData, loading: false }))
+          setUserState(userData)
+          setLoading(false)
           reload()
         }
       }
-      // Ignore TOKEN_REFRESHED, USER_UPDATED, etc.
     })
 
     return () => {
       mounted = false
       subscription.unsubscribe()
     }
-  }, [reload])
+  }, [])
 
-  const setTheme = (t: Theme) => {
+  const setTheme = useCallback((t: Theme) => {
     localStorage.setItem('beb-theme', t)
-    setState(prev => ({ ...prev, theme: t }))
-  }
+    setThemeState(t)
+  }, [])
 
-  const setYear = (y: string) => setState(prev => ({ ...prev, year: y }))
-  const setUser = (u: User | null) => setState(prev => ({ ...prev, user: u }))
+  const setBrand = useCallback((b: Brand) => {
+    localStorage.setItem('beb-brand', b)
+    const currentTheme = theme
+    let newTheme = currentTheme
+    if (b === 'liberty' && !currentTheme.startsWith('liberty')) {
+      const savedLibertyTheme = localStorage.getItem('beb-liberty-theme') as Theme || LIBERTY_DEFAULT_THEME
+      newTheme = savedLibertyTheme
+      localStorage.setItem('beb-theme', newTheme)
+    } else if (b === 'beb' && currentTheme.startsWith('liberty')) {
+      const savedBebTheme = localStorage.getItem('beb-beb-theme') as Theme || 'original'
+      newTheme = savedBebTheme
+      localStorage.setItem('beb-theme', newTheme)
+    }
+    if (b === 'liberty') localStorage.setItem('beb-beb-theme', currentTheme)
+    if (b === 'beb') localStorage.setItem('beb-liberty-theme', currentTheme)
+
+    setBrandState(b)
+    setThemeState(newTheme)
+    reload(b)
+  }, [theme, reload])
+
+  const setYear = useCallback((y: string) => setYearState(y), [])
+  const setUser = useCallback((u: User | null) => setUserState(u), [])
+
+  // Expose these so children can update stores/events directly after mutations
+  const setStores = useCallback((s: Store[]) => setStoresState(s), [])
+  const setEvents = useCallback((e: Event[]) => setEventsState(e), [])
+
+  const themeClass = brand === 'liberty'
+    ? (theme.startsWith('liberty') ? `theme-${theme}` : 'theme-liberty')
+    : (theme !== 'original' ? `theme-${theme}` : '')
+
+  // ── CRITICAL FIX: memoize the context value ──
+  // Without this, every render creates a new object reference,
+  // which forces ALL consumers to re-render on every keystroke.
+  const ctxValue = useMemo<AppContextType>(() => ({
+    user, users, stores, events, shipments, permissions,
+    theme, year, loading, brand,
+    setTheme, setYear, setBrand, reload, setUser,
+    setStores, setEvents,
+  }), [
+    user, users, stores, events, shipments, permissions,
+    theme, year, loading, brand,
+    setTheme, setYear, setBrand, reload, setUser,
+    setStores, setEvents,
+  ])
 
   return (
-    <AppContext.Provider value={{ ...state, setTheme, setYear, reload, setUser }}>
-      <div className={state.theme !== 'original' ? `theme-${state.theme}` : ''}>
+    <AppContext.Provider value={ctxValue}>
+      <div className={themeClass}>
         {children}
       </div>
     </AppContext.Provider>

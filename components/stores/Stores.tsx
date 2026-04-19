@@ -1,11 +1,26 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { Store } from '@/types'
 
 interface Employee { id: string; store_id: string; name: string; phone: string; email: string }
+
+/** Extract address components from a Google Places result */
+function parsePlaceAddress(place: any) {
+  const comps = place.address_components || []
+  const get = (type: string) => comps.find((c: any) => c.types.includes(type))?.long_name || ''
+  const getShort = (type: string) => comps.find((c: any) => c.types.includes(type))?.short_name || ''
+  return {
+    address: `${get('street_number')} ${get('route')}`.trim(),
+    city: get('locality') || get('sublocality') || get('neighborhood'),
+    state: getShort('administrative_area_level_1'),
+    zip: get('postal_code'),
+    lat: place.geometry?.location?.lat() || 0,
+    lng: place.geometry?.location?.lng() || 0,
+  }
+}
 
 // Load Google Maps script once
 function useGoogleMaps() {
@@ -24,9 +39,12 @@ function useGoogleMaps() {
   return loaded
 }
 
-// Address autocomplete input component
-function AddressAutocomplete({ onSelect }: {
-  onSelect: (data: { address: string; city: string; state: string; zip: string; lat: number; lng: number }) => void
+// Store name search with Google Places - fills all fields
+function StoreSearch({ onSelect }: {
+  onSelect: (data: {
+    name: string; address: string; city: string; state: string; zip: string;
+    lat: number; lng: number; website?: string; phone?: string
+  }) => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const mapsLoaded = useGoogleMaps()
@@ -34,88 +52,149 @@ function AddressAutocomplete({ onSelect }: {
   useEffect(() => {
     if (!mapsLoaded || !inputRef.current) return
     const autocomplete = new (window as any).google.maps.places.Autocomplete(inputRef.current, {
-      types: ['address'],
+      types: ['establishment'],
       componentRestrictions: { country: 'us' },
-      fields: ['address_components', 'formatted_address', 'geometry'],
+      fields: ['name', 'address_components', 'formatted_address', 'geometry', 'website', 'formatted_phone_number'],
     })
     autocomplete.addListener('place_changed', () => {
       const place = autocomplete.getPlace()
       if (!place.address_components) return
-      const get = (type: string) => place.address_components.find((c: any) => c.types.includes(type))?.long_name || ''
-      const getShort = (type: string) => place.address_components.find((c: any) => c.types.includes(type))?.short_name || ''
-      const streetNum = get('street_number')
-      const streetName = get('route')
+      const addr = parsePlaceAddress(place)
       onSelect({
-        address: `${streetNum} ${streetName}`.trim(),
-        city: get('locality') || get('sublocality') || get('neighborhood'),
-        state: getShort('administrative_area_level_1'),
-        zip: get('postal_code'),
-        lat: place.geometry?.location?.lat() || 0,
-        lng: place.geometry?.location?.lng() || 0,
+        ...addr,
+        name: place.name || '',
+        website: place.website || '',
+        phone: place.formatted_phone_number || '',
       })
     })
-  }, [mapsLoaded, onSelect])
+  }, [mapsLoaded])
 
   return (
-    <input ref={inputRef} type="text" placeholder="Start typing store address…" />
+    <input ref={inputRef} type="text" placeholder="Search for a jewelry store by name…" />
   )
 }
 
 export default function Stores() {
-  const { stores, events, reload } = useApp()
+  const { events, brand, setStores: setContextStores } = useApp()
+  // ── FIX: local stores state, fetched directly ──
+  const [stores, setStores] = useState<Store[]>([])
+  const [storesLoaded, setStoresLoaded] = useState(false)
   const [selected, setSelected] = useState<Store | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
   const [newStore, setNewStore] = useState({
-    name: '', address: '', city: '', state: '', zip: '', lat: 0, lng: 0
+    name: '', address: '', city: '', state: '', zip: '', lat: 0, lng: 0, website: '', owner_phone: ''
   })
-  const [addressPicked, setAddressPicked] = useState(false)
+  const [placePicked, setPlacePicked] = useState(false)
+
+  const [sort, setSort] = useState<'name' | 'state' | 'spent'>('name')
+
+  // ── FIX: direct fetch function, no reload() dependency ──
+  const fetchStores = useCallback(async () => {
+    const { data } = await supabase
+      .from('stores')
+      .select('*')
+      .eq('brand', brand)
+      .order('name')
+    if (data) {
+      setStores(data)
+      setContextStores(data) // keep context in sync for other pages
+    }
+    setStoresLoaded(true)
+  }, [brand, setContextStores])
+
+  // Fetch on mount and when brand changes
+  useEffect(() => {
+    fetchStores()
+  }, [fetchStores])
+
+  const storeSpend = (storeId: string) => {
+    return events
+      .filter(ev => ev.store_id === storeId && new Date(ev.start_date).getFullYear() === new Date().getFullYear())
+      .reduce((total, ev) => total + ev.days.reduce((s, d) => s + (d.dollars10 || 0) + (d.dollars5 || 0), 0), 0)
+  }
 
   const filtered = stores.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase()) ||
     (s.city || '').toLowerCase().includes(search.toLowerCase()) ||
     (s.state || '').toLowerCase().includes(search.toLowerCase())
-  )
+  ).sort((a, b) => {
+    if (sort === 'name') return a.name.localeCompare(b.name)
+    if (sort === 'state') return (a.state || '').localeCompare(b.state || '') || a.name.localeCompare(b.name)
+    if (sort === 'spent') return storeSpend(b.id) - storeSpend(a.id)
+    return 0
+  })
 
-  const handleAddressSelect = (data: any) => {
-    setNewStore(p => ({ ...p, ...data }))
-    setAddressPicked(true)
+  const handlePlaceSelect = (data: any) => {
+    setNewStore(p => ({
+      ...p,
+      name: data.name || p.name,
+      address: data.address,
+      city: data.city,
+      state: data.state,
+      zip: data.zip,
+      lat: data.lat,
+      lng: data.lng,
+      website: data.website || '',
+      owner_phone: data.phone || '',
+    }))
+    setPlacePicked(true)
   }
 
+  // ── FIX: createStore re-fetches stores table directly ──
   const createStore = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newStore.name) { alert('Store name is required.'); return }
-    if (!addressPicked || !newStore.address || !newStore.city || !newStore.state || !newStore.zip) {
-      alert('Please select a complete address from the autocomplete dropdown.')
+    if (!newStore.address || !newStore.city || !newStore.state || !newStore.zip) {
+      alert('Please select a store from the search dropdown to fill in the address.')
       return
     }
     setSaving(true)
-    await supabase.from('stores').insert(newStore)
-    setSaving(false)
-    setShowForm(false)
-    setNewStore({ name: '', address: '', city: '', state: '', zip: '', lat: 0, lng: 0 })
-    setAddressPicked(false)
-    reload()
+    try {
+      const { error } = await supabase.from('stores').insert({ ...newStore, brand })
+      if (error) { alert('Failed to create store: ' + error.message); return }
+
+      // Reset form FIRST
+      setShowForm(false)
+      setNewStore({ name: '', address: '', city: '', state: '', zip: '', lat: 0, lng: 0, website: '', owner_phone: '' })
+      setPlacePicked(false)
+
+      // Then re-fetch stores directly — no reload()
+      await fetchStores()
+    } catch (err: any) {
+      alert('Error creating store: ' + (err?.message || 'unknown'))
+    } finally {
+      setSaving(false)
+    }
   }
 
+  // ── FIX: deleteStore uses optimistic local update ──
   const deleteStore = async (id: string) => {
     if (!confirm('Delete this store? This cannot be undone.')) return
-    await supabase.from('stores').delete().eq('id', id)
-    reload()
+    const { error } = await supabase.from('stores').delete().eq('id', id)
+    if (error) { alert('Delete failed: ' + error.message); return }
+    setStores(prev => prev.filter(s => s.id !== id))
+    setContextStores(stores.filter(s => s.id !== id))
+    if (selected?.id === id) setSelected(null)
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-6 max-w-6xl mx-auto">
       <div className="notice notice-gold" style={{ display: 'inline-block', marginBottom: 16 }}>
         Admin only — buyers cannot add or remove stores.
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <h2 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)' }}>Jewelry Stores</h2>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search stores…" style={{ width: 200 }} />
+            placeholder="Search stores…" style={{ width: 180 }} />
+          <select value={sort} onChange={e => setSort(e.target.value as any)} style={{ width: 'auto' }}>
+            <option value="name">Sort: A–Z</option>
+            <option value="state">Sort: By State</option>
+            <option value="spent">Sort: Amount Spent ({new Date().getFullYear()})</option>
+          </select>
           <button className="btn-primary" onClick={() => setShowForm(true)}>+ Add Store</button>
         </div>
       </div>
@@ -125,24 +204,33 @@ export default function Stores() {
           <div className="card-title">New Jewelry Store</div>
           <form onSubmit={createStore}>
             <div className="field">
-              <label className="fl">Store Name *</label>
-              <input value={newStore.name} onChange={e => setNewStore(p => ({ ...p, name: e.target.value }))}
-                placeholder="Premier Fine Jewelry" required />
+              <label className="fl">Search for Store *</label>
+              <StoreSearch onSelect={handlePlaceSelect} />
+              <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 4 }}>
+                Start typing the store name to search Google Places
+              </div>
             </div>
-            <div className="field">
-              <label className="fl">Store Address *</label>
-              <AddressAutocomplete onSelect={handleAddressSelect} />
-            </div>
-            {addressPicked && (
+
+            {placePicked && (
               <div className="notice notice-jade" style={{ marginBottom: 14 }}>
-                ✓ {newStore.address}, {newStore.city}, {newStore.state} {newStore.zip}
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>✓ {newStore.name}</div>
+                <div style={{ fontSize: 13 }}>{newStore.address}, {newStore.city}, {newStore.state} {newStore.zip}</div>
+                {newStore.website && <div style={{ fontSize: 12, marginTop: 2 }}>🌐 {newStore.website}</div>}
+                {newStore.owner_phone && <div style={{ fontSize: 12 }}>📞 {newStore.owner_phone}</div>}
               </div>
             )}
+
+            <div className="field">
+              <label className="fl">Store Name *</label>
+              <input value={newStore.name} onChange={e => setNewStore(p => ({ ...p, name: e.target.value }))}
+                placeholder="Edit name if needed" required />
+            </div>
+
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="submit" className="btn-primary btn-sm" disabled={saving}>
                 {saving ? 'Adding…' : 'Add Store'}
               </button>
-              <button type="button" className="btn-outline btn-sm" onClick={() => { setShowForm(false); setAddressPicked(false) }}>
+              <button type="button" className="btn-outline btn-sm" onClick={() => { setShowForm(false); setPlacePicked(false) }}>
                 Cancel
               </button>
             </div>
@@ -156,24 +244,33 @@ export default function Stores() {
             <thead>
               <tr>
                 <th>Store</th>
-                <th>Location</th>
+                <th>City</th>
+                <th>State</th>
                 <th>Events</th>
+                <th>💰 Amount Spent ({new Date().getFullYear()})</th>
                 <th style={{ width: 80 }}></th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={4} style={{ textAlign: 'center', padding: 40, color: 'var(--fog)' }}>No stores yet.</td></tr>
+                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--fog)' }}>No stores yet.</td></tr>
               )}
               {filtered.map(s => {
                 const ec = events.filter(e => e.store_id === s.id).length
+                const spent = storeSpend(s.id)
                 return (
                   <tr key={s.id} onClick={() => setSelected(s)} style={{ cursor: 'pointer' }}
                     onMouseOver={e => (e.currentTarget as HTMLElement).style.background = 'var(--cream2)'}
                     onMouseOut={e => (e.currentTarget as HTMLElement).style.background = ''}>
                     <td><span style={{ color: 'var(--green-dark)', fontWeight: 700 }}>◆ {s.name}</span></td>
-                    <td>{s.city}{s.city && s.state ? ', ' : ''}{s.state}</td>
+                    <td>{s.city || '—'}</td>
+                    <td>{s.state || '—'}</td>
                     <td>{ec}</td>
+                    <td>
+                      {spent > 0
+                        ? <span style={{ fontWeight: 700, color: 'var(--green)' }}>${Math.round(spent).toLocaleString()}</span>
+                        : <span style={{ color: 'var(--silver)' }}>—</span>}
+                    </td>
                     <td onClick={e => e.stopPropagation()}>
                       <button className="btn-danger btn-xs" onClick={() => deleteStore(s.id)}>Delete</button>
                     </td>
@@ -185,15 +282,17 @@ export default function Stores() {
         </div>
       </div>
 
-      {selected && <StoreModal store={selected} onClose={() => setSelected(null)} reload={reload} />}
+      {/* ── FIX: pass fetchStores instead of reload ── */}
+      {selected && <StoreModal store={selected} onClose={() => setSelected(null)} refetchStores={fetchStores} />}
     </div>
   )
 }
 
-function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => void; reload: () => void }) {
+/* ── STORE DETAIL MODAL ── */
+/* FIX: accepts refetchStores callback instead of reload */
+function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: () => void; refetchStores: () => Promise<void> }) {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [details, setDetails] = useState({ ...store })
-  const [newEmp, setNewEmp] = useState({ name: '', phone: '', email: '' })
   const [feedUrl, setFeedUrl] = useState(store.calendar_feed_url || '')
   const [storeImage, setStoreImage] = useState(store.qr_code_url || '')
   const fileRef = useRef<HTMLInputElement>(null)
@@ -216,7 +315,7 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
     setSaving(null)
     if (error) { alert('Save failed: ' + error.message); return }
     alert('Store info saved!')
-    reload()
+    await refetchStores()
   }
 
   const saveOwner = async () => {
@@ -227,25 +326,21 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
     setSaving(null)
     if (error) { alert('Save failed: ' + error.message); return }
     alert('Owner info saved!')
-    reload()
+    await refetchStores()
   }
 
   const saveFeed = async () => {
     setSaving('feed')
-    const { error } = await supabase.from('stores').update({ calendar_feed_url: feedUrl }).eq('id', store.id)
-    setSaving(null)
-    if (error) { alert('Save failed: ' + error.message); return }
-    alert('Feed URL saved!')
-    reload()
-  }
-
-  const addEmployee = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newEmp.name) return
-    const { data, error } = await supabase.from('store_employees').insert({ ...newEmp, store_id: store.id }).select().single()
-    if (error) { alert('Error adding employee: ' + error.message); return }
-    if (data) setEmployees(p => [...p, data])
-    setNewEmp({ name: '', phone: '', email: '' })
+    try {
+      const { error } = await supabase.from('stores').update({ calendar_feed_url: feedUrl }).eq('id', store.id)
+      if (error) { alert('Save failed: ' + error.message); return }
+      alert('Feed URL saved!')
+      await refetchStores()
+    } catch (e: any) {
+      alert('Save failed: ' + (e?.message || 'unknown error'))
+    } finally {
+      setSaving(null)
+    }
   }
 
   const deleteEmployee = async (id: string) => {
@@ -261,7 +356,7 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
       await supabase.from('stores').update({ [field]: dataUrl }).eq('id', store.id)
       if (field === 'qr_code_url') setStoreImage(dataUrl)
       alert('Image uploaded!')
-      reload()
+      await refetchStores()
     }
     reader.readAsDataURL(file)
   }
@@ -306,7 +401,19 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
 
           {/* Store Information */}
           <div className="card card-accent" style={{ margin: 0 }}>
-            <div className="card-title">Store Information</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div className="card-title" style={{ margin: 0 }}>Store Information</div>
+              <AddressUpdateButton onSelect={(data) => {
+                setDetails((p: any) => ({
+                  ...p,
+                  address: data.address,
+                  city: data.city,
+                  state: data.state,
+                  zip: data.zip,
+                  website: data.website || p.website,
+                }))
+              }} />
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               {field('Store Name', 'name', 'text', 'Premier Fine Jewelry')}
               {field('Website', 'website', 'url', 'https://')}
@@ -348,7 +455,7 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
                   <button className="btn-danger btn-sm" onClick={async () => {
                     if (!confirm('Remove store image?')) return
                     await supabase.from('stores').update({ store_image_url: '' }).eq('id', store.id)
-                    reload()
+                    await refetchStores()
                   }}>Remove</button>
                 </div>
               </div>
@@ -401,11 +508,14 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
                 ✓ Current: {store.calendar_feed_url}
               </div>
             )}
+            {/* Personal iCal URL */}
             <div className="field">
               <label className="fl">iCal Feed URL</label>
               <input value={feedUrl} onChange={e => setFeedUrl(e.target.value)}
                 placeholder="https://calendar.google.com/calendar/ical/.../.ics" style={{ fontSize: 12 }} />
             </div>
+
+
             <div style={{ display: 'flex', gap: 8 }}>
               <button className="btn-primary btn-sm" onClick={saveFeed} disabled={saving === 'feed'}>
                 {saving === 'feed' ? 'Saving…' : 'Save Feed URL'}
@@ -413,9 +523,13 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
               {store.calendar_feed_url && (
                 <button className="btn-danger btn-sm" onClick={async () => {
                   if (!confirm('Remove calendar feed URL?')) return
-                  await supabase.from('stores').update({ calendar_feed_url: '' }).eq('id', store.id)
-                  setFeedUrl('')
-                  reload()
+                  try {
+                    await supabase.from('stores').update({ calendar_feed_url: '' }).eq('id', store.id)
+                    setFeedUrl('')
+                    await refetchStores()
+                  } catch (e: any) {
+                    alert('Failed: ' + (e?.message || 'unknown error'))
+                  }
                 }}>Remove</button>
               )}
             </div>
@@ -433,7 +547,7 @@ function StoreModal({ store, onClose, reload }: { store: Store; onClose: () => v
                     if (!confirm('Remove QR code?')) return
                     await supabase.from('stores').update({ qr_code_url: '' }).eq('id', store.id)
                     setStoreImage('')
-                    reload()
+                    await refetchStores()
                   }}>Remove</button>
                 </div>
               </div>
@@ -465,6 +579,7 @@ function EmpRow({ emp, onSave, onDelete }: {
 
   const save = async () => {
     if (!vals.name) return
+    await supabase.auth.refreshSession()
     setSaving(true)
     await onSave(vals)
     setSaving(false)
@@ -603,6 +718,7 @@ function ContactRow({ contact, onSave, onDelete }: {
 
   const save = async () => {
     if (!vals.name) return
+    await supabase.auth.refreshSession()
     setSaving(true)
     await onSave(vals)
     setSaving(false)
@@ -667,6 +783,52 @@ function NewContactRows({ onAdd }: { onAdd: (c: { name: string; phone: string; e
         <button className="btn-primary btn-sm" onClick={saveAll}>Save Contacts</button>
         <button className="btn-outline btn-sm" onClick={() => setRows(p => [...p, blank()])}>+ Add Row</button>
       </div>
+    </div>
+  )
+}
+
+/* ── ADDRESS UPDATE BUTTON ── */
+function AddressUpdateButton({ onSelect }: {
+  onSelect: (data: { address: string; city: string; state: string; zip: string; website?: string; lat?: number; lng?: number }) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const mapsLoaded = useGoogleMaps()
+
+  useEffect(() => {
+    if (!open || !mapsLoaded || !inputRef.current) return
+    const autocomplete = new (window as any).google.maps.places.Autocomplete(inputRef.current, {
+      types: ['establishment'],
+      componentRestrictions: { country: 'us' },
+      fields: ['address_components', 'geometry', 'website'],
+    })
+    autocomplete.addListener('place_changed', () => {
+      const place = autocomplete.getPlace()
+      if (!place.address_components) return
+      const addr = parsePlaceAddress(place)
+      onSelect({ ...addr, website: place.website || '' })
+      setOpen(false)
+    })
+  }, [open, mapsLoaded])
+
+  return (
+    <div>
+      {!open ? (
+        <button className="btn-outline btn-sm" onClick={() => setOpen(true)}>
+          📍 Update Address
+        </button>
+      ) : (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            ref={inputRef}
+            type="text"
+            placeholder="Search Google Places to update address…"
+            autoFocus
+            style={{ fontSize: 13, minWidth: 260 }}
+          />
+          <button className="btn-ghost btn-sm" onClick={() => setOpen(false)}>Cancel</button>
+        </div>
+      )}
     </div>
   )
 }

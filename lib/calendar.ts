@@ -21,28 +21,22 @@ export const STATE_TZ: Record<string, string> = {
   WI:'America/Chicago',    WY:'America/Denver',      DC:'America/New_York',
 }
 
-// Get date string (YYYY-MM-DD) in a given timezone
-export function dateInTz(date: Date, tz: string): string {
+// Get date string (YYYY-MM-DD) — times are stored as raw UTC, no tz conversion needed
+export function dateInTz(date: Date, _tz: string): string {
   return new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit'
+    timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit'
   }).format(date)
 }
 
-// Get hour and minute of a Date in a given timezone
-export function hmInTz(date: Date, tz: string): { h: number; m: number } {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: false
-  }).formatToParts(date)
-  return {
-    h: parseInt(parts.find(p => p.type === 'hour')?.value || '0'),
-    m: parseInt(parts.find(p => p.type === 'minute')?.value || '0'),
-  }
+// Get hour and minute — times are stored as raw UTC, no tz conversion needed
+export function hmInTz(date: Date, _tz: string): { h: number; m: number } {
+  return { h: date.getUTCHours(), m: date.getUTCMinutes() }
 }
 
-// Format a time in a given timezone
-export function timeInTz(date: Date, tz: string): string {
+// Format a time for display — times are stored as raw UTC, no tz conversion needed
+export function timeInTz(date: Date, _tz: string): string {
   return new Intl.DateTimeFormat('en-US', {
-    timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: true
+    timeZone: 'UTC', hour: 'numeric', minute: '2-digit', hour12: true
   }).format(date)
 }
 
@@ -51,6 +45,11 @@ export function timeInTz(date: Date, tz: string): string {
 export function parseIcal(text: string): Appointment[] {
   const events: Appointment[] = []
   const unfolded = text.replace(/\r\n[ \t]/g, '').replace(/\r\n/g, '\n')
+
+  // Extract calendar-level timezone for converting UTC times to local
+  const calTzMatch = unfolded.match(/X-WR-TIMEZONE:([^\n]+)/)
+  const calTz = calTzMatch ? calTzMatch[1].trim() : null
+
   const blocks = unfolded.split('BEGIN:VEVENT').slice(1)
 
   for (const block of blocks) {
@@ -72,41 +71,24 @@ export function parseIcal(text: string): Appointment[] {
       const y = s.slice(0,4), mo = s.slice(4,6), d = s.slice(6,8)
       const h = s.slice(9,11), m2 = s.slice(11,13), sec = s.slice(13,15) || '00'
 
-      // UTC time (Z suffix) — convert directly
+      // UTC time (Z suffix) — convert to calendar's local time for display
       if (s.endsWith('Z')) {
-        return new Date(`${y}-${mo}-${d}T${h}:${m2}:${sec}Z`)
-      }
-
-      // TZID param — e.g. DTSTART;TZID=America/Chicago:20240415T090000
-      const tzidMatch = raw.params.match(/TZID=([^;:]+)/)
-      if (tzidMatch) {
-        const tzid = tzidMatch[1].trim()
-        try {
-          // The time string represents local time in tzid timezone
-          // We need to find the UTC equivalent
-          // Strategy: binary search for the UTC time that, when displayed in tzid, matches our local time
-          const targetMs = Date.UTC(
-            parseInt(y), parseInt(mo) - 1, parseInt(d),
-            parseInt(h), parseInt(m2), parseInt(sec)
-          )
-          // Get the UTC offset for this timezone at approximately this time
-          const probe = new Date(targetMs)
-          const localParts = new Intl.DateTimeFormat('en-US', {
-            timeZone: tzid,
-            year: 'numeric', month: 'numeric', day: 'numeric',
-            hour: 'numeric', minute: 'numeric', second: 'numeric',
-            hour12: false,
-          }).formatToParts(probe)
-          const get = (type: string) => parseInt(localParts.find(p => p.type === type)?.value || '0')
-          const probeLocal = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second'))
-          const offsetMs = targetMs - probeLocal
-          return new Date(targetMs + offsetMs)
-        } catch {
-          return new Date(`${y}-${mo}-${d}T${h}:${m2}:${sec}Z`)
+        const utcDate = new Date(`${y}-${mo}-${d}T${h}:${m2}:${sec}Z`)
+        if (calTz) {
+          // Format this UTC time in the calendar's timezone to get local h:m
+          const parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: calTz, year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+          }).formatToParts(utcDate)
+          const g = (t: string) => parts.find(p => p.type === t)?.value || '00'
+          // Store local time as fake UTC so display functions show it directly
+          return new Date(`${g('year')}-${g('month')}-${g('day')}T${g('hour')}:${g('minute')}:${g('second')}Z`)
         }
+        return utcDate
       }
 
-      // Floating time (no Z, no TZID) — treat as UTC to avoid browser tz contamination
+      // TZID or floating time — the raw value IS local time at the store.
+      // Store as UTC so display functions (which now use UTC) show the raw time.
       return new Date(`${y}-${mo}-${d}T${h}:${m2}:${sec}Z`)
     }
 
@@ -154,9 +136,9 @@ export const SOURCE_COLORS: Record<LeadSource, { bg: string; border: string; tex
   unknown: { bg: '#F3F4F6', border: '#9CA3AF', text: '#374151', label: 'Other' },
 }
 
-// Generate 21 slots per day: 10am–5pm, every 20 minutes
+// Generate 24 slots per day: 10am–6pm, every 20 minutes
 export interface Slot {
-  h: number   // local hour in store timezone (10-16)
+  h: number   // local hour in store timezone (10-17)
   m: number   // 0, 20, or 40
   hourIdx: number
   slotIdx: number
@@ -164,7 +146,7 @@ export interface Slot {
 
 export function generateSlots(): Slot[] {
   const slots: Slot[] = []
-  for (let h = 10; h < 17; h++) {
+  for (let h = 10; h < 18; h++) {
     for (let m = 0; m < 60; m += 20) {
       slots.push({ h, m, hourIdx: h - 10, slotIdx: m / 20 })
     }

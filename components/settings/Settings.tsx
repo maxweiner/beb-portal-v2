@@ -5,14 +5,22 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { Theme } from '@/types'
 
-const THEMES: { id: Theme; label: string; color: string }[] = [
+const BEB_THEMES: { id: Theme; label: string; color: string }[] = [
   { id: 'original',   label: 'Original',        color: '#1D6B44' },
   { id: 'salesforce', label: 'Salesforce Style', color: '#0070D2' },
   { id: 'apple',      label: 'Apple Style',      color: '#007AFF' },
 ]
 
+const LIBERTY_THEMES: { id: Theme; label: string; color: string }[] = [
+  { id: 'liberty',         label: 'Navy Classic',   color: '#1D3A6B' },
+  { id: 'liberty-gold',    label: 'Navy & Gold',    color: '#C9A84C' },
+  { id: 'liberty-slate',   label: 'Slate Steel',    color: '#334155' },
+  { id: 'liberty-patriot', label: 'Red White Blue', color: '#B22234' },
+]
+
 export default function Settings() {
-  const { user, stores, theme, setTheme, reload } = useApp()
+  const { user, stores, theme, setTheme, reload, brand } = useApp()
+  const THEMES = brand === 'liberty' ? LIBERTY_THEMES : BEB_THEMES
   const [profile, setProfile] = useState({ name: user?.name || '', phone: user?.phone || '' })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -34,6 +42,7 @@ export default function Settings() {
   const saveProfile = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!profile.name.trim() || !user) return
+    await supabase.auth.refreshSession()
     setSaving(true)
     await supabase.from('users').update({ name: profile.name.trim(), phone: profile.phone.trim() }).eq('id', user.id)
     setSaving(false)
@@ -171,6 +180,99 @@ export default function Settings() {
           ))}
         </div>
       </div>
+
+      {/* Travel Email Integration */}
+      {(user?.role === 'admin' || user?.role === 'superadmin') && (
+        <PostmarkSettings />
+      )}
+    </div>
+  )
+}
+
+/* ── POSTMARK SETTINGS ── */
+function PostmarkSettings() {
+  const [serverToken, setServerToken] = useState('')
+  const [webhookSecret, setWebhookSecret] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const load = async () => {
+      const [{ data: tok }, { data: sec }] = await Promise.all([
+        supabase.from('settings').select('value').eq('key', 'postmark_server_token').maybeSingle(),
+        supabase.from('settings').select('value').eq('key', 'postmark_webhook_secret').maybeSingle(),
+      ])
+      setServerToken((tok?.value || '').replace(/^"|"$/g, '').replace('change_me', ''))
+      setWebhookSecret((sec?.value || '').replace(/^"|"$/g, '').replace('change_me', ''))
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const save = async () => {
+    await supabase.auth.refreshSession()
+    setSaving(true)
+    await Promise.all([
+      supabase.from('settings').upsert({ key: 'postmark_server_token', value: JSON.stringify(serverToken) }),
+      supabase.from('settings').upsert({ key: 'postmark_webhook_secret', value: JSON.stringify(webhookSecret) }),
+    ])
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  const webhookUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/inbound-travel-email` : ''
+
+  if (loading) return null
+
+  return (
+    <div className="card">
+      <div className="card-title">✈️ Travel Email Integration (Postmark)</div>
+      <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 16, lineHeight: 1.6 }}>
+        Forward travel confirmation emails to <strong>travel@bebllp.com</strong> and they'll be automatically parsed and added to the right event.
+        Sign up at <a href="https://postmarkapp.com" target="_blank" rel="noreferrer" style={{ color: 'var(--green)' }}>postmarkapp.com</a> (~$15/mo).
+      </p>
+
+      <div className="field">
+        <label className="fl">Postmark Server API Token</label>
+        <input type="password" value={serverToken} onChange={e => setServerToken(e.target.value)}
+          placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+        <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>Found in Postmark → Server → API Tokens</div>
+      </div>
+
+      <div className="field">
+        <label className="fl">Webhook Secret</label>
+        <input type="password" value={webhookSecret} onChange={e => setWebhookSecret(e.target.value)}
+          placeholder="Set any secret string" />
+        <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>Set this in Postmark → Inbound webhook settings as a custom header value</div>
+      </div>
+
+      <div className="field">
+        <label className="fl">Your Webhook URL (copy this into Postmark)</label>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input value={webhookUrl} readOnly style={{ flex: 1, background: 'var(--cream2)', color: 'var(--mist)', fontSize: 12 }} />
+          <button className="btn-outline btn-sm" onClick={() => { navigator.clipboard.writeText(webhookUrl); alert('Copied!') }}>Copy</button>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>In Postmark → Inbound → Settings, set this as the Webhook URL</div>
+      </div>
+
+      <div className="card" style={{ background: 'var(--cream2)', margin: '8px 0 16px', padding: 14 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)', marginBottom: 8 }}>Setup Steps</div>
+        <ol style={{ fontSize: 12, color: 'var(--mist)', lineHeight: 2, paddingLeft: 16, margin: 0 }}>
+          <li>Sign up at postmarkapp.com and create a server</li>
+          <li>Add <strong>travel@bebllp.com</strong> as an inbound email address</li>
+          <li>Set the webhook URL above in Postmark → Inbound → Settings</li>
+          <li>Paste your Server API Token and a webhook secret above</li>
+          <li>Buyers forward confirmation emails to <strong>travel@bebllp.com</strong></li>
+          <li>Reservations appear automatically in Travel Share</li>
+        </ol>
+      </div>
+
+      <button className="btn-primary btn-sm" onClick={save} disabled={saving}
+        style={{ background: saved ? '#22c55e' : undefined }}>
+        {saving ? 'Saving…' : saved ? '✓ Saved!' : 'Save Integration Settings'}
+      </button>
     </div>
   )
 }

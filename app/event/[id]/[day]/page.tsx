@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { Metadata } from 'next'
 
 export const dynamic = 'force-dynamic'
+export const dynamicParams = true
 
 const sb = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,13 +16,10 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
 
 export default async function EventSummaryPage({
   params,
-  searchParams,
 }: {
-  params: { id: string }
-  searchParams: { [key: string]: string | string[] | undefined }
+  params: { id: string; day: string }
 }) {
-  const dayParam = searchParams['day']
-  const throughDay = dayParam ? parseInt(Array.isArray(dayParam) ? dayParam[0] : dayParam) : null
+  const throughDay = params.day ? parseInt(params.day) : null
 
   const { data: ev } = await sb
     .from('events')

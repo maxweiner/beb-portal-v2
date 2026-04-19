@@ -68,7 +68,7 @@ export default function Reports() {
         {[
           { label: 'Events', value: yearEvents.length },
           { label: 'Purchases', value: totals.purchases.toLocaleString() },
-          { label: 'Revenue', value: fmt(totals.dollars) },
+          { label: '💰 Amount Spent', value: fmt(totals.dollars) },
           { label: 'Close Rate', value: `${closeRate}%` },
         ].map(({ label, value }) => (
           <div key={label} className="card">
@@ -85,7 +85,7 @@ export default function Reports() {
           <table className="w-full text-sm">
             <thead>
               <tr style={{ borderBottom: '1px solid var(--pearl)', background: 'var(--cream2)' }}>
-                {['Store', 'Events', 'Customers', 'Purchases', 'Close Rate', 'Revenue'].map(h => (
+                {['Store', 'Events', 'Customers', 'Purchases', 'Close Rate', '💰 Amount Spent'].map(h => (
                   <th key={h} className="text-left px-5 py-3 text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--mist)' }}>{h}</th>
                 ))}
               </tr>

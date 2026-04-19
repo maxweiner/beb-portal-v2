@@ -12,6 +12,33 @@ export default function Dashboard() {
 
   const yearEvents = events.filter(e => e.start_date?.startsWith(year))
 
+  // This week: Monday to Sunday
+  const today = new Date()
+  const dayOfWeek = today.getDay() // 0=Sun, 1=Mon...
+  const monday = new Date(today)
+  monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1))
+  monday.setHours(0, 0, 0, 0)
+  const sunday = new Date(monday)
+  sunday.setDate(monday.getDate() + 6)
+  sunday.setHours(23, 59, 59, 999)
+
+  const weekEvents = events.filter(e => {
+    const d = new Date(e.start_date + 'T12:00:00')
+    return d >= monday && d <= sunday
+  })
+
+  const weekTotals = weekEvents.reduce((acc, ev) => {
+    ev.days.forEach((d: any) => {
+      acc.purchases  += d.purchases  || 0
+      acc.customers  += d.customers  || 0
+      acc.dollars    += parseFloat(d.dollars10 || 0) + parseFloat(d.dollars5 || 0)
+      acc.commission += parseFloat(d.dollars10 || 0) * 0.10 + parseFloat(d.dollars5 || 0) * 0.05
+    })
+    return acc
+  }, { purchases: 0, customers: 0, dollars: 0, commission: 0 })
+
+  const fmtWeek = `${monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${sunday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+
   const totals = yearEvents.reduce((acc, ev) => {
     ev.days.forEach(d => {
       acc.customers  += d.customers  || 0
@@ -51,7 +78,7 @@ export default function Dashboard() {
   ]
 
   const fmt = (n: number) => `$${Math.round(n).toLocaleString()}`
-  const buyers = users.filter(u => u.active && (u.role === 'buyer' || u.role === 'admin'))
+  const buyers = users.filter(u => u.active && u.is_buyer !== false)
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -76,13 +103,12 @@ export default function Dashboard() {
       </div>
 
       {/* Summary stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {[
-          { label: 'Events', value: yearEvents.length, sub: `${stores.length} stores` },
-          { label: 'Purchases', value: totals.purchases.toLocaleString(), sub: `${totals.customers.toLocaleString()} customers` },
-          { label: 'Revenue', value: fmt(totals.dollars), sub: `${closeRate}% close rate` },
-          { label: 'Commission Due', value: fmt(totals.commission), sub: '10% + 5% tiers' },
-          { label: 'Active Buyers', value: buyers.length, sub: `${users.filter(u => u.role === 'admin' || u.role === 'superadmin').length} admin(s)` },
+          { label: 'Events This Week', value: weekEvents.length, sub: fmtWeek },
+          { label: 'Purchases', value: weekTotals.purchases.toLocaleString(), sub: `${weekTotals.customers.toLocaleString()} customers` },
+          { label: '💰 Amount Spent', value: fmt(weekTotals.dollars), sub: weekTotals.customers > 0 ? `${Math.round(weekTotals.purchases / weekTotals.customers * 100)}% close rate` : 'This week' },
+          { label: 'Commission Due', value: fmt(weekTotals.commission), sub: '10% + 5% tiers' },
         ].map(({ label, value, sub }) => (
           <div key={label} className="stat-card">
             <div className="stat-label">{label}</div>
@@ -105,7 +131,7 @@ export default function Dashboard() {
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--cream2)', background: 'var(--cream2)' }}>
-                    {['Store', 'Events', 'Purchases', 'Close Rate', 'Revenue'].map(h => (
+                    {['Store', 'Events', 'Purchases', 'Close Rate', '💰 Amount Spent'].map(h => (
                       <th key={h} className="text-left px-5 py-2.5 text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--mist)' }}>{h}</th>
                     ))}
                   </tr>
@@ -153,31 +179,243 @@ export default function Dashboard() {
             })}
           </div>
 
-          {/* Buyers worked */}
+
+          {/* Leaderboard mini */}
           {buyers.length > 0 && (
             <div className="mt-6 pt-5" style={{ borderTop: '1px solid var(--cream2)' }}>
-              <div className="font-black text-sm mb-3" style={{ color: 'var(--ink)' }}>Buyers</div>
+              <div className="font-black text-sm mb-3" style={{ color: 'var(--ink)' }}>🏆 {new Date().getFullYear()} Standings</div>
               <div className="space-y-2">
-                {buyers.map(b => {
-                  const buyed = yearEvents.flatMap(ev => ev.days).filter(d => d.entered_by === b.id).length
-                  return (
-                    <div key={b.id} className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black text-white"
-                          style={{ background: 'var(--green)', fontSize: 10 }}>
-                          {b.name?.charAt(0)}
+                {(() => {
+                  const currentYear = String(new Date().getFullYear())
+                  const currentYearEvents = events.filter(e => e.start_date?.startsWith(currentYear))
+                  const ranked = buyers.map(b => {
+                    const days = currentYearEvents.reduce((s, ev) => {
+                      const workedEvent = (ev.workers || []).some((w: any) => w.id === b.id)
+                      return s + (workedEvent ? ev.days.length : 0)
+                    }, 0)
+                    return { ...b, days }
+                  }).sort((a, b) => b.days - a.days)
+
+                  const ineligible = ['joe', 'max', 'rich'].map(n => n.toLowerCase())
+                  let rank = 0; let lastDays = -1
+                  return ranked.map((b, i) => {
+                    if (b.days !== lastDays) { rank = i + 1; lastDays = b.days }
+                    const isIneligible = ineligible.some(n => b.name?.toLowerCase().includes(n))
+                    const tier = rank === 1 ? { label: 'Estate Elite', icon: '👑', color: '#B8860B', bg: 'rgba(184,134,11,.1)' }
+                      : rank === 2 ? { label: 'Platinum', icon: '💎', color: '#6B7FD4', bg: 'rgba(107,127,212,.1)' }
+                      : rank === 3 ? { label: 'Gold', icon: '🥇', color: '#C9A84C', bg: 'rgba(201,168,76,.1)' }
+                      : null
+                    return (
+                      <div key={b.id} className="flex items-center justify-between text-sm"
+                        style={{ padding: '4px 6px', borderRadius: 6, background: tier ? tier.bg : 'transparent' }}>
+                        <div className="flex items-center gap-2">
+                          <div style={{ width: 18, fontSize: 11, fontWeight: 900, color: tier ? tier.color : 'var(--mist)', textAlign: 'center' }}>
+                            {rank}
+                          </div>
+                          <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black text-white"
+                            style={{ background: tier ? tier.color : 'var(--green)', fontSize: 10 }}>
+                            {b.name?.charAt(0)}
+                          </div>
+                          <span style={{ color: 'var(--ash)', fontWeight: tier ? 700 : 400 }}>{b.name}</span>
+                          {tier && <span style={{ fontSize: 10, fontWeight: 700, color: tier.color }}>{tier.icon} {tier.label}</span>}
+                          {isIneligible && (
+                            <span title="Not eligible for prize" style={{ fontSize: 10, color: 'var(--mist)', cursor: 'help' }}>*</span>
+                          )}
                         </div>
-                        <span style={{ color: 'var(--ash)' }}>{b.name}</span>
+                        <span className="text-xs font-bold" style={{ color: tier ? tier.color : 'var(--mist)' }}>{b.days} days</span>
                       </div>
-                      <span className="text-xs font-bold" style={{ color: 'var(--mist)' }}>{buyed} days</span>
-                    </div>
-                  )
-                })}
+                    )
+                  })
+                })()}
               </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* Full Leaderboard */}
+      <Leaderboard events={events} users={users} buyers={buyers} />
     </div>
+  )
+}
+
+/* ── LEADERBOARD ── */
+function Leaderboard({ events, users, buyers }: { events: any[]; users: any[]; buyers: any[] }) {
+  const currentYear = String(new Date().getFullYear())
+  const currentYearEvents = events.filter(e => e.start_date?.startsWith(currentYear))
+  const ineligible = ['joe', 'max', 'rich'].map(n => n.toLowerCase())
+
+  const PRIZES: Record<number, { amount: string; label: string }> = {
+    1: { amount: '$1,000', label: 'First Prize' },
+    2: { amount: '$500', label: 'Second Prize' },
+    3: { amount: '$250', label: 'Third Prize' },
+  }
+
+  const TIERS = [
+    { rank: 1, label: 'Estate Elite', icon: '👑', color: '#D4A017', bg: 'linear-gradient(135deg, #F5C400, #FF9900)', textBg: 'rgba(245,196,0,.12)', border: '#F5C400' },
+    { rank: 2, label: 'Platinum',     icon: '💎', color: '#5B6FBF', bg: 'linear-gradient(135deg, #3a4a8a, #6b7fd4)', textBg: 'rgba(107,127,212,.08)', border: '#6b7fd4' },
+    { rank: 3, label: 'Gold',         icon: '🥇', color: '#9a7500', bg: 'linear-gradient(135deg, #6b5200, #c9a84c)', textBg: 'rgba(201,168,76,.08)', border: '#c9a84c' },
+  ]
+
+  const ranked = buyers.map(b => {
+    const days = currentYearEvents.reduce((s, ev) => {
+      const workedEvent = (ev.workers || []).some((w: any) => w.id === b.id)
+      return s + (workedEvent ? ev.days.length : 0)
+    }, 0)
+    const isIneligible = ineligible.some(n => b.name?.toLowerCase().includes(n))
+    return { ...b, days, isIneligible }
+  }).sort((a, b) => b.days - a.days)
+
+  // Assign ranks (ties share rank)
+  let rank = 0; let lastDays = -1
+  const withRanks = ranked.map((b, i) => {
+    if (b.days !== lastDays) { rank = i + 1; lastDays = b.days }
+    return { ...b, rank }
+  })
+
+  const top3 = withRanks.filter(b => b.rank <= 3)
+  const rest = withRanks.filter(b => b.rank > 3)
+  const leader = withRanks[0]
+
+  return (
+    <div style={{ marginTop: 32 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+        <div>
+          <h2 className="text-xl font-black" style={{ color: 'var(--ink)', margin: 0 }}>
+            🏆 {currentYear} Buyer Leaderboard
+          </h2>
+          <div style={{ fontSize: 13, color: 'var(--mist)', marginTop: 2 }}>
+            Days with submitted data · Resets January 1st · <span style={{ color: 'var(--green)', fontWeight: 700 }}>Cash prizes for top 3 eligible buyers</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Top 3 podium cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 20 }}>
+        {TIERS.map(tier => {
+          const buyer = top3.find(b => b.rank === tier.rank)
+          const prize = PRIZES[tier.rank]
+          const nextBuyer = withRanks.find(b => b.rank === tier.rank + 1)
+          const gap = buyer && nextBuyer ? buyer.days - nextBuyer.days : 0
+
+          return (
+            <div key={tier.rank} style={{
+              borderRadius: 16, overflow: 'hidden',
+              border: `1px solid ${tier.border}`,
+              boxShadow: tier.rank === 1 ? `0 4px 24px rgba(184,134,11,.2)` : '0 2px 8px rgba(0,0,0,.06)',
+              background: 'var(--cream)',
+            }}>
+              {/* Gradient header */}
+              <div style={{ background: tier.bg, padding: '16px 20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <div style={{ fontSize: 28 }}>{tier.icon}</div>
+                  <div style={{ color: 'rgba(255,255,255,.8)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                    {prize.label}
+                  </div>
+                </div>
+                <div style={{ color: '#fff', fontSize: 28, fontWeight: 900 }}>{prize.amount}</div>
+                <div style={{ color: 'rgba(255,255,255,.7)', fontSize: 13, marginTop: 2 }}>{tier.label}</div>
+              </div>
+
+              {/* Buyer info */}
+              <div style={{ padding: '16px 20px' }}>
+                {buyer ? (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: '50%', background: tier.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: 16, flexShrink: 0 }}>
+                        {buyer.name?.charAt(0)}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 900, fontSize: 15, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {buyer.name}
+                          {buyer.isIneligible && (
+                            <span title="Not eligible for prize" style={{ fontSize: 11, color: 'var(--mist)', cursor: 'help', fontWeight: 400 }}>*</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 13, color: 'var(--mist)' }}>{buyer.days} days worked</div>
+                      </div>
+                    </div>
+
+                    {/* Progress bar to next rank */}
+                    {tier.rank > 1 && leader && (
+                      <div style={{ marginBottom: 10 }}>
+                        <div style={{ fontSize: 11, color: 'var(--mist)', marginBottom: 4 }}>
+                          {buyer.days === leader.days ? '🔥 Tied for the lead!' : `${leader.days - buyer.days} days behind ${leader.name?.split(' ')[0]}`}
+                        </div>
+                        <div style={{ height: 6, background: 'var(--cream2)', borderRadius: 99, overflow: 'hidden' }}>
+                          <div style={{
+                            height: '100%', borderRadius: 99,
+                            background: tier.bg,
+                            width: leader.days > 0 ? `${Math.round(buyer.days / leader.days * 100)}%` : '0%',
+                            transition: 'width .5s',
+                          }} />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Gap to next person */}
+                    {gap > 0 && nextBuyer && (
+                      <div style={{ fontSize: 11, color: 'var(--green)', fontWeight: 600 }}>
+                        🛡 {gap} day{gap !== 1 ? 's' : ''} ahead of {nextBuyer.name?.split(' ')[0]}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--mist)', fontSize: 13 }}>
+                    No one yet — could be you! 🎯
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Rest of leaderboard */}
+      {rest.length > 0 && (
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--cream2)', fontWeight: 900, fontSize: 13, color: 'var(--ink)' }}>
+            Full Rankings
+          </div>
+          {rest.map((b, i) => {
+            const prev = withRanks.find(x => x.rank === b.rank - 1)
+            const gapToPrev = prev ? prev.days - b.days : 0
+            return (
+              <div key={b.id} style={{
+                display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px',
+                borderBottom: i < rest.length - 1 ? '1px solid var(--cream2)' : 'none',
+                background: i % 2 === 0 ? 'transparent' : 'var(--cream2)',
+              }}>
+                <div style={{ width: 28, textAlign: 'center', fontWeight: 900, fontSize: 14, color: 'var(--mist)' }}>
+                  {b.rank}
+                </div>
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: 14, flexShrink: 0 }}>
+                  {b.name?.charAt(0)}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {b.name}
+                    {b.isIneligible && (
+                      <span title="Not eligible for prize" style={{ fontSize: 11, color: 'var(--mist)', cursor: 'help' }}>*</span>
+                    )}
+                  </div>
+                  {gapToPrev > 0 && (
+                    <div style={{ fontSize: 11, color: 'var(--mist)' }}>
+                      {gapToPrev} day{gapToPrev !== 1 ? 's' : ''} behind #{b.rank - 1}
+                    </div>
+                  )}
+                </div>
+                <div style={{ fontWeight: 900, fontSize: 15, color: 'var(--ash)' }}>{b.days}</div>
+                <div style={{ fontSize: 11, color: 'var(--mist)' }}>days</div>
+              </div>
+            )
+          })}
+          <div style={{ padding: '10px 20px', fontSize: 11, color: 'var(--mist)', borderTop: '1px solid var(--cream2)' }}>
+            * Not eligible for cash prize
+          </div>
+        </div>
+      )}
+    </div>
+
   )
 }

@@ -25,15 +25,24 @@ export default function Calendar() {
   })
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [selectedDay, setSelectedDay] = useState(1)
+  const [calFilter, setCalFilter] = useState<'active'|'all'|'days30'|'days60'|'past'>('active')
 
-  // Get active events (within ±2 weeks)
-  const activeEvents = events.filter(ev => {
-    if (!ev.start_date) return false
+  // Get all events with dates
+  const allDatedEvents = events.filter(ev => !!ev.start_date)
+
+  // Apply calendar filter
+  const activeEvents = allDatedEvents.filter(ev => {
     const today = new Date(); today.setHours(0, 0, 0, 0)
     const start = new Date(ev.start_date + 'T12:00:00')
-    const end = new Date(ev.start_date + 'T12:00:00'); end.setDate(end.getDate() + 2)
-    const twoWeeks = 14 * 24 * 60 * 60 * 1000
-    return (end.getTime() - today.getTime()) >= -twoWeeks && (start.getTime() - today.getTime()) <= twoWeeks
+    const end = new Date(ev.start_date + 'T12:00:00'); end.setDate(end.getDate() + 2); end.setHours(23,59,59)
+    const isPast = end < today
+    const isFut = start > today
+    const isCur = today >= start && today <= end
+    if (calFilter === 'active') return isCur || isFut
+    if (calFilter === 'past') return isPast
+    if (calFilter === 'days30') { const d = new Date(today); d.setDate(d.getDate() + 30); return start <= d && end >= today }
+    if (calFilter === 'days60') { const d = new Date(today); d.setDate(d.getDate() + 60); return start <= d && end >= today }
+    return true
   })
 
   const fetchForStore = async (store: Store) => {
@@ -46,7 +55,10 @@ export default function Calendar() {
       const appts = parseIcal(text)
       setCalState(prev => ({
         ...prev,
-        appointments: { ...prev.appointments, [store.id]: appts },
+        appointments: { ...prev.appointments, [store.id]: 
+          store.name.includes('Alan Miller') 
+            ? appts.map(a => ({ ...a, start: new Date(a.start.getTime() - 3 * 60 * 60 * 1000), end: new Date(a.end.getTime() - 3 * 60 * 60 * 1000) }))
+            : appts },
         lastRefresh: new Date(),
         loading: { ...prev.loading, [store.id]: false },
       }))
@@ -123,6 +135,8 @@ export default function Calendar() {
       ) : (
         <EventCards
           activeEvents={activeEvents}
+          calFilter={calFilter}
+          setCalFilter={setCalFilter}
           stores={stores}
           appointments={calState.appointments}
           loading={calState.loading}
@@ -136,8 +150,10 @@ export default function Calendar() {
 }
 
 /* ── EVENT CARDS VIEW ── */
-function EventCards({ activeEvents, stores, appointments, loading, lastRefresh, onOpen, onRefreshAll }: {
+function EventCards({ activeEvents, stores, appointments, loading, lastRefresh, onOpen, onRefreshAll, calFilter, setCalFilter }: {
   activeEvents: Event[]
+  calFilter: string
+  setCalFilter: (f: any) => void
   stores: Store[]
   appointments: Record<string, Appointment[]>
   loading: Record<string, boolean>
@@ -148,13 +164,20 @@ function EventCards({ activeEvents, stores, appointments, loading, lastRefresh, 
   return (
     <>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-black" style={{ color: 'var(--ink)' }}>Calendar</h1>
+        <h1 className="text-2xl font-black" style={{ color: 'var(--ink)' }}>Appointments</h1>
         <div className="flex items-center gap-3">
           {lastRefresh && (
             <span className="text-xs" style={{ color: 'var(--mist)' }}>
               Updated {lastRefresh.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
             </span>
           )}
+          <select value={calFilter} onChange={e => setCalFilter(e.target.value)} style={{ width: 'auto', fontSize: 13, padding: '6px 12px' }}>
+            <option value="active">Current & Upcoming</option>
+            <option value="all">All Events</option>
+            <option value="days30">Next 30 Days</option>
+            <option value="days60">Next 60 Days</option>
+            <option value="past">Past</option>
+          </select>
           <button onClick={onRefreshAll}
             className="btn-outline btn-sm"
             >
@@ -187,10 +210,25 @@ function EventCards({ activeEvents, stores, appointments, loading, lastRefresh, 
           const total = dayCounts.reduce((a, b) => a + b, 0)
           const pct = Math.min(Math.round(total / 63 * 100), 100) // 63 = 3 days × 21 slots
 
+          const evEnd = new Date(ev.start_date + 'T12:00:00')
+          evEnd.setDate(evEnd.getDate() + 2); evEnd.setHours(23,59,59)
+          const evStart = new Date(ev.start_date + 'T12:00:00')
+          const todayDate = new Date(); todayDate.setHours(0,0,0,0)
+          const stale = (todayDate.getTime() - evEnd.getTime()) > 7 * 24 * 60 * 60 * 1000
+          const cur = todayDate >= evStart && todayDate <= evEnd
+          const upcoming = !cur && !stale && evStart > todayDate
+
           return (
             <div key={ev.id}
               className="rounded-xl p-5 cursor-pointer transition-all hover:shadow-md"
-              style={{ background: 'var(--card-bg)', border: '1px solid var(--pearl)' }}
+              style={{
+                background: 'var(--card-bg)',
+                border: cur ? '1px solid var(--green)' : upcoming ? '1px solid var(--green)' : '1px solid var(--pearl)',
+                borderLeft: cur ? '4px solid var(--green)' : upcoming ? '4px solid var(--green)' : stale ? '4px solid var(--pearl)' : '1px solid var(--pearl)',
+                boxShadow: cur ? '0 0 0 2px var(--green-pale)' : 'none',
+                opacity: stale ? 0.55 : 1,
+                transition: 'opacity .2s',
+              }}
               onClick={() => onOpen(ev)}>
 
               <div className="flex items-start justify-between mb-3">

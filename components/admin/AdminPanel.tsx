@@ -10,7 +10,6 @@ type Tab = 'users' | 'invite' | 'merge' | 'email' | 'permissions'
 export default function AdminPanel() {
   const [tab, setTab] = useState<Tab>('users')
   const { user } = useApp()
-  const isSuperAdmin = user?.role === 'superadmin'
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -45,8 +44,34 @@ export default function AdminPanel() {
 function UsersTab() {
   const { users, user: me, reload } = useApp()
   const isSuperAdmin = me?.role === 'superadmin'
+  const isAdmin = me?.role === 'admin' || me?.role === 'superadmin'
   const [editingName, setEditingName] = useState<string | null>(null)
   const [nameVal, setNameVal] = useState('')
+  const [editingUser, setEditingUser] = useState<any>(null)
+  const [editForm, setEditForm] = useState({ name: '', alternate_emails: [''] })
+  const [buyerStates, setBuyerStates] = useState<Record<string, boolean>>({})
+  const [orderedUsers, setOrderedUsers] = useState<typeof users>([])
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const sorted = [...users].sort((a, b) => ((a as any).sort_order || 0) - ((b as any).sort_order || 0))
+    setOrderedUsers(sorted)
+  }, [users])
+
+  const getBuyer = (u: any) => buyerStates[u.id] !== undefined ? buyerStates[u.id] : u.is_buyer !== false
+
+  const toggleBuyer = async (u: any) => {
+    const next = !getBuyer(u)
+    setBuyerStates(p => ({ ...p, [u.id]: next }))
+    const { error } = await supabase.from('users').update({ is_buyer: next }).eq('id', u.id)
+    if (error) {
+      alert('Failed to update buyer status: ' + error.message)
+      setBuyerStates(p => ({ ...p, [u.id]: !next }))
+      return
+    }
+    reload()
+  }
 
   const changeRole = async (uid: string, newRole: Role) => {
     if (!confirm(`Change role to ${newRole}?`)) return
@@ -60,20 +85,72 @@ function UsersTab() {
   }
 
   const saveName = async (uid: string) => {
+    await supabase.auth.refreshSession()
     if (!nameVal.trim()) return
     await supabase.from('users').update({ name: nameVal.trim() }).eq('id', uid)
     setEditingName(null)
     reload()
   }
 
+  const saveUserEdit = async () => {
+    if (!editingUser) return
+    const cleanEmails = editForm.alternate_emails.filter(e => e.trim())
+    const { error } = await supabase.from('users').update({
+      name: editForm.name,
+      alternate_emails: cleanEmails
+    }).eq('id', editingUser.id)
+    if (error) { alert('Failed to save: ' + error.message); return }
+    setEditingUser(null)
+    reload()
+  }
+
   const deleteUser = async (uid: string, name: string) => {
-    if (!confirm(`Permanently delete ${name}?\n\nThis cannot be undone.`)) return
+    const input = window.prompt(`To permanently delete ${name}, type "delete" to confirm:`)
+    if (input?.toLowerCase() !== 'delete') {
+      if (input !== null) alert('Deletion cancelled — you must type "delete" exactly.')
+      return
+    }
+    // Preserve worker name on events before deleting
+    const { data: events } = await supabase.from('events').select('id, workers')
+    if (events) {
+      for (const ev of events) {
+        const workers = ev.workers || []
+        if (workers.some((w: any) => w.id === uid)) {
+          // Keep the worker entry but mark as deleted so name still shows
+          const updated = workers.map((w: any) =>
+            w.id === uid ? { ...w, id: `deleted_${uid}`, deleted: true } : w
+          )
+          await supabase.from('events').update({ workers: updated }).eq('id', ev.id)
+        }
+      }
+    }
     await supabase.from('users').delete().eq('id', uid)
     reload()
   }
 
+  const handleDragStart = (id: string) => setDragId(id)
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault()
+    setDragOverId(id)
+  }
+  const handleDrop = async (targetId: string) => {
+    if (!dragId || dragId === targetId) { setDragId(null); setDragOverId(null); return }
+    const newOrder = [...orderedUsers]
+    const fromIdx = newOrder.findIndex(u => u.id === dragId)
+    const toIdx = newOrder.findIndex(u => u.id === targetId)
+    const [moved] = newOrder.splice(fromIdx, 1)
+    newOrder.splice(toIdx, 0, moved)
+    setOrderedUsers(newOrder)
+    setDragId(null)
+    setDragOverId(null)
+    // Save order to DB
+    await Promise.all(newOrder.map((u, i) =>
+      supabase.from('users').update({ sort_order: i }).eq('id', u.id)
+    ))
+  }
+
   const roleBadge = (role: Role) => {
-    const map: Record<string,string> = { superadmin: 'badge-ruby', admin: 'badge-gold', buyer: 'badge-sapph', pending: 'badge-silver', non_buyer_admin: 'badge-silver' }
+    const map: Record<string,string> = { superadmin: 'badge-ruby', admin: 'badge-gold', buyer: 'badge-sapph', pending: 'badge-silver' }
     return <span className={`badge ${map[role] || 'badge-silver'}`}>{role.replace('_', ' ')}</span>
   }
 
@@ -83,14 +160,33 @@ function UsersTab() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {users.map(u => (
-        <div key={u.id} className="card" style={{ padding: '16px 20px' }}>
+      <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 4 }}>
+        ⠿ Drag cards to reorder staff
+      </div>
+      {orderedUsers.map(u => (
+        <div key={u.id}
+          draggable
+          onDragStart={() => handleDragStart(u.id)}
+          onDragOver={e => handleDragOver(e, u.id)}
+          onDrop={() => handleDrop(u.id)}
+          onDragEnd={() => { setDragId(null); setDragOverId(null) }}
+          className="card"
+          style={{
+            padding: '16px 20px',
+            cursor: 'grab',
+            opacity: dragId === u.id ? 0.5 : 1,
+            border: dragOverId === u.id && dragId !== u.id ? '2px solid var(--green)' : '1px solid var(--pearl)',
+            transition: 'border .1s, opacity .1s',
+          }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+
+            {/* Drag handle */}
+            <div style={{ color: 'var(--pearl)', fontSize: 18, cursor: 'grab', flexShrink: 0, lineHeight: 1 }}>⠿</div>
 
             {/* Avatar */}
             <div style={{ width: 44, height: 44, borderRadius: '50%', background: avatarColor(u.id), display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 15, color: '#fff', flexShrink: 0 }}>
               {u.photo_url
-                ? <img src={u.photo_url} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} />
+                ? <img src={u.photo_url} alt={u.name || 'User'} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} />
                 : initials(u.name || u.email)}
             </div>
 
@@ -113,9 +209,6 @@ function UsersTab() {
               )}
             </div>
 
-            {/* Phone */}
-            <div style={{ fontSize: 13, color: 'var(--mist)', minWidth: 110, display: 'none' }}>{u.phone || '—'}</div>
-
             {/* Badges */}
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               {roleBadge(u.role)}
@@ -124,8 +217,10 @@ function UsersTab() {
 
             {/* Actions */}
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
-              <button onClick={() => { setEditingName(u.id); setNameVal(u.name || '') }}
-                className="btn-outline btn-xs">✎ Name</button>
+              <button onClick={() => {
+                setEditingUser(u)
+                setEditForm({ name: u.name || '', alternate_emails: [...(u.alternate_emails || []), ''] })
+              }} className="btn-outline btn-xs">✎ Edit</button>
 
               {u.id !== me?.id && (
                 <select value={u.role} onChange={e => changeRole(u.id, e.target.value as Role)}
@@ -133,7 +228,6 @@ function UsersTab() {
                   <option value="pending">Pending</option>
                   <option value="buyer">Buyer</option>
                   <option value="admin">Admin</option>
-                  <option value="non_buyer_admin">Non-Buyer Admin</option>
                   {isSuperAdmin && <option value="superadmin">Superadmin</option>}
                 </select>
               )}
@@ -142,13 +236,64 @@ function UsersTab() {
                 {u.active ? 'Deactivate' : 'Activate'}
               </button>
 
+              {isAdmin && (
+                <label onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', userSelect: 'none' }}>
+                  <div onClick={() => toggleBuyer(u)} style={{
+                    width: 20, height: 20, borderRadius: 4, flexShrink: 0,
+                    border: `2px solid ${getBuyer(u) ? 'var(--green)' : 'var(--pearl)'}`,
+                    background: getBuyer(u) ? 'var(--green)' : '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer', transition: 'all .15s',
+                  }}>
+                    {getBuyer(u) && (
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                        <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: getBuyer(u) ? 'var(--green-dark)' : 'var(--ash)' }}>Buyer</span>
+                </label>
+              )}
               {isSuperAdmin && u.id !== me?.id && (
-                <button onClick={() => deleteUser(u.id, u.name)} className="btn-danger btn-xs">🗑</button>
+                <button onClick={() => deleteUser(u.id, u.name)} className="btn-danger btn-xs">Delete</button>
               )}
             </div>
           </div>
         </div>
       ))}
+
+      {/* Edit User Modal */}
+      {editingUser && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setEditingUser(null)}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: 32, width: 500, maxWidth: '90vw', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 20 }}>Edit User</div>
+            <div className="field">
+              <label>Name</label>
+              <input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>Primary Email (cannot be changed)</label>
+              <input value={editingUser.email} disabled style={{ background: 'var(--cream)', color: 'var(--mist)' }} />
+            </div>
+            <div className="field">
+              <label>Alternate Email Addresses</label>
+              <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 8 }}>Users can sign in with any of these emails. Leave blank to remove.</div>
+              {editForm.alternate_emails.map((email: string, i: number) => (
+                <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                  <input type="email" value={email} onChange={e => { const n = [...editForm.alternate_emails]; n[i] = e.target.value; setEditForm({ ...editForm, alternate_emails: n }) }} placeholder="user@example.com" style={{ flex: 1 }} />
+                  {i > 0 && <button onClick={() => { const n = editForm.alternate_emails.filter((_: string, idx: number) => idx !== i); setEditForm({ ...editForm, alternate_emails: n }) }} className="btn-outline btn-xs">✕</button>}
+                </div>
+              ))}
+              <button onClick={() => setEditForm({ ...editForm, alternate_emails: [...editForm.alternate_emails, ''] })} className="btn-outline btn-sm" style={{ marginTop: 8 }}>+ Add Another Email</button>
+            </div>
+            <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+              <button onClick={saveUserEdit} className="btn-primary">Save Changes</button>
+              <button onClick={() => setEditingUser(null)} className="btn-outline">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
@@ -206,7 +351,6 @@ function InviteTab() {
               style={{ background: 'var(--cream2)', border: '1px solid var(--pearl)', color: 'var(--ink)' }}>
               <option value="buyer">Buyer</option>
               <option value="admin">Admin</option>
-              <option value="non_buyer_admin">Non-Buyer Admin</option>
               {isSuperAdmin && <option value="superadmin">Superadmin</option>}
             </select>
           </div>
@@ -283,6 +427,7 @@ function EmailTab() {
   }, [])
 
   const save = async () => {
+    await supabase.auth.refreshSession()
     setSaving(true)
     await supabase.from('settings').upsert({ key: 'email', value: cfg, updated_at: new Date().toISOString() })
     setSaving(false)
@@ -371,6 +516,7 @@ function PermissionsTab() {
   }
 
   const save = async () => {
+    await supabase.auth.refreshSession()
     setSaving(true)
     const { error } = await supabase.from('settings').upsert({
       key: 'permissions',

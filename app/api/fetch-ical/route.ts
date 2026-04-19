@@ -6,7 +6,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'url parameter required' }, { status: 400 })
   }
 
-  const decoded = decodeURIComponent(url)
+  let decoded = decodeURIComponent(url)
+  // Handle double-encoded URLs (e.g. %2540 -> %40 -> @)
+  if (decoded.includes('%40')) decoded = decodeURIComponent(decoded)
 
   // Security: only allow Google Calendar and SimplyBook URLs
   const allowed = ['calendar.google.com', 'simplybook.me', 'simplybook.it']
@@ -33,6 +35,16 @@ export async function GET(request: NextRequest) {
     const text = await res.text()
     if (!text.includes('BEGIN:VCALENDAR')) {
       return NextResponse.json({ error: 'Not a valid iCal feed' }, { status: 422 })
+    }
+
+    // Debug mode: return just timezone and DTSTART info
+    if (request.nextUrl.searchParams.get('debug') === '1') {
+      const lines = text.split(/\r?\n/)
+      const info = lines.filter(l => 
+        l.startsWith('DTSTART') || l.startsWith('X-WR-TIMEZONE') || 
+        l.startsWith('TZID') || l.startsWith('BEGIN:VTIMEZONE')
+      ).slice(0, 20)
+      return NextResponse.json({ timezone_info: info })
     }
 
     return new NextResponse(text, {

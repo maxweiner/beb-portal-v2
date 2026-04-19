@@ -20,16 +20,17 @@ function detectCarrier(tracking: string): string {
 }
 
 export default function Shipping() {
-  const { shipments, user, reload } = useApp()
+  const { shipments, user, reload, brand } = useApp()
   const [form, setForm] = useState({ tracking: '', description: '', from_store: '', ship_date: new Date().toISOString().slice(0,10) })
   const [saving, setSaving] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.tracking) return
+    await supabase.auth.refreshSession()
     setSaving(true)
     const carrier = detectCarrier(form.tracking)
-    const { error } = await supabase.from('shipments').insert({
+    const { error } = await supabase.from('shipments').insert({ brand,
       ...form, carrier, created_by: user?.id,
     })
     setSaving(false)

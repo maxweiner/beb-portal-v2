@@ -283,3 +283,119 @@ tr:last-child td { border-bottom: none; }
 
 /* ── MOBILE ── */
 @media (max-width: 640px) { .sidebar { display: none; } }
+
+/* ── LIBERTY CLASSIC THEME (Navy/White/Black) ── */
+.theme-liberty {
+  --cream: #FFFFFF;
+  --cream2: #F0F4F8;
+  --pearl: #CBD5E1;
+  --fog: #94A3B8;
+  --silver: #64748B;
+  --mist: #475569;
+  --ash: #1E293B;
+  --ink: #0F172A;
+  --green: #1D3A6B;
+  --green2: #162D54;
+  --green-dark: #0F1F3D;
+  --green3: #93C5FD;
+  --green-pale: #EFF6FF;
+  --red: #DC2626;
+  --red-pale: #FEF2F2;
+  --amber: #D97706;
+  --amber-pale: #FFFBEB;
+  --blue: #1D3A6B;
+  --blue-pale: #EFF6FF;
+  --page-bg: #F0F4F8;
+  --sidebar-bg: #0F172A;
+  --sidebar-active: #1D3A6B;
+  --sidebar-text: rgba(255,255,255,.80);
+  --sidebar-muted: rgba(255,255,255,.30);
+  --card-bg: #FFFFFF;
+}
+
+/* ── LIBERTY GOLD THEME (Navy/Gold/Black) ── */
+.theme-liberty-gold {
+  --cream: #FFFDF5;
+  --cream2: #FFF8E1;
+  --pearl: #E8D5A3;
+  --fog: #C9A84C;
+  --silver: #9A7B2E;
+  --mist: #5C4A1E;
+  --ash: #2C2410;
+  --ink: #1A1508;
+  --green: #1D3A6B;
+  --green2: #162D54;
+  --green-dark: #0F1F3D;
+  --green3: #F5C400;
+  --green-pale: #FFFDE7;
+  --red: #DC2626;
+  --red-pale: #FEF2F2;
+  --amber: #C9A84C;
+  --amber-pale: #FFFDF5;
+  --blue: #1D3A6B;
+  --blue-pale: #EFF6FF;
+  --page-bg: #FFF8E1;
+  --sidebar-bg: #0F172A;
+  --sidebar-active: #1D3A6B;
+  --sidebar-text: rgba(255,255,255,.80);
+  --sidebar-muted: rgba(255,255,255,.35);
+  --card-bg: #FFFDF5;
+}
+
+/* ── LIBERTY SLATE THEME (Slate/White/Steel) ── */
+.theme-liberty-slate {
+  --cream: #F8FAFC;
+  --cream2: #F1F5F9;
+  --pearl: #CBD5E1;
+  --fog: #94A3B8;
+  --silver: #64748B;
+  --mist: #475569;
+  --ash: #334155;
+  --ink: #0F172A;
+  --green: #334155;
+  --green2: #1E293B;
+  --green-dark: #0F172A;
+  --green3: #7DD3FC;
+  --green-pale: #F0F9FF;
+  --red: #DC2626;
+  --red-pale: #FEF2F2;
+  --amber: #0EA5E9;
+  --amber-pale: #F0F9FF;
+  --blue: #0EA5E9;
+  --blue-pale: #F0F9FF;
+  --page-bg: #E2E8F0;
+  --sidebar-bg: #1E293B;
+  --sidebar-active: #334155;
+  --sidebar-text: rgba(255,255,255,.80);
+  --sidebar-muted: rgba(255,255,255,.30);
+  --card-bg: #F8FAFC;
+}
+
+/* ── LIBERTY PATRIOT THEME (Red/White/Blue) ── */
+.theme-liberty-patriot {
+  --cream: #FFFFFF;
+  --cream2: #F8F8FF;
+  --pearl: #DCDCDC;
+  --fog: #B0B0C0;
+  --silver: #8080A0;
+  --mist: #505070;
+  --ash: #2A2A50;
+  --ink: #0A0A30;
+  --green: #B22234;
+  --green2: #8B1A27;
+  --green-dark: #6B1220;
+  --green3: #FFB3BB;
+  --green-pale: #FFF0F2;
+  --red: #B22234;
+  --red-pale: #FFF0F2;
+  --amber: #3C3B6E;
+  --amber-pale: #F0F0FF;
+  --blue: #3C3B6E;
+  --blue-pale: #F0F0FF;
+  --page-bg: #F0F0FF;
+  --sidebar-bg: #3C3B6E;
+  --sidebar-active: #B22234;
+  --sidebar-text: rgba(255,255,255,.85);
+  --sidebar-muted: rgba(255,255,255,.35);
+  --card-bg: #FFFFFF;
+}

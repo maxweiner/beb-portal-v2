@@ -1,4 +1,4 @@
-export type Role = 'buyer' | 'admin' | 'superadmin' | 'pending' | 'non_buyer_admin'
+export type Role = 'buyer' | 'admin' | 'superadmin' | 'pending'
 
 export interface User {
   id: string
@@ -9,10 +9,13 @@ export interface User {
   active: boolean
   notify: boolean
   phone: string
+  is_buyer: boolean
   photo_url?: string
   alternate_emails?: string[]
   created_at: string
   updated_at: string
+  liberty_access?: boolean
+  sort_order?: number
 }
 
 export interface Store {
@@ -49,11 +52,13 @@ export interface EventDay {
   src_wordofmouth: number
   src_other: number
   src_repeat: number
+  src_store: number
+  src_text: number
+  src_newspaper: number
   entered_by?: string
   entered_by_name?: string
   entered_at?: string
 }
-
 
 export interface Event {
   id: string
@@ -61,7 +66,7 @@ export interface Event {
   store_name: string
   start_date: string
   workers?: { id: string; name: string }[]
-spend_vdp?: number
+  spend_vdp?: number
   spend_newspaper?: number
   spend_postcard?: number
   spend_spiffs?: number
@@ -80,7 +85,8 @@ export interface Shipment {
   created_by?: string
 }
 
-export type Theme = 'original' | 'salesforce' | 'apple'
+export type Theme = 'original' | 'salesforce' | 'apple' | 'liberty' | 'liberty-gold' | 'liberty-slate' | 'liberty-patriot'
+export type Brand = 'beb' | 'liberty'
 
 export interface AppState {
   user: User | null
@@ -92,6 +98,7 @@ export interface AppState {
   theme: Theme
   year: string
   loading: boolean
+  brand: Brand
 }
 
 export interface Appointment {

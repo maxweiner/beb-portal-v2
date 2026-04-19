@@ -1,17 +1,22 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { Event } from '@/types'
 
-type Filter = 'all' | 'current' | 'past' | 'future'
+type Filter = 'active' | 'all' | 'current' | 'past' | 'future' | 'days30' | 'days60'
 type Sort = 'date-desc' | 'date-asc' | 'name-asc'
 
 export default function Events() {
-  const { events, stores, users, user, reload } = useApp()
+  const { stores, users, user, brand, setEvents: setContextEvents } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
-  const [filter, setFilter] = useState<Filter>('all')
+
+  // ── FIX: local events state, fetched directly ──
+  const [events, setEvents] = useState<Event[]>([])
+  const [eventsLoaded, setEventsLoaded] = useState(false)
+
+  const [filter, setFilter] = useState<Filter>('active')
   const [sort, setSort] = useState<Sort>('date-desc')
   const [showForm, setShowForm] = useState(false)
   const [newEvent, setNewEvent] = useState({ store_id: '', start_date: '' })
@@ -19,18 +24,52 @@ export default function Events() {
   const [workersOpen, setWorkersOpen] = useState<string | null>(null)
   const [spendOpen, setSpendOpen] = useState<string | null>(null)
   const [detail, setDetail] = useState<Event | null>(null)
+  const [dayEdit, setDayEdit] = useState<{ ev: Event; dayNumber: number } | null>(null)
 
   const today = new Date(); today.setHours(0,0,0,0)
-  const weekMs = 7 * 24 * 60 * 60 * 1000
-  const buyers = users.filter(u => u.active && u.role !== 'non_buyer_admin' && u.role !== 'pending')
+  const buyers = users.filter(u => u.active && u.is_buyer !== false)
 
+  // ── FIX: direct fetch function, no reload() dependency ──
+  const fetchEvents = useCallback(async () => {
+    const { data } = await supabase
+      .from('events')
+      .select('*, days:event_days(*), buyer_entries(*)')
+      .eq('brand', brand)
+      .order('start_date', { ascending: false })
+    if (data) {
+      const mapped = data.map((e: any) => ({ ...e, days: e.days || [] }))
+      setEvents(mapped)
+      setContextEvents(mapped) // keep context in sync for other pages
+    }
+    setEventsLoaded(true)
+  }, [brand, setContextEvents])
+
+  // Fetch on mount and when brand changes
+  useEffect(() => {
+    fetchEvents()
+  }, [fetchEvents])
+
+  /* ── Filter & sort events ── */
   const filtered = events.filter(ev => {
     if (!ev.start_date) return false
-    const d = new Date(ev.start_date + 'T12:00:00')
-    const diff = d.getTime() - today.getTime()
-    if (filter === 'current') return diff >= -weekMs && diff <= weekMs
-    if (filter === 'past') return diff < -weekMs
-    if (filter === 'future') return diff > weekMs
+    const start = new Date(ev.start_date + 'T12:00:00')
+    const end = new Date(ev.start_date + 'T12:00:00')
+    end.setDate(end.getDate() + 2); end.setHours(23,59,59)
+    const isCur = today >= start && today <= end
+    const isPast = end < today
+    const isFut = start > today
+    if (filter === 'active') return isCur || isFut
+    if (filter === 'current') return isCur
+    if (filter === 'past') return isPast
+    if (filter === 'future') return isFut
+    if (filter === 'days30') {
+      const d30 = new Date(today); d30.setDate(d30.getDate() + 30)
+      return start <= d30 && end >= today
+    }
+    if (filter === 'days60') {
+      const d60 = new Date(today); d60.setDate(d60.getDate() + 60)
+      return start <= d60 && end >= today
+    }
     return true
   }).sort((a, b) => {
     if (sort === 'date-desc') return b.start_date.localeCompare(a.start_date)
@@ -38,33 +77,84 @@ export default function Events() {
     return (a.store_name || '').localeCompare(b.store_name || '')
   })
 
+  // ── FIX: createEvent re-fetches events table directly ──
   const createEvent = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newEvent.store_id || !newEvent.start_date) return
+    console.log('[CREATE] start', newEvent)
+    if (!newEvent.store_id || !newEvent.start_date) { console.log('[CREATE] validation fail'); return }
     setSaving(true)
-    const store = stores.find(s => s.id === newEvent.store_id)
-    await supabase.from('events').insert({
-      store_id: newEvent.store_id, store_name: store?.name || '',
-      start_date: newEvent.start_date, created_by: user?.id,
-    })
-    setSaving(false)
-    setShowForm(false)
-    setNewEvent({ store_id: '', start_date: '' })
-    reload()
+    console.log('[CREATE] saving set, about to insert')
+    try {
+      const store = stores.find(s => s.id === newEvent.store_id)
+      console.log('[CREATE] found store:', store?.name, 'inserting...')
+      console.log('[CREATE] supabase client exists:', !!supabase, 'from fn:', typeof supabase.from)
+      const insertPromise = supabase.from('events').insert({
+        brand,
+        store_id: newEvent.store_id,
+        store_name: store?.name || '',
+        start_date: newEvent.start_date,
+        created_by: user?.id,
+      })
+      console.log('[CREATE] insert promise created, awaiting...')
+      const { error } = await insertPromise
+      console.log('[CREATE] insert completed, error:', error)
+      if (error) { alert('Failed to create event: ' + error.message); return }
+
+      // Reset form FIRST
+      setShowForm(false)
+      setNewEvent({ store_id: '', start_date: '' })
+
+      // Then re-fetch events directly — no reload()
+      await fetchEvents()
+    } catch (err: any) {
+      alert('Error creating event: ' + (err?.message || 'unknown'))
+    } finally {
+      setSaving(false)
+    }
   }
 
+  // ── FIX: deleteEvent uses optimistic local update ──
   const deleteEvent = async (id: string) => {
     if (!confirm('Delete this event? This cannot be undone.')) return
-    await supabase.from('events').delete().eq('id', id)
-    reload()
+    const { error } = await supabase.from('events').delete().eq('id', id)
+    if (error) { alert('Delete failed: ' + error.message); return }
+    const updated = events.filter(ev => ev.id !== id)
+    setEvents(updated)
+    setContextEvents(updated)
   }
 
+  // ── FIX: toggleWorker uses local state update ──
   const toggleWorker = async (ev: Event, uid: string, name: string) => {
     const workers = ev.workers || []
     const exists = workers.find(w => w.id === uid)
+    if (!exists) {
+      const evDays = [0, 1, 2].map(i => {
+        const d = new Date(ev.start_date + 'T12:00:00')
+        d.setDate(d.getDate() + i)
+        return d.toISOString().slice(0, 10)
+      })
+      const conflicts = events.filter(other => {
+        if (other.id === ev.id) return false
+        if (!(other.workers || []).some(w => w.id === uid)) return false
+        const otherDays = [0, 1, 2].map(i => {
+          const d = new Date(other.start_date + 'T12:00:00')
+          d.setDate(d.getDate() + i)
+          return d.toISOString().slice(0, 10)
+        })
+        return evDays.some(d => otherDays.includes(d))
+      })
+      if (conflicts.length > 0) {
+        const conflictNames = conflicts.map(c => `${c.store_name} (${c.start_date})`).join(', ')
+        alert(`⚠️ Conflict! ${name} is already assigned to: ${conflictNames}\n\nA buyer cannot work two events on the same day.`)
+        return
+      }
+    }
     const updated = exists ? workers.filter(w => w.id !== uid) : [...workers, { id: uid, name }]
     await supabase.from('events').update({ workers: updated }).eq('id', ev.id)
-    reload()
+    // Update locally instead of reload()
+    const updatedEvents = events.map(e => e.id === ev.id ? { ...e, workers: updated } : e)
+    setEvents(updatedEvents)
+    setContextEvents(updatedEvents)
   }
 
   const copyLink = (ev: Event) => {
@@ -72,9 +162,21 @@ export default function Events() {
     alert('Event summary link copied to clipboard!')
   }
 
+  /** Check if an event is currently running (within its 3-day window) */
   const isCurrent = (ev: Event) => {
-    const diff = new Date(ev.start_date + 'T12:00:00').getTime() - today.getTime()
-    return diff >= -weekMs && diff <= weekMs
+    const start = new Date(ev.start_date + 'T12:00:00')
+    const end = new Date(ev.start_date + 'T12:00:00')
+    end.setDate(end.getDate() + 2)
+    end.setHours(23, 59, 59)
+    return today >= start && today <= end
+  }
+
+  /** Check if an event ended more than 7 days ago */
+  const isStale = (ev: Event) => {
+    const end = new Date(ev.start_date + 'T12:00:00')
+    end.setDate(end.getDate() + 2)
+    end.setHours(23, 59, 59)
+    return (today.getTime() - end.getTime()) > 7 * 24 * 60 * 60 * 1000
   }
 
   const fmt = (ds: string) => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -87,15 +189,14 @@ export default function Events() {
           Events <span className="text-base font-normal" style={{ color: 'var(--fog)' }}>({filtered.length} of {events.length})</span>
         </h1>
         <div className="flex gap-2 flex-wrap">
-          <select value={filter} onChange={e => setFilter(e.target.value as Filter)}
-            style={{ width: 'auto' }}>
+          <select value={filter} onChange={e => setFilter(e.target.value as Filter)} style={{ width: 'auto' }}>
+            <option value="active">Current & Upcoming</option>
             <option value="all">All Events</option>
-            <option value="current">Current (±1 week)</option>
-            <option value="future">Upcoming</option>
+            <option value="days30">Next 30 Days</option>
+            <option value="days60">Next 60 Days</option>
             <option value="past">Past</option>
           </select>
-          <select value={sort} onChange={e => setSort(e.target.value as Sort)}
-            style={{ width: 'auto' }}>
+          <select value={sort} onChange={e => setSort(e.target.value as Sort)} style={{ width: 'auto' }}>
             <option value="date-desc">Newest First</option>
             <option value="date-asc">Oldest First</option>
             <option value="name-asc">Store Name</option>
@@ -143,10 +244,21 @@ export default function Events() {
           const store = stores.find(s => s.id === ev.store_id)
           const evWorkers = ev.workers || []
           const wOpen = workersOpen === ev.id
+          const totalSpend = (ev.spend_vdp||0)+(ev.spend_newspaper||0)+(ev.spend_postcard||0)+(ev.spend_spiffs||0)
+
+          const stale = isStale(ev)
+          const upcoming = !cur && !stale && new Date(ev.start_date + 'T12:00:00') > today
 
           return (
             <div key={ev.id} className="card"
-              style={{ border: `1px solid ${cur ? 'var(--green)' : 'var(--pearl)'}`, boxShadow: cur ? '0 0 0 2px var(--green-pale)' : 'none', cursor: 'pointer' }}
+              style={{
+                border: cur ? '1px solid var(--green)' : upcoming ? '1px solid var(--green)' : '1px solid var(--pearl)',
+                boxShadow: cur ? '0 0 0 2px var(--green-pale)' : 'none',
+                borderLeft: cur ? '4px solid var(--green)' : upcoming ? '4px solid var(--green)' : stale ? '4px solid var(--pearl)' : '1px solid var(--pearl)',
+                opacity: stale ? 0.55 : 1,
+                cursor: 'pointer',
+                transition: 'opacity .2s',
+              }}
               onClick={() => setDetail(ev)}>
 
               <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -169,30 +281,80 @@ export default function Events() {
                     </div>
                   )}
                 </div>
-                <div className="flex gap-4">
-                  {[
-                    { label: 'Days', value: ev.days.length },
-                    { label: 'Purchases', value: purchases },
-                    { label: 'Revenue', value: fmtDollars(dollars) },
-                  ].map(({ label, value }) => (
-                    <div key={label} className="text-center">
-                      <div className="text-xl font-black" style={{ color: 'var(--green)' }}>{value}</div>
-                      <div className="text-xs" style={{ color: 'var(--mist)' }}>{label}</div>
-                    </div>
-                  ))}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                  <div className="flex gap-4">
+                    {(() => {
+                      const stats = [
+                        { label: 'Days', value: ev.days.length },
+                        { label: 'Purchases', value: purchases },
+                        { label: '💰 Amount Spent', value: fmtDollars(dollars) },
+                      ]
+                      if (totalSpend > 0) stats.unshift({ label: 'Ad Spend', value: fmtDollars(totalSpend) })
+                      return stats.map(({ label, value }) => (
+                        <div key={label} className="text-center">
+                          <div className="text-xl font-black" style={{ color: 'var(--green)' }}>{value}</div>
+                          <div className="text-xs" style={{ color: 'var(--mist)' }}>{label}</div>
+                        </div>
+                      ))
+                    })()}
+                  </div>
+                  {(() => {
+                    const totalCustomers = ev.days.reduce((s, d) => s + (d.customers || 0), 0)
+                    const costPerLead = totalSpend > 0 && totalCustomers > 0 ? totalSpend / totalCustomers : null
+                    const adSpendRatio = totalSpend > 0 && dollars > 0 ? dollars / totalSpend : null
+                    if (!costPerLead && !adSpendRatio) return null
+                    return (
+                      <div className="flex gap-4" style={{ paddingTop: 4, borderTop: '1px solid var(--cream2)' }}>
+                        {costPerLead !== null && (
+                          <div className="text-center">
+                            <div className="text-sm font-black" style={{ color: 'var(--ash)' }}>{fmtDollars(costPerLead)}</div>
+                            <div className="text-xs" style={{ color: 'var(--mist)' }}>Cost Per Lead</div>
+                          </div>
+                        )}
+                        {adSpendRatio !== null && (
+                          <div className="text-center">
+                            <div className="text-sm font-black" style={{ color: 'var(--ash)' }}>{adSpendRatio.toFixed(1)}x</div>
+                            <div className="text-xs" style={{ color: 'var(--mist)' }}>Ad Spend Ratio</div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
 
               {/* Day dots */}
               <div className="flex gap-2 mt-4" onClick={e => e.stopPropagation()}>
                 {[1, 2, 3].map(d => {
-                  const day = ev.days.find(x => x.day_number === d)
+                  const day = (ev.days || []).find(x => x.day_number === d)
+                  const dayBuyerEntries = ((ev as any).buyer_entries || []).filter((e: any) => e.day_number === d)
+                  const eventWorkerCount = (ev.workers || []).length
+                  const submittedCount = dayBuyerEntries.filter((e: any) => e.submitted_at).length
+                  const startedCount = dayBuyerEntries.length
+                  const hasData = day && (day.purchases > 0 || day.customers > 0 || day.dollars10 > 0)
+                  const allSubmitted = eventWorkerCount > 0 && submittedCount === eventWorkerCount
+                  const someSubmitted = submittedCount > 0 || startedCount > 0
+                  const dotColor = hasData || allSubmitted ? 'var(--green)' : someSubmitted ? '#f59e0b' : 'var(--cream2)'
+                  const textColor = (hasData || allSubmitted || someSubmitted) ? '#fff' : 'var(--silver)'
                   return (
-                    <div key={d} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
-                      style={{ background: day ? 'var(--green-pale)' : 'var(--cream2)', color: day ? 'var(--green-dark)' : 'var(--silver)', border: `1px solid ${day ? 'var(--green3)' : 'transparent'}` }}>
-                      {day ? '●' : '○'} Day {d}
-                      {day && <span className="ml-1 opacity-70">{day.purchases} buys</span>}
-                    </div>
+                    <button key={d}
+                      onClick={e => { e.stopPropagation(); setDayEdit({ ev, dayNumber: d }) }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        padding: '6px 12px', borderRadius: 99, border: 'none', cursor: 'pointer',
+                        background: dotColor, color: textColor,
+                        fontWeight: 700, fontSize: 12,
+                        boxShadow: someSubmitted ? '0 1px 4px rgba(45,106,79,.3)' : 'none',
+                        transition: 'all .15s',
+                      }}>
+                      <span style={{
+                        width: 8, height: 8, borderRadius: '50%',
+                        background: (hasData || allSubmitted || someSubmitted) ? '#fff' : 'var(--silver)',
+                        display: 'inline-block', flexShrink: 0,
+                      }} />
+                      Day {d}
+                      {someSubmitted && <span style={{ opacity: .8, fontSize: 11 }}>{submittedCount}/{eventWorkerCount}</span>}
+                    </button>
                   )
                 })}
               </div>
@@ -218,6 +380,11 @@ export default function Events() {
                 </div>
               )}
 
+              {/* Spend panel — FIX: pass fetchEvents instead of reload */}
+              {spendOpen === ev.id && (
+                <SpendPanel ev={ev} onClose={() => setSpendOpen(null)} refetchEvents={fetchEvents} />
+              )}
+
               {/* Actions */}
               <div className="flex gap-2 mt-3 pt-3 flex-wrap" style={{ borderTop: '1px solid var(--cream2)' }} onClick={e => e.stopPropagation()}>
                 <button onClick={e => { e.stopPropagation(); setWorkersOpen(wOpen ? null : ev.id) }}
@@ -235,24 +402,30 @@ export default function Events() {
                   <button onClick={e => { e.stopPropagation(); deleteEvent(ev.id) }} className="btn-danger btn-xs">Delete</button>
                 )}
               </div>
-
-              {/* Spend panel */}
-              {spendOpen === ev.id && (
-                <SpendPanel ev={ev} onClose={() => setSpendOpen(null)} reload={reload} />
-              )}
             </div>
           )
         })}
       </div>
 
-      {/* Detail Modal */}
+      {/* ── Detail Modal ── */}
       {detail && (
         <EventDetailModal ev={detail} stores={stores} onClose={() => setDetail(null)} fmtDollars={fmtDollars} />
+      )}
+
+      {/* ── Day Edit Modal — FIX: pass fetchEvents instead of reload ── */}
+      {dayEdit && (
+        <DayEditModal
+          ev={dayEdit.ev}
+          dayNumber={dayEdit.dayNumber}
+          onClose={() => setDayEdit(null)}
+          onSaved={() => { setDayEdit(null); fetchEvents() }}
+        />
       )}
     </div>
   )
 }
 
+/* ══ EVENT DETAIL MODAL ══ */
 function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
   ev: Event
   stores: any[]
@@ -275,7 +448,6 @@ function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
       <div onClick={e => e.stopPropagation()}
         style={{ background: 'var(--cream)', borderRadius: 'var(--r2)', maxWidth: 600, width: '100%', boxShadow: 'var(--shadow-lg)' }}>
 
-        {/* Header */}
         <div style={{ background: 'var(--sidebar-bg)', padding: '20px 24px', borderRadius: 'var(--r2) var(--r2) 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <div style={{ color: '#7EC8A0', fontSize: 14 }}>◆ Event Details</div>
@@ -287,8 +459,6 @@ function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
         </div>
 
         <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
-
-          {/* Summary stats */}
           <div className="card card-accent" style={{ margin: 0 }}>
             <div className="card-title">Event Summary</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
@@ -296,7 +466,7 @@ function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
                 ['Customers', totalCustomers.toLocaleString()],
                 ['Purchases', totalPurchases.toLocaleString()],
                 ['Close Rate', `${closeRate}%`],
-                ['Revenue', fmtDollars(totalDollars)],
+                ['💰 Amount Spent', fmtDollars(totalDollars)],
                 ['Commission Due', fmtDollars(totalCommission)],
                 ['Days Entered', `${days.length} of 3`],
               ].map(([label, value]) => (
@@ -308,20 +478,20 @@ function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
             </div>
           </div>
 
-          {/* Per day breakdown */}
           {days.length > 0 && (
             <div className="card card-accent" style={{ margin: 0 }}>
               <div className="card-title">Day by Day</div>
               {days.map(d => {
                 const dayDate = new Date(ev.start_date + 'T12:00:00')
                 dayDate.setDate(dayDate.getDate() + d.day_number - 1)
+                const dayDateStr = isNaN(dayDate.getTime()) ? '' : dayDate.toISOString().slice(0, 10)
                 const dayDollars = (d.dollars10 || 0) + (d.dollars5 || 0)
                 const dayCR = d.customers > 0 ? Math.round(d.purchases / d.customers * 100) : 0
                 return (
                   <div key={d.day_number} style={{ paddingBottom: 16, marginBottom: 16, borderBottom: '1px solid var(--cream2)' }}>
-                    <div style={{ fontWeight: 700, color: 'var(--green)', marginBottom: 8 }}>Day {d.day_number} — {fmt(dayDate.toISOString().slice(0, 10))}</div>
+                    <div style={{ fontWeight: 700, color: 'var(--green)', marginBottom: 8 }}>Day {d.day_number}{dayDateStr ? ` — ${fmt(dayDateStr)}` : ''}</div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, fontSize: 13 }}>
-                      {[['Customers', d.customers || 0], ['Purchases', d.purchases || 0], ['Revenue', fmtDollars(dayDollars)], ['Close', `${dayCR}%`]].map(([l, v]) => (
+                      {[['Customers', d.customers || 0], ['Purchases', d.purchases || 0], ['💰 Amount Spent', fmtDollars(dayDollars)], ['Close', `${dayCR}%`]].map(([l, v]) => (
                         <div key={l as string}>
                           <div style={{ color: 'var(--mist)', fontSize: 11, marginBottom: 2 }}>{l}</div>
                           <div style={{ fontWeight: 700 }}>{v}</div>
@@ -334,30 +504,24 @@ function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
             </div>
           )}
 
-          {/* Spend */}
           {(ev.spend_vdp || ev.spend_newspaper || ev.spend_postcard || ev.spend_spiffs) ? (
             <div className="card card-accent" style={{ margin: 0 }}>
               <div className="card-title">Ad Spend & Spiffs</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                {[
-                  ['VDP Spend', ev.spend_vdp],
-                  ['Newspaper Spend', ev.spend_newspaper],
-                  ['Postcard Spend', ev.spend_postcard],
-                  ['Spiffs Paid', ev.spend_spiffs],
-                ].map(([label, value]) => value ? (
+                {[['VDP Spend', ev.spend_vdp], ['Newspaper Spend', ev.spend_newspaper], ['Postcard Spend', ev.spend_postcard], ['Spiffs Paid', ev.spend_spiffs]].map(([label, value]) => value ? (
                   <div key={label as string}>
                     <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', marginBottom: 2 }}>{label}</div>
                     <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--ink)' }}>${Math.round(Number(value)).toLocaleString()}</div>
                   </div>
                 ) : null)}
               </div>
-              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--cream2)', fontSize: 13, fontWeight: 700, color: 'var(--mist)' }}>
-                Total Spend: <span style={{ color: 'var(--ink)' }}>${Math.round((ev.spend_vdp || 0) + (ev.spend_newspaper || 0) + (ev.spend_postcard || 0) + (ev.spend_spiffs || 0)).toLocaleString()}</span>
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--cream2)' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', marginBottom: 2 }}>Total Spend</div>
+                <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--ink)' }}>${Math.round((ev.spend_vdp || 0) + (ev.spend_newspaper || 0) + (ev.spend_postcard || 0) + (ev.spend_spiffs || 0)).toLocaleString()}</div>
               </div>
             </div>
           ) : null}
 
-          {/* Workers */}
           {(ev.workers || []).length > 0 && (
             <div className="card card-accent" style={{ margin: 0 }}>
               <div className="card-title">Who Worked</div>
@@ -374,8 +538,9 @@ function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
   )
 }
 
-/* ── SPEND PANEL ── */
-function SpendPanel({ ev, onClose, reload }: { ev: Event; onClose: () => void; reload: () => void }) {
+/* ══ SPEND PANEL ══ */
+/* FIX: accepts refetchEvents instead of reload */
+function SpendPanel({ ev, onClose, refetchEvents }: { ev: Event; onClose: () => void; refetchEvents: () => Promise<void> }) {
   const [spend, setSpend] = useState({
     spend_vdp:       String(ev.spend_vdp       || ''),
     spend_newspaper: String(ev.spend_newspaper || ''),
@@ -386,16 +551,21 @@ function SpendPanel({ ev, onClose, reload }: { ev: Event; onClose: () => void; r
 
   const save = async () => {
     setSaving(true)
-    const { error } = await supabase.from('events').update({
-      spend_vdp:       parseFloat(spend.spend_vdp)       || 0,
-      spend_newspaper: parseFloat(spend.spend_newspaper) || 0,
-      spend_postcard:  parseFloat(spend.spend_postcard)  || 0,
-      spend_spiffs:    parseFloat(spend.spend_spiffs)    || 0,
-    }).eq('id', ev.id)
+    await supabase.auth.refreshSession()
+    try {
+      const { error } = await supabase.from('events').update({
+        spend_vdp:       parseFloat(spend.spend_vdp)       || 0,
+        spend_newspaper: parseFloat(spend.spend_newspaper) || 0,
+        spend_postcard:  parseFloat(spend.spend_postcard)  || 0,
+        spend_spiffs:    parseFloat(spend.spend_spiffs)    || 0,
+      }).eq('id', ev.id).select()
+      if (error) { alert('Error: ' + error.message); setSaving(false); return }
+      await refetchEvents()
+      onClose()
+    } catch (err: any) {
+      alert('Unexpected error: ' + err.message)
+    }
     setSaving(false)
-    if (error) { alert('Error: ' + error.message); return }
-    reload()
-    onClose()
   }
 
   const totalSpend = (parseFloat(spend.spend_vdp) || 0) +
@@ -437,6 +607,148 @@ function SpendPanel({ ev, onClose, reload }: { ev: Event; onClose: () => void; r
           {saving ? 'Saving…' : 'Save Spend'}
         </button>
         <button className="btn-outline btn-sm" onClick={onClose}>Cancel</button>
+      </div>
+    </div>
+  )
+}
+
+/* ══ DAY EDIT MODAL ══ */
+function DayEditModal({ ev, dayNumber, onClose, onSaved }: {
+  ev: Event
+  dayNumber: number
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [existing, setExisting] = useState<any>(ev.days.find(d => d.day_number === dayNumber) || null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const n = (v: string) => parseFloat(v) || 0
+
+  const [form, setForm] = useState({
+    customers: '', purchases: '', dollars10: '', dollars5: '',
+    src_vdp: '', src_postcard: '', src_social: '',
+    src_wordofmouth: '', src_repeat: '', src_other: '', src_store: '', src_text: '', src_newspaper: '',
+  })
+
+  useEffect(() => {
+    supabase.from('event_days')
+      .select('*')
+      .eq('event_id', ev.id)
+      .eq('day_number', dayNumber)
+      .maybeSingle()
+      .then(({ data }) => {
+        const d = data || existing
+        if (d) {
+          setExisting(d)
+          setForm({
+            customers:       String(d.customers       || ''),
+            purchases:       String(d.purchases       || ''),
+            dollars10:       String(d.dollars10       || ''),
+            dollars5:        String(d.dollars5        || ''),
+            src_vdp:         String(d.src_vdp         || ''),
+            src_postcard:    String(d.src_postcard    || ''),
+            src_social:      String(d.src_social      || ''),
+            src_wordofmouth: String(d.src_wordofmouth || ''),
+            src_repeat:      String(d.src_repeat      || ''),
+            src_other:       String(d.src_other       || ''),
+            src_store:       String(d.src_store        || ''),
+            src_text:        String(d.src_text         || ''),
+            src_newspaper:   String(d.src_newspaper   || ''),
+          })
+        }
+        setLoading(false)
+      })
+  }, [ev.id, dayNumber])
+
+  const dayDate = new Date(ev.start_date + 'T12:00:00')
+  dayDate.setDate(dayDate.getDate() + dayNumber - 1)
+  const dayLabel = isNaN(dayDate.getTime()) ? `Day ${dayNumber}` :
+    `Day ${dayNumber} — ${dayDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`
+
+  const handleSave = async () => {
+    await supabase.auth.refreshSession()
+    if (!n(form.purchases) && !n(form.dollars10)) {
+      alert('Enter at least purchases and dollar amount.')
+      return
+    }
+    setSaving(true)
+    const payload = {
+      event_id: ev.id, day_number: dayNumber, day: dayNumber,
+      customers: n(form.customers), purchases: n(form.purchases),
+      dollars10: n(form.dollars10), dollars5: n(form.dollars5),
+      src_vdp: n(form.src_vdp), src_postcard: n(form.src_postcard),
+      src_social: n(form.src_social), src_wordofmouth: n(form.src_wordofmouth),
+      src_repeat: n(form.src_repeat), src_other: n(form.src_other),
+      src_store: n(form.src_store), src_text: n(form.src_text), src_newspaper: n(form.src_newspaper),
+    }
+    if (existing) {
+      const { error } = await supabase.from('event_days').update(payload).eq('id', existing.id)
+      if (error) { alert('Save failed: ' + error.message); setSaving(false); return }
+    } else {
+      const { error } = await supabase.from('event_days').insert(payload)
+      if (error) { alert('Save failed: ' + error.message); setSaving(false); return }
+    }
+    setSaving(false)
+    onSaved()
+  }
+
+  const inp = (label: string, key: keyof typeof form, hint?: string) => (
+    <div key={key}>
+      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', marginBottom: 4 }}>
+        {label}{hint && <span style={{ color: 'var(--green)', marginLeft: 4 }}>{hint}</span>}
+      </label>
+      <input type="number" min="0" value={form[key]}
+        onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}
+        style={{ width: '100%' }} />
+    </div>
+  )
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1000, overflowY: 'auto', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--cream)', borderRadius: 'var(--r2)', maxWidth: 540, width: '100%', boxShadow: 'var(--shadow-lg)' }}>
+        <div style={{ background: 'var(--sidebar-bg)', padding: '20px 24px', borderRadius: 'var(--r2) var(--r2) 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ color: '#7EC8A0', fontSize: 13 }}>◆ {ev.store_name}</div>
+            <div style={{ color: '#fff', fontSize: 17, fontWeight: 900, marginTop: 2 }}>{dayLabel}</div>
+            {existing && <div style={{ color: 'rgba(255,255,255,.5)', fontSize: 12, marginTop: 2 }}>Editing existing data</div>}
+          </div>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 32, height: 32, borderRadius: '50%', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+        </div>
+        {loading ? (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--mist)' }}>Loading day data…</div>
+        ) : (
+          <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div className="card card-accent" style={{ margin: 0 }}>
+              <div className="card-title">Sales Data</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                {inp('Customers Seen', 'customers')}
+                {inp('Purchases Made', 'purchases', '★')}
+                {inp('Commission at 10%', 'dollars10', '★')}
+                {inp('Commission at 5%', 'dollars5')}
+              </div>
+            </div>
+            <div className="card card-accent" style={{ margin: 0 }}>
+              <div className="card-title">Lead Sources</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                {inp('VDP / Large Postcard', 'src_vdp')}
+                {inp('Store Postcard', 'src_postcard')}
+                {inp('Social Media', 'src_social')}
+                {inp('Word of Mouth', 'src_wordofmouth')}
+                {inp('Repeat Customer', 'src_repeat')}
+                {inp('Store', 'src_store')}
+                {inp('Text Message', 'src_text')}
+                {inp('Newspaper', 'src_newspaper')}
+                {inp('Other', 'src_other')}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="btn-primary" onClick={handleSave} disabled={saving} style={{ flex: 1 }}>
+                {saving ? 'Saving…' : existing ? 'Update Day Data' : 'Save Day Data'}
+              </button>
+              <button className="btn-outline" onClick={onClose}>Cancel</button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

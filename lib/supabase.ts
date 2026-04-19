@@ -8,7 +8,16 @@ export const supabase = createClient(
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
-      flowType: 'implicit', // simpler than PKCE, works with redirects
-    }
+      flowType: 'implicit',
+    },
   }
 )
+
+// Refresh session when tab becomes visible again (handles sleep/inactivity)
+if (typeof window !== 'undefined') {
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible') {
+      try { await supabase.auth.refreshSession() } catch {}
+    }
+  })
+}

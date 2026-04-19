@@ -72,7 +72,7 @@ export default function Login() {
                   fontSize: 32,
                 }}>◆</div>
                 <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--ink)', letterSpacing: '-.5px', marginBottom: 6 }}>
-                  BeneficialOS Buyer Portal
+                  BuyerOS
                 </div>
                 <div style={{ fontSize: 14, color: 'var(--mist)' }}>Buyer Management</div>
               </div>
