@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">
+  <rect width="180" height="180" rx="40" fill="#1D6B44"/>
+  <text x="90" y="125" text-anchor="middle" font-family="-apple-system,Helvetica,Arial,sans-serif" font-size="110" font-weight="900" fill="#fff">B</text>
+  <path d="M30 150 L40 140 L50 150" stroke="#7EC8A0" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <circle cx="145" cy="40" r="5" fill="#7EC8A0"/>
+</svg>

@@ -1,0 +1,15 @@
+{
+  "name": "BEB Buyer Portal",
+  "short_name": "BEB Portal",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#1D6B44",
+  "icons": [
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

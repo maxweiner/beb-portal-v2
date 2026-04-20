@@ -86,33 +86,86 @@ export default function MobileDashboard() {
         )}
       </div>
 
-      {/* Year stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
-        {[
-          ['📦 Purchases', totals.purchases.toLocaleString()],
-          ['💰 Amount Spent', fmt(totals.dollars)],
-        ].map(([label, value]) => (
-          <div key={label as string} style={{ background: 'var(--cream)', borderRadius: 12, padding: '14px 16px', border: '1px solid var(--pearl)' }}>
-            <div style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 4 }}>{label}</div>
-            <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--green)' }}>{value}</div>
-          </div>
-        ))}
-      </div>
+      {/* Active event stats or next event countdown */}
+      {(() => {
+        const now = new Date(); now.setHours(0,0,0,0)
+        const activeEvent = myEvents.find(ev => {
+          const start = new Date(ev.start_date + 'T12:00:00')
+          const end = new Date(ev.start_date + 'T12:00:00'); end.setDate(end.getDate() + 2); end.setHours(23,59,59)
+          return now >= start && now <= end
+        })
+        if (activeEvent) {
+          const evPurchases = activeEvent.days.reduce((s: number, d: any) => s + (d.purchases || 0), 0)
+          const evDollars = activeEvent.days.reduce((s: number, d: any) => s + (d.dollars10 || 0) + (d.dollars5 || 0), 0)
+          return (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6, paddingLeft: 2 }}>
+                Live — {activeEvent.store_name}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div style={{ background: 'var(--cream)', borderRadius: 12, padding: '14px 16px', border: '1px solid var(--pearl)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 4 }}>📦 Purchases</div>
+                  <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--green)' }}>{evPurchases.toLocaleString()}</div>
+                </div>
+                <div style={{ background: 'var(--cream)', borderRadius: 12, padding: '14px 16px', border: '1px solid var(--pearl)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 4 }}>💰 Amount Spent</div>
+                  <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--green)' }}>{fmt(evDollars)}</div>
+                </div>
+              </div>
+            </div>
+          )
+        }
+        const futureEvents = [...myEvents].filter(ev => new Date(ev.start_date + 'T12:00:00') > now).sort((a, b) => a.start_date.localeCompare(b.start_date))
+        const nextEvent = futureEvents[0]
+        if (nextEvent) {
+          const nextDay = new Date(nextEvent.start_date + 'T12:00:00'); nextDay.setHours(0,0,0,0)
+          const todayDate = new Date(); todayDate.setHours(0,0,0,0)
+          const daysUntil = Math.round((nextDay.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24))
+          const countdownLabel = daysUntil <= 0 ? 'Today' : daysUntil === 1 ? 'Tomorrow' : `In ${daysUntil} days`
+          return (
+            <div style={{ background: 'var(--cream)', borderRadius: 12, padding: '16px', border: '1px solid var(--pearl)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ width: 50, height: 50, borderRadius: 12, background: 'var(--green-pale)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--green)' }}>{daysUntil <= 1 ? (daysUntil <= 0 ? '!' : '1') : daysUntil}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 700, textTransform: 'uppercase' }}>{countdownLabel}</div>
+                <div style={{ fontSize: 15, fontWeight: 900, color: 'var(--ink)', marginTop: 2 }}>{nextEvent.store_name}</div>
+                <div style={{ fontSize: 12, color: 'var(--mist)' }}>{fmtDate(nextEvent.start_date)}</div>
+              </div>
+            </div>
+          )
+        }
+        return null
+      })()}
 
       {/* My upcoming events */}
       {myEvents.length > 0 && (
         <div style={{ background: 'var(--cream)', borderRadius: 12, padding: 16, marginBottom: 16, border: '1px solid var(--pearl)' }}>
           <div style={{ fontWeight: 900, fontSize: 14, color: 'var(--ink)', marginBottom: 12 }}>My Events</div>
-          {myEvents.slice(0, 3).map(ev => (
-            <div key={ev.id} style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 10, marginBottom: 10, borderBottom: '1px solid var(--cream2)' }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--green)', flexShrink: 0 }} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--ink)' }}>{ev.store_name}</div>
-                <div style={{ fontSize: 12, color: 'var(--mist)' }}>{fmtDate(ev.start_date)}</div>
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--mist)' }}>{ev.days.length}/3 days</div>
-            </div>
-          ))}
+          {[...myEvents].sort((a, b) => a.start_date.localeCompare(b.start_date)).slice(0, 5).map(ev => {
+            const evStart = new Date(ev.start_date + 'T12:00:00')
+              const evEnd = new Date(ev.start_date + 'T12:00:00'); evEnd.setDate(evEnd.getDate() + 2); evEnd.setHours(23,59,59)
+              const now = new Date()
+              const isPast = evEnd < now
+              const isCurrent = now >= evStart && now <= evEnd
+              const today = new Date(); today.setHours(0,0,0,0)
+              const evDay = new Date(ev.start_date + 'T12:00:00'); evDay.setHours(0,0,0,0)
+              const daysAway = Math.round((evDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+              const statusText = isCurrent ? 'Now' : isPast ? 'Done' : daysAway <= 0 ? 'Today' : daysAway === 1 ? 'Tomorrow' : `${daysAway} days`
+              const statusColor = isCurrent ? 'var(--green)' : isPast ? 'var(--fog)' : 'var(--ash)'
+              return (
+                <div key={ev.id} style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 10, marginBottom: 10, borderBottom: '1px solid var(--cream2)' }}>
+                  <div style={{ width: 4, height: 36, borderRadius: 2, background: isCurrent ? 'var(--green)' : isPast ? 'var(--fog)' : 'var(--green)', flexShrink: 0 }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: isPast ? 'var(--mist)' : 'var(--ink)' }}>{ev.store_name}</div>
+                    <div style={{ fontSize: 12, color: 'var(--mist)' }}>{fmtDate(ev.start_date)}</div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: statusColor }}>{statusText}</div>
+                  </div>
+                </div>
+              )
+          })}
         </div>
       )}
 
