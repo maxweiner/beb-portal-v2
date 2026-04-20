@@ -5,6 +5,7 @@ import { useApp } from '@/lib/context'
 import { setMobilePreference } from '@/lib/mobile'
 import { supabase } from '@/lib/supabase'
 import type { NavPage } from '@/app/page'
+import ReceiptScanner from '@/components/scan/ReceiptScanner'
 
 const TABS: { id: NavPage; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Home',   icon: '⌂' },
@@ -21,11 +22,25 @@ interface Props {
 }
 
 export default function MobileLayout({ nav, setNav, children }: Props) {
-  const { user, brand, setBrand } = useApp()
+  const { user, brand, setBrand, events } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
   const hasLibertyAccess = user?.liberty_access === true
   const isLiberty = brand === 'liberty'
   const [menuOpen, setMenuOpen] = useState(false)
+  const [showScanner, setShowScanner] = useState(false)
+
+  // Detect active event for this buyer
+  const today = new Date(); today.setHours(0,0,0,0)
+  const activeEvent = events.find(ev => {
+    const start = new Date(ev.start_date + 'T12:00:00'); start.setHours(0,0,0,0)
+    const end = new Date(ev.start_date + 'T12:00:00'); end.setDate(end.getDate() + 2); end.setHours(23,59,59)
+    const isWorker = (ev.workers || []).some((w: any) => w.id === user?.id)
+    return isWorker && today >= start && today <= end
+  })
+  const activeDayNumber = activeEvent ? (() => {
+    const start = new Date(activeEvent.start_date + 'T12:00:00'); start.setHours(0,0,0,0)
+    return Math.floor((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+  })() : 0
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -101,17 +116,63 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
 
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 100 }}>{children}</div>
 
+      {showScanner && user && (
+        <ReceiptScanner
+          eventId={activeEvent?.id || 'test'}
+          userId={user.id}
+          storeName={activeEvent?.store_name || 'Testing'}
+          dayNumber={activeDayNumber || 1}
+          onClose={() => setShowScanner(false)}
+          onSaved={() => {}}
+        />
+      )}
+
       <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'var(--cream)', borderTop: '1px solid var(--pearl)', display: 'flex', zIndex: 999, paddingBottom: 'max(env(safe-area-inset-bottom), 8px)', boxShadow: '0 -2px 12px rgba(0,0,0,.12)', minHeight: 60 }}>
-        {TABS.map(tab => {
-          const active = nav === tab.id
-          return (
-            <button key={tab.id} onClick={() => setNav(tab.id)} style={{ flex: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '10px 4px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-              <div style={{ fontSize: 22, lineHeight: 1 }}>{tab.icon}</div>
-              <div style={{ fontSize: 10, fontWeight: active ? 900 : 500, color: active ? 'var(--green)' : 'var(--mist)' }}>{tab.label}</div>
-              {active && <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--green)' }} />}
-            </button>
-          )
-        })}
+        {true ? (
+          <>
+            {TABS.filter(t => t.id !== 'dayentry').slice(0, 2).map(tab => {
+              const active = nav === tab.id
+              return (
+                <button key={tab.id} onClick={() => setNav(tab.id)} style={{ flex: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '10px 4px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                  <div style={{ fontSize: 22, lineHeight: 1 }}>{tab.icon}</div>
+                  <div style={{ fontSize: 10, fontWeight: active ? 900 : 500, color: active ? 'var(--green)' : 'var(--mist)' }}>{tab.label}</div>
+                  {active && <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--green)' }} />}
+                </button>
+              )
+            })}
+            <div style={{ flex: 1.2, display: 'flex', justifyContent: 'center', position: 'relative' }}>
+              <button onClick={() => setShowScanner(true)} style={{
+                position: 'absolute', bottom: 8, width: 60, height: 60, borderRadius: '50%',
+                background: 'var(--sidebar-bg)', border: '4px solid var(--cream)',
+                cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <div style={{ color: '#fff', fontSize: 22, lineHeight: 1 }}>📷</div>
+                <div style={{ color: 'rgba(255,255,255,.7)', fontSize: 8, fontWeight: 700, marginTop: 1 }}>SCAN</div>
+              </button>
+            </div>
+            {TABS.filter(t => t.id !== 'dayentry').slice(2).map(tab => {
+              const active = nav === tab.id
+              return (
+                <button key={tab.id} onClick={() => setNav(tab.id)} style={{ flex: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '10px 4px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                  <div style={{ fontSize: 22, lineHeight: 1 }}>{tab.icon}</div>
+                  <div style={{ fontSize: 10, fontWeight: active ? 900 : 500, color: active ? 'var(--green)' : 'var(--mist)' }}>{tab.label}</div>
+                  {active && <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--green)' }} />}
+                </button>
+              )
+            })}
+          </>
+        ) : (
+          TABS.map(tab => {
+            const active = nav === tab.id
+            return (
+              <button key={tab.id} onClick={() => setNav(tab.id)} style={{ flex: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '10px 4px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                <div style={{ fontSize: 22, lineHeight: 1 }}>{tab.icon}</div>
+                <div style={{ fontSize: 10, fontWeight: active ? 900 : 500, color: active ? 'var(--green)' : 'var(--mist)' }}>{tab.label}</div>
+                {active && <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--green)' }} />}
+              </button>
+            )
+          })
+        )}
       </div>
     </div>
   )

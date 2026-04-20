@@ -236,7 +236,7 @@ export default function MobileDayEntry() {
             </div>
           </div>
 
-          {/* Actions */}
+              {/* Actions */}
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={() => save(false)} disabled={saving}
               style={{ flex: 1, padding: 14, borderRadius: 12, border: '2px solid var(--pearl)', background: 'var(--cream)', color: 'var(--ink)', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
