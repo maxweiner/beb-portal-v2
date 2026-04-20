@@ -257,7 +257,6 @@ function BuyerEntryForm({ eventId, dayNumber, buyerId, buyerName, existingEntry,
     setSaving(true)
     try {
       // Refresh session first to prevent auth timeout failures
-      await supabase.auth.refreshSession()
 
       const entryPayload = {
         event_id: eventId, day_number: dayNumber, day: dayNumber,
@@ -498,7 +497,6 @@ function CombinedEntryForm({ event, dayNumber, onSaved }: {
 
   const save = async () => {
     setSaving(true)
-    await supabase.auth.refreshSession()
     const payload = {
       event_id: event.id, day_number: dayNumber, day: dayNumber,
       customers: n(form.customers), purchases: n(form.purchases),

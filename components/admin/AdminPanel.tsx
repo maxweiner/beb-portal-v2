@@ -85,7 +85,6 @@ function UsersTab() {
   }
 
   const saveName = async (uid: string) => {
-    await supabase.auth.refreshSession()
     if (!nameVal.trim()) return
     await supabase.from('users').update({ name: nameVal.trim() }).eq('id', uid)
     setEditingName(null)
@@ -427,7 +426,6 @@ function EmailTab() {
   }, [])
 
   const save = async () => {
-    await supabase.auth.refreshSession()
     setSaving(true)
     await supabase.from('settings').upsert({ key: 'email', value: cfg, updated_at: new Date().toISOString() })
     setSaving(false)
@@ -516,7 +514,6 @@ function PermissionsTab() {
   }
 
   const save = async () => {
-    await supabase.auth.refreshSession()
     setSaving(true)
     const { error } = await supabase.from('settings').upsert({
       key: 'permissions',

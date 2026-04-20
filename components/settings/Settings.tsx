@@ -51,7 +51,6 @@ export default function Settings() {
   const saveProfile = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!profile.name.trim() || !user) return
-    await supabase.auth.refreshSession()
     setSaving(true)
     await supabase.from('users').update({ name: profile.name.trim(), phone: profile.phone.trim() }).eq('id', user.id)
     setSaving(false)
@@ -319,7 +318,6 @@ function PostmarkSettings() {
   }, [])
 
   const save = async () => {
-    await supabase.auth.refreshSession()
     setSaving(true)
     await Promise.all([
       supabase.from('settings').upsert({ key: 'postmark_server_token', value: JSON.stringify(serverToken) }),

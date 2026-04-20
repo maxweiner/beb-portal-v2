@@ -616,8 +616,7 @@ function ProofRow({ proof, isAdmin, onUpdate }: {
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn-primary btn-sm" onClick={async () => {
-                  await supabase.auth.refreshSession()
-    setSaving(true)
+                setSaving(true)
                   await onUpdate(proof.id, 'approved', notes)
                   setSaving(false)
                 }} disabled={saving}>
@@ -625,8 +624,7 @@ function ProofRow({ proof, isAdmin, onUpdate }: {
                 </button>
                 <button className="btn-outline btn-sm" onClick={async () => {
                   if (!notes.trim()) { alert('Add edit notes before requesting changes.'); return }
-                  await supabase.auth.refreshSession()
-    setSaving(true)
+                setSaving(true)
                   await onUpdate(proof.id, 'needs_edits', notes)
                   setSaving(false)
                 }} disabled={saving}>

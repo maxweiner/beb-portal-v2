@@ -27,7 +27,6 @@ export default function Shipping() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.tracking) return
-    await supabase.auth.refreshSession()
     setSaving(true)
     const carrier = detectCarrier(form.tracking)
     const { error } = await supabase.from('shipments').insert({ brand,

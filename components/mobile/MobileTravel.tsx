@@ -307,7 +307,6 @@ function MobileAddReservation({ eventId, user, onClose, onSaved }: any) {
   const f = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm(p => ({ ...p, [k]: e.target.value }))
 
   const save = async () => {
-    await supabase.auth.refreshSession()
     setSaving(true)
     const details: any = {}
     if (type === 'flight') { details.flight_number = form.flight_number; details.from = form.from; details.to = form.to; details.seat = form.seat }

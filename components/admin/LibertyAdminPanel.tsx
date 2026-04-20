@@ -30,7 +30,6 @@ export default function LibertyAdminPanel() {
     if (isProtected) return
 
     setSaving(userId)
-    await supabase.auth.refreshSession()
     await supabase.from('users').update({ liberty_access: !current }).eq('id', userId)
     await loadUsers()
     setSaving(null)

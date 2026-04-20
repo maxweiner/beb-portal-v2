@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useApp } from '@/lib/context'
-import type { Event } from '@/types'
+import type { Event, BuyerVacation } from '@/types'
+import { supabase } from '@/lib/supabase'
 
 type ViewMode = 'month' | 'timeline' | 'agenda' | 'kanban'
 
@@ -25,9 +26,24 @@ function evDays(ev: Event): string[] {
 }
 
 export default function Schedule() {
-  const { events, stores } = useApp()
+  const { events, stores, users, user } = useApp()
   const [view, setView] = useState<ViewMode>('month')
   const [detail, setDetail] = useState<Event | null>(null)
+  const [vacations, setVacations] = useState<BuyerVacation[]>([])
+  const [showVacations, setShowVacations] = useState(() => {
+    if (typeof window === 'undefined') return true
+    return localStorage.getItem('beb-show-vacations') !== 'false'
+  })
+
+  useEffect(() => {
+    supabase.from('buyer_vacations').select('*').then(({ data }) => setVacations(data || []))
+  }, [])
+
+  const toggleShowVacations = () => {
+    const next = !showVacations
+    setShowVacations(next)
+    localStorage.setItem('beb-show-vacations', String(next))
+  }
 
   const views: { id: ViewMode; label: string }[] = [
     { id: 'month',    label: '▦  Month'    },
@@ -40,9 +56,17 @@ export default function Schedule() {
     <div style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)', margin: 0 }}>Schedule</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)', margin: 0 }}>Calendar</h1>
           <div style={{ fontSize: 13, color: 'var(--mist)', marginTop: 2 }}>Visual planning view · {events.length} events</div>
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button onClick={toggleShowVacations} style={{
+          padding: '7px 12px', borderRadius: 'var(--r)', border: '1px solid var(--pearl)', cursor: 'pointer',
+          fontSize: 12, fontWeight: 700, background: showVacations ? 'var(--cream2)' : 'transparent',
+          color: showVacations ? 'var(--ash)' : 'var(--fog)',
+        }}>
+          ☀ Vacations {showVacations ? 'ON' : 'OFF'}
+        </button>
         <div style={{ display: 'flex', gap: 4, background: 'var(--cream2)', padding: 4, borderRadius: 'var(--r)', border: '1px solid var(--pearl)' }}>
           {views.map(v => (
             <button key={v.id} onClick={() => setView(v.id)} style={{
@@ -53,9 +77,10 @@ export default function Schedule() {
             }}>{v.label}</button>
           ))}
         </div>
+        </div>
       </div>
 
-      {view === 'month'    && <MonthView    events={events} stores={stores} onSelect={setDetail} />}
+      {view === 'month'    && <MonthView    events={events} stores={stores} users={users} vacations={showVacations ? vacations : []} currentUserId={user?.id} onSelect={setDetail} />}
       {view === 'timeline' && <TimelineView events={events} stores={stores} onSelect={setDetail} />}
       {view === 'agenda'   && <AgendaView   events={events} stores={stores} onSelect={setDetail} />}
       {view === 'kanban'   && <KanbanView   events={events} stores={stores} onSelect={setDetail} />}
@@ -68,7 +93,7 @@ export default function Schedule() {
 /* ══════════════════════════════════════════
    MONTH VIEW
 ══════════════════════════════════════════ */
-function MonthView({ events, stores, onSelect }: { events: Event[]; stores: any[]; onSelect: (e: Event) => void }) {
+function MonthView({ events, stores, users, vacations, currentUserId, onSelect }: { events: Event[]; stores: any[]; users: any[]; vacations: BuyerVacation[]; currentUserId?: string; onSelect: (e: Event) => void }) {
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
@@ -85,6 +110,14 @@ function MonthView({ events, stores, onSelect }: { events: Event[]; stores: any[
   const ds = (d: number) => `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`
 
   const eventsOnDay = (d: number) => events.filter(ev => evDays(ev).includes(ds(d)))
+
+  const vacationsOnDay = (d: number) => {
+    const dateStr = ds(d)
+    return vacations.filter(v => dateStr >= v.start_date && dateStr <= v.end_date).map(v => {
+      const u = users.find((x: any) => x.id === v.user_id)
+      return { ...v, userName: u?.name?.split(' ')[0] || 'Unknown', isMe: v.user_id === currentUserId }
+    })
+  }
 
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -126,6 +159,15 @@ function MonthView({ events, stores, onSelect }: { events: Event[]; stores: any[
                       marginBottom: 2, cursor: 'pointer', overflow: 'hidden',
                       whiteSpace: 'nowrap', textOverflow: 'ellipsis',
                     }}>◆ {ev.store_name}</div>
+                  ))}
+                  {vacationsOnDay(day).map(v => (
+                    <div key={v.id} title={v.note || 'Vacation'} style={{
+                      fontSize: 9, padding: '1px 5px', borderRadius: 99, marginTop: 2,
+                      background: v.isMe ? 'var(--green-pale)' : 'var(--cream2)',
+                      color: v.isMe ? 'var(--green-dark)' : 'var(--mist)',
+                      fontWeight: 700, display: 'inline-block', whiteSpace: 'nowrap',
+                      border: v.isMe ? '1px solid var(--green3)' : '1px solid var(--pearl)',
+                    }}>☀ {v.userName}</div>
                   ))}
                 </>
               )}

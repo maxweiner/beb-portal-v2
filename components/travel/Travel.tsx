@@ -390,7 +390,6 @@ function AddReservationModal({ eventId, user, onClose, onSaved }: {
   const f = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm(p => ({ ...p, [k]: e.target.value }))
 
   const save = async () => {
-    await supabase.auth.refreshSession()
     setSaving(true)
     const details: any = {}
     if (type === 'flight') { details.flight_number = form.flight_number; details.from = form.from; details.to = form.to; details.seat = form.seat }
@@ -583,7 +582,6 @@ function FolderContent({ folder, eventId, items, onItemsChange }: {
 
   const addNote = async () => {
     if (!note.trim()) return
-    await supabase.auth.refreshSession()
     setSaving(true)
     const { data } = await supabase.from('travel_items').insert({ folder_id: folder.id, event_id: eventId, type: 'note', content: note }).select().single()
     if (data) onItemsChange([...items, data])

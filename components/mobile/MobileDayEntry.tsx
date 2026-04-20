@@ -72,7 +72,6 @@ export default function MobileDayEntry() {
 
   const save = async (submit: boolean) => {
     setSaving(true)
-    await supabase.auth.refreshSession()
     const payload = {
       event_id: selectedEventId, day_number: selectedDay, day: selectedDay,
       buyer_id: user?.id, buyer_name: user?.name,
