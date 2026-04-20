@@ -165,17 +165,21 @@ export default function Dashboard() {
               const evEnd = new Date(ev.start_date + 'T12:00:00')
               evEnd.setDate(evEnd.getDate() + 2)
               const fmtD = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-              const workers = (ev.workers || []).map((w: any) => w.name?.split(' ')[0]).filter(Boolean)
+              const evWorkersList = (ev.workers || []).filter((w: any) => w.name)
               return (
                 <div key={ev.id} style={{ minWidth: 190, flex: 1, background: 'var(--cream2)', borderRadius: 'var(--r)', padding: '12px 14px', borderLeft: `3px solid ${storeColors[i % storeColors.length]}` }}>
                   <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)', marginBottom: 2 }}>{ev.store_name}</div>
                   <div style={{ fontSize: 12, color: 'var(--mist)' }}>{store?.city}{store?.city && store?.state ? ', ' : ''}{store?.state}</div>
                   <div style={{ fontSize: 11, color: 'var(--fog)', marginTop: 6 }}>{fmtD(evStart)} – {fmtD(evEnd)}</div>
-                  {workers.length > 0 && (
+                  {evWorkersList.length > 0 && (
                     <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
-                      {workers.map((name: string) => (
-                        <span key={name} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--green-pale)', color: 'var(--green-dark)', fontWeight: 700 }}>{name}</span>
-                      ))}
+                      {evWorkersList.map((w: any) => {
+                        const u = users.find((x: any) => x.id === w.id)
+                        const tip = [u?.phone, u?.email].filter(Boolean).join(' · ') || ''
+                        return (
+                          <span key={w.id} title={tip} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--green-pale)', color: 'var(--green-dark)', fontWeight: 700, cursor: tip ? 'help' : 'default' }}>{w.name?.split(' ')[0]}</span>
+                        )
+                      })}
                     </div>
                   )}
                 </div>

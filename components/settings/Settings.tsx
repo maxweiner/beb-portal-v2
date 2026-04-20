@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
-import type { Theme } from '@/types'
+import type { Theme, BuyerVacation } from '@/types'
 import AvatarPicker from './AvatarPicker'
 
 const BEB_THEMES: { id: Theme; label: string; color: string }[] = [
@@ -30,6 +30,12 @@ export default function Settings() {
   const [loadingPrefs, setLoadingPrefs] = useState(true)
   const [photoUrl, setPhotoUrl] = useState(user?.photo_url || '')
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
+  const [vacations, setVacations] = useState<BuyerVacation[]>([])
+  const [showVacForm, setShowVacForm] = useState(false)
+  const [vacStart, setVacStart] = useState('')
+  const [vacEnd, setVacEnd] = useState('')
+  const [vacNote, setVacNote] = useState('')
+  const [vacSaving, setVacSaving] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -38,6 +44,8 @@ export default function Settings() {
         setStorePrefs(data?.value || {})
         setLoadingPrefs(false)
       })
+    supabase.from('buyer_vacations').select('*').eq('user_id', user.id).order('start_date')
+      .then(({ data }) => setVacations(data || []))
   }, [user])
 
   const saveProfile = async (e: React.FormEvent) => {
@@ -77,6 +85,40 @@ export default function Settings() {
       updated_at: new Date().toISOString(),
       updated_by: user.id,
     })
+  }
+
+  const addVacation = async () => {
+    if (!user || !vacStart) return
+    const endDate = vacEnd || vacStart
+    if (endDate < vacStart) { alert('End date must be on or after start date.'); return }
+    setVacSaving(true)
+    const { data, error } = await supabase.from('buyer_vacations').insert({
+      user_id: user.id,
+      start_date: vacStart,
+      end_date: endDate,
+      note: vacNote,
+    }).select().single()
+    if (error) { alert('Failed to save: ' + error.message); setVacSaving(false); return }
+    setVacations(prev => [...prev, data].sort((a, b) => a.start_date.localeCompare(b.start_date)))
+    setVacStart('')
+    setVacEnd('')
+    setVacNote('')
+    setShowVacForm(false)
+    setVacSaving(false)
+  }
+
+  const removeVacation = async (id: string) => {
+    if (!confirm('Remove this vacation?')) return
+    await supabase.from('buyer_vacations').delete().eq('id', id)
+    setVacations(prev => prev.filter(v => v.id !== id))
+  }
+
+  const fmtVacDate = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+
+  const vacDays = (start: string, end: string) => {
+    const s = new Date(start + 'T12:00:00')
+    const e = new Date(end + 'T12:00:00')
+    return Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1
   }
 
   return (
@@ -132,6 +174,65 @@ export default function Settings() {
           onClose={() => setShowAvatarPicker(false)}
         />
       )}
+
+      {/* Vacation Dates */}
+      <div className="card">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div>
+            <div className="card-title" style={{ margin: 0 }}>Vacation Dates</div>
+            <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 2 }}>You won't be assigned to events on these days</div>
+          </div>
+          <button className="btn-outline btn-xs" onClick={() => setShowVacForm(!showVacForm)}>
+            {showVacForm ? 'Cancel' : '+ Add Dates'}
+          </button>
+        </div>
+
+        {showVacForm && (
+          <div style={{ padding: 14, background: 'var(--cream2)', borderRadius: 'var(--r)', marginBottom: 14 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
+              <div className="field" style={{ flex: 1, minWidth: 130, marginBottom: 0 }}>
+                <label className="fl">Start date</label>
+                <input type="date" value={vacStart} onChange={e => { setVacStart(e.target.value); if (!vacEnd) setVacEnd(e.target.value) }} />
+              </div>
+              <div className="field" style={{ flex: 1, minWidth: 130, marginBottom: 0 }}>
+                <label className="fl">End date</label>
+                <input type="date" value={vacEnd} onChange={e => setVacEnd(e.target.value)} min={vacStart} />
+              </div>
+            </div>
+            <div className="field" style={{ marginTop: 8, marginBottom: 8 }}>
+              <label className="fl">Note (optional)</label>
+              <input type="text" value={vacNote} onChange={e => setVacNote(e.target.value)} placeholder="e.g. Family trip, Holiday" />
+            </div>
+            <button className="btn-primary btn-sm" onClick={addVacation} disabled={!vacStart || vacSaving}>
+              {vacSaving ? 'Saving…' : 'Save Vacation'}
+            </button>
+          </div>
+        )}
+
+        {vacations.length === 0 && !showVacForm && (
+          <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--mist)', fontSize: 13 }}>
+            No vacation dates set. Click "+ Add Dates" to block off time.
+          </div>
+        )}
+
+        {vacations.map(v => (
+          <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--cream2)', borderRadius: 'var(--r)', marginBottom: 6 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 'var(--r)', background: '#FAEEDA', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 14 }}>
+              ☀
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>
+                {v.start_date === v.end_date ? fmtVacDate(v.start_date) : `${fmtVacDate(v.start_date)} – ${fmtVacDate(v.end_date)}`}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--mist)' }}>
+                {vacDays(v.start_date, v.end_date)} day{vacDays(v.start_date, v.end_date) !== 1 ? 's' : ''}
+                {v.note ? ` · ${v.note}` : ''}
+              </div>
+            </div>
+            <button className="btn-danger btn-xs" onClick={() => removeVacation(v.id)}>Remove</button>
+          </div>
+        ))}
+      </div>
 
       {/* Notifications */}
       <div className="card">

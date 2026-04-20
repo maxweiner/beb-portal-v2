@@ -110,3 +110,12 @@ export interface Appointment {
 }
 
 export type LeadSource = 'vdp' | 'small' | 'wom' | 'repeat' | 'social' | 'unknown'
+
+export interface BuyerVacation {
+  id: string
+  user_id: string
+  start_date: string
+  end_date: string
+  note?: string
+  created_at?: string
+}

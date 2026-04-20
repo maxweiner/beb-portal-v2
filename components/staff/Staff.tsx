@@ -53,14 +53,16 @@ export default function Staff() {
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{
-          display: 'grid', gridTemplateColumns: '1fr 100px 130px 140px',
-          padding: '12px 20px', background: 'var(--sidebar-bg)',
+          display: 'grid', gridTemplateColumns: '1fr 120px 160px 70px 90px 90px',
+          padding: '12px 16px', background: 'var(--sidebar-bg)',
           fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'rgba(255,255,255,.5)'
         }}>
           <div>Staff Member</div>
+          <div>Phone</div>
+          <div>Email</div>
           <div style={{ textAlign: 'center' }}>Events</div>
-          <div style={{ textAlign: 'center' }}>Days Worked</div>
-          <div style={{ textAlign: 'center' }}>Upcoming Days</div>
+          <div style={{ textAlign: 'center' }}>Days</div>
+          <div style={{ textAlign: 'center' }}>Upcoming</div>
         </div>
 
         {staffStats.length === 0 && (
@@ -69,34 +71,32 @@ export default function Staff() {
 
         {staffStats.map((s, i) => (
           <div key={s.id} style={{
-            display: 'grid', gridTemplateColumns: '1fr 100px 130px 140px',
-            padding: '14px 20px', borderBottom: '1px solid var(--cream2)', alignItems: 'center',
+            display: 'grid', gridTemplateColumns: '1fr 120px 160px 70px 90px 90px',
+            padding: '12px 16px', borderBottom: '1px solid var(--cream2)', alignItems: 'center',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{
-                width: 28, height: 28, borderRadius: '50%',
-                background: i === 0 ? '#f59e0b' : i === 1 ? '#94a3b8' : i === 2 ? '#b45309' : 'var(--cream2)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 12, fontWeight: 900, color: i < 3 ? '#fff' : 'var(--mist)', flexShrink: 0,
-              }}>{i + 1}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {s.photo_url ? (
                 <img src={s.photo_url} alt={s.name}
-                  style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                  style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
               ) : (
                 <div style={{
-                  width: 32, height: 32, borderRadius: '50%', background: 'var(--green-pale)',
+                  width: 36, height: 36, borderRadius: '50%', background: 'var(--green-pale)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 13, fontWeight: 700, color: 'var(--green-dark)', flexShrink: 0,
+                  fontSize: 14, fontWeight: 700, color: 'var(--green-dark)', flexShrink: 0,
                 }}>{s.name.charAt(0).toUpperCase()}</div>
               )}
-              <div>
-                <div style={{ fontWeight: 700, color: 'var(--ink)', fontSize: 14 }}>{s.name}</div>
-                <div style={{ fontSize: 11, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{s.role}</div>
-              </div>
+              <span style={{ fontWeight: 500, color: 'var(--ink)', fontSize: 14 }}>{s.name}</span>
+            </div>
+
+            <div style={{ fontSize: 12, color: 'var(--ash)' }}>
+              {s.phone ? <a href={`tel:${s.phone}`} style={{ color: 'var(--ash)', textDecoration: 'none' }}>{s.phone}</a> : <span style={{ color: 'var(--fog)' }}>—</span>}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--green)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {s.email ? <a href={`mailto:${s.email}`} style={{ color: 'var(--green)', textDecoration: 'none' }}>{s.email}</a> : <span style={{ color: 'var(--fog)' }}>—</span>}
             </div>
 
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontWeight: 900, fontSize: 18, color: 'var(--ink)' }}>{s.eventsWorked}</div>
+              <div style={{ fontWeight: 900, fontSize: 16, color: 'var(--ink)' }}>{s.eventsWorked}</div>
             </div>
 
             <div style={{ textAlign: 'center' }}>

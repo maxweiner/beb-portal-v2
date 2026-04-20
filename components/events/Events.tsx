@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
-import type { Event } from '@/types'
+import type { Event, BuyerVacation } from '@/types'
 
 type Filter = 'active' | 'all' | 'current' | 'past' | 'future' | 'days30' | 'days60'
 type Sort = 'date-desc' | 'date-asc' | 'name-asc'
@@ -39,6 +39,12 @@ export default function Events() {
 
   const today = new Date(); today.setHours(0,0,0,0)
   const buyers = users.filter(u => u.active && u.is_buyer !== false)
+
+  // Fetch all buyer vacations for conflict checking
+  const [buyerVacations, setBuyerVacations] = useState<BuyerVacation[]>([])
+  useEffect(() => {
+    supabase.from('buyer_vacations').select('*').then(({ data }) => setBuyerVacations(data || []))
+  }, [])
 
   // ── Direct fetch — fresh query builder each time ──
   const fetchEvents = useCallback(async () => {
@@ -333,12 +339,17 @@ export default function Events() {
                   </div>
                   {evWorkers.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mt-2">
-                      {evWorkers.map(w => (
-                        <span key={w.id} className="px-2 py-0.5 rounded-full text-xs font-bold"
-                          style={{ background: 'var(--green-pale)', color: 'var(--green-dark)', border: '1px solid var(--green3)' }}>
-                          👤 {w.name}
-                        </span>
-                      ))}
+                      {evWorkers.map(w => {
+                        const u = users.find(x => x.id === w.id)
+                        const tip = [u?.phone, u?.email].filter(Boolean).join(' · ') || ''
+                        return (
+                          <span key={w.id} className="px-2 py-0.5 rounded-full text-xs font-bold"
+                            title={tip}
+                            style={{ background: 'var(--green-pale)', color: 'var(--green-dark)', border: '1px solid var(--green3)', cursor: tip ? 'help' : 'default' }}>
+                            👤 {w.name}
+                          </span>
+                        )
+                      })}
                     </div>
                   )}
                 </div>

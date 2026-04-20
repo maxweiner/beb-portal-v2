@@ -157,9 +157,8 @@ export default function Stores() {
   const createStore = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newStore.name) { alert('Store name is required.'); return }
-    if (!newStore.address || !newStore.city || !newStore.state || !newStore.zip) {
-      alert('Please select a store from the search dropdown to fill in the address.')
-      return
+    if (!newStore.address && !newStore.city && !newStore.state) {
+      if (!confirm('No address entered. Create store with just a name?')) return
     }
     setSaving(true)
     try {
