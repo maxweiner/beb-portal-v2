@@ -5,7 +5,7 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { Event, BuyerVacation } from '@/types'
 
-type Filter = 'active' | 'all' | 'current' | 'past' | 'future' | 'days30' | 'days60'
+type Filter = 'thisweek' | 'active' | 'all' | 'current' | 'past' | 'future' | 'days30' | 'days60'
 type Sort = 'date-desc' | 'date-asc' | 'name-asc'
 
 // ── Timeout wrapper: prevents permanent UI hangs from supabase deadlocks ──
@@ -26,8 +26,8 @@ export default function Events() {
   const [events, setEvents] = useState<Event[]>([])
   const [eventsLoaded, setEventsLoaded] = useState(false)
 
-  const [filter, setFilter] = useState<Filter>('active')
-  const [sort, setSort] = useState<Sort>('date-desc')
+  const [filter, setFilter] = useState<Filter>('thisweek')
+  const [sort, setSort] = useState<Sort>('date-asc')
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [newEvent, setNewEvent] = useState({ store_id: '', start_date: '' })
@@ -96,6 +96,13 @@ export default function Events() {
     const isCur = today >= start && today <= end
     const isPast = end < today
     const isFut = start > today
+    if (filter === 'thisweek') {
+      const now = new Date(); now.setHours(0,0,0,0)
+      const dow = now.getDay()
+      const mon = new Date(now); mon.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1)); mon.setHours(0,0,0,0)
+      const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23,59,59,999)
+      return (start <= sun && end >= mon)
+    }
     if (filter === 'active') return isCur || isFut
     if (filter === 'current') return isCur
     if (filter === 'past') return isPast
@@ -257,6 +264,7 @@ export default function Events() {
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search stores…" style={{ width: 160 }} />
           <select value={filter} onChange={e => setFilter(e.target.value as Filter)} style={{ width: 'auto' }}>
+            <option value="thisweek">This Week</option>
             <option value="active">Current & Upcoming</option>
             <option value="all">All Events</option>
             <option value="days30">Next 30 Days</option>
@@ -264,8 +272,8 @@ export default function Events() {
             <option value="past">Past</option>
           </select>
           <select value={sort} onChange={e => setSort(e.target.value as Sort)} style={{ width: 'auto' }}>
-            <option value="date-desc">Newest First</option>
-            <option value="date-asc">Oldest First</option>
+            <option value="date-desc">Furthest Away</option>
+            <option value="date-asc">Soonest Event</option>
             <option value="name-asc">Store Name</option>
           </select>
           {isAdmin && (
