@@ -9,10 +9,11 @@ type Filter = 'active' | 'all' | 'current' | 'past' | 'future' | 'days30' | 'day
 type Sort = 'date-desc' | 'date-asc' | 'name-asc'
 
 // ── Timeout wrapper: prevents permanent UI hangs from supabase deadlocks ──
-const withTimeout = <T,>(promise: Promise<T>, ms = 10000): Promise<T> => {
+// Accepts Supabase query builders (PromiseLike) as well as native Promises
+const withTimeout = (promise: PromiseLike<any>, ms = 10000): Promise<any> => {
   return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
+    Promise.resolve(promise),
+    new Promise<any>((_, reject) =>
       setTimeout(() => reject(new Error('Request timed out')), ms)
     ),
   ])

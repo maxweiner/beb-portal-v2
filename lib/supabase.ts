@@ -6,18 +6,22 @@ export const supabase = createClient(
   {
     auth: {
       persistSession: true,
-      autoRefreshToken: true,
+      autoRefreshToken: false,
       detectSessionInUrl: true,
       flowType: 'implicit',
     },
   }
 )
 
-// Refresh session when tab becomes visible again (handles sleep/inactivity)
+// Manually refresh token on tab focus and every 10 minutes
 if (typeof window !== 'undefined') {
-  document.addEventListener('visibilitychange', async () => {
-    if (document.visibilityState === 'visible') {
-      try { await supabase.auth.refreshSession() } catch {}
-    }
+  const refreshToken = async () => {
+    try { await supabase.auth.refreshSession() } catch {}
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshToken()
   })
+
+  setInterval(refreshToken, 10 * 60 * 1000)
 }
