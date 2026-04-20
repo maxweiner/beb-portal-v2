@@ -2,6 +2,16 @@
 
 import { useApp } from '@/lib/context'
 
+// Count days worked: past events = 3 days, current/future = days with data
+const countDays = (ev: any) => {
+  const end = new Date(ev.start_date + 'T12:00:00')
+  end.setDate(end.getDate() + 2)
+  end.setHours(23, 59, 59)
+  const isPast = end < new Date()
+  return isPast ? 3 : (ev.days || []).length
+}
+
+
 export default function Staff() {
   const { users, events } = useApp()
 
@@ -14,7 +24,7 @@ export default function Staff() {
     const daysWorked = events.reduce((total, ev) => {
       const isWorker = (ev.workers || []).some(w => w.id === u.id)
       if (!isWorker) return total
-      return total + (ev.days || []).length
+      return total + countDays(ev)
     }, 0)
 
     const upcomingDays = events.reduce((total, ev) => {

@@ -28,6 +28,7 @@ export default function Events() {
 
   const [filter, setFilter] = useState<Filter>('active')
   const [sort, setSort] = useState<Sort>('date-desc')
+  const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [newEvent, setNewEvent] = useState({ store_id: '', start_date: '' })
   const [saving, setSaving] = useState(false)
@@ -67,6 +68,22 @@ export default function Events() {
   /* ── Filter & sort events ── */
   const filtered = events.filter(ev => {
     if (!ev.start_date) return false
+    if (search) {
+      const s = search.toLowerCase()
+      const store = stores.find(st => st.id === ev.store_id)
+      const match = (ev.store_name || '').toLowerCase().includes(s) ||
+        (store?.city || '').toLowerCase().includes(s) ||
+        (store?.state || '').toLowerCase().includes(s)
+      if (!match) return false
+    }
+    if (search) {
+      const s = search.toLowerCase()
+      const store = stores.find(st => st.id === ev.store_id)
+      const match = (ev.store_name || '').toLowerCase().includes(s) ||
+        (store?.city || '').toLowerCase().includes(s) ||
+        (store?.state || '').toLowerCase().includes(s)
+      if (!match) return false
+    }
     const start = new Date(ev.start_date + 'T12:00:00')
     const end = new Date(ev.start_date + 'T12:00:00')
     end.setDate(end.getDate() + 2); end.setHours(23,59,59)
@@ -231,6 +248,8 @@ export default function Events() {
           Events <span className="text-base font-normal" style={{ color: 'var(--fog)' }}>({filtered.length} of {events.length})</span>
         </h1>
         <div className="flex gap-2 flex-wrap">
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search stores…" style={{ width: 160 }} />
           <select value={filter} onChange={e => setFilter(e.target.value as Filter)} style={{ width: 'auto' }}>
             <option value="active">Current & Upcoming</option>
             <option value="all">All Events</option>
@@ -409,13 +428,20 @@ export default function Events() {
                     {buyers.map(b => {
                       const on = evWorkers.some(w => w.id === b.id)
                       return (
-                        <label key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14 }}>
-                          <input type="checkbox" checked={on}
-                            onChange={() => toggleWorker(ev, b.id, b.name)}
-                            style={{ width: 16, height: 16, accentColor: 'var(--green)', cursor: 'pointer' }} />
+                        <div key={b.id} onClick={() => toggleWorker(ev, b.id, b.name)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14, padding: '4px 0' }}>
+                          <div style={{
+                            width: 28, height: 28, borderRadius: 6, flexShrink: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            ...(on
+                              ? { background: 'var(--green)' }
+                              : { border: '2.5px solid var(--pearl)' })
+                          }}>
+                            {on && <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 12.5 C6 12.5, 8 17, 9.5 19 C12 14, 16 8, 20 5" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                          </div>
                           <span style={{ fontWeight: on ? 700 : 400, color: on ? 'var(--green-dark)' : 'var(--ash)' }}>{b.name}</span>
                           <span style={{ fontSize: 12, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{b.role}</span>
-                        </label>
+                        </div>
                       )
                     })}
                   </div>

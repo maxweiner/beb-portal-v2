@@ -2,6 +2,16 @@
 
 import { useApp } from '@/lib/context'
 
+// Count days worked: past events = 3 days, current/future = days with data
+const countDays = (ev: any) => {
+  const end = new Date(ev.start_date + 'T12:00:00')
+  end.setDate(end.getDate() + 2)
+  end.setHours(23, 59, 59)
+  const isPast = end < new Date()
+  return isPast ? 3 : (ev.days || []).length
+}
+
+
 export default function MobileDashboard() {
   const { user, users, events } = useApp()
   const currentYear = String(new Date().getFullYear())
@@ -20,7 +30,7 @@ export default function MobileDashboard() {
   // Current user's stats
   const myDays = yearEvents.reduce((s, ev) => {
     const workedEvent = (ev.workers || []).some((w: any) => w.id === user?.id)
-    return s + (workedEvent ? ev.days.length : 0)
+    return s + (workedEvent ? countDays(ev) : 0)
   }, 0)
   const myEvents = yearEvents.filter(ev => (ev.workers || []).some((w: any) => w.id === user?.id))
 
@@ -29,7 +39,7 @@ export default function MobileDashboard() {
   const ranked = buyers.map(b => {
     const days = yearEvents.reduce((s, ev) => {
       const workedEvent = (ev.workers || []).some((w: any) => w.id === b.id)
-      return s + (workedEvent ? ev.days.length : 0)
+      return s + (workedEvent ? countDays(ev) : 0)
     }, 0)
     return { ...b, days, isIneligible: ineligible.some(n => b.name?.toLowerCase().includes(n)) }
   }).sort((a, b) => b.days - a.days).map((b, i) => {
@@ -124,9 +134,13 @@ export default function MobileDashboard() {
               <div style={{ width: 24, textAlign: 'center', fontWeight: 900, fontSize: 13, color: tier ? tier.color : 'var(--mist)' }}>
                 {b.rank}
               </div>
-              <div style={{ width: 32, height: 32, borderRadius: '50%', background: tier ? tier.color : 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: 13, flexShrink: 0 }}>
-                {b.name?.charAt(0)}
-              </div>
+              {b.photo_url ? (
+                <img src={b.photo_url} alt="" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+              ) : (
+                <div style={{ width: 32, height: 32, borderRadius: '50%', background: tier ? tier.color : 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: 13, flexShrink: 0 }}>
+                  {b.name?.charAt(0)}
+                </div>
+              )}
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: isMe ? 900 : 600, fontSize: 14, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6 }}>
                   {b.name?.split(' ')[0]}

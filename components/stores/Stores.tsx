@@ -217,9 +217,6 @@ export default function Stores() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <div className="notice notice-gold" style={{ display: 'inline-block', marginBottom: 16 }}>
-        Admin only — buyers cannot add or remove stores.
-      </div>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <h2 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)' }}>Jewelry Stores</h2>

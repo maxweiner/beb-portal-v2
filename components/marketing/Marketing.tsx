@@ -192,23 +192,35 @@ function MarketingEventView({ ev, isAdmin, selectedChannel, setSelectedChannel, 
         <div className="card" style={{ marginBottom: 20, border: '2px solid var(--green3)' }}>
           <div className="card-title">Select Vendors to Notify</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700, color: 'var(--green-dark)' }}>
-              <input type="checkbox"
-                checked={selectedVendors.length === vendors.length}
-                onChange={() => setSelectedVendors(selectedVendors.length === vendors.length ? [] : vendors.map(v => v.id))}
-                style={{ accentColor: 'var(--green)' }} />
+            <div onClick={() => setSelectedVendors(selectedVendors.length === vendors.length ? [] : vendors.map(v => v.id))}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700, color: 'var(--green-dark)' }}>
+              <div style={{
+                width: 22, height: 22, borderRadius: 5, flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                ...(selectedVendors.length === vendors.length
+                  ? { background: 'var(--green)' }
+                  : { border: '2.5px solid var(--pearl)' })
+              }}>
+                {selectedVendors.length === vendors.length && <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 12.5 C6 12.5, 8 17, 9.5 19 C12 14, 16 8, 20 5" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+              </div>
               Select All
-            </label>
+            </div>
             {vendors.map(v => (
-              <label key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
-                <input type="checkbox"
-                  checked={selectedVendors.includes(v.id)}
-                  onChange={() => setSelectedVendors(p => p.includes(v.id) ? p.filter(x => x !== v.id) : [...p, v.id])}
-                  style={{ accentColor: 'var(--green)' }} />
+              <div key={v.id} onClick={() => setSelectedVendors(p => p.includes(v.id) ? p.filter(x => x !== v.id) : [...p, v.id])}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                <div style={{
+                  width: 22, height: 22, borderRadius: 5, flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  ...(selectedVendors.includes(v.id)
+                    ? { background: 'var(--green)' }
+                    : { border: '2.5px solid var(--pearl)' })
+                }}>
+                  {selectedVendors.includes(v.id) && <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 12.5 C6 12.5, 8 17, 9.5 19 C12 14, 16 8, 20 5" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </div>
                 <span style={{ fontWeight: 600 }}>{v.name}</span>
                 <span style={{ color: 'var(--mist)' }}>{v.email}</span>
                 <span className="badge badge-silver" style={{ fontSize: 10 }}>{v.type}</span>
-              </label>
+              </div>
             ))}
           </div>
           <div className="field" style={{ marginTop: 12 }}>

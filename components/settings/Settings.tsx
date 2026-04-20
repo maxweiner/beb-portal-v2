@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { Theme } from '@/types'
+import AvatarPicker from './AvatarPicker'
 
 const BEB_THEMES: { id: Theme; label: string; color: string }[] = [
   { id: 'original',   label: 'Original',        color: '#1D6B44' },
@@ -28,7 +29,7 @@ export default function Settings() {
   const [storePrefs, setStorePrefs] = useState<Record<string, boolean>>({})
   const [loadingPrefs, setLoadingPrefs] = useState(true)
   const [photoUrl, setPhotoUrl] = useState(user?.photo_url || '')
-  const photoRef = useRef<HTMLInputElement>(null)
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -51,15 +52,11 @@ export default function Settings() {
     reload()
   }
 
-  const uploadPhoto = async (file: File) => {
-    const reader = new FileReader()
-    reader.onload = async (e) => {
-      const dataUrl = e.target?.result as string
-      await supabase.from('users').update({ photo_url: dataUrl }).eq('id', user!.id)
-      setPhotoUrl(dataUrl)
-      reload()
-    }
-    reader.readAsDataURL(file)
+  const saveAvatar = async (dataUrl: string) => {
+    await supabase.from('users').update({ photo_url: dataUrl }).eq('id', user!.id)
+    setPhotoUrl(dataUrl)
+    setShowAvatarPicker(false)
+    reload()
   }
 
   const toggleMasterNotify = async () => {
@@ -90,24 +87,25 @@ export default function Settings() {
       <div className="card">
         <div className="card-title">Profile</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-          <div style={{ position: 'relative', cursor: 'pointer' }} onClick={() => photoRef.current?.click()}>
+          <div style={{ position: 'relative', cursor: 'pointer' }} onClick={() => setShowAvatarPicker(true)}>
             {photoUrl ? (
-              <img src={photoUrl} alt="Profile" style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--pearl)' }} />
+              <img src={photoUrl} alt="Profile" style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--pearl)' }} />
             ) : (
-              <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 900, color: '#fff' }}>
+              <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, fontWeight: 900, color: '#fff' }}>
                 {user?.name?.charAt(0) || 'U'}
               </div>
             )}
-            <div style={{ position: 'absolute', bottom: 0, right: 0, background: 'var(--green)', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff', border: '2px solid var(--cream)' }}>✎</div>
+            <div style={{ position: 'absolute', bottom: 0, right: 0, background: 'var(--green)', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#fff', border: '2px solid var(--cream)' }}>✎</div>
           </div>
-          <input ref={photoRef} type="file" accept="image/*" style={{ display: 'none' }}
-            onChange={e => { if (e.target.files?.[0]) uploadPhoto(e.target.files[0]) }} />
           <div>
             <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--ink)' }}>{user?.name}</div>
             <div style={{ fontSize: 13, color: 'var(--mist)' }}>{user?.email}</div>
             <span className={`badge badge-${user?.role === 'superadmin' ? 'ruby' : user?.role === 'admin' ? 'gold' : 'sapph'}`} style={{ marginTop: 4 }}>
               {user?.role}
             </span>
+            <div style={{ marginTop: 6 }}>
+              <button onClick={() => setShowAvatarPicker(true)} className="btn-outline btn-xs">Change Avatar</button>
+            </div>
           </div>
         </div>
         <form onSubmit={saveProfile}>
@@ -125,6 +123,15 @@ export default function Settings() {
           </button>
         </form>
       </div>
+
+      {showAvatarPicker && (
+        <AvatarPicker
+          currentPhoto={photoUrl}
+          userName={user?.name || ''}
+          onSave={saveAvatar}
+          onClose={() => setShowAvatarPicker(false)}
+        />
+      )}
 
       {/* Notifications */}
       <div className="card">

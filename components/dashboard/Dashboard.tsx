@@ -2,6 +2,16 @@
 
 import { useApp } from '@/lib/context'
 
+// Count days worked: past events = 3 days, current/future = days with data
+const countDays = (ev: any) => {
+  const end = new Date(ev.start_date + 'T12:00:00')
+  end.setDate(end.getDate() + 2)
+  end.setHours(23, 59, 59)
+  const isPast = end < new Date()
+  return isPast ? 3 : (ev.days || []).length
+}
+
+
 export default function Dashboard() {
   const { user, users, stores, events, year, setYear } = useApp()
 
@@ -37,6 +47,25 @@ export default function Dashboard() {
     return acc
   }, { purchases: 0, customers: 0, dollars: 0, commission: 0 })
 
+
+  // Next week preview (only visible on Saturday/Sunday)
+  const dayOfWeekNum = today.getDay() // 0=Sun, 6=Sat
+  const isWeekend = dayOfWeekNum === 0 || dayOfWeekNum === 6
+  const nextMonday = new Date(today)
+  nextMonday.setDate(today.getDate() + (dayOfWeekNum === 0 ? 1 : 8 - dayOfWeekNum))
+  nextMonday.setHours(0, 0, 0, 0)
+  const nextSunday = new Date(nextMonday)
+  nextSunday.setDate(nextMonday.getDate() + 6)
+  nextSunday.setHours(23, 59, 59, 999)
+
+  const nextWeekEvents = isWeekend ? events.filter(e => {
+    const d = new Date(e.start_date + 'T12:00:00')
+    return d >= nextMonday && d <= nextSunday
+  }) : []
+
+  const fmtNextWeek = `${nextMonday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${nextSunday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+
+  const storeColors = ['#1D6B44', '#E67E22', '#9B59B6', '#3498DB', '#E74C3C', '#1ABC9C', '#F39C12', '#2C3E50']
   const fmtWeek = `${monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${sunday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
 
   const totals = yearEvents.reduce((acc, ev) => {
@@ -118,6 +147,44 @@ export default function Dashboard() {
         ))}
       </div>
 
+      {/* Next Week Preview — only on weekends */}
+      {isWeekend && nextWeekEvents.length > 0 && (
+        <div style={{ background: 'var(--card-bg)', borderRadius: 'var(--r2)', border: '1px solid var(--pearl)', padding: '16px 20px', marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#4FACFE' }} />
+              <span style={{ fontWeight: 900, fontSize: 14, color: 'var(--ink)' }}>Next week</span>
+              <span style={{ fontSize: 12, color: 'var(--mist)' }}>{fmtNextWeek}</span>
+            </div>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>{nextWeekEvents.length} event{nextWeekEvents.length !== 1 ? 's' : ''}</span>
+          </div>
+          <div style={{ display: 'flex', gap: 12, overflowX: 'auto' }}>
+            {nextWeekEvents.sort((a, b) => a.start_date.localeCompare(b.start_date)).map((ev, i) => {
+              const store = stores.find(s => s.id === ev.store_id)
+              const evStart = new Date(ev.start_date + 'T12:00:00')
+              const evEnd = new Date(ev.start_date + 'T12:00:00')
+              evEnd.setDate(evEnd.getDate() + 2)
+              const fmtD = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+              const workers = (ev.workers || []).map((w: any) => w.name?.split(' ')[0]).filter(Boolean)
+              return (
+                <div key={ev.id} style={{ minWidth: 190, flex: 1, background: 'var(--cream2)', borderRadius: 'var(--r)', padding: '12px 14px', borderLeft: `3px solid ${storeColors[i % storeColors.length]}` }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)', marginBottom: 2 }}>{ev.store_name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--mist)' }}>{store?.city}{store?.city && store?.state ? ', ' : ''}{store?.state}</div>
+                  <div style={{ fontSize: 11, color: 'var(--fog)', marginTop: 6 }}>{fmtD(evStart)} – {fmtD(evEnd)}</div>
+                  {workers.length > 0 && (
+                    <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
+                      {workers.map((name: string) => (
+                        <span key={name} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--green-pale)', color: 'var(--green-dark)', fontWeight: 700 }}>{name}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Store performance table */}
         <div className="lg:col-span-2 rounded-xl overflow-hidden" style={{ background: 'var(--card-bg)', border: '1px solid var(--pearl)' }}>
@@ -191,7 +258,7 @@ export default function Dashboard() {
                   const ranked = buyers.map(b => {
                     const days = currentYearEvents.reduce((s, ev) => {
                       const workedEvent = (ev.workers || []).some((w: any) => w.id === b.id)
-                      return s + (workedEvent ? ev.days.length : 0)
+                      return s + (workedEvent ? countDays(ev) : 0)
                     }, 0)
                     return { ...b, days }
                   }).sort((a, b) => b.days - a.days)
@@ -212,10 +279,14 @@ export default function Dashboard() {
                           <div style={{ width: 18, fontSize: 11, fontWeight: 900, color: tier ? tier.color : 'var(--mist)', textAlign: 'center' }}>
                             {rank}
                           </div>
-                          <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black text-white"
-                            style={{ background: tier ? tier.color : 'var(--green)', fontSize: 10 }}>
-                            {b.name?.charAt(0)}
-                          </div>
+                          {b.photo_url ? (
+                            <img src={b.photo_url} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                          ) : (
+                            <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black text-white"
+                              style={{ background: tier ? tier.color : 'var(--green)', fontSize: 10 }}>
+                              {b.name?.charAt(0)}
+                            </div>
+                          )}
                           <span style={{ color: 'var(--ash)', fontWeight: tier ? 700 : 400 }}>{b.name}</span>
                           {tier && <span style={{ fontSize: 10, fontWeight: 700, color: tier.color }}>{tier.icon} {tier.label}</span>}
                           {isIneligible && (
@@ -260,7 +331,7 @@ function Leaderboard({ events, users, buyers }: { events: any[]; users: any[]; b
   const ranked = buyers.map(b => {
     const days = currentYearEvents.reduce((s, ev) => {
       const workedEvent = (ev.workers || []).some((w: any) => w.id === b.id)
-      return s + (workedEvent ? ev.days.length : 0)
+      return s + (workedEvent ? countDays(ev) : 0)
     }, 0)
     const isIneligible = ineligible.some(n => b.name?.toLowerCase().includes(n))
     return { ...b, days, isIneligible }
@@ -322,9 +393,13 @@ function Leaderboard({ events, users, buyers }: { events: any[]; users: any[]; b
                 {buyer ? (
                   <>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                      <div style={{ width: 40, height: 40, borderRadius: '50%', background: tier.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: 16, flexShrink: 0 }}>
-                        {buyer.name?.charAt(0)}
-                      </div>
+                      {buyer.photo_url ? (
+                        <img src={buyer.photo_url} alt="" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                      ) : (
+                        <div style={{ width: 40, height: 40, borderRadius: '50%', background: tier.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: 16, flexShrink: 0 }}>
+                          {buyer.name?.charAt(0)}
+                        </div>
+                      )}
                       <div>
                         <div style={{ fontWeight: 900, fontSize: 15, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6 }}>
                           {buyer.name}
@@ -371,50 +446,6 @@ function Leaderboard({ events, users, buyers }: { events: any[]; users: any[]; b
         })}
       </div>
 
-      {/* Rest of leaderboard */}
-      {rest.length > 0 && (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--cream2)', fontWeight: 900, fontSize: 13, color: 'var(--ink)' }}>
-            Full Rankings
-          </div>
-          {rest.map((b, i) => {
-            const prev = withRanks.find(x => x.rank === b.rank - 1)
-            const gapToPrev = prev ? prev.days - b.days : 0
-            return (
-              <div key={b.id} style={{
-                display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px',
-                borderBottom: i < rest.length - 1 ? '1px solid var(--cream2)' : 'none',
-                background: i % 2 === 0 ? 'transparent' : 'var(--cream2)',
-              }}>
-                <div style={{ width: 28, textAlign: 'center', fontWeight: 900, fontSize: 14, color: 'var(--mist)' }}>
-                  {b.rank}
-                </div>
-                <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: 14, flexShrink: 0 }}>
-                  {b.name?.charAt(0)}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {b.name}
-                    {b.isIneligible && (
-                      <span title="Not eligible for prize" style={{ fontSize: 11, color: 'var(--mist)', cursor: 'help' }}>*</span>
-                    )}
-                  </div>
-                  {gapToPrev > 0 && (
-                    <div style={{ fontSize: 11, color: 'var(--mist)' }}>
-                      {gapToPrev} day{gapToPrev !== 1 ? 's' : ''} behind #{b.rank - 1}
-                    </div>
-                  )}
-                </div>
-                <div style={{ fontWeight: 900, fontSize: 15, color: 'var(--ash)' }}>{b.days}</div>
-                <div style={{ fontSize: 11, color: 'var(--mist)' }}>days</div>
-              </div>
-            )
-          })}
-          <div style={{ padding: '10px 20px', fontSize: 11, color: 'var(--mist)', borderTop: '1px solid var(--cream2)' }}>
-            * Not eligible for cash prize
-          </div>
-        </div>
-      )}
     </div>
 
   )
