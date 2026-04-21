@@ -29,7 +29,7 @@ import { shouldUseMobile, setMobilePreference } from '@/lib/mobile'
 export type NavPage = 'dashboard' | 'calendar' | 'events' | 'schedule' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'stores' | 'historical' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'libertyadmin'
 
 export default function Home() {
-  const { user, loading } = useApp()
+  const { user, loading, connectionError, reload } = useApp()
   const [navKey, setNavKey] = useState(0)
   const [nav, rawSetNav] = useState<NavPage>('dashboard')
   const setNav = (n: NavPage) => { rawSetNav(n); setNavKey(k => k + 1) }
@@ -38,6 +38,21 @@ export default function Home() {
   useEffect(() => {
     setIsMobile(shouldUseMobile())
   }, [])
+
+  const ConnectionBanner = () => connectionError ? (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+      background: '#DC2626', color: 'white', padding: '10px 16px',
+      display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12,
+      fontSize: 14, fontWeight: 700,
+    }}>
+      <span>Connection error — data may be incomplete</span>
+      <button onClick={() => reload()} style={{
+        background: 'white', color: '#DC2626', border: 'none', borderRadius: 6,
+        padding: '4px 12px', fontWeight: 700, cursor: 'pointer', fontSize: 13,
+      }}>Retry</button>
+    </div>
+  ) : null
 
   if (loading) {
     return (
@@ -56,27 +71,31 @@ export default function Home() {
   // Mobile layout
   if (isMobile) {
     return (
-      <MobileLayout nav={nav} setNav={setNav}>
-        {nav === 'dashboard' && <MobileDashboard />}
-        {nav === 'dayentry'  && <MobileDayEntry />}
-        {nav === 'events'    && <Events />}
-        {nav === 'calendar'  && <Calendar key={navKey} />}
-        {nav === 'schedule'  && <Schedule />}
-        {nav === 'travel'    && <MobileTravel />}
-        {nav === 'staff'     && <Staff />}
-        {nav === 'shipping'  && <Shipping />}
-        {nav === 'reports'   && <Reports />}
-        {nav === 'marketing' && <Marketing />}
-        {nav === 'settings'  && <Settings />}
-        {nav === 'admin'     && <RoleGuard roles={["admin", "superadmin"]}><AdminPanel /></RoleGuard>}
-        {nav === 'libertyadmin' && <RoleGuard roles={["admin", "superadmin"]}><LibertyAdminPanel /></RoleGuard>}
-        {nav === 'stores'    && <RoleGuard roles={["admin", "superadmin"]}><Stores /></RoleGuard>}
-        {nav === 'historical'&& <RoleGuard roles={["admin", "superadmin"]}><Historical /></RoleGuard>}
-      </MobileLayout>
+      <>
+        <ConnectionBanner />
+        <MobileLayout nav={nav} setNav={setNav}>
+          {nav === 'dashboard' && <MobileDashboard />}
+          {nav === 'dayentry'  && <MobileDayEntry />}
+          {nav === 'events'    && <Events />}
+          {nav === 'calendar'  && <Calendar key={navKey} />}
+          {nav === 'schedule'  && <Schedule />}
+          {nav === 'travel'    && <MobileTravel />}
+          {nav === 'staff'     && <Staff />}
+          {nav === 'shipping'  && <Shipping />}
+          {nav === 'reports'   && <Reports />}
+          {nav === 'marketing' && <Marketing />}
+          {nav === 'settings'  && <Settings />}
+          {nav === 'admin'     && <RoleGuard roles={["admin", "superadmin"]}><AdminPanel /></RoleGuard>}
+          {nav === 'libertyadmin' && <RoleGuard roles={["admin", "superadmin"]}><LibertyAdminPanel /></RoleGuard>}
+          {nav === 'stores'    && <RoleGuard roles={["admin", "superadmin"]}><Stores /></RoleGuard>}
+        </MobileLayout>
+      </>
     )
   }
 
   return (
+    <>
+    <ConnectionBanner />
     <div className="flex h-screen overflow-hidden" style={{ background: 'var(--page-bg)' }}>
       {/* Switch to mobile button */}
       <button onClick={() => { setMobilePreference(true); window.location.reload() }}
@@ -118,5 +137,6 @@ export default function Home() {
         )}
       </main>
     </div>
+    </>
   )
 }

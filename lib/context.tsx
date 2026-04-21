@@ -12,6 +12,7 @@ interface AppContextType extends AppState {
   setUser: (u: User | null) => void
   setStores: (stores: Store[]) => void
   setEvents: (events: Event[]) => void
+  connectionError: boolean
 }
 
 const AppContext = createContext<AppContextType | null>(null)
@@ -40,6 +41,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>('original')
   const [year, setYearState] = useState(String(new Date().getFullYear()))
   const [loading, setLoading] = useState(true)
+  const [connectionError, setConnectionError] = useState(false)
   const [brand, setBrandState] = useState<Brand>('beb')
 
   // ── CRITICAL: use refs to avoid stale closures in reload ──
@@ -55,35 +57,54 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   reloadRef.current = async (overrideBrand?: Brand) => {
     const currentBrand = overrideBrand || brandRef.current || 'beb'
-    try {
-      // Create fresh query builders each time — never reuse
-      const [usersRes, storesRes, eventsRes, shipmentsRes, permsRes] = await Promise.all([
-        supabase.from('users').select('*').order('name'),
-        supabase.from('stores').select('*').eq('brand', currentBrand).order('name'),
-        supabase
-          .from('events')
-          .select('*, days:event_days(*), buyer_entries(*)')
-          .eq('brand', currentBrand)
-          .order('start_date', { ascending: false }),
-        supabase
-          .from('shipments')
-          .select('*')
-          .eq('brand', currentBrand)
-          .order('ship_date', { ascending: false }),
-        supabase.from('settings').select('value').eq('key', 'permissions').maybeSingle(),
-      ])
+    const MAX_RETRIES = 3
+    const RETRY_DELAY = 2000
 
-      if (usersRes.data) setUsers(usersRes.data)
-      if (storesRes.data) setStoresState(storesRes.data)
-      if (eventsRes.data) {
-        setEventsState(eventsRes.data.map((e: any) => ({ ...e, days: e.days || [] })))
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const [usersRes, storesRes, eventsRes, shipmentsRes, permsRes] = await Promise.all([
+          supabase.from('users').select('*').order('name'),
+          supabase.from('stores').select('*').eq('brand', currentBrand).order('name'),
+          supabase
+            .from('events')
+            .select('*, days:event_days(*), buyer_entries(*)')
+            .eq('brand', currentBrand)
+            .order('start_date', { ascending: false }),
+          supabase
+            .from('shipments')
+            .select('*')
+            .eq('brand', currentBrand)
+            .order('ship_date', { ascending: false }),
+          supabase.from('settings').select('value').eq('key', 'permissions').maybeSingle(),
+        ])
+
+        // Check if any critical query failed
+        const hasError = usersRes.error || storesRes.error || eventsRes.error || shipmentsRes.error
+        if (hasError && attempt < MAX_RETRIES) {
+          console.warn(`reload attempt \${attempt} failed, retrying in \${RETRY_DELAY}ms...`)
+          await new Promise(r => setTimeout(r, RETRY_DELAY))
+          continue
+        }
+
+        // Apply data — only update if we got results (preserve existing on failure)
+        if (usersRes.data && usersRes.data.length > 0) setUsers(usersRes.data)
+        if (storesRes.data) setStoresState(storesRes.data)
+        if (eventsRes.data) {
+          setEventsState(eventsRes.data.map((e: any) => ({ ...e, days: e.days || [] })))
+        }
+        if (shipmentsRes.data) setShipments(shipmentsRes.data)
+        setPermissions(permsRes.data?.value || DEFAULT_PERMS)
+        setConnectionError(false)
+        return // success
+      } catch (err) {
+        console.error(`reload attempt \${attempt} error:`, err)
+        if (attempt < MAX_RETRIES) {
+          await new Promise(r => setTimeout(r, RETRY_DELAY))
+        } else {
+          // All retries exhausted — flag connection error but keep existing data
+          setConnectionError(true)
+        }
       }
-      if (shipmentsRes.data) setShipments(shipmentsRes.data)
-      setPermissions(permsRes.data?.value || DEFAULT_PERMS)
-      setLoading(false)
-    } catch (err) {
-      console.error('reload error:', err)
-      setLoading(false)
     }
   }
 
@@ -94,7 +115,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Safety net — never show spinner for more than 5 seconds
   useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 5000)
+    const t = setTimeout(() => setLoading(false), 15000)
     return () => clearTimeout(t)
   }, [])
 
@@ -129,8 +150,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const effectiveBrand = savedBrand === 'liberty' && !userData.liberty_access ? 'beb' : savedBrand
       setUserState(userData)
       setBrandState(effectiveBrand)
+      await reloadRef.current(effectiveBrand)
       setLoading(false)
-      reloadRef.current(effectiveBrand)
     }).catch(() => {
       if (mounted) setLoading(false)
     })
@@ -151,9 +172,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const { data: userData } = await supabase
           .from('users').select('*').eq('email', session.user.email).maybeSingle()
         if (userData?.active && mounted) {
+          const savedBrand = localStorage.getItem('beb-brand') as Brand || 'beb'
+          const effectiveBrand = savedBrand === 'liberty' && !userData.liberty_access ? 'beb' : savedBrand
           setUserState(userData)
+          setBrandState(effectiveBrand)
+          await reloadRef.current(effectiveBrand)
           setLoading(false)
-          reloadRef.current()
         }
       }
     })
@@ -206,12 +230,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // ── CRITICAL: memoize the context value ──
   const ctxValue = useMemo<AppContextType>(() => ({
     user, users, stores, events, shipments, permissions,
-    theme, year, loading, brand,
+    theme, year, loading, brand, connectionError,
     setTheme, setYear, setBrand, reload, setUser,
     setStores, setEvents,
   }), [
     user, users, stores, events, shipments, permissions,
-    theme, year, loading, brand,
+    theme, year, loading, brand, connectionError,
     reload,
   ])
 
