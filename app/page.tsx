@@ -24,6 +24,7 @@ import MobileLayout from '@/components/mobile/MobileLayout'
 import MobileDashboard from '@/components/mobile/MobileDashboard'
 import MobileDayEntry from '@/components/mobile/MobileDayEntry'
 import MobileTravel from '@/components/mobile/MobileTravel'
+import MobileStaff from '@/components/mobile/MobileStaff'
 import { shouldUseMobile, setMobilePreference } from '@/lib/mobile'
 
 export type NavPage = 'dashboard' | 'calendar' | 'events' | 'schedule' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'stores' | 'historical' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'libertyadmin'
@@ -80,7 +81,7 @@ export default function Home() {
           {nav === 'calendar'  && <Calendar key={navKey} />}
           {nav === 'schedule'  && <Schedule />}
           {nav === 'travel'    && <MobileTravel />}
-          {nav === 'staff'     && <Staff />}
+          {nav === 'staff'     && <MobileStaff />}
           {nav === 'shipping'  && <Shipping />}
           {nav === 'reports'   && <Reports />}
           {nav === 'marketing' && <Marketing />}
