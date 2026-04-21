@@ -124,7 +124,6 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
     { id: 'settings',     label: 'Settings',       icon: '⚙️' },
     { id: isLiberty ? 'libertyadmin' : 'admin', label: isLiberty ? 'LEB Admin' : 'Admin', icon: '🔧', adminOnly: true },
     { id: 'stores',       label: 'Stores',         icon: '🏪', adminOnly: true },
-    { id: 'historical',   label: 'Historical',     icon: '📜', adminOnly: true },
   ]
 
   const visiblePages = ALL_PAGES.filter(p => !p.adminOnly || isAdmin)
@@ -138,14 +137,14 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
         background: 'var(--sidebar-bg)', color: '#fff',
         borderBottom: '1px solid rgba(255,255,255,.08)',
       }}>
-        <button onClick={() => setMenuOpen(true)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 22, cursor: 'pointer', padding: '4px 8px' }}>☰</button>
+        <button onClick={() => setMenuOpen(true)} aria-label="Open menu" style={{ background: 'none', border: 'none', color: '#fff', fontSize: 24, cursor: 'pointer', padding: '10px 12px', minWidth: 44, minHeight: 44 }}>☰</button>
         {hasLibertyAccess && (
           <div style={{ display: 'flex', background: 'rgba(255,255,255,.1)', borderRadius: 20, padding: 2 }}>
             <button onClick={() => setBrand('beb')} style={{ padding: '4px 14px', borderRadius: 18, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer', background: !isLiberty ? 'var(--green)' : 'transparent', color: !isLiberty ? '#fff' : 'rgba(255,255,255,.5)' }}>BEB</button>
             <button onClick={() => setBrand('liberty')} style={{ padding: '4px 14px', borderRadius: 18, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer', background: isLiberty ? '#1D3A6B' : 'transparent', color: isLiberty ? '#fff' : 'rgba(255,255,255,.5)' }}>LEB</button>
           </div>
         )}
-        <button onClick={() => { setMobilePreference(false); window.location.reload() }} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,.4)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Desktop</button>
+        <button onClick={() => { setMobilePreference(false); window.location.reload() }} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,.4)', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '10px 12px', minHeight: 44 }}>Desktop</button>
       </div>
 
       {/* Slide-out menu */}
@@ -159,13 +158,13 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
             </div>
             <div style={{ padding: '12px 0' }}>
               {visiblePages.map(p => (
-                <button key={p.id} onClick={() => { setNav(p.id); setMenuOpen(false) }} style={{ width: '100%', padding: '12px 20px', background: nav === p.id ? 'rgba(255,255,255,.1)' : 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, color: nav === p.id ? '#fff' : 'rgba(255,255,255,.6)', fontWeight: nav === p.id ? 700 : 400, fontSize: 14, textAlign: 'left', borderLeft: nav === p.id ? '3px solid var(--green3)' : '3px solid transparent' }}>
-                  <span style={{ fontSize: 16 }}>{p.icon}</span>{p.label}
+                <button key={p.id} onClick={() => { setNav(p.id); setMenuOpen(false) }} style={{ width: '100%', padding: '14px 20px', background: nav === p.id ? 'rgba(255,255,255,.1)' : 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 12, color: nav === p.id ? '#fff' : 'rgba(255,255,255,.6)', fontWeight: nav === p.id ? 700 : 400, fontSize: 14, textAlign: 'left', borderLeft: nav === p.id ? '3px solid var(--green3)' : '3px solid transparent', minHeight: 44 }}>
+                  <span style={{ fontSize: 16, width: 20, textAlign: 'center', flexShrink: 0 }}>{p.icon}</span>{p.label}
                 </button>
               ))}
               <div style={{ borderTop: '1px solid rgba(255,255,255,.1)', margin: '12px 0 0' }} />
-              <button onClick={() => supabase.auth.signOut()} style={{ width: '100%', padding: '14px 20px', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, color: '#FCA5A5', fontWeight: 700, fontSize: 14, textAlign: 'left' }}>
-                <span style={{ fontSize: 16 }}>🚪</span>Sign Out
+              <button onClick={() => supabase.auth.signOut()} style={{ width: '100%', padding: '14px 20px', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 12, color: '#FCA5A5', fontWeight: 700, fontSize: 14, textAlign: 'left', minHeight: 44 }}>
+                <span style={{ fontSize: 16, width: 20, textAlign: 'center', flexShrink: 0 }}>🚪</span>Sign Out
               </button>
             </div>
           </div>

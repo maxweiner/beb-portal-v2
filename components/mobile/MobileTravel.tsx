@@ -128,7 +128,7 @@ export default function MobileTravel() {
       {/* Event header */}
       <div style={{ background: 'var(--sidebar-bg)', padding: '14px 16px' }}>
         <button onClick={() => setSelectedEvent(null)}
-          style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: 'rgba(255,255,255,.8)', fontSize: 13, fontWeight: 700, padding: '6px 12px', borderRadius: 99, cursor: 'pointer', marginBottom: 10 }}>
+          style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: 'rgba(255,255,255,.8)', fontSize: 13, fontWeight: 700, padding: '10px 14px', borderRadius: 99, cursor: 'pointer', marginBottom: 10, minHeight: 40 }}>
           ← All Events
         </button>
         <div style={{ color: '#7EC8A0', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em' }}>Travel</div>
@@ -149,13 +149,13 @@ export default function MobileTravel() {
                   <div style={{ fontSize: 13, color: '#92400e', marginBottom: 4 }}>{alert.message}</div>
                   {myAlert && !myAck && (
                     <button onClick={() => acknowledge(alert.type)}
-                      style={{ fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 99, border: '1px solid #d97706', background: 'transparent', color: '#92400e', cursor: 'pointer' }}>
+                      style={{ fontSize: 13, fontWeight: 700, padding: '8px 14px', borderRadius: 99, border: '1px solid #d97706', background: 'transparent', color: '#92400e', cursor: 'pointer', minHeight: 36 }}>
                       {alert.type === 'no_rental_car' ? "I don't need a car" : "I'll handle it"}
                     </button>
                   )}
                   {myAck && (
                     <button onClick={() => removeAck(alert.type)}
-                      style={{ fontSize: 12, padding: '5px 12px', borderRadius: 99, border: '1px solid #d97706', background: 'rgba(0,0,0,.05)', color: '#92400e', cursor: 'pointer' }}>
+                      style={{ fontSize: 13, padding: '8px 14px', borderRadius: 99, border: '1px solid #d97706', background: 'rgba(0,0,0,.05)', color: '#92400e', cursor: 'pointer', minHeight: 36 }}>
                       ✓ Acknowledged · Undo
                     </button>
                   )}
@@ -335,7 +335,7 @@ function MobileAddReservation({ eventId, user, onClose, onSaved }: any) {
       <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
         <div style={{ background: 'var(--sidebar-bg)', padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ color: '#fff', fontWeight: 900, fontSize: 17 }}>Add Reservation</div>
-          <button onClick={onClose} style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 32, height: 32, borderRadius: '50%', fontSize: 18, cursor: 'pointer' }}>×</button>
+          <button onClick={onClose} aria-label="Close" style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 44, height: 44, borderRadius: '50%', fontSize: 22, cursor: 'pointer' }}>×</button>
         </div>
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
           {/* Type tabs */}

@@ -217,7 +217,8 @@ export default function MobileDayEntry() {
                     <option value="cash">Cash</option>
                   </select>
                   <button onClick={() => setChecks(p => p.filter((_, idx) => idx !== i))}
-                    style={{ background: 'none', border: 'none', color: 'var(--mist)', fontSize: 20, cursor: 'pointer', padding: '0 4px' }}>×</button>
+                    aria-label={`Remove check ${i + 1}`}
+                    style={{ background: 'none', border: 'none', color: 'var(--mist)', fontSize: 22, cursor: 'pointer', padding: 0, width: 44, height: 44, flexShrink: 0 }}>×</button>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
                   <div>
