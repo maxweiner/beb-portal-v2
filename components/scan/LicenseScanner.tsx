@@ -42,6 +42,7 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
   const [cameraReady, setCameraReady] = useState(false)
   const [debugMode, setDebugMode] = useState(false)
   const [debugInfo, setDebugInfo] = useState<string[]>([])
+  const [wrongBarcode, setWrongBarcode] = useState('') // e.g. "Found Code128 — need the large PDF417"
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -83,26 +84,40 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
     if (step === 'scan-back') { startCamera(); return () => stopCamera() }
   }, [step])
 
-  // ─── Process scan result with diagnostics ───
   const processScanResult = (result: ScanResult) => {
+    // If it's NOT PDF417, show feedback but keep scanning
+    if (!result.isPDF417) {
+      setWrongBarcode(`Reading ${result.format} (${result.text.length}ch) — need the large PDF417 barcode`)
+      if (debugMode) {
+        const diag = diagnoseBarcode(result.text)
+        setDebugInfo([
+          `Found: ${result.format} | ${diag.totalLength} chars (NOT PDF417)`,
+          `Header: ${diag.rawPrefix}`,
+          `This is the small 1D barcode — aim at the large 2D barcode`,
+        ])
+      }
+      setScanAttempts(prev => prev + 1)
+      return // keep scanning — don't stop
+    }
+
+    // It IS PDF417 — try to parse
+    setWrongBarcode('')
     const diag = diagnoseBarcode(result.text)
     const license = parseAAMVABarcode(result.text)
     const validation = isValidParsedLicense(license)
 
     if (debugMode) {
-      const info = [
-        `Format: ${result.format} | ${diag.totalLength} chars`,
+      setDebugInfo([
+        `Format: ${result.format} | ${diag.totalLength} chars ✓ PDF417`,
         `Header: ${diag.rawPrefix}`,
         `Delimiters: ${diag.delimitersFound.join(', ') || 'NONE'}`,
-        `Lines after split: ${diag.linesAfterSplit}`,
-        `ANSI header: ${diag.hasANSIHeader ? 'YES' : 'NO'}`,
-        `@ prefix: ${diag.hasComplianceIndicator ? 'YES' : 'NO'}`,
-        `Field codes seen: ${diag.fieldCodesSeen.join(', ') || 'NONE'}`,
-        `Known codes matched: ${diag.fieldCodesFound.join(', ') || 'NONE'}`,
-        `Fields parsed: ${license.rawFieldCount}`,
+        `Lines: ${diag.linesAfterSplit}`,
+        `ANSI: ${diag.hasANSIHeader ? 'YES' : 'NO'} | @: ${diag.hasComplianceIndicator ? 'YES' : 'NO'}`,
+        `Codes seen: ${diag.fieldCodesSeen.join(', ') || 'NONE'}`,
+        `Matched: ${diag.fieldCodesFound.join(', ') || 'NONE'}`,
+        `Parsed: ${license.rawFieldCount} fields`,
         validation.valid ? 'VALID ✓' : `Missing: ${validation.missing.join(', ')}`,
-      ]
-      setDebugInfo(info)
+      ])
     }
 
     if (validation.valid) {
@@ -149,14 +164,18 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    setError('')
+    setError(''); setWrongBarcode('')
     try {
-      const result = await decodePDF417FromBlob(file, debugMode)
+      const result = await decodePDF417FromBlob(file, true) // always use debug for uploads to find any barcode
       if (!wasmLoaded) setWasmLoaded(true)
       if (result) {
-        processScanResult(result)
+        if (!result.isPDF417) {
+          setError(`Found a ${result.format} barcode, but need the PDF417 (large 2D barcode). Make sure the entire back of the license is visible.`)
+        } else {
+          processScanResult(result)
+        }
       } else {
-        setError('No barcode found. Make sure the back of the license is clearly visible.')
+        setError('No barcode found. Make sure the back of the license is clearly visible and well-lit.')
       }
     } catch { setError('Could not process image.') }
     if (fileInputRef.current) fileInputRef.current.value = ''
@@ -206,7 +225,7 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
     setSaving(true); setStep('saving')
     try {
       await supabase.auth.refreshSession()
-      const { data: intake, error: insertError } = await supabase.from('customer_intakes').insert({
+      const { data: intake, error: err } = await supabase.from('customer_intakes').insert({
         event_id: eventId, buyer_id: user.id,
         first_name: parsed.firstName, last_name: parsed.lastName,
         date_of_birth: parsed.dateOfBirth || null,
@@ -217,7 +236,7 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
         sex: parsed.sex, eye_color: parsed.eyeColor, height: parsed.height,
         is_over_18: parsed.isOver18, scanned_at: new Date().toISOString(), brand,
       }).select().single()
-      if (insertError) throw insertError
+      if (err) throw err
       if (frontPhoto && intake) {
         try {
           const photoUrl = await uploadLicensePhoto(frontPhoto, eventId, intake.id)
@@ -226,7 +245,7 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
         } catch { /* non-fatal */ }
       }
       setStep('done'); onComplete?.(intake.id)
-    } catch (err) { setError((err as Error).message || 'Failed to save.'); setStep('error') }
+    } catch (e) { setError((e as Error).message || 'Failed to save.'); setStep('error') }
     finally { setSaving(false) }
   }
 
@@ -246,7 +265,7 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
     setParsed(null); setFrontPhoto(null); setFrontPreview('')
     setError(''); setScanAttempts(0); setCameraError(false)
     setWasmLoaded(false); setCameraReady(false); setDebugInfo([])
-    setStep('scan-back')
+    setWrongBarcode(''); setStep('scan-back')
   }
 
   const stepIndex = ['scan-back', 'photo-front', 'review', 'saving', 'done'].indexOf(step)
@@ -274,7 +293,6 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
         <div style={{ width: 60 }} />
       </div>
 
-      {/* Progress */}
       <div style={{ display: 'flex', gap: 4, padding: '8px 16px', background: 'rgba(0,0,0,.8)' }}>
         {[0, 1, 2].map(i => (
           <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: stepIndex >= i ? 'var(--green, #7EC8A0)' : 'rgba(255,255,255,.15)', transition: 'background .3s' }} />
@@ -301,7 +319,7 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
                     ].map((s, i) => <div key={i} style={{ position: 'absolute', width: 24, height: 24, ...s } as any} />)}
                     <div style={{ position: 'absolute', left: 8, right: 8, height: 2, background: 'rgba(126,200,160,.5)', animation: 'scanLine 2s ease-in-out infinite' }} />
                     <div style={{ position: 'absolute', bottom: -36, left: 0, right: 0, textAlign: 'center', fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,.8)' }}>
-                      Align barcode on back of ID
+                      Align the large barcode on back of ID
                     </div>
                   </div>
                 </div>
@@ -311,11 +329,11 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
               {!cameraError && (
                 <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'rgba(255,255,255,.7)' }}>
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: cameraReady ? '#22C55E' : '#F59E0B', animation: cameraReady ? 'none' : 'pulse 1s infinite' }} />
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: cameraReady ? '#22C55E' : '#F59E0B' }} />
                     {cameraReady ? 'Camera ready' : 'Starting…'}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'rgba(255,255,255,.7)' }}>
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: wasmLoaded ? '#22C55E' : '#F59E0B', animation: wasmLoaded ? 'none' : 'pulse 1s infinite' }} />
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: wasmLoaded ? '#22C55E' : '#F59E0B' }} />
                     {wasmLoaded ? 'Scanner ready' : 'Loading…'}
                   </div>
                   {scanAttempts > 0 && <div style={{ fontSize: 11, color: 'rgba(255,255,255,.4)' }}>Frames: {scanAttempts}</div>}
@@ -330,9 +348,18 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
                   border: `1px solid ${debugMode ? 'rgba(250,204,21,.4)' : 'rgba(255,255,255,.2)'}`,
                   borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 700,
                   color: debugMode ? '#FCD34D' : 'rgba(255,255,255,.5)', cursor: 'pointer',
+                }}>{debugMode ? '🔍 DEBUG' : '🔍'}</button>
+              )}
+
+              {/* Wrong barcode warning */}
+              {wrongBarcode && (
+                <div style={{
+                  position: 'absolute', top: 80, left: 12, right: 12,
+                  background: 'rgba(217,119,6,.9)', borderRadius: 8, padding: '10px 14px',
+                  fontSize: 12, fontWeight: 600, color: '#fff', textAlign: 'center',
                 }}>
-                  {debugMode ? '🔍 DEBUG' : '🔍'}
-                </button>
+                  ⚠️ {wrongBarcode}
+                </div>
               )}
 
               {/* Debug panel */}
@@ -340,14 +367,11 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
                 <div style={{
                   position: 'absolute', bottom: 12, left: 12, right: 12,
                   background: 'rgba(0,0,0,.85)', borderRadius: 8, padding: '10px 12px',
-                  border: '1px solid rgba(250,204,21,.3)',
-                  maxHeight: 200, overflowY: 'auto',
+                  border: '1px solid rgba(250,204,21,.3)', maxHeight: 180, overflowY: 'auto',
                 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#FCD34D', marginBottom: 4 }}>BARCODE DIAGNOSTICS</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#FCD34D', marginBottom: 4 }}>DIAGNOSTICS</div>
                   {debugInfo.map((line, i) => (
-                    <div key={i} style={{ fontSize: 10, color: 'rgba(255,255,255,.8)', fontFamily: 'monospace', lineHeight: 1.4, wordBreak: 'break-all' }}>
-                      {line}
-                    </div>
+                    <div key={i} style={{ fontSize: 10, color: 'rgba(255,255,255,.8)', fontFamily: 'monospace', lineHeight: 1.4, wordBreak: 'break-all' }}>{line}</div>
                   ))}
                 </div>
               )}
@@ -368,9 +392,9 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
                   <button onClick={() => setError('')} style={{ background: 'none', border: 'none', color: '#FCA5A5', cursor: 'pointer', fontWeight: 700, marginLeft: 8 }}>×</button>
                 </div>
               )}
-              {scanAttempts > 30 && !cameraError && (
+              {scanAttempts > 30 && !wrongBarcode && !cameraError && (
                 <div style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(217,119,6,.15)', border: '1px solid rgba(217,119,6,.3)', fontSize: 12, color: '#FCD34D' }}>
-                  Trouble scanning? Hold 6-8" away, reduce glare, or try Upload.{!debugMode && ' Tap 🔍 for diagnostics.'}
+                  Trouble scanning? Hold the physical ID 6-8" from the camera. Reduce glare by tilting. Or try Upload.
                 </div>
               )}
               <button onClick={() => fileInputRef.current?.click()} style={{
@@ -398,16 +422,13 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
               )}
               {cameraError && (
                 <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, gap: 16 }}>
-                  <div style={{ fontSize: 48 }}>📷</div>
-                  <div style={{ fontSize: 16, fontWeight: 700 }}>Upload front of ID</div>
+                  <div style={{ fontSize: 48 }}>📷</div><div style={{ fontSize: 16, fontWeight: 700 }}>Upload front of ID</div>
                 </div>
               )}
             </div>
             <div style={{ padding: '16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', background: 'rgba(0,0,0,.9)', display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', gap: 10 }}>
-                {!cameraError && (
-                  <button onClick={capturePhoto} style={{ flex: 2, padding: '14px', borderRadius: 10, background: '#3B82F6', border: 'none', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>📸 Capture</button>
-                )}
+                {!cameraError && <button onClick={capturePhoto} style={{ flex: 2, padding: '14px', borderRadius: 10, background: '#3B82F6', border: 'none', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>📸 Capture</button>}
                 <button onClick={() => frontFileRef.current?.click()} style={{ flex: 1, padding: '14px', borderRadius: 10, background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.2)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>📁 Upload</button>
                 <input ref={frontFileRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handleFrontFileUpload} />
               </div>
@@ -419,17 +440,10 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
         {/* ── STEP 3 ── */}
         {step === 'review' && parsed && (
           <div style={{ padding: 16, paddingBottom: 120, animation: 'fadeIn .3s ease' }}>
-            <div style={{
-              padding: '12px 16px', borderRadius: 10, marginBottom: 16,
-              background: parsed.isOver18 ? 'rgba(34,197,94,.12)' : 'rgba(220,38,38,.12)',
-              border: `1px solid ${parsed.isOver18 ? 'rgba(34,197,94,.25)' : 'rgba(220,38,38,.25)'}`,
-              display: 'flex', alignItems: 'center', gap: 10,
-            }}>
+            <div style={{ padding: '12px 16px', borderRadius: 10, marginBottom: 16, background: parsed.isOver18 ? 'rgba(34,197,94,.12)' : 'rgba(220,38,38,.12)', border: `1px solid ${parsed.isOver18 ? 'rgba(34,197,94,.25)' : 'rgba(220,38,38,.25)'}`, display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 24 }}>{parsed.isOver18 ? '✅' : '🚫'}</span>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: parsed.isOver18 ? '#86EFAC' : '#FCA5A5' }}>
-                  {parsed.isOver18 ? 'Age Verified — 18+' : 'UNDER 18 — Cannot Proceed'}
-                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: parsed.isOver18 ? '#86EFAC' : '#FCA5A5' }}>{parsed.isOver18 ? 'Age Verified — 18+' : 'UNDER 18'}</div>
                 {parsed.dateOfBirth && <div style={{ fontSize: 12, color: 'rgba(255,255,255,.5)', marginTop: 2 }}>DOB: {parsed.dateOfBirth}</div>}
               </div>
             </div>
@@ -445,7 +459,7 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
               <ReviewField label="Middle Name" value={parsed.middleName} onChange={v => updateField('middleName', v)} />
               <ReviewField label="Last Name" value={parsed.lastName} onChange={v => updateField('lastName', v)} />
               <ReviewField label="Date of Birth" value={parsed.dateOfBirth} onChange={v => updateField('dateOfBirth', v)} />
-              <ReviewField label="Street Address" value={parsed.address.street} onChange={v => updateField('address.street', v)} />
+              <ReviewField label="Street" value={parsed.address.street} onChange={v => updateField('address.street', v)} />
               <ReviewField label="City" value={parsed.address.city} onChange={v => updateField('address.city', v)} />
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <ReviewField label="State" value={parsed.address.state} onChange={v => updateField('address.state', v)} />
@@ -463,7 +477,7 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
               </div>
             </div>
             <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '12px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 12px)', background: 'rgba(0,0,0,.95)', borderTop: '1px solid rgba(255,255,255,.1)', display: 'flex', gap: 10 }}>
-              <button onClick={() => { resetAll() }} style={{ flex: 1, padding: '14px', borderRadius: 10, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.15)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Re-scan</button>
+              <button onClick={resetAll} style={{ flex: 1, padding: '14px', borderRadius: 10, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.15)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Re-scan</button>
               <button onClick={handleSubmit} disabled={!parsed.isOver18} style={{ flex: 2, padding: '14px', borderRadius: 10, background: parsed.isOver18 ? 'var(--green, #1e5c3a)' : 'rgba(255,255,255,.08)', border: 'none', color: '#fff', fontSize: 15, fontWeight: 700, cursor: parsed.isOver18 ? 'pointer' : 'not-allowed', opacity: parsed.isOver18 ? 1 : 0.5 }}>✓ Save Intake</button>
             </div>
           </div>
@@ -493,7 +507,7 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
             <div style={{ fontSize: 64 }}>❌</div>
             <div style={{ fontSize: 18, fontWeight: 700 }}>Something went wrong</div>
             <div style={{ fontSize: 14, color: '#FCA5A5', textAlign: 'center' }}>{error}</div>
-            <button onClick={() => { setError(''); setStep('review') }} style={{ padding: '14px 32px', borderRadius: 10, marginTop: 8, background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.2)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>← Back to Review</button>
+            <button onClick={() => { setError(''); setStep('review') }} style={{ padding: '14px 32px', borderRadius: 10, marginTop: 8, background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.2)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>← Back</button>
           </div>
         )}
       </div>

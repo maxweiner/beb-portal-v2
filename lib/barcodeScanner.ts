@@ -23,42 +23,47 @@ function ensureWasm() {
   wasmConfigured = true
 }
 
-const READER_OPTIONS: ReaderOptions = {
+// PDF417-only for the actual scan
+const PDF417_OPTIONS: ReaderOptions = {
   formats: ['PDF417', 'CompactPDF417'],
   tryHarder: true,
   maxNumberOfSymbols: 1,
 }
 
-const DEBUG_READER_OPTIONS: ReaderOptions = {
+// All formats for diagnostics — find ANY barcode on the card
+const ALL_FORMAT_OPTIONS: ReaderOptions = {
   tryHarder: true,
-  maxNumberOfSymbols: 3,
+  maxNumberOfSymbols: 5,
 }
 
 export interface ScanResult {
   text: string
   format: string
+  isPDF417: boolean
 }
 
 function downscaleImageData(imageData: ImageData, targetWidth: number): ImageData {
   if (imageData.width <= targetWidth) return imageData
   const scale = targetWidth / imageData.width
-  const newWidth = Math.round(imageData.width * scale)
-  const newHeight = Math.round(imageData.height * scale)
+  const nw = Math.round(imageData.width * scale)
+  const nh = Math.round(imageData.height * scale)
 
   const srcCanvas = typeof OffscreenCanvas !== 'undefined'
     ? new OffscreenCanvas(imageData.width, imageData.height)
     : (() => { const c = document.createElement('canvas'); c.width = imageData.width; c.height = imageData.height; return c })()
-  const srcCtx = srcCanvas.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
-  srcCtx.putImageData(imageData, 0, 0)
+  ;(srcCanvas.getContext('2d') as any).putImageData(imageData, 0, 0)
 
   const canvas = typeof OffscreenCanvas !== 'undefined'
-    ? new OffscreenCanvas(newWidth, newHeight)
-    : (() => { const c = document.createElement('canvas'); c.width = newWidth; c.height = newHeight; return c })()
-  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
-  ctx.drawImage(srcCanvas as any, 0, 0, newWidth, newHeight)
-  return ctx.getImageData(0, 0, newWidth, newHeight)
+    ? new OffscreenCanvas(nw, nh)
+    : (() => { const c = document.createElement('canvas'); c.width = nw; c.height = nh; return c })()
+  ;(canvas.getContext('2d') as any).drawImage(srcCanvas as any, 0, 0, nw, nh)
+  return (canvas.getContext('2d') as any).getImageData(0, 0, nw, nh)
 }
 
+/**
+ * Scan for PDF417 barcode. In debug mode, also scan all formats
+ * and return non-PDF417 results flagged as such (for diagnostics).
+ */
 export async function decodePDF417FromImageData(
   imageData: ImageData,
   debug = false
@@ -66,15 +71,25 @@ export async function decodePDF417FromImageData(
   ensureWasm()
   try {
     const scaled = downscaleImageData(imageData, 1280)
-    const options = debug ? DEBUG_READER_OPTIONS : READER_OPTIONS
-    const results = await readBarcodes(scaled, options)
 
-    if (results.length > 0 && results[0].text) {
-      if (debug) {
-        console.log(`[barcode-debug] Found: format=${results[0].format}, length=${results[0].text.length}`)
-      }
-      return { text: results[0].text, format: results[0].format || 'unknown' }
+    // Always try PDF417 first
+    const pdf417Results = await readBarcodes(scaled, PDF417_OPTIONS)
+    if (pdf417Results.length > 0 && pdf417Results[0].text) {
+      return { text: pdf417Results[0].text, format: pdf417Results[0].format || 'PDF417', isPDF417: true }
     }
+
+    // In debug mode, also try all formats to see what's on the card
+    if (debug) {
+      const allResults = await readBarcodes(scaled, ALL_FORMAT_OPTIONS)
+      if (allResults.length > 0 && allResults[0].text) {
+        return {
+          text: allResults[0].text,
+          format: allResults[0].format || 'unknown',
+          isPDF417: false,
+        }
+      }
+    }
+
     return null
   } catch (err) {
     if (typeof err === 'object' && err && 'message' in err) {
@@ -90,15 +105,20 @@ export async function decodePDF417FromImageData(
 export async function decodePDF417FromBlob(blob: Blob, debug = false): Promise<ScanResult | null> {
   ensureWasm()
   try {
-    const options = debug ? DEBUG_READER_OPTIONS : READER_OPTIONS
-    const results = await readBarcodes(blob, options)
-
-    if (results.length > 0 && results[0].text) {
-      if (debug) {
-        console.log(`[barcode-debug] Found in upload: format=${results[0].format}, length=${results[0].text.length}`)
-      }
-      return { text: results[0].text, format: results[0].format || 'unknown' }
+    // Try PDF417 first
+    const pdf417Results = await readBarcodes(blob, PDF417_OPTIONS)
+    if (pdf417Results.length > 0 && pdf417Results[0].text) {
+      return { text: pdf417Results[0].text, format: pdf417Results[0].format || 'PDF417', isPDF417: true }
     }
+
+    // In debug mode, try all formats
+    if (debug) {
+      const allResults = await readBarcodes(blob, ALL_FORMAT_OPTIONS)
+      if (allResults.length > 0 && allResults[0].text) {
+        return { text: allResults[0].text, format: allResults[0].format || 'unknown', isPDF417: false }
+      }
+    }
+
     return null
   } catch (err) {
     if (typeof err === 'object' && err && 'message' in err) {
