@@ -590,10 +590,11 @@ function ApptDetail({ appt, tz, pos, onClose }: {
 
 /* ══ MOBILE ACTIVE APPOINTMENTS VIEW ══
  * Shown when the user is on mobile and currently assigned to an active
- * event. Auto-opens to today's day. Tappable store-name header opens a
- * drawer of the user's other events. Solid green day bar with segmented
- * Day 1/2/3. Hour-grouped appointment list with each row fully tinted by
- * its detected lead source.
+ * event. Auto-opens to today's day. Header is a tappable dropdown that
+ * lists the user's other events + "Browse all events". Solid green day
+ * bar with segmented Day 1/2/3 (TODAY label on the current day). Stats
+ * strip shows booked / available / fill %. Hour-grouped appointment
+ * list with each row fully tinted by its detected lead source.
  */
 function MobileActiveAppointmentsView({
   ev, stores, myEvents, appointments, loading,
@@ -612,7 +613,7 @@ function MobileActiveAppointmentsView({
   const tz = STATE_TZ[(store?.state || '').toUpperCase()] || 'America/New_York'
   const [day, setDay] = useState(1)
   const [expanded, setExpanded] = useState<string | null>(null)
-  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [dropdownOpen, setDropdownOpen] = useState(false)
 
   // Auto-select today if it's one of the event days.
   useEffect(() => {
@@ -645,41 +646,150 @@ function MobileActiveAppointmentsView({
     .sort((a, b) => b.start_date.localeCompare(a.start_date))
     .slice(0, 10)
 
+  // Is this event actually happening right now? Controls the LIVE badge.
+  const isLive = (() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const start = new Date(ev.start_date + 'T12:00:00')
+    const end = new Date(ev.start_date + 'T12:00:00')
+    end.setDate(end.getDate() + 2); end.setHours(23, 59, 59)
+    return today >= start && today <= end
+  })()
+
+  const bookedToday = slots.filter(s => findAppt(s)).length
+  const availToday  = slots.length - bookedToday
+  const fillPct     = slots.length > 0 ? Math.round((bookedToday / slots.length) * 100) : 0
+
+  const todayInStoreTz = dateInTz(new Date(), tz)
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-      {/* Tappable header */}
-      <div style={{ padding: '12px 16px', background: 'var(--cream)', borderBottom: '1px solid var(--pearl)' }}>
-        <button onClick={() => setDrawerOpen(true)} style={{
-          width: '100%', background: 'none', border: 'none', textAlign: 'left',
-          padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+      {/* Dropdown header */}
+      <div style={{
+        padding: '12px 16px', background: 'var(--cream)',
+        borderBottom: '1px solid var(--pearl)', position: 'relative',
+      }}>
+        <button onClick={() => setDropdownOpen(o => !o)} style={{
+          width: '100%', padding: '8px 12px', borderRadius: 10,
+          background: 'var(--cream2)', border: '1.5px solid var(--pearl)',
+          cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+          textAlign: 'left',
         }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--ink)' }}>
-              {store?.name || ev.store_name}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 15, fontWeight: 900, color: 'var(--ink)' }}>
+                {store?.name || ev.store_name}
+              </span>
+              {isLive && (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  padding: '2px 8px', borderRadius: 99,
+                  background: '#DC2626', color: '#fff',
+                  fontSize: 9, fontWeight: 900, letterSpacing: '.08em',
+                }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#fff' }} />
+                  LIVE
+                </span>
+              )}
             </div>
-            <div style={{ fontSize: 12, color: 'var(--mist)' }}>
-              {store?.city}, {store?.state} · Day {day} · Active
+            <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>
+              {store?.city}, {store?.state} · Day {day} of 3
             </div>
           </div>
-          {isLoading && <span style={{ fontSize: 11, color: 'var(--mist)', marginRight: 6 }}>↻</span>}
-          <span style={{ fontSize: 16, color: 'var(--green-dark)' }}>▾</span>
+          {isLoading && <span style={{ fontSize: 11, color: 'var(--mist)', marginRight: 4 }}>↻</span>}
+          <span style={{ fontSize: 16, color: 'var(--green-dark)' }}>{dropdownOpen ? '▴' : '▾'}</span>
         </button>
+
+        {dropdownOpen && (
+          <div style={{
+            position: 'absolute', top: 'calc(100% - 1px)', left: 12, right: 12,
+            background: 'var(--cream)',
+            border: '1.5px solid var(--pearl)', borderTop: 'none',
+            borderRadius: '0 0 10px 10px',
+            boxShadow: '0 8px 20px rgba(0,0,0,.12)', zIndex: 20,
+            overflow: 'hidden',
+          }}>
+            {otherEvents.length === 0 ? (
+              <div style={{ padding: '10px 14px', fontSize: 12, color: 'var(--mist)', fontStyle: 'italic' }}>
+                No other events assigned to you.
+              </div>
+            ) : (
+              otherEvents.map(other => {
+                const otherStore = stores.find(s => s.id === other.store_id)
+                return (
+                  <button key={other.id}
+                    onClick={() => { onPickEvent(other.id); setDropdownOpen(false) }}
+                    style={{
+                      width: '100%', padding: '10px 14px', background: 'none',
+                      border: 'none', borderBottom: '1px solid var(--cream2)',
+                      textAlign: 'left', cursor: 'pointer',
+                    }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>
+                      {otherStore?.name || other.store_name}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--mist)' }}>
+                      {otherStore?.city}, {otherStore?.state} · {other.start_date}
+                    </div>
+                  </button>
+                )
+              })
+            )}
+            <button onClick={() => { onRefresh(); setDropdownOpen(false) }} style={{
+              width: '100%', padding: '10px 14px', background: 'var(--cream2)',
+              border: 'none', borderTop: '1px solid var(--pearl)',
+              textAlign: 'left', cursor: 'pointer',
+              fontSize: 12, fontWeight: 700, color: 'var(--mist)',
+            }}>
+              ↻ Refresh feed
+            </button>
+            <button onClick={() => { onBack(); setDropdownOpen(false) }} style={{
+              width: '100%', padding: '10px 14px', background: 'var(--green-pale)',
+              border: 'none', borderTop: '1px solid var(--pearl)',
+              textAlign: 'left', cursor: 'pointer',
+              fontSize: 12, fontWeight: 700, color: 'var(--green-dark)',
+            }}>
+              🔎 Browse all events →
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Solid green day bar */}
       <div style={{ padding: '10px 16px', background: 'var(--green)' }}>
         <div style={{ display: 'flex', background: 'rgba(0,0,0,.22)', borderRadius: 10, padding: 3 }}>
-          {[1, 2, 3].map(d => (
-            <button key={d} onClick={() => setDay(d)} style={{
-              flex: 1, padding: '8px 0', borderRadius: 8, border: 'none',
-              background: day === d ? 'var(--cream)' : 'transparent',
-              color: day === d ? 'var(--green-dark)' : 'rgba(255,255,255,.85)',
-              fontSize: 13, fontWeight: 900, cursor: 'pointer',
-              boxShadow: day === d ? '0 1px 3px rgba(0,0,0,.2)' : 'none',
-            }}>Day {d}</button>
-          ))}
+          {[1, 2, 3].map(d => {
+            const active = day === d
+            const isTodayDay = getEventDayDate(ev.start_date, d) === todayInStoreTz
+            return (
+              <button key={d} onClick={() => setDay(d)} style={{
+                flex: 1, padding: '7px 0 6px', borderRadius: 8, border: 'none',
+                background: active ? 'var(--cream)' : 'transparent',
+                color: active ? 'var(--green-dark)' : 'rgba(255,255,255,.85)',
+                fontSize: 13, fontWeight: 900, cursor: 'pointer',
+                boxShadow: active ? '0 1px 3px rgba(0,0,0,.2)' : 'none',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
+              }}>
+                <span>Day {d}</span>
+                {isTodayDay && (
+                  <span style={{ fontSize: 9, fontWeight: 700, opacity: 0.85, letterSpacing: '.04em' }}>TODAY</span>
+                )}
+              </button>
+            )
+          })}
         </div>
       </div>
+
+      {/* Stats strip */}
+      {store?.calendar_feed_url && (
+        <div style={{
+          padding: '8px 16px', background: 'var(--cream2)',
+          fontSize: 11, fontWeight: 700, color: 'var(--ash)',
+          display: 'flex', gap: 14, borderBottom: '1px solid var(--pearl)',
+        }}>
+          <span><strong style={{ color: 'var(--green-dark)' }}>{bookedToday}</strong> booked</span>
+          <span><strong style={{ color: 'var(--mist)' }}>{availToday}</strong> available</span>
+          <span style={{ marginLeft: 'auto', color: 'var(--green)' }}>{fillPct}% full</span>
+        </div>
+      )}
 
       {/* Hour-grouped list with lead-source-tinted rows */}
       {store?.calendar_feed_url ? (
@@ -769,67 +879,6 @@ function MobileActiveAppointmentsView({
         </div>
       )}
 
-      {/* Drawer — other events */}
-      {drawerOpen && (
-        <div onClick={() => setDrawerOpen(false)} style={{
-          position: 'absolute', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 10,
-        }}>
-          <div onClick={e => e.stopPropagation()} style={{
-            position: 'absolute', top: 0, right: 0, bottom: 0,
-            width: 280, background: 'var(--cream)', boxShadow: '-4px 0 12px rgba(0,0,0,.2)',
-            display: 'flex', flexDirection: 'column',
-          }}>
-            <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--pearl)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 14, fontWeight: 900, color: 'var(--ink)' }}>My events</span>
-              <button onClick={() => setDrawerOpen(false)}
-                style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--mist)' }}>×</button>
-            </div>
-            <div style={{ padding: '10px 12px', flex: 1, overflowY: 'auto' }}>
-              <div style={{ background: 'var(--green-pale)', padding: 10, borderRadius: 8, marginBottom: 8, border: '1px solid var(--green)' }}>
-                <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--green-dark)', letterSpacing: '.06em' }}>ACTIVE</div>
-                <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--ink)', marginTop: 2 }}>{store?.name || ev.store_name}</div>
-                <div style={{ fontSize: 12, color: 'var(--mist)' }}>{store?.city}, {store?.state}</div>
-              </div>
-              {otherEvents.length === 0 && (
-                <div style={{ fontSize: 12, color: 'var(--mist)', textAlign: 'center', padding: 16 }}>
-                  No other events assigned to you.
-                </div>
-              )}
-              {otherEvents.map(other => {
-                const otherStore = stores.find(s => s.id === other.store_id)
-                return (
-                  <button key={other.id}
-                    onClick={() => { onPickEvent(other.id); setDrawerOpen(false) }}
-                    style={{
-                      width: '100%', textAlign: 'left', background: 'var(--cream)',
-                      border: '1px solid var(--pearl)', borderRadius: 8,
-                      padding: 10, marginBottom: 6, cursor: 'pointer',
-                    }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>
-                      {otherStore?.name || other.store_name}
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--mist)' }}>
-                      {otherStore?.city}, {otherStore?.state} · {other.start_date}
-                    </div>
-                  </button>
-                )
-              })}
-              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--pearl)' }}>
-                <button onClick={() => { onBack(); setDrawerOpen(false) }} style={{
-                  width: '100%', padding: 10, background: 'none',
-                  border: '1px solid var(--pearl)', borderRadius: 8,
-                  fontSize: 12, color: 'var(--mist)', cursor: 'pointer',
-                }}>← All events</button>
-                <button onClick={() => { onRefresh(); setDrawerOpen(false) }} style={{
-                  width: '100%', padding: 10, marginTop: 6, background: 'none',
-                  border: '1px solid var(--pearl)', borderRadius: 8,
-                  fontSize: 12, color: 'var(--mist)', cursor: 'pointer',
-                }}>↻ Refresh feed</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
