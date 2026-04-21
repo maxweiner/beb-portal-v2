@@ -7,14 +7,98 @@ import { supabase } from '@/lib/supabase'
 import type { NavPage } from '@/app/page'
 import LicenseScanner from '@/components/scan/LicenseScanner'
 
-const LEFT_TABS: { id: NavPage; label: string; icon: string }[] = [
-  { id: 'dashboard', label: 'Home',   icon: '⌂' },
-  { id: 'events',    label: 'Events', icon: '◆' },
+type TabDef = { id: NavPage; label: string; glyph: string }
+const LEFT_TABS: TabDef[] = [
+  { id: 'dashboard', label: 'Home',   glyph: 'home' },
+  { id: 'events',    label: 'Events', glyph: '◆' },
 ]
-const RIGHT_TABS: { id: NavPage; label: string; icon: string }[] = [
-  { id: 'calendar',  label: 'Appts',  icon: '📅' },
-  { id: 'travel',    label: 'Travel', icon: '✈️' },
+const RIGHT_TABS: TabDef[] = [
+  { id: 'calendar',  label: 'Appts',  glyph: '📅' },
+  { id: 'travel',    label: 'Travel', glyph: '✈️' },
 ]
+
+/* ── ICONS ── */
+function CameraIcon({ size = 34 }: { size?: number }) {
+  // Polaroid OneStep — front face. Big concentric lens, rectangle
+  // viewfinder top-left, rectangle flash top-right, shutter dot.
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden>
+      <rect x="3.5" y="5" width="25" height="22" rx="2.5" stroke="#111" strokeWidth="2.2"/>
+      <circle cx="16" cy="17" r="6.5" stroke="#111" strokeWidth="2.2"/>
+      <circle cx="16" cy="17" r="4" stroke="#111" strokeWidth="1.4"/>
+      <circle cx="16" cy="17" r="1.8" fill="#111"/>
+      <circle cx="14.5" cy="15.5" r="0.9" fill="#fff"/>
+      <rect x="5.5" y="7.5" width="4.5" height="3" rx="0.4" stroke="#111" strokeWidth="1.8"/>
+      <rect x="22" y="7.5" width="4.5" height="3" rx="0.4" stroke="#111" strokeWidth="1.8"/>
+      <circle cx="25.5" cy="13.5" r="0.9" fill="#111"/>
+    </svg>
+  )
+}
+
+function HouseIcon({ active }: { active: boolean }) {
+  const stroke = active ? 'var(--green-dark)' : 'var(--mist)'
+  const accent = 'var(--green)'
+  return (
+    <svg width={22} height={22} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M4.5 11V19.5C4.5 19.8 4.7 20 5 20H19C19.3 20 19.5 19.8 19.5 19.5V11"
+        stroke={stroke} strokeWidth="1.5" strokeLinejoin="round" style={{ fill: 'var(--cream)' }}/>
+      <path d="M3 11.5L12 4L21 11.5Z" style={{ fill: accent }} stroke={stroke} strokeWidth="1.4" strokeLinejoin="round"/>
+      <path d="M16 6.5V3.5H18V7.5" stroke={stroke} strokeWidth="1.3" style={{ fill: accent }} strokeLinejoin="round"/>
+      <rect x="12.5" y="13" width="3.5" height="3.5" style={{ fill: 'var(--green3)' }} stroke={stroke} strokeWidth="1" rx="0.4"/>
+      <rect x="7.5" y="14.5" width="3" height="5.5" style={{ fill: 'none' }} stroke={stroke} strokeWidth="1.2" rx="0.3"/>
+    </svg>
+  )
+}
+
+/* ── SHARED TAB BUTTON ── */
+function TabBtn({ tab, active, onClick }: { tab: TabDef; active: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick} style={{
+      background: 'none', border: 'none', cursor: 'pointer',
+      padding: '10px 4px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+      color: active ? 'var(--green-dark)' : 'var(--mist)',
+    }}>
+      {tab.glyph === 'home'
+        ? <HouseIcon active={active} />
+        : <div style={{ fontSize: 22, lineHeight: 1 }}>{tab.glyph}</div>}
+      <div style={{ fontSize: 10, fontWeight: active ? 900 : 500 }}>{tab.label}</div>
+    </button>
+  )
+}
+
+/* ── BOTTOM NAV ── */
+function BottomNav({ nav, setNav, onScan }: { nav: NavPage; setNav: (n: NavPage) => void; onScan: () => void }) {
+  return (
+    <div style={{
+      position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 999,
+      background: 'var(--cream)',
+      borderTop: '1px solid var(--pearl)',
+      borderTopLeftRadius: 26, borderTopRightRadius: 26,
+      display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr',
+      alignItems: 'end',
+      paddingBottom: 'max(env(safe-area-inset-bottom), 8px)',
+      boxShadow: '0 -4px 18px rgba(0,0,0,.10)', minHeight: 64,
+    }}>
+      {LEFT_TABS.map(tab => <TabBtn key={tab.id} tab={tab} active={nav === tab.id} onClick={() => setNav(tab.id)} />)}
+      <button onClick={onScan} aria-label="Scan" style={{
+        background: 'none', border: 'none', cursor: 'pointer',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0 0 8px',
+      }}>
+        <div style={{
+          width: 58, height: 58, borderRadius: '50%',
+          background: '#fff', border: '3px solid var(--green)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          marginTop: -18,
+          boxShadow: '0 0 0 4px rgba(255,255,255,.9), 0 6px 16px rgba(29,107,68,.28)',
+        }}>
+          <CameraIcon size={34} />
+        </div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--green-dark)', marginTop: 4, letterSpacing: '.04em' }}>SCAN</div>
+      </button>
+      {RIGHT_TABS.map(tab => <TabBtn key={tab.id} tab={tab} active={nav === tab.id} onClick={() => setNav(tab.id)} />)}
+    </div>
+  )
+}
 
 interface Props {
   nav: NavPage
@@ -41,22 +125,17 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Get events this user can access
   const getMyEvents = () => {
     if (!events || events.length === 0) return []
     return [...events]
       .filter(ev => isAdmin || (ev.workers || []).some((w: any) => w.id === user?.id))
-      .sort((a, b) => b.start_date.localeCompare(a.start_date)) // newest first
+      .sort((a, b) => b.start_date.localeCompare(a.start_date))
   }
 
-  // Find the best auto-selected event
   const getActiveEventId = (): string | null => {
     const myEvents = getMyEvents()
     if (myEvents.length === 0) return null
-
     const today = new Date().toISOString().split('T')[0]
-
-    // Active event (today is within its range)
     const active = myEvents.find(ev => {
       const start = ev.start_date
       const days = ev.days?.length || 3
@@ -65,13 +144,9 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
       return start <= today && today <= end.toISOString().split('T')[0]
     })
     if (active) return active.id
-
-    // Next upcoming
     const sorted = [...myEvents].sort((a, b) => a.start_date.localeCompare(b.start_date))
     const upcoming = sorted.find(ev => ev.start_date >= today)
     if (upcoming) return upcoming.id
-
-    // Fallback: most recent
     return myEvents[0]?.id || null
   }
 
@@ -81,20 +156,15 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
       alert('No events found. You need to be assigned to an event to scan IDs.')
       return
     }
-
     const autoId = getActiveEventId()
     if (autoId) {
-      // Check if it's actually happening today
       const today = new Date().toISOString().split('T')[0]
       const ev = myEvents.find(e => e.id === autoId)
       const isToday = ev && ev.start_date <= today
-
       if (isToday) {
-        // Active event — go straight to scanner
         setScanEventId(autoId)
         setScannerOpen(true)
       } else {
-        // No event today — show picker so user can choose
         setEventPickerOpen(true)
       }
     } else {
@@ -171,53 +241,9 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
         </div>
       )}
 
-      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 100 }}>{children}</div>
+      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 110 }}>{children}</div>
 
-      {/* Bottom tab bar */}
-      <div style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0,
-        background: 'var(--cream)', borderTop: '1px solid var(--pearl)',
-        display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr',
-        alignItems: 'end', zIndex: 999,
-        paddingBottom: 'max(env(safe-area-inset-bottom), 8px)',
-        boxShadow: '0 -2px 12px rgba(0,0,0,.12)', minHeight: 60,
-      }}>
-        {LEFT_TABS.map(tab => {
-          const active = nav === tab.id
-          return (
-            <button key={tab.id} onClick={() => setNav(tab.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '10px 4px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-              <div style={{ fontSize: 22, lineHeight: 1 }}>{tab.icon}</div>
-              <div style={{ fontSize: 10, fontWeight: active ? 900 : 500, color: active ? 'var(--green-dark)' : 'var(--mist)' }}>{tab.label}</div>
-            </button>
-          )
-        })}
-
-        <button onClick={handleScanPress} style={{
-          background: 'none', border: 'none', cursor: 'pointer',
-          display: 'flex', flexDirection: 'column', alignItems: 'center',
-          padding: '0 0 8px 0',
-        }}>
-          <div style={{
-            width: 52, height: 52, borderRadius: '50%',
-            background: 'var(--green, #1e5c3a)',
-            border: '3px solid var(--cream)',
-            boxShadow: '0 2px 12px rgba(0,0,0,.25)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            marginTop: -20, color: '#fff', fontSize: 22,
-          }}>🪪</div>
-          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mist)', marginTop: 2 }}>Scan</div>
-        </button>
-
-        {RIGHT_TABS.map(tab => {
-          const active = nav === tab.id
-          return (
-            <button key={tab.id} onClick={() => setNav(tab.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '10px 4px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-              <div style={{ fontSize: 22, lineHeight: 1 }}>{tab.icon}</div>
-              <div style={{ fontSize: 10, fontWeight: active ? 900 : 500, color: active ? 'var(--green-dark)' : 'var(--mist)' }}>{tab.label}</div>
-            </button>
-          )
-        })}
-      </div>
+      <BottomNav nav={nav} setNav={setNav} onScan={handleScanPress} />
 
       {/* Event picker modal */}
       {eventPickerOpen && (
