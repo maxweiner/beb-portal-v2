@@ -1,9 +1,16 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { parseAAMVABarcode, isValidParsedLicense, diagnoseBarcode, type ParsedLicense } from '@/lib/aamva-parser'
-import { decodePDF417FromImageData, decodePDF417FromBlob, type ScanResult } from '@/lib/barcodeScanner'
+import { parseAAMVABarcode, isValidParsedLicense, type ParsedLicense } from '@/lib/aamva-parser'
+import {
+  createBarcodeDecoder, getDecoderStrategy, CAMERA_CONSTRAINTS,
+  type BarcodeDecoder, type DecoderStrategy,
+} from '@/lib/barcode-decoder'
 import { compressLicensePhoto, dataURLtoBlob, uploadLicensePhoto } from '@/lib/licensePhotoUtils'
+import {
+  recordScanAttempt, recordScanSuccess, recordUploadFallback,
+  strategyCategory,
+} from '@/lib/scan-metrics'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 
@@ -13,6 +20,15 @@ interface LicenseScannerProps {
   eventId: string
   onClose: () => void
   onComplete?: (intakeId: string) => void
+}
+
+/** Display helpers — turn nullable fields into safe UI strings. */
+const s = (v: string | null) => v ?? ''
+const formatHeight = (inches: number | null): string => {
+  if (inches == null) return ''
+  const ft = Math.floor(inches / 12)
+  const i = inches % 12
+  return `${ft}'${i}"`
 }
 
 function ReviewField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
@@ -28,185 +44,275 @@ function ReviewField({ label, value, onChange }: { label: string; value: string;
   )
 }
 
+/** SHA-256 hex digest of the raw barcode. Used for dedup — NEVER stored raw. */
+async function hashBarcode(raw: string): Promise<string> {
+  const buf = new TextEncoder().encode(raw)
+  const digest = await crypto.subtle.digest('SHA-256', buf)
+  return Array.from(new Uint8Array(digest))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
 export default function LicenseScanner({ eventId, onClose, onComplete }: LicenseScannerProps) {
   const { user, brand } = useApp()
   const [step, setStep] = useState<Step>('scan-back')
   const [parsed, setParsed] = useState<ParsedLicense | null>(null)
+  const [barcodeHash, setBarcodeHash] = useState<string>('')
   const [frontPhoto, setFrontPhoto] = useState<Blob | null>(null)
   const [frontPreview, setFrontPreview] = useState('')
   const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
   const [cameraError, setCameraError] = useState(false)
-  const [scanAttempts, setScanAttempts] = useState(0)
-  const [wasmLoaded, setWasmLoaded] = useState(false)
   const [cameraReady, setCameraReady] = useState(false)
-  const [debugMode, setDebugMode] = useState(false)
-  const [debugInfo, setDebugInfo] = useState<string[]>([])
-  const [wrongBarcode, setWrongBarcode] = useState('') // e.g. "Found Code128 — need the large PDF417"
+  const [strategy, setStrategy] = useState<DecoderStrategy>('upload-only')
+  const [torchOn, setTorchOn] = useState(false)
+  const [torchSupported, setTorchSupported] = useState(false)
+  const [showUploadFallback, setShowUploadFallback] = useState(false)
 
   const videoRef = useRef<HTMLVideoElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  const decoderRef = useRef<BarcodeDecoder | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const frontFileRef = useRef<HTMLInputElement>(null)
-  const scanIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const mountedRef = useRef(true)
-  const scanningRef = useRef(false)
+  const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scanStartedAtRef = useRef<number>(0)
 
   useEffect(() => {
     mountedRef.current = true
-    return () => { mountedRef.current = false; stopCamera() }
+    return () => { mountedRef.current = false; teardown() }
   }, [])
 
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
-      })
-      if (!mountedRef.current) { stream.getTracks().forEach(t => t.stop()); return }
-      streamRef.current = stream
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        await videoRef.current.play()
-        if (mountedRef.current) { setCameraReady(true); startScanning() }
-      }
-    } catch { if (mountedRef.current) setCameraError(true) }
-  }
-
-  const stopCamera = () => {
-    if (scanIntervalRef.current) { clearInterval(scanIntervalRef.current); scanIntervalRef.current = null }
+  const teardown = () => {
+    if (decoderRef.current) { decoderRef.current.stop(); decoderRef.current = null }
     if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
     if (videoRef.current) videoRef.current.srcObject = null
-    setCameraReady(false); scanningRef.current = false
+    if (fallbackTimerRef.current) { clearTimeout(fallbackTimerRef.current); fallbackTimerRef.current = null }
+    setCameraReady(false)
+    setTorchOn(false)
+  }
+
+  /* ─────────── Step 1: scan back of ID ─────────── */
+
+  const startBackScan = async () => {
+    const probed = await getDecoderStrategy()
+    if (!mountedRef.current) return
+    setStrategy(probed)
+
+    if (probed === 'upload-only') {
+      setCameraError(true)
+      return
+    }
+
+    // Open camera with high-res rear-facing constraints.
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS)
+    } catch {
+      // Some phones reject `advanced: [{ focusMode: 'continuous' }]`. Retry
+      // with the simpler constraint set.
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+          audio: false,
+        })
+      } catch {
+        if (mountedRef.current) setCameraError(true)
+        return
+      }
+    }
+
+    if (!mountedRef.current) { stream.getTracks().forEach(t => t.stop()); return }
+    streamRef.current = stream
+
+    // Torch capability probe
+    const track = stream.getVideoTracks()[0]
+    const caps = (track.getCapabilities?.() || {}) as any
+    setTorchSupported(!!caps.torch)
+
+    if (!videoRef.current) return
+    videoRef.current.srcObject = stream
+    try { await videoRef.current.play() } catch { /* autoplay policy; user-initiated */ }
+    if (!mountedRef.current) return
+    setCameraReady(true)
+
+    // Build decoder + start scanning.
+    const decoder = await createBarcodeDecoder()
+    if (!mountedRef.current) return
+    if (!decoder) { setCameraError(true); return }
+    decoderRef.current = decoder
+
+    scanStartedAtRef.current = Date.now()
+    recordScanAttempt()
+
+    decoder.startScanning(videoRef.current, handleDecoded)
+
+    // 30-second fallback — surface the upload button prominently.
+    fallbackTimerRef.current = setTimeout(() => {
+      if (mountedRef.current) setShowUploadFallback(true)
+    }, 30_000)
+  }
+
+  const handleDecoded = async (raw: string) => {
+    if (!mountedRef.current) return
+    const elapsed = Date.now() - scanStartedAtRef.current
+    const parsedLicense = parseAAMVABarcode(raw)
+    const validation = isValidParsedLicense(parsedLicense)
+
+    if (!validation.valid) {
+      // Parser couldn't extract required fields — keep scanning. This is a
+      // rare case where BarcodeDetector matches a PDF417 that isn't a DL.
+      if (decoderRef.current) {
+        const current = decoderRef.current
+        // Restart scanning on the same decoder instance (it stopped itself).
+        if (videoRef.current) current.startScanning(videoRef.current, handleDecoded)
+      }
+      return
+    }
+
+    const hash = await hashBarcode(raw)
+    if (!mountedRef.current) return
+
+    recordScanSuccess(strategyCategory(strategy), elapsed)
+
+    // Privacy: `raw` now goes out of scope and is GC-collected. Only the
+    // parsed fields + hash are kept in state.
+    setParsed(parsedLicense)
+    setBarcodeHash(hash)
+    teardown()
+    setStep('photo-front')
   }
 
   useEffect(() => {
-    if (step === 'scan-back') { startCamera(); return () => stopCamera() }
+    if (step === 'scan-back') {
+      startBackScan()
+      return () => teardown()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step])
 
-  const processScanResult = (result: ScanResult) => {
-    // If it's NOT PDF417, show feedback but keep scanning
-    if (!result.isPDF417) {
-      setWrongBarcode(`Reading ${result.format} (${result.text.length}ch) — need the large PDF417 barcode`)
-      if (debugMode) {
-        const diag = diagnoseBarcode(result.text)
-        setDebugInfo([
-          `Found: ${result.format} | ${diag.totalLength} chars (NOT PDF417)`,
-          `Header: ${diag.rawPrefix}`,
-          `This is the small 1D barcode — aim at the large 2D barcode`,
-        ])
-      }
-      setScanAttempts(prev => prev + 1)
-      return // keep scanning — don't stop
-    }
+  /* ─────────── Torch toggle ─────────── */
 
-    // It IS PDF417 — try to parse
-    setWrongBarcode('')
-    const diag = diagnoseBarcode(result.text)
-    const license = parseAAMVABarcode(result.text)
-    const validation = isValidParsedLicense(license)
-
-    if (debugMode) {
-      setDebugInfo([
-        `Format: ${result.format} | ${diag.totalLength} chars ✓ PDF417`,
-        `Header: ${diag.rawPrefix}`,
-        `Delimiters: ${diag.delimitersFound.join(', ') || 'NONE'}`,
-        `Lines: ${diag.linesAfterSplit}`,
-        `ANSI: ${diag.hasANSIHeader ? 'YES' : 'NO'} | @: ${diag.hasComplianceIndicator ? 'YES' : 'NO'}`,
-        `Codes seen: ${diag.fieldCodesSeen.join(', ') || 'NONE'}`,
-        `Matched: ${diag.fieldCodesFound.join(', ') || 'NONE'}`,
-        `Parsed: ${license.rawFieldCount} fields`,
-        validation.valid ? 'VALID ✓' : `Missing: ${validation.missing.join(', ')}`,
-      ])
-    }
-
-    if (validation.valid) {
-      stopCamera()
-      setParsed(license)
-      setStep('photo-front')
-    } else {
-      setScanAttempts(prev => prev + 1)
+  const toggleTorch = async () => {
+    const track = streamRef.current?.getVideoTracks()[0]
+    if (!track) return
+    const next = !torchOn
+    try {
+      await track.applyConstraints({ advanced: [{ torch: next }] as any })
+      setTorchOn(next)
+    } catch {
+      // Not supported on this device — quietly ignore.
     }
   }
 
-  const startScanning = () => {
-    if (scanIntervalRef.current) clearInterval(scanIntervalRef.current)
-    scanIntervalRef.current = setInterval(async () => {
-      if (!videoRef.current || !canvasRef.current || !mountedRef.current) return
-      if (videoRef.current.readyState !== videoRef.current.HAVE_ENOUGH_DATA) return
-      if (scanningRef.current) return
-      scanningRef.current = true
+  /* ─────────── Tap-to-focus ─────────── */
 
-      const canvas = canvasRef.current
-      const video = videoRef.current
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
-      canvas.getContext('2d')!.drawImage(video, 0, 0)
-      const imageData = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height)
-      const result = await decodePDF417FromImageData(imageData, debugMode)
-
-      scanningRef.current = false
-      if (!mountedRef.current) return
-      if (!wasmLoaded) setWasmLoaded(true)
-
-      if (result) {
-        processScanResult(result)
-      } else {
-        setScanAttempts(prev => prev + 1)
+  const handleVideoTap = async (e: React.MouseEvent<HTMLVideoElement>) => {
+    const track = streamRef.current?.getVideoTracks()[0]
+    if (!track) return
+    const caps = (track.getCapabilities?.() || {}) as any
+    const rect = (e.currentTarget as HTMLVideoElement).getBoundingClientRect()
+    const x = (e.clientX - rect.left) / rect.width
+    const y = (e.clientY - rect.top) / rect.height
+    try {
+      const constraints: any = { advanced: [] }
+      if (caps.focusMode && (caps.focusMode as string[]).includes('manual')) {
+        constraints.advanced.push({ focusMode: 'manual' })
       }
-    }, 400)
+      if (caps.pointsOfInterest) {
+        constraints.advanced.push({ pointsOfInterest: [{ x, y }] })
+      }
+      if (constraints.advanced.length > 0) await track.applyConstraints(constraints)
+    } catch {
+      // Focus constraints often throw on unsupported devices — safe to ignore.
+    }
   }
 
-  useEffect(() => {
-    if (step === 'scan-back' && cameraReady) startScanning()
-  }, [debugMode])
+  /* ─────────── Upload-fallback decode ─────────── */
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file) return
-    setError(''); setWrongBarcode('')
-    try {
-      const result = await decodePDF417FromBlob(file, true) // always use debug for uploads to find any barcode
-      if (!wasmLoaded) setWasmLoaded(true)
-      if (result) {
-        if (!result.isPDF417) {
-          setError(`Found a ${result.format} barcode, but need the PDF417 (large 2D barcode). Make sure the entire back of the license is visible.`)
-        } else {
-          processScanResult(result)
-        }
-      } else {
-        setError('No barcode found. Make sure the back of the license is clearly visible and well-lit.')
-      }
-    } catch { setError('Could not process image.') }
     if (fileInputRef.current) fileInputRef.current.value = ''
+    if (!file) return
+
+    setError('')
+    recordUploadFallback()
+    recordScanAttempt()
+    const startedAt = Date.now()
+
+    // For upload decode, prefer native BarcodeDetector if available (same as
+    // live scan strategy). Otherwise fall back to the enhanced zxing path.
+    let decoder = decoderRef.current
+    if (!decoder) {
+      const built = await createBarcodeDecoder()
+      if (!built) {
+        setError('Barcode decoding is not available in this browser.')
+        return
+      }
+      decoder = built
+      decoderRef.current = built
+    }
+
+    try {
+      const raw = await decoder.decodeImage(file)
+      if (!raw) {
+        setError('No barcode found. Make sure the back of the license is clearly visible and well-lit.')
+        return
+      }
+      const parsedLicense = parseAAMVABarcode(raw)
+      const validation = isValidParsedLicense(parsedLicense)
+      if (!validation.valid) {
+        setError(`Scanned the barcode but couldn't read: ${validation.missing.join(', ')}. Try a clearer photo.`)
+        return
+      }
+      const hash = await hashBarcode(raw)
+      recordScanSuccess('upload', Date.now() - startedAt)
+      setParsed(parsedLicense)
+      setBarcodeHash(hash)
+      teardown()
+      setStep('photo-front')
+    } catch {
+      setError('Could not process image.')
+    }
   }
 
-  // ─── Front photo ───
+  /* ─────────── Step 2: front photo ─────────── */
+
   useEffect(() => {
-    if (step === 'photo-front') {
-      setCameraError(false)
-      ;(async () => {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
-          })
-          if (!mountedRef.current) { stream.getTracks().forEach(t => t.stop()); return }
-          streamRef.current = stream
-          if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play() }
-        } catch { if (mountedRef.current) setCameraError(true) }
-      })()
-      return () => stopCamera()
-    }
+    if (step !== 'photo-front') return
+    setCameraError(false)
+    let cancelled = false
+    ;(async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+        })
+        if (cancelled || !mountedRef.current) { stream.getTracks().forEach(t => t.stop()); return }
+        streamRef.current = stream
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+          await videoRef.current.play()
+        }
+      } catch {
+        if (!cancelled && mountedRef.current) setCameraError(true)
+      }
+    })()
+    return () => { cancelled = true; teardown() }
   }, [step])
 
   const capturePhoto = () => {
-    if (!videoRef.current || !canvasRef.current) return
-    const c = canvasRef.current, v = videoRef.current
-    c.width = v.videoWidth; c.height = v.videoHeight
-    c.getContext('2d')!.drawImage(v, 0, 0)
-    const url = c.toDataURL('image/jpeg', 0.85)
-    setFrontPhoto(dataURLtoBlob(url)); setFrontPreview(url)
-    stopCamera(); setStep('review')
+    if (!videoRef.current) return
+    const v = videoRef.current
+    const canvas = document.createElement('canvas')
+    canvas.width = v.videoWidth
+    canvas.height = v.videoHeight
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.drawImage(v, 0, 0)
+    const url = canvas.toDataURL('image/jpeg', 0.85)
+    setFrontPhoto(dataURLtoBlob(url))
+    setFrontPreview(url)
+    teardown()
+    setStep('review')
   }
 
   const handleFrontFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -214,60 +320,104 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
     if (!file) return
     try {
       const compressed = await compressLicensePhoto(file)
-      setFrontPhoto(compressed); setFrontPreview(URL.createObjectURL(compressed))
-      stopCamera(); setStep('review')
+      setFrontPhoto(compressed)
+      setFrontPreview(URL.createObjectURL(compressed))
+      teardown()
+      setStep('review')
     } catch { setError('Failed to process photo.') }
+  }
+
+  /* ─────────── Step 3: review & save ─────────── */
+
+  const updateField = <K extends keyof ParsedLicense>(field: K, value: string) => {
+    setParsed(prev => {
+      if (!prev) return prev
+      return { ...prev, [field]: (value || null) as ParsedLicense[K] }
+    })
   }
 
   const handleSubmit = async () => {
     if (!parsed || !user) return
-    if (!parsed.isOver18) { setError('Customer must be 18 or older.'); return }
-    setSaving(true); setStep('saving')
+    if (parsed.isUnder18) { setError('Customer must be 18 or older.'); return }
+    setError('')
+    setStep('saving')
     try {
-      const { data: intake, error: err } = await supabase.from('customer_intakes').insert({
-        event_id: eventId, buyer_id: user.id,
-        first_name: parsed.firstName, last_name: parsed.lastName,
-        date_of_birth: parsed.dateOfBirth || null,
-        address_line1: parsed.address.street, address_city: parsed.address.city,
-        address_state: parsed.address.state, address_zip: parsed.address.zip,
-        license_number: parsed.licenseNumber, license_state: parsed.licenseState,
-        license_expiration: parsed.expirationDate || null,
-        sex: parsed.sex, eye_color: parsed.eyeColor, height: parsed.height,
-        is_over_18: parsed.isOver18, scanned_at: new Date().toISOString(), brand,
-      }).select().single()
+      // Dedup: if this event already has this hash, don't create a duplicate.
+      const { data: existing } = await supabase.from('customer_intakes')
+        .select('id')
+        .eq('event_id', eventId)
+        .eq('barcode_hash', barcodeHash)
+        .maybeSingle()
+
+      if (existing?.id) {
+        setError('This ID was already scanned for this event.')
+        setStep('error')
+        return
+      }
+
+      const insertRow: Record<string, any> = {
+        event_id: eventId,
+        buyer_id: user.id,
+        first_name: parsed.firstName,
+        middle_name: parsed.middleName,
+        last_name: parsed.lastName,
+        date_of_birth: parsed.dateOfBirth,
+        address_line1: parsed.street,
+        address_city: parsed.city,
+        address_state: parsed.state,
+        address_zip: parsed.zip,
+        license_number: parsed.licenseNumber,
+        license_state: parsed.licenseState,
+        license_expiration: parsed.expirationDate,
+        issue_date: parsed.issueDate,
+        sex: parsed.sex,
+        eye_color: parsed.eyeColor,
+        height: formatHeight(parsed.heightInches) || null,
+        height_inches: parsed.heightInches,
+        country: parsed.country,
+        aamva_version: parsed.aamvaVersion,
+        barcode_hash: barcodeHash,
+        is_over_18: !parsed.isUnder18,
+        scanned_at: new Date().toISOString(),
+        brand,
+      }
+
+      const { data: intake, error: err } = await supabase
+        .from('customer_intakes')
+        .insert(insertRow)
+        .select()
+        .single()
       if (err) throw err
+
       if (frontPhoto && intake) {
         try {
           const photoUrl = await uploadLicensePhoto(frontPhoto, eventId, intake.id)
           const exp = new Date(); exp.setFullYear(exp.getFullYear() + 3)
-          await supabase.from('customer_intakes').update({ license_photo_url: photoUrl, photo_expires_at: exp.toISOString() }).eq('id', intake.id)
-        } catch { /* non-fatal */ }
+          await supabase.from('customer_intakes')
+            .update({ license_photo_url: photoUrl, photo_expires_at: exp.toISOString() })
+            .eq('id', intake.id)
+        } catch { /* photo upload is non-fatal */ }
       }
-      setStep('done'); onComplete?.(intake.id)
-    } catch (e) { setError((e as Error).message || 'Failed to save.'); setStep('error') }
-    finally { setSaving(false) }
-  }
 
-  const updateField = (field: string, value: string) => {
-    if (!parsed) return
-    setParsed(prev => {
-      if (!prev) return prev
-      if (field.startsWith('address.')) {
-        const key = field.split('.')[1] as keyof typeof prev.address
-        return { ...prev, address: { ...prev.address, [key]: value } }
-      }
-      return { ...prev, [field]: value }
-    })
+      setStep('done')
+      onComplete?.(intake.id)
+    } catch (e) {
+      setError((e as Error).message || 'Failed to save.')
+      setStep('error')
+    }
   }
 
   const resetAll = () => {
-    setParsed(null); setFrontPhoto(null); setFrontPreview('')
-    setError(''); setScanAttempts(0); setCameraError(false)
-    setWasmLoaded(false); setCameraReady(false); setDebugInfo([])
-    setWrongBarcode(''); setStep('scan-back')
+    setParsed(null); setBarcodeHash('')
+    setFrontPhoto(null); setFrontPreview('')
+    setError(''); setCameraError(false); setCameraReady(false)
+    setShowUploadFallback(false)
+    setStep('scan-back')
   }
 
   const stepIndex = ['scan-back', 'photo-front', 'review', 'saving', 'done'].indexOf(step)
+
+  /* ─────────── Render ─────────── */
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#000', color: '#fff', display: 'flex', flexDirection: 'column' }}>
@@ -280,14 +430,14 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', paddingTop: 'max(env(safe-area-inset-top), 12px)', background: 'rgba(0,0,0,.9)', borderBottom: '1px solid rgba(255,255,255,.1)' }}>
-        <button onClick={() => { stopCamera(); onClose() }} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', padding: '4px 8px' }}>← Back</button>
+        <button onClick={() => { teardown(); onClose() }} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', padding: '4px 8px' }}>← Back</button>
         <div style={{ fontSize: 14, fontWeight: 700 }}>
-          {step === 'scan-back' && 'Scan Back of ID'}
+          {step === 'scan-back'   && 'Scan Back of ID'}
           {step === 'photo-front' && 'Photo Front of ID'}
-          {step === 'review' && 'Review & Submit'}
-          {step === 'saving' && 'Saving…'}
-          {step === 'done' && 'Complete'}
-          {step === 'error' && 'Error'}
+          {step === 'review'      && 'Review & Submit'}
+          {step === 'saving'      && 'Saving…'}
+          {step === 'done'        && 'Complete'}
+          {step === 'error'       && 'Error'}
         </div>
         <div style={{ width: 60 }} />
       </div>
@@ -304,103 +454,100 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
         {step === 'scan-back' && (
           <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-              <video ref={videoRef} playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover', display: cameraError ? 'none' : 'block' }} />
-              <canvas ref={canvasRef} style={{ display: 'none' }} />
+              <video
+                ref={videoRef}
+                playsInline
+                muted
+                onClick={handleVideoTap}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: cameraError ? 'none' : 'block', cursor: 'crosshair' }}
+              />
 
               {!cameraError && (
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <div style={{ width: '85%', maxWidth: 360, aspectRatio: '1.586/1', border: '2px solid rgba(126,200,160,.6)', borderRadius: 12, boxShadow: '0 0 0 9999px rgba(0,0,0,.5)', position: 'relative' }}>
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                  <div style={{ width: '90%', maxWidth: 380, aspectRatio: '3/1', border: '2px solid rgba(126,200,160,.6)', borderRadius: 12, boxShadow: '0 0 0 9999px rgba(0,0,0,.5)', position: 'relative' }}>
                     {[
                       { top: -2, left: -2, borderTop: '3px solid #7EC8A0', borderLeft: '3px solid #7EC8A0', borderTopLeftRadius: 12 },
                       { top: -2, right: -2, borderTop: '3px solid #7EC8A0', borderRight: '3px solid #7EC8A0', borderTopRightRadius: 12 },
                       { bottom: -2, left: -2, borderBottom: '3px solid #7EC8A0', borderLeft: '3px solid #7EC8A0', borderBottomLeftRadius: 12 },
                       { bottom: -2, right: -2, borderBottom: '3px solid #7EC8A0', borderRight: '3px solid #7EC8A0', borderBottomRightRadius: 12 },
-                    ].map((s, i) => <div key={i} style={{ position: 'absolute', width: 24, height: 24, ...s } as any} />)}
+                    ].map((st, i) => <div key={i} style={{ position: 'absolute', width: 24, height: 24, ...st } as any} />)}
                     <div style={{ position: 'absolute', left: 8, right: 8, height: 2, background: 'rgba(126,200,160,.5)', animation: 'scanLine 2s ease-in-out infinite' }} />
                     <div style={{ position: 'absolute', bottom: -36, left: 0, right: 0, textAlign: 'center', fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,.8)' }}>
-                      Align the large barcode on back of ID
+                      Align the PDF417 barcode on the back of the ID
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Status */}
+              {/* Status + strategy badge */}
               {!cameraError && (
                 <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'rgba(255,255,255,.7)' }}>
                     <div style={{ width: 6, height: 6, borderRadius: '50%', background: cameraReady ? '#22C55E' : '#F59E0B' }} />
                     {cameraReady ? 'Camera ready' : 'Starting…'}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'rgba(255,255,255,.7)' }}>
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: wasmLoaded ? '#22C55E' : '#F59E0B' }} />
-                    {wasmLoaded ? 'Scanner ready' : 'Loading…'}
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 700,
+                    background: strategy === 'native' ? 'rgba(34,197,94,.18)' : 'rgba(59,130,246,.18)',
+                    border: `1px solid ${strategy === 'native' ? 'rgba(34,197,94,.35)' : 'rgba(59,130,246,.35)'}`,
+                    color: strategy === 'native' ? '#86EFAC' : '#93C5FD',
+                    alignSelf: 'flex-start',
+                  }}>
+                    {strategy === 'native' ? '⚡ Native scanner' : strategy === 'zxing' ? '🔍 Enhanced scanner' : 'Upload only'}
                   </div>
-                  {scanAttempts > 0 && <div style={{ fontSize: 11, color: 'rgba(255,255,255,.4)' }}>Frames: {scanAttempts}</div>}
                 </div>
               )}
 
-              {/* Debug toggle */}
-              {!cameraError && (
-                <button onClick={() => setDebugMode(d => !d)} style={{
-                  position: 'absolute', top: 12, right: 12,
-                  background: debugMode ? 'rgba(250,204,21,.2)' : 'rgba(255,255,255,.1)',
-                  border: `1px solid ${debugMode ? 'rgba(250,204,21,.4)' : 'rgba(255,255,255,.2)'}`,
-                  borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 700,
-                  color: debugMode ? '#FCD34D' : 'rgba(255,255,255,.5)', cursor: 'pointer',
-                }}>{debugMode ? '🔍 DEBUG' : '🔍'}</button>
-              )}
-
-              {/* Wrong barcode warning */}
-              {wrongBarcode && (
-                <div style={{
-                  position: 'absolute', top: 80, left: 12, right: 12,
-                  background: 'rgba(217,119,6,.9)', borderRadius: 8, padding: '10px 14px',
-                  fontSize: 12, fontWeight: 600, color: '#fff', textAlign: 'center',
-                }}>
-                  ⚠️ {wrongBarcode}
-                </div>
-              )}
-
-              {/* Debug panel */}
-              {debugMode && debugInfo.length > 0 && (
-                <div style={{
-                  position: 'absolute', bottom: 12, left: 12, right: 12,
-                  background: 'rgba(0,0,0,.85)', borderRadius: 8, padding: '10px 12px',
-                  border: '1px solid rgba(250,204,21,.3)', maxHeight: 180, overflowY: 'auto',
-                }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#FCD34D', marginBottom: 4 }}>DIAGNOSTICS</div>
-                  {debugInfo.map((line, i) => (
-                    <div key={i} style={{ fontSize: 10, color: 'rgba(255,255,255,.8)', fontFamily: 'monospace', lineHeight: 1.4, wordBreak: 'break-all' }}>{line}</div>
-                  ))}
-                </div>
+              {/* Torch toggle */}
+              {!cameraError && torchSupported && (
+                <button
+                  onClick={toggleTorch}
+                  aria-label="Toggle flashlight"
+                  style={{
+                    position: 'absolute', top: 12, right: 12,
+                    width: 44, height: 44, borderRadius: '50%',
+                    background: torchOn ? 'rgba(250,204,21,.25)' : 'rgba(255,255,255,.1)',
+                    border: `1.5px solid ${torchOn ? 'rgba(250,204,21,.6)' : 'rgba(255,255,255,.25)'}`,
+                    color: torchOn ? '#FCD34D' : '#fff',
+                    fontSize: 20, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                  💡
+                </button>
               )}
 
               {cameraError && (
                 <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, gap: 16 }}>
                   <div style={{ fontSize: 48 }}>📷</div>
                   <div style={{ fontSize: 16, fontWeight: 700 }}>Camera not available</div>
-                  <div style={{ fontSize: 13, color: 'rgba(255,255,255,.6)', textAlign: 'center' }}>Upload a photo instead</div>
+                  <div style={{ fontSize: 13, color: 'rgba(255,255,255,.6)', textAlign: 'center' }}>Upload a photo of the back of the ID instead.</div>
                 </div>
               )}
             </div>
 
-            <div style={{ padding: '16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', background: 'rgba(0,0,0,.9)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ padding: 16, paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', background: 'rgba(0,0,0,.9)', display: 'flex', flexDirection: 'column', gap: 10 }}>
               {error && (
                 <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(220,38,38,.15)', border: '1px solid rgba(220,38,38,.3)', fontSize: 13, color: '#FCA5A5', display: 'flex', justifyContent: 'space-between' }}>
                   <span>{error}</span>
                   <button onClick={() => setError('')} style={{ background: 'none', border: 'none', color: '#FCA5A5', cursor: 'pointer', fontWeight: 700, marginLeft: 8 }}>×</button>
                 </div>
               )}
-              {scanAttempts > 30 && !wrongBarcode && !cameraError && (
-                <div style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(217,119,6,.15)', border: '1px solid rgba(217,119,6,.3)', fontSize: 12, color: '#FCD34D' }}>
-                  Trouble scanning? Hold the physical ID 6-8" from the camera. Reduce glare by tilting. Or try Upload.
+
+              {showUploadFallback && !cameraError && (
+                <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(217,119,6,.15)', border: '1px solid rgba(217,119,6,.35)', fontSize: 12, color: '#FCD34D' }}>
+                  Having trouble? Upload a photo below — the native camera app usually focuses better on dense barcodes.
                 </div>
               )}
+
               <button onClick={() => fileInputRef.current?.click()} style={{
                 width: '100%', padding: '14px', borderRadius: 10,
-                background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.2)',
+                background: showUploadFallback ? '#D97706' : 'rgba(255,255,255,.1)',
+                border: `1px solid ${showUploadFallback ? 'rgba(217,119,6,.8)' : 'rgba(255,255,255,.2)'}`,
                 color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer',
-              }}>📁 Upload Photo Instead</button>
+                transition: 'all .2s',
+              }}>📁 {showUploadFallback ? 'Upload Photo Instead' : 'Upload Photo'}</button>
+
               <input ref={fileInputRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handleFileUpload} />
             </div>
           </div>
@@ -411,11 +558,10 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
           <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
               <video ref={videoRef} playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover', display: cameraError ? 'none' : 'block' }} />
-              <canvas ref={canvasRef} style={{ display: 'none' }} />
               {!cameraError && (
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
                   <div style={{ width: '85%', maxWidth: 360, aspectRatio: '1.586/1', border: '2px solid rgba(59,130,246,.6)', borderRadius: 12, boxShadow: '0 0 0 9999px rgba(0,0,0,.4)' }}>
-                    <div style={{ position: 'absolute', bottom: -36, left: 0, right: 0, textAlign: 'center', fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,.8)' }}>Position front of ID</div>
+                    <div style={{ position: 'absolute', bottom: -36, left: 0, right: 0, textAlign: 'center', fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,.8)' }}>Position the front of the ID</div>
                   </div>
                 </div>
               )}
@@ -425,7 +571,7 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
                 </div>
               )}
             </div>
-            <div style={{ padding: '16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', background: 'rgba(0,0,0,.9)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ padding: 16, paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', background: 'rgba(0,0,0,.9)', display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', gap: 10 }}>
                 {!cameraError && <button onClick={capturePhoto} style={{ flex: 2, padding: '14px', borderRadius: 10, background: '#3B82F6', border: 'none', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>📸 Capture</button>}
                 <button onClick={() => frontFileRef.current?.click()} style={{ flex: 1, padding: '14px', borderRadius: 10, background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.2)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>📁 Upload</button>
@@ -439,45 +585,88 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
         {/* ── STEP 3 ── */}
         {step === 'review' && parsed && (
           <div style={{ padding: 16, paddingBottom: 120, animation: 'fadeIn .3s ease' }}>
-            <div style={{ padding: '12px 16px', borderRadius: 10, marginBottom: 16, background: parsed.isOver18 ? 'rgba(34,197,94,.12)' : 'rgba(220,38,38,.12)', border: `1px solid ${parsed.isOver18 ? 'rgba(34,197,94,.25)' : 'rgba(220,38,38,.25)'}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 24 }}>{parsed.isOver18 ? '✅' : '🚫'}</span>
+            <div style={{
+              padding: '12px 16px', borderRadius: 10, marginBottom: 12,
+              background: !parsed.isUnder18 ? 'rgba(34,197,94,.12)' : 'rgba(220,38,38,.12)',
+              border: `1px solid ${!parsed.isUnder18 ? 'rgba(34,197,94,.25)' : 'rgba(220,38,38,.25)'}`,
+              display: 'flex', alignItems: 'center', gap: 10,
+            }}>
+              <span style={{ fontSize: 24 }}>{!parsed.isUnder18 ? '✅' : '🚫'}</span>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: parsed.isOver18 ? '#86EFAC' : '#FCA5A5' }}>{parsed.isOver18 ? 'Age Verified — 18+' : 'UNDER 18'}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: !parsed.isUnder18 ? '#86EFAC' : '#FCA5A5' }}>
+                  {!parsed.isUnder18 ? 'Age Verified — 18+' : 'UNDER 18 — cannot continue'}
+                </div>
                 {parsed.dateOfBirth && <div style={{ fontSize: 12, color: 'rgba(255,255,255,.5)', marginTop: 2 }}>DOB: {parsed.dateOfBirth}</div>}
               </div>
             </div>
-            {error && <div style={{ padding: '10px 14px', borderRadius: 8, marginBottom: 16, background: 'rgba(220,38,38,.12)', border: '1px solid rgba(220,38,38,.25)', fontSize: 13, color: '#FCA5A5' }}>{error}</div>}
+
+            {parsed.isExpired && (
+              <div style={{
+                padding: '10px 14px', borderRadius: 8, marginBottom: 12,
+                background: 'rgba(217,119,6,.15)', border: '1px solid rgba(217,119,6,.3)',
+                fontSize: 12, color: '#FCD34D',
+              }}>
+                ⚠️ License expired {parsed.expirationDate}. You can still accept this intake; remind the customer to renew.
+              </div>
+            )}
+
+            {error && <div style={{ padding: '10px 14px', borderRadius: 8, marginBottom: 12, background: 'rgba(220,38,38,.12)', border: '1px solid rgba(220,38,38,.25)', fontSize: 13, color: '#FCA5A5' }}>{error}</div>}
+
             {frontPreview && (
               <div style={{ marginBottom: 16, borderRadius: 10, overflow: 'hidden', border: '1px solid rgba(255,255,255,.1)' }}>
                 <img src={frontPreview} alt="Front of ID" style={{ width: '100%', display: 'block' }} />
                 <div style={{ padding: '8px 12px', background: 'rgba(255,255,255,.04)', fontSize: 11, color: 'rgba(255,255,255,.4)' }}>Retained 3 years per compliance</div>
               </div>
             )}
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <ReviewField label="First Name" value={parsed.firstName} onChange={v => updateField('firstName', v)} />
-              <ReviewField label="Middle Name" value={parsed.middleName} onChange={v => updateField('middleName', v)} />
-              <ReviewField label="Last Name" value={parsed.lastName} onChange={v => updateField('lastName', v)} />
-              <ReviewField label="Date of Birth" value={parsed.dateOfBirth} onChange={v => updateField('dateOfBirth', v)} />
-              <ReviewField label="Street" value={parsed.address.street} onChange={v => updateField('address.street', v)} />
-              <ReviewField label="City" value={parsed.address.city} onChange={v => updateField('address.city', v)} />
+              <ReviewField label="First Name"   value={s(parsed.firstName)}    onChange={v => updateField('firstName', v)} />
+              <ReviewField label="Middle Name"  value={s(parsed.middleName)}   onChange={v => updateField('middleName', v)} />
+              <ReviewField label="Last Name"    value={s(parsed.lastName)}     onChange={v => updateField('lastName', v)} />
+              <ReviewField label="Date of Birth" value={s(parsed.dateOfBirth)} onChange={v => updateField('dateOfBirth', v)} />
+              <ReviewField label="Street"        value={s(parsed.street)}      onChange={v => updateField('street', v)} />
+              <ReviewField label="City"          value={s(parsed.city)}        onChange={v => updateField('city', v)} />
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <ReviewField label="State" value={parsed.address.state} onChange={v => updateField('address.state', v)} />
-                <ReviewField label="ZIP" value={parsed.address.zip} onChange={v => updateField('address.zip', v)} />
+                <ReviewField label="State" value={s(parsed.state)} onChange={v => updateField('state', v)} />
+                <ReviewField label="ZIP"   value={s(parsed.zip)}   onChange={v => updateField('zip', v)} />
               </div>
-              <ReviewField label="License #" value={parsed.licenseNumber} onChange={v => updateField('licenseNumber', v)} />
+              <ReviewField label="License #" value={s(parsed.licenseNumber)} onChange={v => updateField('licenseNumber', v)} />
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <ReviewField label="License State" value={parsed.licenseState} onChange={v => updateField('licenseState', v)} />
-                <ReviewField label="Expiration" value={parsed.expirationDate} onChange={v => updateField('expirationDate', v)} />
+                <ReviewField label="License State" value={s(parsed.licenseState)} onChange={v => updateField('licenseState', v)} />
+                <ReviewField label="Expiration"    value={s(parsed.expirationDate)} onChange={v => updateField('expirationDate', v)} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-                <ReviewField label="Sex" value={parsed.sex} onChange={v => updateField('sex', v)} />
-                <ReviewField label="Eyes" value={parsed.eyeColor} onChange={v => updateField('eyeColor', v)} />
-                <ReviewField label="Height" value={parsed.height} onChange={v => updateField('height', v)} />
+                <ReviewField label="Sex"    value={s(parsed.sex)}          onChange={v => updateField('sex', v.toUpperCase() as any)} />
+                <ReviewField label="Eyes"   value={s(parsed.eyeColor)}     onChange={v => updateField('eyeColor', v)} />
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'rgba(255,255,255,.5)', marginBottom: 4 }}>Height</div>
+                  <input
+                    value={formatHeight(parsed.heightInches)}
+                    readOnly
+                    style={{
+                      width: '100%', padding: '10px 12px', borderRadius: 8,
+                      background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.1)',
+                      color: 'rgba(255,255,255,.7)', fontSize: 14, fontFamily: 'inherit', outline: 'none',
+                    }}
+                  />
+                </div>
               </div>
             </div>
+
             <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '12px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 12px)', background: 'rgba(0,0,0,.95)', borderTop: '1px solid rgba(255,255,255,.1)', display: 'flex', gap: 10 }}>
               <button onClick={resetAll} style={{ flex: 1, padding: '14px', borderRadius: 10, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.15)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Re-scan</button>
-              <button onClick={handleSubmit} disabled={!parsed.isOver18} style={{ flex: 2, padding: '14px', borderRadius: 10, background: parsed.isOver18 ? 'var(--green, #1e5c3a)' : 'rgba(255,255,255,.08)', border: 'none', color: '#fff', fontSize: 15, fontWeight: 700, cursor: parsed.isOver18 ? 'pointer' : 'not-allowed', opacity: parsed.isOver18 ? 1 : 0.5 }}>✓ Save Intake</button>
+              <button
+                onClick={handleSubmit}
+                disabled={parsed.isUnder18}
+                style={{
+                  flex: 2, padding: '14px', borderRadius: 10,
+                  background: !parsed.isUnder18 ? 'var(--green, #1e5c3a)' : 'rgba(255,255,255,.08)',
+                  border: 'none', color: '#fff', fontSize: 15, fontWeight: 700,
+                  cursor: !parsed.isUnder18 ? 'pointer' : 'not-allowed',
+                  opacity: !parsed.isUnder18 ? 1 : 0.5,
+                }}>
+                ✓ Save Intake
+              </button>
             </div>
           </div>
         )}
