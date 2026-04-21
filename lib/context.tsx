@@ -12,7 +12,6 @@ interface AppContextType extends AppState {
   setUser: (u: User | null) => void
   setStores: (stores: Store[]) => void
   setEvents: (events: Event[]) => void
-  connectionError: boolean
 }
 
 const AppContext = createContext<AppContextType | null>(null)
@@ -31,6 +30,11 @@ const DEFAULT_PERMS = {
 
 const LIBERTY_DEFAULT_THEME: Theme = 'liberty'
 
+function readLocal<T extends string>(key: string, fallback: T): T {
+  if (typeof window === 'undefined') return fallback
+  return (localStorage.getItem(key) as T) || fallback
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [user, setUserState] = useState<User | null>(null)
   const [users, setUsers] = useState<User[]>([])
@@ -38,22 +42,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [events, setEventsState] = useState<Event[]>([])
   const [shipments, setShipments] = useState<Shipment[]>([])
   const [permissions, setPermissions] = useState<any>(null)
-  const [theme, setThemeState] = useState<Theme>('original')
+  const [theme, setThemeState] = useState<Theme>(() => readLocal('beb-theme', 'original'))
   const [year, setYearState] = useState(String(new Date().getFullYear()))
   const [loading, setLoading] = useState(true)
   const [connectionError, setConnectionError] = useState(false)
-  const [brand, setBrandState] = useState<Brand>('beb')
+  const [brand, setBrandState] = useState<Brand>(() => readLocal('beb-brand', 'beb'))
 
-  // ── CRITICAL: use refs to avoid stale closures in reload ──
-  const brandRef = useRef(brand)
-  brandRef.current = brand // update on every render, no useEffect needed
+  const brandRef = useRef(brand); brandRef.current = brand
+  const themeRef = useRef(theme); themeRef.current = theme
 
-  const themeRef = useRef(theme)
-  themeRef.current = theme
-
-  // ── reload: fetches all data with fresh queries ──
-  // Stored in a ref so it always has current brand without useCallback deps
-  const reloadRef = useRef<(overrideBrand?: Brand) => Promise<void>>(async () => {})
+  // reload returns the fetched users so callers can find the current user
+  // without an extra single-row query (saves one round-trip on login).
+  const reloadRef = useRef<(overrideBrand?: Brand) => Promise<{ users: User[] }>>(async () => ({ users: [] }))
 
   reloadRef.current = async (overrideBrand?: Brand) => {
     const currentBrand = overrideBrand || brandRef.current || 'beb'
@@ -78,16 +78,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           supabase.from('settings').select('value').eq('key', 'permissions').maybeSingle(),
         ])
 
-        // Check if any critical query failed
         const hasError = usersRes.error || storesRes.error || eventsRes.error || shipmentsRes.error
         if (hasError && attempt < MAX_RETRIES) {
-          console.warn(`reload attempt \${attempt} failed, retrying in \${RETRY_DELAY}ms...`)
           await new Promise(r => setTimeout(r, RETRY_DELAY))
           continue
         }
 
-        // Apply data — only update if we got results (preserve existing on failure)
-        if (usersRes.data && usersRes.data.length > 0) setUsers(usersRes.data)
+        const nextUsers = usersRes.data && usersRes.data.length > 0 ? usersRes.data : []
+        if (nextUsers.length > 0) setUsers(nextUsers)
         if (storesRes.data) setStoresState(storesRes.data)
         if (eventsRes.data) {
           setEventsState(eventsRes.data.map((e: any) => ({ ...e, days: e.days || [] })))
@@ -95,70 +93,75 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (shipmentsRes.data) setShipments(shipmentsRes.data)
         setPermissions(permsRes.data?.value || DEFAULT_PERMS)
         setConnectionError(false)
-        return // success
+        return { users: nextUsers }
       } catch (err) {
-        console.error(`reload attempt \${attempt} error:`, err)
+        console.error('reload error:', err)
         if (attempt < MAX_RETRIES) {
           await new Promise(r => setTimeout(r, RETRY_DELAY))
         } else {
-          // All retries exhausted — flag connection error but keep existing data
           setConnectionError(true)
         }
       }
     }
+    return { users: [] }
   }
 
-  // Stable function reference that delegates to the ref
-  const reload = useMemo(() => {
-    return (overrideBrand?: Brand) => reloadRef.current(overrideBrand)
-  }, [])
+  const reload = useMemo(
+    () => async (overrideBrand?: Brand) => { await reloadRef.current(overrideBrand) },
+    []
+  )
 
-  // Safety net — never show spinner for more than 5 seconds
+  // Safety net — never show spinner more than 15s
   useEffect(() => {
     const t = setTimeout(() => setLoading(false), 15000)
     return () => clearTimeout(t)
   }, [])
 
-  // Read saved preferences from localStorage
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('beb-theme') as Theme || 'original'
-    const savedBrand = localStorage.getItem('beb-brand') as Brand || 'beb'
-    setThemeState(savedTheme)
-    setBrandState(savedBrand)
-  }, [])
-
-  // ── Auth listener ──
+  // Auth — initial session + subsequent sign-in / sign-out
   useEffect(() => {
     let mounted = true
+    let initialized = false
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    // Dedupe: getSession() and onAuthStateChange('SIGNED_IN') can both fire
+    // on page load when a session is restored from storage. Only handle once.
+    const handleSession = async (email: string) => {
+      if (!mounted || initialized) return
+      initialized = true
+      const savedBrand = readLocal<Brand>('beb-brand', 'beb')
+
+      // Single parallel load: fetches everything (users + stores + events + ...)
+      // for the user's preferred brand. We find the current user in the returned
+      // users list — no separate .eq('email', ...) query needed.
+      const { users: loadedUsers } = await reloadRef.current(savedBrand)
       if (!mounted) return
-      if (!session) {
-        setLoading(false)
-        return
-      }
-      const email = session.user.email
-      const { data: userData } = await supabase
-        .from('users').select('*').eq('email', email).maybeSingle()
-      if (!mounted) return
+
+      const userData = loadedUsers.find(u => u.email === email)
       if (!userData || !userData.active) {
         setUserState(null)
         setLoading(false)
         return
       }
-      const savedBrand = localStorage.getItem('beb-brand') as Brand || 'beb'
-      const effectiveBrand = savedBrand === 'liberty' && !userData.liberty_access ? 'beb' : savedBrand
+
+      // If saved brand is liberty but user lacks access, fall back to beb and re-fetch.
+      const effectiveBrand: Brand = savedBrand === 'liberty' && !userData.liberty_access ? 'beb' : savedBrand
       setUserState(userData)
       setBrandState(effectiveBrand)
-      await reloadRef.current(effectiveBrand)
+      if (effectiveBrand !== savedBrand) {
+        await reloadRef.current(effectiveBrand)
+      }
       setLoading(false)
-    }).catch(() => {
-      if (mounted) setLoading(false)
+    }
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return
+      if (!session?.user?.email) { setLoading(false); return }
+      handleSession(session.user.email)
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return
       if (event === 'SIGNED_OUT') {
+        initialized = false
         setUserState(null)
         setUsers([])
         setStoresState([])
@@ -169,16 +172,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return
       }
       if (event === 'SIGNED_IN' && session?.user?.email) {
-        const { data: userData } = await supabase
-          .from('users').select('*').eq('email', session.user.email).maybeSingle()
-        if (userData?.active && mounted) {
-          const savedBrand = localStorage.getItem('beb-brand') as Brand || 'beb'
-          const effectiveBrand = savedBrand === 'liberty' && !userData.liberty_access ? 'beb' : savedBrand
-          setUserState(userData)
-          setBrandState(effectiveBrand)
-          await reloadRef.current(effectiveBrand)
-          setLoading(false)
-        }
+        handleSession(session.user.email)
       }
     })
 
@@ -188,25 +182,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // ── Theme setter ──
   const setTheme = (t: Theme) => {
     localStorage.setItem('beb-theme', t)
     setThemeState(t)
   }
 
-  // ── Brand switcher with theme pairing ──
   const setBrand = (b: Brand) => {
     localStorage.setItem('beb-brand', b)
     const currentTheme = themeRef.current
     let newTheme = currentTheme
 
     if (b === 'liberty' && !currentTheme.startsWith('liberty')) {
-      const savedLibertyTheme = localStorage.getItem('beb-liberty-theme') as Theme || LIBERTY_DEFAULT_THEME
-      newTheme = savedLibertyTheme
+      newTheme = (localStorage.getItem('beb-liberty-theme') as Theme) || LIBERTY_DEFAULT_THEME
       localStorage.setItem('beb-theme', newTheme)
     } else if (b === 'beb' && currentTheme.startsWith('liberty')) {
-      const savedBebTheme = localStorage.getItem('beb-beb-theme') as Theme || 'original'
-      newTheme = savedBebTheme
+      newTheme = (localStorage.getItem('beb-beb-theme') as Theme) || 'original'
       localStorage.setItem('beb-theme', newTheme)
     }
 
@@ -227,7 +217,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ? (theme.startsWith('liberty') ? `theme-${theme}` : 'theme-liberty')
     : (theme !== 'original' ? `theme-${theme}` : '')
 
-  // ── CRITICAL: memoize the context value ──
   const ctxValue = useMemo<AppContextType>(() => ({
     user, users, stores, events, shipments, permissions,
     theme, year, loading, brand, connectionError,
