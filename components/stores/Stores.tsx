@@ -325,6 +325,7 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
   const [employees, setEmployees] = useState<Employee[]>([])
   const [details, setDetails] = useState({ ...store })
   const [feedUrl, setFeedUrl] = useState(store.calendar_feed_url || '')
+  const [calendarOffset, setCalendarOffset] = useState<number>(store.calendar_offset_hours ?? 0)
   const [storeImage, setStoreImage] = useState(store.qr_code_url || '')
   const fileRef = useRef<HTMLInputElement>(null)
   const imgRef = useRef<HTMLInputElement>(null)
@@ -359,10 +360,13 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
   )
 
   const feedStatus = useAutosave(
-    feedUrl,
-    async (url) => {
+    { feedUrl, calendarOffset },
+    async ({ feedUrl, calendarOffset }) => {
       const { error } = await withTimeout(
-        supabase.from('stores').update({ calendar_feed_url: url }).eq('id', store.id)
+        supabase.from('stores').update({
+          calendar_feed_url: feedUrl,
+          calendar_offset_hours: calendarOffset,
+        }).eq('id', store.id)
       )
       if (error) throw error
       await refetchStores()
@@ -544,6 +548,31 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
               <input value={feedUrl} onChange={e => setFeedUrl(e.target.value)}
                 placeholder="https://calendar.google.com/calendar/ical/.../.ics" style={{ fontSize: 12 }} />
             </div>
+
+            <div className="field">
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+                <label className="fl" style={{ margin: 0 }}>Time Offset</label>
+                <span style={{
+                  fontSize: 13, fontWeight: 700,
+                  color: calendarOffset === 0 ? 'var(--mist)' : 'var(--green-dark)',
+                }}>
+                  {calendarOffset === 0 ? 'No offset' : `${calendarOffset > 0 ? '+' : ''}${calendarOffset} hr${Math.abs(calendarOffset) === 1 ? '' : 's'}`}
+                </span>
+              </div>
+              <input
+                type="range" min={-4} max={4} step={1}
+                value={calendarOffset}
+                onChange={e => setCalendarOffset(Number(e.target.value))}
+                style={{ width: '100%', accentColor: 'var(--green)' }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--fog)', marginTop: 2, fontWeight: 700 }}>
+                <span>-4h</span><span>-2h</span><span>0</span><span>+2h</span><span>+4h</span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 6, lineHeight: 1.4 }}>
+                Shifts displayed appointment times. Use if the feed's times don't match the store's local time.
+              </div>
+            </div>
+
             {store.calendar_feed_url && (
               <button className="btn-danger btn-sm" onClick={async () => {
                 if (!confirm('Remove calendar feed URL?')) return

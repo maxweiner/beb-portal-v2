@@ -26,6 +26,8 @@ export default function Calendar() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [selectedDay, setSelectedDay] = useState(1)
   const [calFilter, setCalFilter] = useState<'active'|'all'|'days30'|'days60'|'past'>('active')
+  const storesRef = useRef(stores)
+  storesRef.current = stores
 
   // Get all events with dates
   const allDatedEvents = events.filter(ev => !!ev.start_date)
@@ -52,13 +54,19 @@ export default function Calendar() {
       const res = await fetch(`/api/fetch-ical?url=${encodeURIComponent(store.calendar_feed_url)}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const text = await res.text()
-      const appts = parseIcal(text)
+      const rawAppts = parseIcal(text)
+      const latest = storesRef.current.find(s => s.id === store.id) || store
+      const offsetMs = (latest.calendar_offset_hours || 0) * 60 * 60 * 1000
+      const appts = offsetMs === 0
+        ? rawAppts
+        : rawAppts.map(a => ({
+            ...a,
+            start: new Date(a.start.getTime() + offsetMs),
+            end: new Date(a.end.getTime() + offsetMs),
+          }))
       setCalState(prev => ({
         ...prev,
-        appointments: { ...prev.appointments, [store.id]: 
-          store.name.includes('Alan Miller') 
-            ? appts.map(a => ({ ...a, start: new Date(a.start.getTime() - 3 * 60 * 60 * 1000), end: new Date(a.end.getTime() - 3 * 60 * 60 * 1000) }))
-            : appts },
+        appointments: { ...prev.appointments, [store.id]: appts },
         lastRefresh: new Date(),
         loading: { ...prev.loading, [store.id]: false },
       }))
@@ -164,7 +172,7 @@ function EventCards({ activeEvents, stores, appointments, loading, lastRefresh, 
   return (
     <>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-black" style={{ color: 'var(--ink)' }}>Appointments</h1>
+        <h1 className="text-2xl font-black" style={{ color: 'var(--ink)' }}>Calendar</h1>
         <div className="flex items-center gap-3">
           {lastRefresh && (
             <span className="text-xs" style={{ color: 'var(--mist)' }}>
