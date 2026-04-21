@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
+import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 
 const LEAD_SOURCES = [
   { key: 'src_vdp', label: 'VDP' },
@@ -29,6 +30,8 @@ export default function MobileDayEntry() {
   const [saving, setSaving] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [step, setStep] = useState<'event' | 'data' | 'success'>('event')
+  const entryIdRef = useRef<string | null>(null)
+  const hydratedRef = useRef(false)
 
   // Only show events this buyer is assigned to
   const myEvents = events.filter(ev =>
@@ -45,11 +48,13 @@ export default function MobileDayEntry() {
   }, [selectedEventId, selectedDay])
 
   const loadEntry = async () => {
+    hydratedRef.current = false
     const { data } = await supabase.from('buyer_entries')
       .select('*').eq('event_id', selectedEventId)
       .eq('day_number', selectedDay).eq('buyer_id', user?.id).maybeSingle()
     if (data) {
       setExistingEntry(data)
+      entryIdRef.current = data.id
       setCustomers(String(data.customers_seen || ''))
       setSources(Object.fromEntries(LEAD_SOURCES.map(s => [s.key, String((data as any)[s.key] || '')])))
       setSubmitted(!!data.submitted_at)
@@ -58,11 +63,13 @@ export default function MobileDayEntry() {
       setChecks(chks && chks.length > 0 ? chks : [emptyCheck()])
     } else {
       setExistingEntry(null)
+      entryIdRef.current = null
       setCustomers('')
       setSources(Object.fromEntries(LEAD_SOURCES.map(s => [s.key, ''])))
       setChecks([emptyCheck()])
       setSubmitted(false)
     }
+    setTimeout(() => { hydratedRef.current = true }, 0)
   }
 
   function emptyCheck() { return { check_number: '', buy_form_number: '', amount: '', payment_type: 'check' } }
@@ -70,8 +77,7 @@ export default function MobileDayEntry() {
   const validChecks = checks.filter(c => c.amount && parseFloat(c.amount) > 0)
   const totalAmount = validChecks.reduce((s, c) => s + parseFloat(c.amount || 0), 0)
 
-  const save = async (submit: boolean) => {
-    setSaving(true)
+  const persist = async (submit: boolean) => {
     const payload = {
       event_id: selectedEventId, day_number: selectedDay, day: selectedDay,
       buyer_id: user?.id, buyer_name: user?.name,
@@ -79,25 +85,45 @@ export default function MobileDayEntry() {
       ...Object.fromEntries(LEAD_SOURCES.map(s => [s.key, parseInt(sources[s.key]) || 0])),
       submitted_at: submit ? new Date().toISOString() : existingEntry?.submitted_at || null,
     }
-    let entryId = existingEntry?.id
+    let entryId = entryIdRef.current
     if (entryId) {
-      await supabase.from('buyer_entries').update(payload).eq('id', entryId)
+      const { error } = await supabase.from('buyer_entries').update(payload).eq('id', entryId)
+      if (error) throw error
     } else {
-      const { data } = await supabase.from('buyer_entries').insert(payload).select().single()
-      entryId = data?.id
+      const { data, error } = await supabase.from('buyer_entries').insert(payload).select().single()
+      if (error) throw error
+      entryId = data?.id || null
+      entryIdRef.current = entryId
     }
-    if (entryId) {
-      await supabase.from('buyer_checks').delete().eq('entry_id', entryId)
-      if (validChecks.length > 0) {
-        await supabase.from('buyer_checks').insert(validChecks.map(c => ({
-          entry_id: entryId, event_id: selectedEventId,
-          check_number: c.check_number, buy_form_number: c.buy_form_number,
-          amount: parseFloat(c.amount) || 0, payment_type: c.payment_type,
-        })))
-      }
+    if (!entryId) throw new Error('Failed to save entry')
+
+    await supabase.from('buyer_checks').delete().eq('entry_id', entryId)
+    if (validChecks.length > 0) {
+      const { error } = await supabase.from('buyer_checks').insert(validChecks.map(c => ({
+        entry_id: entryId!, event_id: selectedEventId,
+        check_number: c.check_number, buy_form_number: c.buy_form_number,
+        amount: parseFloat(c.amount) || 0, payment_type: c.payment_type,
+      })))
+      if (error) throw error
+    }
+  }
+
+  const autosaveStatus = useAutosave(
+    { customers, sources, checks },
+    async () => { await persist(false) },
+    { enabled: !!selectedEventId && hydratedRef.current && !saving, delay: 1000 }
+  )
+
+  const submit = async () => {
+    setSaving(true)
+    try {
+      await persist(true)
+      setSubmitted(true)
+      setStep('success')
+    } catch (err: any) {
+      alert('Error: ' + (err?.message || 'unknown'))
     }
     setSaving(false)
-    if (submit) { setSubmitted(true); setStep('success') }
   }
 
   const fmt = (ds: string) => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -165,7 +191,10 @@ export default function MobileDayEntry() {
 
           {/* Customers */}
           <div style={{ background: 'var(--cream)', borderRadius: 12, padding: 16, marginBottom: 12, border: '1px solid var(--pearl)' }}>
-            <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', display: 'block', marginBottom: 8 }}>Customers Seen</label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', margin: 0 }}>Customers Seen</label>
+              <AutosaveIndicator status={autosaveStatus} />
+            </div>
             <input type="number" inputMode="numeric" value={customers} onChange={e => setCustomers(e.target.value)}
               placeholder="0" style={{ width: '100%', fontSize: 28, fontWeight: 900, padding: '8px 0', border: 'none', background: 'transparent', color: 'var(--ink)', outline: 'none' }} />
           </div>
@@ -237,13 +266,10 @@ export default function MobileDayEntry() {
           </div>
 
               {/* Actions */}
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={() => save(false)} disabled={saving}
-              style={{ flex: 1, padding: 14, borderRadius: 12, border: '2px solid var(--pearl)', background: 'var(--cream)', color: 'var(--ink)', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
-              Save Draft
-            </button>
-            <button onClick={() => save(true)} disabled={saving}
-              style={{ flex: 2, padding: 14, borderRadius: 12, border: 'none', background: 'var(--sidebar-bg)', color: '#fff', fontWeight: 900, fontSize: 15, cursor: 'pointer' }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <AutosaveIndicator status={autosaveStatus} />
+            <button onClick={submit} disabled={saving}
+              style={{ flex: 1, padding: 14, borderRadius: 12, border: 'none', background: 'var(--sidebar-bg)', color: '#fff', fontWeight: 900, fontSize: 15, cursor: 'pointer' }}>
               {saving ? 'Saving…' : `✓ Submit Day ${selectedDay}`}
             </button>
           </div>

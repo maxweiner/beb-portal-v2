@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
+import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import type { Event, BuyerVacation } from '@/types'
 
 type Filter = 'thisweek' | 'active' | 'all' | 'current' | 'past' | 'future' | 'days30' | 'days60'
@@ -633,27 +634,23 @@ function SpendPanel({ ev, onClose, refetchEvents }: { ev: Event; onClose: () => 
     spend_postcard:  String(ev.spend_postcard  || ''),
     spend_spiffs:    String(ev.spend_spiffs    || ''),
   })
-  const [saving, setSaving] = useState(false)
 
-  const save = async () => {
-    setSaving(true)
-    try {
+  const status = useAutosave(
+    spend,
+    async (s) => {
       const { error } = await withTimeout(
         supabase.from('events').update({
-          spend_vdp:       parseFloat(spend.spend_vdp)       || 0,
-          spend_newspaper: parseFloat(spend.spend_newspaper) || 0,
-          spend_postcard:  parseFloat(spend.spend_postcard)  || 0,
-          spend_spiffs:    parseFloat(spend.spend_spiffs)    || 0,
+          spend_vdp:       parseFloat(s.spend_vdp)       || 0,
+          spend_newspaper: parseFloat(s.spend_newspaper) || 0,
+          spend_postcard:  parseFloat(s.spend_postcard)  || 0,
+          spend_spiffs:    parseFloat(s.spend_spiffs)    || 0,
         }).eq('id', ev.id)
       )
-      if (error) { alert('Error: ' + error.message); setSaving(false); return }
+      if (error) throw error
       await refetchEvents()
-      onClose()
-    } catch (err: any) {
-      alert('Unexpected error: ' + (err?.message || 'timeout'))
-    }
-    setSaving(false)
-  }
+    },
+    { delay: 1000 }
+  )
 
   const totalSpend = (parseFloat(spend.spend_vdp) || 0) +
     (parseFloat(spend.spend_newspaper) || 0) +
@@ -676,7 +673,10 @@ function SpendPanel({ ev, onClose, refetchEvents }: { ev: Event; onClose: () => 
   return (
     <div className="mt-4 p-4 rounded-xl" style={{ background: 'var(--cream2)', border: '1px solid var(--pearl)' }} onClick={e => e.stopPropagation()}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-        <div className="fl" style={{ margin: 0 }}>Ad Spend & Spiffs</div>
+        <div className="fl" style={{ margin: 0, display: 'flex', alignItems: 'center' }}>
+          Ad Spend & Spiffs
+          <AutosaveIndicator status={status} />
+        </div>
         {totalSpend > 0 && (
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>
             Total: ${Math.round(totalSpend).toLocaleString()}
@@ -690,10 +690,7 @@ function SpendPanel({ ev, onClose, refetchEvents }: { ev: Event; onClose: () => 
         {inp('Spiffs Paid', 'spend_spiffs')}
       </div>
       <div style={{ display: 'flex', gap: 8 }}>
-        <button className="btn-primary btn-sm" onClick={save} disabled={saving}>
-          {saving ? 'Saving…' : 'Save Spend'}
-        </button>
-        <button className="btn-outline btn-sm" onClick={onClose}>Cancel</button>
+        <button className="btn-outline btn-sm" onClick={onClose}>Done</button>
       </div>
     </div>
   )
@@ -708,7 +705,6 @@ function DayEditModal({ ev, dayNumber, onClose, onSaved }: {
 }) {
   const [existing, setExisting] = useState<any>(ev.days.find(d => d.day_number === dayNumber) || null)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const n = (v: string) => parseFloat(v) || 0
 
   const [form, setForm] = useState({
@@ -753,39 +749,36 @@ function DayEditModal({ ev, dayNumber, onClose, onSaved }: {
   const dayLabel = isNaN(dayDate.getTime()) ? `Day ${dayNumber}` :
     `Day ${dayNumber} — ${dayDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`
 
-  const handleSave = async () => {
-    if (!n(form.purchases) && !n(form.dollars10)) {
-      alert('Enter at least purchases and dollar amount.')
-      return
-    }
-    setSaving(true)
-    const payload = {
-      event_id: ev.id, day_number: dayNumber, day: dayNumber,
-      customers: n(form.customers), purchases: n(form.purchases),
-      dollars10: n(form.dollars10), dollars5: n(form.dollars5),
-      src_vdp: n(form.src_vdp), src_postcard: n(form.src_postcard),
-      src_social: n(form.src_social), src_wordofmouth: n(form.src_wordofmouth),
-      src_repeat: n(form.src_repeat), src_other: n(form.src_other),
-      src_store: n(form.src_store), src_text: n(form.src_text), src_newspaper: n(form.src_newspaper),
-    }
-    try {
+  const status = useAutosave(
+    form,
+    async (f) => {
+      const payload = {
+        event_id: ev.id, day_number: dayNumber, day: dayNumber,
+        customers: n(f.customers), purchases: n(f.purchases),
+        dollars10: n(f.dollars10), dollars5: n(f.dollars5),
+        src_vdp: n(f.src_vdp), src_postcard: n(f.src_postcard),
+        src_social: n(f.src_social), src_wordofmouth: n(f.src_wordofmouth),
+        src_repeat: n(f.src_repeat), src_other: n(f.src_other),
+        src_store: n(f.src_store), src_text: n(f.src_text), src_newspaper: n(f.src_newspaper),
+      }
       if (existing) {
         const { error } = await withTimeout(
           supabase.from('event_days').update(payload).eq('id', existing.id)
         )
-        if (error) { alert('Save failed: ' + error.message); setSaving(false); return }
+        if (error) throw error
       } else {
-        const { error } = await withTimeout(
+        const { data, error } = await withTimeout(
           supabase.from('event_days').insert(payload).select().single()
         )
-        if (error) { alert('Save failed: ' + error.message); setSaving(false); return }
+        if (error) throw error
+        if (data) setExisting(data)
       }
-      setSaving(false)
-      onSaved()
-    } catch (err: any) {
-      alert('Save failed: ' + (err?.message || 'timeout'))
-      setSaving(false)
-    }
+    },
+    { enabled: !loading, delay: 1000 }
+  )
+
+  const handleDone = () => {
+    onSaved()
   }
 
   const inp = (label: string, key: keyof typeof form, hint?: string) => (
@@ -815,7 +808,10 @@ function DayEditModal({ ev, dayNumber, onClose, onSaved }: {
         ) : (
           <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div className="card card-accent" style={{ margin: 0 }}>
-              <div className="card-title">Sales Data</div>
+              <div className="card-title" style={{ display: 'flex', alignItems: 'center' }}>
+                Sales Data
+                <AutosaveIndicator status={status} />
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 {inp('Customers Seen', 'customers')}
                 {inp('Purchases Made', 'purchases', '★')}
@@ -838,10 +834,9 @@ function DayEditModal({ ev, dayNumber, onClose, onSaved }: {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button className="btn-primary" onClick={handleSave} disabled={saving} style={{ flex: 1 }}>
-                {saving ? 'Saving…' : existing ? 'Update Day Data' : 'Save Day Data'}
+              <button className="btn-primary" onClick={handleDone} style={{ flex: 1 }}>
+                Done
               </button>
-              <button className="btn-outline" onClick={onClose}>Cancel</button>
             </div>
           </div>
         )}

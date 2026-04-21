@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
+import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import type { Theme, BuyerVacation } from '@/types'
 import AvatarPicker from './AvatarPicker'
 
@@ -23,8 +24,6 @@ export default function Settings() {
   const { user, stores, theme, setTheme, reload, brand } = useApp()
   const THEMES = brand === 'liberty' ? LIBERTY_THEMES : BEB_THEMES
   const [profile, setProfile] = useState({ name: user?.name || '', phone: user?.phone || '' })
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
   const [notifyMaster, setNotifyMaster] = useState(user?.notify || false)
   const [storePrefs, setStorePrefs] = useState<Record<string, boolean>>({})
   const [loadingPrefs, setLoadingPrefs] = useState(true)
@@ -48,16 +47,15 @@ export default function Settings() {
       .then(({ data }) => setVacations(data || []))
   }, [user])
 
-  const saveProfile = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!profile.name.trim() || !user) return
-    setSaving(true)
-    await supabase.from('users').update({ name: profile.name.trim(), phone: profile.phone.trim() }).eq('id', user.id)
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
-    reload()
-  }
+  const profileStatus = useAutosave(
+    profile,
+    async (p) => {
+      if (!user || !p.name.trim()) return
+      await supabase.from('users').update({ name: p.name.trim(), phone: p.phone.trim() }).eq('id', user.id)
+      reload()
+    },
+    { enabled: !!user, delay: 1000 }
+  )
 
   const saveAvatar = async (dataUrl: string) => {
     await supabase.from('users').update({ photo_url: dataUrl }).eq('id', user!.id)
@@ -126,7 +124,10 @@ export default function Settings() {
 
       {/* Profile */}
       <div className="card">
-        <div className="card-title">Profile</div>
+        <div className="card-title" style={{ display: 'flex', alignItems: 'center' }}>
+          Profile
+          <AutosaveIndicator status={profileStatus} />
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
           <div style={{ position: 'relative', cursor: 'pointer' }} onClick={() => setShowAvatarPicker(true)}>
             {photoUrl ? (
@@ -149,20 +150,14 @@ export default function Settings() {
             </div>
           </div>
         </div>
-        <form onSubmit={saveProfile}>
-          <div className="field">
-            <label className="fl">Display Name</label>
-            <input type="text" value={profile.name} onChange={e => setProfile(p => ({ ...p, name: e.target.value }))} />
-          </div>
-          <div className="field">
-            <label className="fl">Phone</label>
-            <input type="tel" value={profile.phone} onChange={e => setProfile(p => ({ ...p, phone: e.target.value }))} />
-          </div>
-          <button type="submit" disabled={saving} className="btn-primary btn-sm"
-            style={{ background: saved ? '#22c55e' : undefined }}>
-            {saving ? 'Saving…' : saved ? '✓ Saved!' : 'Save Profile'}
-          </button>
-        </form>
+        <div className="field">
+          <label className="fl">Display Name</label>
+          <input type="text" value={profile.name} onChange={e => setProfile(p => ({ ...p, name: e.target.value }))} />
+        </div>
+        <div className="field">
+          <label className="fl">Phone</label>
+          <input type="tel" value={profile.phone} onChange={e => setProfile(p => ({ ...p, phone: e.target.value }))} />
+        </div>
       </div>
 
       {showAvatarPicker && (
@@ -300,8 +295,6 @@ export default function Settings() {
 function PostmarkSettings() {
   const [serverToken, setServerToken] = useState('')
   const [webhookSecret, setWebhookSecret] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -317,16 +310,16 @@ function PostmarkSettings() {
     load()
   }, [])
 
-  const save = async () => {
-    setSaving(true)
-    await Promise.all([
-      supabase.from('settings').upsert({ key: 'postmark_server_token', value: JSON.stringify(serverToken) }),
-      supabase.from('settings').upsert({ key: 'postmark_webhook_secret', value: JSON.stringify(webhookSecret) }),
-    ])
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
+  const status = useAutosave(
+    { serverToken, webhookSecret },
+    async ({ serverToken, webhookSecret }) => {
+      await Promise.all([
+        supabase.from('settings').upsert({ key: 'postmark_server_token', value: JSON.stringify(serverToken) }),
+        supabase.from('settings').upsert({ key: 'postmark_webhook_secret', value: JSON.stringify(webhookSecret) }),
+      ])
+    },
+    { enabled: !loading, delay: 1000 }
+  )
 
   const webhookUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/inbound-travel-email` : ''
 
@@ -334,7 +327,10 @@ function PostmarkSettings() {
 
   return (
     <div className="card">
-      <div className="card-title">✈️ Travel Email Integration (Postmark)</div>
+      <div className="card-title" style={{ display: 'flex', alignItems: 'center' }}>
+        ✈️ Travel Email Integration (Postmark)
+        <AutosaveIndicator status={status} />
+      </div>
       <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 16, lineHeight: 1.6 }}>
         Forward travel confirmation emails to <strong>travel@bebllp.com</strong> and they'll be automatically parsed and added to the right event.
         Sign up at <a href="https://postmarkapp.com" target="_blank" rel="noreferrer" style={{ color: 'var(--green)' }}>postmarkapp.com</a> (~$15/mo).
@@ -375,10 +371,6 @@ function PostmarkSettings() {
         </ol>
       </div>
 
-      <button className="btn-primary btn-sm" onClick={save} disabled={saving}
-        style={{ background: saved ? '#22c55e' : undefined }}>
-        {saving ? 'Saving…' : saved ? '✓ Saved!' : 'Save Integration Settings'}
-      </button>
     </div>
   )
 }

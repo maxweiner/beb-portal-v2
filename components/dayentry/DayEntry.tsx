@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
+import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 
 interface BuyerEntry {
   id: string
@@ -223,13 +224,22 @@ function BuyerEntryForm({ eventId, dayNumber, buyerId, buyerName, existingEntry,
   const [saving, setSaving] = useState(false)
   const [submitted, setSubmitted] = useState(!!existingEntry?.submitted_at)
   const isSubmitted = submitted
+  const entryIdRef = useRef<string | null>(existingEntry?.id || null)
+  const hydratedRef = useRef(false)
 
   useEffect(() => {
+    hydratedRef.current = false
+    entryIdRef.current = existingEntry?.id || null
     setCustomersSeen(String(existingEntry?.customers_seen || ''))
     setSources(Object.fromEntries(LEAD_SOURCES.map(s => [s.key, String((existingEntry as any)?.[s.key] || '')])))
     setSubmitted(!!existingEntry?.submitted_at)
     if (existingEntry?.id) loadChecks(existingEntry.id)
-    else setChecks([{ check_number: '', buy_form_number: '', amount: 0, payment_type: 'check', event_id: eventId, created_at: '' } as any])
+    else {
+      setChecks([{ check_number: '', buy_form_number: '', amount: 0, payment_type: 'check', event_id: eventId, created_at: '' } as any])
+      setLoadingChecks(false)
+      // mark hydrated on next tick for new entries
+      setTimeout(() => { hydratedRef.current = true }, 0)
+    }
   }, [existingEntry?.id])
 
   const loadChecks = async (entryId: string) => {
@@ -237,6 +247,7 @@ function BuyerEntryForm({ eventId, dayNumber, buyerId, buyerName, existingEntry,
     const { data } = await supabase.from('buyer_checks').select('*').eq('entry_id', entryId).order('created_at')
     setChecks(data && data.length > 0 ? data : [emptyCheck()])
     setLoadingChecks(false)
+    setTimeout(() => { hydratedRef.current = true }, 0)
   }
 
   const emptyCheck = () => ({ check_number: '', buy_form_number: '', amount: '' as any, payment_type: 'check', event_id: eventId })
@@ -253,46 +264,55 @@ function BuyerEntryForm({ eventId, dayNumber, buyerId, buyerName, existingEntry,
   const totalAmount = validChecks.reduce((s, c) => s + parseFloat(String(c.amount) || '0'), 0)
   const totalPurchases = validChecks.length
 
-  const save = async (submit: boolean) => {
+  const persist = async (submit: boolean) => {
+    const entryPayload = {
+      event_id: eventId, day_number: dayNumber, day: dayNumber,
+      buyer_id: buyerId, buyer_name: buyerName,
+      customers_seen: parseInt(customersSeeen) || 0,
+      ...Object.fromEntries(LEAD_SOURCES.map(s => [s.key, parseInt(sources[s.key]) || 0])),
+      submitted_at: submit ? new Date().toISOString() : existingEntry?.submitted_at || null,
+    }
+
+    let entryId = entryIdRef.current
+    if (entryId) {
+      const { error } = await supabase.from('buyer_entries').update(entryPayload).eq('id', entryId)
+      if (error) throw error
+    } else {
+      const { data, error } = await supabase.from('buyer_entries').insert(entryPayload).select().single()
+      if (error) throw error
+      entryId = data?.id || null
+      entryIdRef.current = entryId
+    }
+
+    if (!entryId) throw new Error('Failed to save entry')
+
+    await supabase.from('buyer_checks').delete().eq('entry_id', entryId)
+    if (validChecks.length > 0) {
+      const { error } = await supabase.from('buyer_checks').insert(
+        validChecks.map(c => ({
+          entry_id: entryId!,
+          event_id: eventId,
+          check_number: c.check_number,
+          buy_form_number: c.buy_form_number,
+          amount: parseFloat(String(c.amount)) || 0,
+          payment_type: c.payment_type,
+        }))
+      )
+      if (error) throw error
+    }
+  }
+
+  const autosaveStatus = useAutosave(
+    { customersSeeen, sources, checks },
+    async () => { await persist(false) },
+    { enabled: hydratedRef.current && !loadingChecks && !saving, delay: 1000 }
+  )
+
+  const submit = async () => {
     setSaving(true)
     try {
-      // Refresh session first to prevent auth timeout failures
-
-      const entryPayload = {
-        event_id: eventId, day_number: dayNumber, day: dayNumber,
-        buyer_id: buyerId, buyer_name: buyerName,
-        customers_seen: parseInt(customersSeeen) || 0,
-        ...Object.fromEntries(LEAD_SOURCES.map(s => [s.key, parseInt(sources[s.key]) || 0])),
-        submitted_at: submit ? new Date().toISOString() : existingEntry?.submitted_at || null,
-      }
-
-      let entryId = existingEntry?.id
-      if (entryId) {
-        await supabase.from('buyer_entries').update(entryPayload).eq('id', entryId)
-      } else {
-        const { data } = await supabase.from('buyer_entries').insert(entryPayload).select().single()
-        entryId = data?.id
-      }
-
-      if (!entryId) { alert('Failed to save entry'); setSaving(false); return }
-
-      // Save checks — delete all and re-insert
-      await supabase.from('buyer_checks').delete().eq('entry_id', entryId)
-      if (validChecks.length > 0) {
-        await supabase.from('buyer_checks').insert(
-          validChecks.map(c => ({
-            entry_id: entryId,
-            event_id: eventId,
-            check_number: c.check_number,
-            buy_form_number: c.buy_form_number,
-            amount: parseFloat(String(c.amount)) || 0,
-            payment_type: c.payment_type,
-          }))
-        )
-      }
-
-      // Notify other buyers if submitting
-      if (submit && otherBuyers.length > 0) {
+      await persist(true)
+      if (otherBuyers.length > 0) {
         try {
           await fetch('/api/day-entry', {
             method: 'POST',
@@ -301,10 +321,9 @@ function BuyerEntryForm({ eventId, dayNumber, buyerId, buyerName, existingEntry,
           })
         } catch (e) { /* non-critical */ }
       }
-
-      setSubmitted(submit)
+      setSubmitted(true)
       onSaved()
-      if (submit) alert(`✅ Day ${dayNumber} submitted! ${otherBuyers.length > 0 ? 'Other buyers have been notified.' : ''}`)
+      alert(`✅ Day ${dayNumber} submitted! ${otherBuyers.length > 0 ? 'Other buyers have been notified.' : ''}`)
     } catch (err: any) {
       alert('Error: ' + err.message)
     }
@@ -331,7 +350,10 @@ function BuyerEntryForm({ eventId, dayNumber, buyerId, buyerName, existingEntry,
 
       {/* Customers seen + lead sources */}
       <div className="card card-accent" style={{ margin: 0 }}>
-        <div className="card-title">Customers & Lead Sources</div>
+        <div className="card-title" style={{ display: 'flex', alignItems: 'center' }}>
+          Customers & Lead Sources
+          <AutosaveIndicator status={autosaveStatus} />
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <div style={{ gridColumn: '1 / -1' }}>
             <label className="fl">Customers Seen Today</label>
@@ -465,12 +487,10 @@ function BuyerEntryForm({ eventId, dayNumber, buyerId, buyerName, existingEntry,
         </div>
       </div>
 
-      {/* Save / Submit */}
-      <div style={{ display: 'flex', gap: 10 }}>
-        <button className="btn-outline" onClick={() => save(false)} disabled={saving} style={{ flex: 1 }}>
-          {saving ? 'Saving…' : 'Save Draft'}
-        </button>
-        <button className="btn-primary" onClick={() => save(true)} disabled={saving} style={{ flex: 2 }}>
+      {/* Submit */}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <AutosaveIndicator status={autosaveStatus} />
+        <button className="btn-primary" onClick={submit} disabled={saving} style={{ flex: 1 }}>
           {saving ? 'Submitting…' : isSubmitted ? '✓ Re-Submit Day ' + dayNumber : '✓ Submit Day ' + dayNumber}
         </button>
       </div>
@@ -483,39 +503,40 @@ function CombinedEntryForm({ event, dayNumber, onSaved }: {
   event: any; dayNumber: number; onSaved: () => void
 }) {
   const { user } = useApp()
-  const existing = event.days?.find((d: any) => d.day_number === dayNumber)
+  const [existingRow, setExistingRow] = useState<any>(event.days?.find((d: any) => d.day_number === dayNumber) || null)
   const n = (v: string) => parseInt(v) || 0
 
   const [form, setForm] = useState({
-    customers: String(existing?.customers || ''),
-    purchases: String(existing?.purchases || ''),
-    dollars10: String(existing?.dollars10 || ''),
-    dollars5: String(existing?.dollars5 || ''),
-    ...Object.fromEntries(LEAD_SOURCES.map(s => [s.key, String((existing as any)?.[s.key] || '')])),
+    customers: String(existingRow?.customers || ''),
+    purchases: String(existingRow?.purchases || ''),
+    dollars10: String(existingRow?.dollars10 || ''),
+    dollars5: String(existingRow?.dollars5 || ''),
+    ...Object.fromEntries(LEAD_SOURCES.map(s => [s.key, String((existingRow as any)?.[s.key] || '')])),
   })
-  const [saving, setSaving] = useState(false)
 
-  const save = async () => {
-    setSaving(true)
-    const payload = {
-      event_id: event.id, day_number: dayNumber, day: dayNumber,
-      customers: n(form.customers), purchases: n(form.purchases),
-      dollars10: n(form.dollars10), dollars5: n(form.dollars5),
-      ...Object.fromEntries(LEAD_SOURCES.map(s => [s.key, n((form as any)[s.key])])),
-      entered_by: user?.id, entered_by_name: user?.name,
-      entered_at: new Date().toISOString(),
-    }
-    if (existing) {
-      const { error } = await supabase.from('event_days').update(payload).eq('id', existing.id)
-      if (error) { alert('Error: ' + error.message); setSaving(false); return }
-    } else {
-      const { error } = await supabase.from('event_days').insert(payload)
-      if (error) { alert('Error: ' + error.message); setSaving(false); return }
-    }
-    setSaving(false)
-    onSaved()
-    alert('✅ Combined day data saved!')
-  }
+  const status = useAutosave(
+    form,
+    async (f) => {
+      const payload = {
+        event_id: event.id, day_number: dayNumber, day: dayNumber,
+        customers: n(f.customers), purchases: n(f.purchases),
+        dollars10: n(f.dollars10), dollars5: n(f.dollars5),
+        ...Object.fromEntries(LEAD_SOURCES.map(s => [s.key, n((f as any)[s.key])])),
+        entered_by: user?.id, entered_by_name: user?.name,
+        entered_at: new Date().toISOString(),
+      }
+      if (existingRow) {
+        const { error } = await supabase.from('event_days').update(payload).eq('id', existingRow.id)
+        if (error) throw error
+      } else {
+        const { data, error } = await supabase.from('event_days').insert(payload).select().single()
+        if (error) throw error
+        if (data) setExistingRow(data)
+      }
+      onSaved()
+    },
+    { delay: 1000 }
+  )
 
   const field = (label: string, key: string) => (
     <div key={key}>
@@ -528,7 +549,10 @@ function CombinedEntryForm({ event, dayNumber, onSaved }: {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="card card-accent" style={{ margin: 0, border: '2px solid var(--green3)' }}>
-        <div className="card-title">Combined Day {dayNumber} Data</div>
+        <div className="card-title" style={{ display: 'flex', alignItems: 'center' }}>
+          Combined Day {dayNumber} Data
+          <AutosaveIndicator status={status} />
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 16 }}>
           {field('Customers Seen', 'customers')}
           {field('Purchases Made', 'purchases')}
@@ -540,9 +564,6 @@ function CombinedEntryForm({ event, dayNumber, onSaved }: {
           {LEAD_SOURCES.map(s => field(s.label, s.key))}
         </div>
       </div>
-      <button className="btn-primary" onClick={save} disabled={saving}>
-        {saving ? 'Saving…' : `Save Combined Day ${dayNumber} Data`}
-      </button>
     </div>
   )
 }

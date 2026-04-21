@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
+import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import type { Store } from '@/types'
 
 interface Employee { id: string; store_id: string; name: string; phone: string; email: string }
@@ -327,66 +328,47 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
   const [storeImage, setStoreImage] = useState(store.qr_code_url || '')
   const fileRef = useRef<HTMLInputElement>(null)
   const imgRef = useRef<HTMLInputElement>(null)
-  const [saving, setSaving] = useState<string | null>(null)
 
   useEffect(() => {
     supabase.from('store_employees').select('*').eq('store_id', store.id).order('name')
       .then(({ data }) => setEmployees(data || []))
   }, [store.id])
 
-  const saveInfo = async () => {
-    setSaving('info')
-    try {
+  const infoStatus = useAutosave(
+    {
+      name: details.name,
+      website: details.website,
+      address: details.address,
+      city: details.city,
+      state: details.state,
+      zip: details.zip,
+      notes: details.notes,
+    },
+    async (d) => {
       const { error } = await withTimeout(
         supabase.from('stores').update({
-          name: details.name, website: details.website,
-          address: details.address, city: details.city,
-          state: details.state?.toUpperCase(), zip: details.zip, notes: details.notes,
+          name: d.name, website: d.website,
+          address: d.address, city: d.city,
+          state: d.state?.toUpperCase(), zip: d.zip, notes: d.notes,
         }).eq('id', store.id)
       )
-      if (error) { alert('Save failed: ' + error.message); return }
-      alert('Store info saved!')
+      if (error) throw error
       await refetchStores()
-    } catch (e: any) {
-      alert('Save failed: ' + (e?.message || 'unknown'))
-    } finally {
-      setSaving(null)
-    }
-  }
+    },
+    { delay: 1000 }
+  )
 
-  const saveOwner = async () => {
-    setSaving('owner')
-    try {
+  const feedStatus = useAutosave(
+    feedUrl,
+    async (url) => {
       const { error } = await withTimeout(
-        supabase.from('stores').update({
-          owner_name: details.owner_name, owner_phone: details.owner_phone, owner_email: details.owner_email,
-        }).eq('id', store.id)
+        supabase.from('stores').update({ calendar_feed_url: url }).eq('id', store.id)
       )
-      if (error) { alert('Save failed: ' + error.message); return }
-      alert('Owner info saved!')
+      if (error) throw error
       await refetchStores()
-    } catch (e: any) {
-      alert('Save failed: ' + (e?.message || 'unknown'))
-    } finally {
-      setSaving(null)
-    }
-  }
-
-  const saveFeed = async () => {
-    setSaving('feed')
-    try {
-      const { error } = await withTimeout(
-        supabase.from('stores').update({ calendar_feed_url: feedUrl }).eq('id', store.id)
-      )
-      if (error) { alert('Save failed: ' + error.message); return }
-      alert('Feed URL saved!')
-      await refetchStores()
-    } catch (e: any) {
-      alert('Save failed: ' + (e?.message || 'unknown error'))
-    } finally {
-      setSaving(null)
-    }
-  }
+    },
+    { delay: 1000 }
+  )
 
   const deleteEmployee = async (id: string) => {
     if (!confirm('Remove this employee?')) return
@@ -447,7 +429,10 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
           {/* Store Information */}
           <div className="card card-accent" style={{ margin: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <div className="card-title" style={{ margin: 0 }}>Store Information</div>
+              <div className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center' }}>
+                Store Information
+                <AutosaveIndicator status={infoStatus} />
+              </div>
               <AddressUpdateButton onSelect={(data) => {
                 setDetails((p: any) => ({
                   ...p,
@@ -478,9 +463,6 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
                 onChange={e => setDetails((p: any) => ({ ...p, notes: e.target.value }))}
                 style={{ resize: 'none' }} />
             </div>
-            <button className="btn-primary btn-sm" onClick={saveInfo} disabled={saving === 'info'}>
-              {saving === 'info' ? 'Saving…' : 'Save Store Info'}
-            </button>
           </div>
 
           {/* Store Contacts */}
@@ -545,7 +527,10 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
 
           {/* Google Calendar Feed */}
           <div className="card card-accent" style={{ margin: 0 }}>
-            <div className="card-title">Google Calendar Feed</div>
+            <div className="card-title" style={{ display: 'flex', alignItems: 'center' }}>
+              Google Calendar Feed
+              <AutosaveIndicator status={feedStatus} />
+            </div>
             <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 12 }}>
               Paste the <strong>Secret address in iCal format</strong> from Google Calendar Settings → Integrate calendar.
             </p>
@@ -559,23 +544,18 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
               <input value={feedUrl} onChange={e => setFeedUrl(e.target.value)}
                 placeholder="https://calendar.google.com/calendar/ical/.../.ics" style={{ fontSize: 12 }} />
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn-primary btn-sm" onClick={saveFeed} disabled={saving === 'feed'}>
-                {saving === 'feed' ? 'Saving…' : 'Save Feed URL'}
-              </button>
-              {store.calendar_feed_url && (
-                <button className="btn-danger btn-sm" onClick={async () => {
-                  if (!confirm('Remove calendar feed URL?')) return
-                  try {
-                    await withTimeout(supabase.from('stores').update({ calendar_feed_url: '' }).eq('id', store.id))
-                    setFeedUrl('')
-                    await refetchStores()
-                  } catch (e: any) {
-                    alert('Failed: ' + (e?.message || 'unknown error'))
-                  }
-                }}>Remove</button>
-              )}
-            </div>
+            {store.calendar_feed_url && (
+              <button className="btn-danger btn-sm" onClick={async () => {
+                if (!confirm('Remove calendar feed URL?')) return
+                try {
+                  await withTimeout(supabase.from('stores').update({ calendar_feed_url: '' }).eq('id', store.id))
+                  setFeedUrl('')
+                  await refetchStores()
+                } catch (e: any) {
+                  alert('Failed: ' + (e?.message || 'unknown error'))
+                }
+              }}>Remove</button>
+            )}
           </div>
 
           {/* SimplyBook QR Code */}
@@ -618,15 +598,15 @@ function EmpRow({ emp, onSave, onDelete }: {
 }) {
   const [editing, setEditing] = useState(false)
   const [vals, setVals] = useState({ name: emp.name, phone: emp.phone, email: emp.email })
-  const [saving, setSaving] = useState(false)
 
-  const save = async () => {
-    if (!vals.name) return
-    setSaving(true)
-    await onSave(vals)
-    setSaving(false)
-    setEditing(false)
-  }
+  const status = useAutosave(
+    vals,
+    async (v) => {
+      if (!v.name.trim()) return
+      await onSave(v)
+    },
+    { enabled: editing, delay: 1000 }
+  )
 
   if (editing) return (
     <div style={{ padding: '10px 0', borderBottom: '1px solid var(--cream2)' }}>
@@ -635,9 +615,9 @@ function EmpRow({ emp, onSave, onDelete }: {
         <input type="tel" value={vals.phone} onChange={e => setVals(p => ({ ...p, phone: e.target.value }))} placeholder="Phone" style={{ fontSize: 13 }} />
         <input type="email" value={vals.email} onChange={e => setVals(p => ({ ...p, email: e.target.value }))} placeholder="Email" style={{ fontSize: 13 }} />
       </div>
-      <div style={{ display: 'flex', gap: 6 }}>
-        <button className="btn-primary btn-xs" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
-        <button className="btn-outline btn-xs" onClick={() => setEditing(false)}>Cancel</button>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <button className="btn-outline btn-xs" onClick={() => setEditing(false)}>Done</button>
+        <AutosaveIndicator status={status} />
       </div>
     </div>
   )
@@ -758,15 +738,15 @@ function ContactRow({ contact, onSave, onDelete }: {
 }) {
   const [editing, setEditing] = useState(false)
   const [vals, setVals] = useState({ name: contact.name, phone: contact.phone, email: contact.email, title: contact.title })
-  const [saving, setSaving] = useState(false)
 
-  const save = async () => {
-    if (!vals.name) return
-    setSaving(true)
-    await onSave(vals)
-    setSaving(false)
-    setEditing(false)
-  }
+  const status = useAutosave(
+    vals,
+    async (v) => {
+      if (!v.name.trim()) return
+      await onSave(v)
+    },
+    { enabled: editing, delay: 1000 }
+  )
 
   if (editing) return (
     <div style={{ padding: '10px 0', borderBottom: '1px solid var(--cream2)' }}>
@@ -776,9 +756,9 @@ function ContactRow({ contact, onSave, onDelete }: {
         <input type="tel" value={vals.phone} onChange={e => setVals(p => ({ ...p, phone: e.target.value }))} placeholder="Phone" style={{ fontSize: 13 }} />
         <input type="email" value={vals.email} onChange={e => setVals(p => ({ ...p, email: e.target.value }))} placeholder="Email" style={{ fontSize: 13 }} />
       </div>
-      <div style={{ display: 'flex', gap: 6 }}>
-        <button className="btn-primary btn-xs" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
-        <button className="btn-outline btn-xs" onClick={() => setEditing(false)}>Cancel</button>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <button className="btn-outline btn-xs" onClick={() => setEditing(false)}>Done</button>
+        <AutosaveIndicator status={status} />
       </div>
     </div>
   )
