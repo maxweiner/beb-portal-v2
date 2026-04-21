@@ -30,15 +30,6 @@ function Avatar({ u, size = 32 }: { u: User; size?: number }) {
   )
 }
 
-function ActiveDot({ active }: { active: boolean }) {
-  return (
-    <span title={active ? 'Active' : 'Inactive'} style={{
-      width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-      background: active ? 'var(--green)' : 'var(--fog)',
-    }} />
-  )
-}
-
 export default function MobileStaff() {
   const { users, events } = useApp()
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -84,7 +75,6 @@ export default function MobileStaff() {
                   </div>
                 </div>
                 <span className={`badge ${badge.cls}`} style={{ fontSize: 10, padding: '2px 8px' }}>{badge.label}</span>
-                <ActiveDot active={!!s.active} />
                 <span style={{ color: 'var(--fog)', fontSize: 14, width: 14, textAlign: 'center' }}>{isOpen ? '▾' : '▸'}</span>
               </button>
 
