@@ -109,55 +109,83 @@ export default function Dashboard() {
   const fmt = (n: number) => `$${Math.round(n).toLocaleString()}`
   const buyers = users.filter(u => u.active && u.is_buyer !== false)
 
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-black" style={{ color: 'var(--ink)' }}>
-            Welcome back, {user?.name?.split(' ')[0]} 👋
-          </h1>
-          <div className="text-sm mt-0.5" style={{ color: 'var(--mist)' }}>
-            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+      {/* Hero: gradient header with greeting + week stats as interior pills */}
+      <div style={{
+        background: 'linear-gradient(160deg, var(--sidebar-bg) 0%, var(--green-dark) 50%, var(--green) 100%)',
+        borderRadius: 20, padding: '26px 28px', marginBottom: 24,
+        position: 'relative', overflow: 'hidden',
+        boxShadow: '0 8px 28px rgba(29,107,68,.18)',
+      }}>
+        <div style={{
+          position: 'absolute', top: -40, right: -80, width: 320, height: 320,
+          borderRadius: '50%', background: 'rgba(134,239,172,.12)', filter: 'blur(40px)',
+          pointerEvents: 'none',
+        }} />
+        <div style={{ position: 'relative' }}>
+          <div className="flex items-start justify-between flex-wrap gap-3 mb-5">
+            <div>
+              <div style={{ color: 'rgba(245,240,232,.8)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em' }}>
+                Good {greeting}
+              </div>
+              <h1 style={{ color: '#fff', fontSize: 28, fontWeight: 900, letterSpacing: '-.02em', marginTop: 2 }}>
+                {user?.name?.split(' ')[0]} 👋
+              </h1>
+              <div style={{ color: 'rgba(245,240,232,.6)', fontSize: 13, marginTop: 4 }}>
+                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · Week of {fmtWeek}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span style={{ color: 'rgba(245,240,232,.6)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em' }}>Year</span>
+              <select value={year} onChange={e => setYear(e.target.value)}
+                style={{
+                  padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+                  background: 'rgba(255,255,255,.12)', color: '#fff',
+                  border: '1px solid rgba(255,255,255,.2)', cursor: 'pointer',
+                  WebkitAppearance: 'none', appearance: 'none',
+                }}>
+                {YEARS.map(y => <option key={y} style={{ color: 'var(--ink)' }}>{y}</option>)}
+              </select>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--mist)' }}>Year</span>
-          <select value={year} onChange={e => setYear(e.target.value)}
-            className="px-3 py-2 rounded-lg text-sm border"
-            style={{ background: 'var(--card-bg)', borderColor: 'var(--pearl)', color: 'var(--ink)' }}>
-            {YEARS.map(y => <option key={y}>{y}</option>)}
-          </select>
-        </div>
-      </div>
 
-      {/* Summary stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        {[
-          { label: 'Events This Week', value: weekEvents.length, sub: fmtWeek },
-          { label: 'Purchases', value: weekTotals.purchases.toLocaleString(), sub: `${weekTotals.customers.toLocaleString()} customers` },
-          { label: '💰 Amount Spent', value: fmt(weekTotals.dollars), sub: weekTotals.customers > 0 ? `${Math.round(weekTotals.purchases / weekTotals.customers * 100)}% close rate` : 'This week' },
-          { label: 'Commission Due', value: fmt(weekTotals.commission), sub: '10% + 5% tiers' },
-        ].map(({ label, value, sub }) => (
-          <div key={label} className="stat-card">
-            <div className="stat-label">{label}</div>
-            <div className="stat-val">{value}</div>
-            <div className="stat-sub">{sub}</div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: 'Events This Week', value: weekEvents.length, sub: fmtWeek },
+              { label: 'Purchases', value: weekTotals.purchases.toLocaleString(), sub: `${weekTotals.customers.toLocaleString()} customers` },
+              { label: '💰 Amount Spent', value: fmt(weekTotals.dollars), sub: weekTotals.customers > 0 ? `${Math.round(weekTotals.purchases / weekTotals.customers * 100)}% close rate` : 'This week' },
+              { label: 'Commission Due', value: fmt(weekTotals.commission), sub: '10% + 5% tiers' },
+            ].map(({ label, value, sub }) => (
+              <div key={label} style={{
+                background: 'rgba(240,253,244,.95)', borderRadius: 12, padding: '14px 16px',
+                border: '1px solid var(--green3)',
+                boxShadow: '0 2px 10px rgba(0,0,0,.08)',
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--green-dark)', opacity: 0.7, textTransform: 'uppercase', letterSpacing: '.06em' }}>{label}</div>
+                <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--green-dark)', letterSpacing: '-.02em', marginTop: 4, lineHeight: 1 }}>{value}</div>
+                <div style={{ fontSize: 11, color: 'var(--green-dark)', opacity: 0.6, marginTop: 4 }}>{sub}</div>
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
       </div>
 
       {/* Next Week Preview — only on weekends */}
       {isWeekend && nextWeekEvents.length > 0 && (
-        <div style={{ background: 'var(--card-bg)', borderRadius: 'var(--r2)', border: '1px solid var(--pearl)', padding: '16px 20px', marginBottom: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div style={{ background: 'var(--card-bg)', borderRadius: 'var(--r2)', border: '1px solid var(--pearl)', marginBottom: 24, overflow: 'hidden' }}>
+          <div style={{ background: 'var(--green-pale)', padding: '12px 20px', borderBottom: '1px solid var(--green3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#4FACFE' }} />
-              <span style={{ fontWeight: 900, fontSize: 14, color: 'var(--ink)' }}>Next week</span>
-              <span style={{ fontSize: 12, color: 'var(--mist)' }}>{fmtNextWeek}</span>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--green)', boxShadow: '0 0 0 3px rgba(29,107,68,.15)' }} />
+              <span style={{ fontWeight: 900, fontSize: 13, color: 'var(--green-dark)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Next Week</span>
+              <span style={{ fontSize: 12, color: 'var(--green-dark)', opacity: 0.7 }}>{fmtNextWeek}</span>
             </div>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>{nextWeekEvents.length} event{nextWeekEvents.length !== 1 ? 's' : ''}</span>
+            <span style={{ fontSize: 12, fontWeight: 900, color: 'var(--green-dark)' }}>{nextWeekEvents.length} event{nextWeekEvents.length !== 1 ? 's' : ''}</span>
           </div>
+          <div style={{ padding: '16px 20px' }}>
           <div style={{ display: 'flex', gap: 12, overflowX: 'auto' }}>
             {nextWeekEvents.sort((a, b) => a.start_date.localeCompare(b.start_date)).map((ev, i) => {
               const store = stores.find(s => s.id === ev.store_id)
@@ -186,13 +214,14 @@ export default function Dashboard() {
               )
             })}
           </div>
+          </div>
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Store performance table */}
-        <div className="lg:col-span-2 rounded-xl overflow-hidden" style={{ background: 'var(--card-bg)', border: '1px solid var(--pearl)' }}>
-          <div className="px-5 py-4 font-black text-sm" style={{ borderBottom: '1px solid var(--pearl)', color: 'var(--ink)' }}>
+        <div className="lg:col-span-2 rounded-xl overflow-hidden" style={{ background: 'var(--card-bg)', border: '1px solid var(--pearl)', boxShadow: '0 2px 10px rgba(0,0,0,.04)' }}>
+          <div style={{ background: 'var(--green-pale)', padding: '12px 20px', borderBottom: '1px solid var(--green3)', fontWeight: 900, fontSize: 13, color: 'var(--green-dark)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
             Store Performance — {year}
           </div>
           {storeRows.length === 0 ? (
