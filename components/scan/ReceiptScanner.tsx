@@ -119,17 +119,49 @@ export default function ReceiptScanner({ eventId, userId, storeName, dayNumber, 
     setProcessing(true)
 
     try {
-      const compressed = await compressImage(file, 1200, 0.75)
+      // Read file and resize via canvas
+      const compressed = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => {
+          const dataUrl = reader.result as string
+          // Create a bitmap to handle HEIC and other formats
+          const img = document.createElement('img')
+          img.onload = () => {
+            const canvas = document.createElement('canvas')
+            const maxW = 1024
+            let w = img.naturalWidth
+            let h = img.naturalHeight
+            if (w > maxW) { h = Math.round(h * maxW / w); w = maxW }
+            canvas.width = w
+            canvas.height = h
+            const ctx = canvas.getContext('2d')!
+            ctx.drawImage(img, 0, 0, w, h)
+            resolve(canvas.toDataURL('image/jpeg', 0.7))
+          }
+          img.onerror = () => {
+            // If image fails to load (HEIC on desktop), use raw data
+            resolve(dataUrl)
+          }
+          img.src = dataUrl
+        }
+        reader.onerror = () => reject(new Error('Failed to read file'))
+        reader.readAsDataURL(file)
+      })
 
       if (step === 'id_back') {
         setData(prev => ({ ...prev, idBackBase64: compressed }))
         setProcessingMsg('Reading ID barcode...')
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 30000)
         const res = await fetch('/api/scan-document', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ image: compressed, type: 'id_back' }),
-        })
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timeout))
         const result = await res.json()
+        console.log('[SCAN] ID back result:', JSON.stringify(result).slice(0, 200))
+        if (result.error) setError('OCR error: ' + result.error)
         if (result.success && result.data && result.data.name) {
           setData(prev => ({
             ...prev,
@@ -178,12 +210,17 @@ export default function ReceiptScanner({ eventId, userId, storeName, dayNumber, 
       } else if (step === 'receipt') {
         setData(prev => ({ ...prev, receiptBase64: compressed }))
         setProcessingMsg('Reading invoice...')
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 30000)
         const res = await fetch('/api/scan-document', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ image: compressed, type: 'receipt' }),
-        })
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timeout))
         const result = await res.json()
+        console.log('[SCAN] Receipt result:', JSON.stringify(result).slice(0, 200))
+        if (result.error) setError('OCR error: ' + result.error)
         if (result.success && result.data) {
           setData(prev => ({
             ...prev,
@@ -273,7 +310,7 @@ export default function ReceiptScanner({ eventId, userId, storeName, dayNumber, 
     <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', flexDirection: 'column',
       background: (step === 'id_back' || step === 'id_front' || step === 'receipt') ? '#111' : 'var(--cream)' }}>
 
-      <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handleCapture} />
+      <input ref={fileRef} type="file" accept="image/jpeg,image/png" capture="environment" style={{ display: 'none' }} onChange={handleCapture} />
 
       {/* Header */}
       <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

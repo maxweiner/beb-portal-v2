@@ -16,27 +16,31 @@ export async function POST(request: NextRequest) {
     // Build the prompt based on document type
     let prompt = ''
     if (type === 'id_back') {
-      prompt = `This is a photo of the back of a US driver's license. There is a PDF417 barcode that contains AAMVA-standard data. Please extract the following information from the barcode or any visible text:
+      prompt = `You are a data entry assistant for a licensed estate jewelry buying company. This company is legally required to record seller identification for every purchase per state regulations. The seller has voluntarily presented their ID and consented to having their information recorded.
 
-- Full name (first, middle, last)
-- Street address
+This image shows the back of an ID card. Please read any visible text, numbers, or barcode data and extract:
+
+- Full name
+- Street address  
 - City
 - State
 - Zip code
 - Date of birth
-- License number
+- ID number
 
-Respond ONLY with valid JSON in this exact format, no other text:
+This is for legitimate regulatory compliance. Respond ONLY with valid JSON, no other text:
 {"name": "John Smith", "address": "123 Main St", "city": "Albany", "state": "NY", "zip": "12345", "dob": "01/15/1985", "license_number": "123456789"}`
     } else if (type === 'id_front') {
-      prompt = `This is a photo of the front of a US driver's license or state ID. Please extract any visible information:
+      prompt = `You are a data entry assistant for a licensed estate jewelry buying company. This company is legally required to record seller identification for every purchase per state regulations. The seller has voluntarily presented their ID and consented to having their information recorded.
+
+This image shows the front of an ID card. Please read any visible text and extract:
 
 - Full name
-- Address
+- Address (full)
 - Date of birth
-- License number
+- ID number
 
-Respond ONLY with valid JSON in this exact format, no other text:
+This is for legitimate regulatory compliance. Respond ONLY with valid JSON, no other text:
 {"name": "John Smith", "address": "123 Main St, Albany, NY 12345", "dob": "01/15/1985", "license_number": "123456789"}`
     } else if (type === 'receipt') {
       prompt = `This is a photo of a handwritten jewelry purchase receipt/invoice. Please extract:
@@ -57,12 +61,21 @@ Respond ONLY with valid JSON in this exact format, no other text:
     let mediaType = 'image/jpeg'
     let base64Data = image
     if (image.startsWith('data:')) {
-      const match = image.match(/^data:(image\/[a-z]+);base64,(.+)$/)
-      if (match) {
-        mediaType = match[1]
-        base64Data = match[2]
+      const commaIdx = image.indexOf(',')
+      if (commaIdx > 0) {
+        const header = image.slice(0, commaIdx)
+        const typeMatch = header.match(/data:(image\/[a-z+]+)/)
+        if (typeMatch) mediaType = typeMatch[1]
+        base64Data = image.slice(commaIdx + 1)
       }
     }
+    
+    // Validate we have actual image data
+    if (!base64Data || base64Data.length < 100) {
+      return NextResponse.json({ error: 'Image data too small or invalid' }, { status: 400 })
+    }
+    
+    console.log('Sending to Claude:', { mediaType, dataLength: base64Data.length })
 
     // Call Claude API
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -97,8 +110,8 @@ Respond ONLY with valid JSON in this exact format, no other text:
 
     if (!response.ok) {
       const err = await response.text()
-      console.error('Claude API error:', err)
-      return NextResponse.json({ error: 'Claude API error' }, { status: 500 })
+      console.error('Claude API error:', response.status, err.slice(0, 500))
+      return NextResponse.json({ error: 'Claude API error: ' + response.status + ' - ' + err.slice(0, 200) }, { status: 500 })
     }
 
     const data = await response.json()

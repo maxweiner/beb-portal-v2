@@ -5,12 +5,14 @@ import { useApp } from '@/lib/context'
 import { setMobilePreference } from '@/lib/mobile'
 import { supabase } from '@/lib/supabase'
 import type { NavPage } from '@/app/page'
-import ReceiptScanner from '@/components/scan/ReceiptScanner'
+import LicenseScanner from '@/components/scan/LicenseScanner'
 
-const TABS: { id: NavPage; label: string; icon: string }[] = [
+// 4 tabs + center scan button = 5 slots, perfectly balanced
+const LEFT_TABS: { id: NavPage; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Home',   icon: '⌂' },
   { id: 'events',    label: 'Events', icon: '◆' },
-  { id: 'dayentry',  label: 'Enter',  icon: '📝' },
+]
+const RIGHT_TABS: { id: NavPage; label: string; icon: string }[] = [
   { id: 'calendar',  label: 'Appts',  icon: '📅' },
   { id: 'travel',    label: 'Travel', icon: '✈️' },
 ]
@@ -27,20 +29,8 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
   const hasLibertyAccess = user?.liberty_access === true
   const isLiberty = brand === 'liberty'
   const [menuOpen, setMenuOpen] = useState(false)
-  const [showScanner, setShowScanner] = useState(false)
-
-  // Detect active event for this buyer
-  const today = new Date(); today.setHours(0,0,0,0)
-  const activeEvent = events.find(ev => {
-    const start = new Date(ev.start_date + 'T12:00:00'); start.setHours(0,0,0,0)
-    const end = new Date(ev.start_date + 'T12:00:00'); end.setDate(end.getDate() + 2); end.setHours(23,59,59)
-    const isWorker = (ev.workers || []).some((w: any) => w.id === user?.id)
-    return isWorker && today >= start && today <= end
-  })
-  const activeDayNumber = activeEvent ? (() => {
-    const start = new Date(activeEvent.start_date + 'T12:00:00'); start.setHours(0,0,0,0)
-    return Math.floor((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
-  })() : 0
+  const [scannerOpen, setScannerOpen] = useState(false)
+  const [scanEventId, setScanEventId] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -50,6 +40,42 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
+
+  // Find the active/upcoming event for this buyer
+  const getActiveEventId = (): string | null => {
+    if (!events || events.length === 0) return null
+    const today = new Date().toISOString().split('T')[0]
+    const myEvents = [...events]
+      .filter(ev => isAdmin || (ev.workers || []).some((w: any) => w.id === user?.id))
+      .sort((a, b) => a.start_date.localeCompare(b.start_date))
+
+    // Active event (today falls within range)
+    const active = myEvents.find(ev => {
+      const start = ev.start_date
+      const days = ev.days?.length || 3
+      const end = new Date(start + 'T12:00:00')
+      end.setDate(end.getDate() + days)
+      return start <= today && today <= end.toISOString().split('T')[0]
+    })
+    if (active) return active.id
+
+    // Next upcoming
+    const upcoming = myEvents.find(ev => ev.start_date >= today)
+    if (upcoming) return upcoming.id
+
+    // Most recent
+    return myEvents[myEvents.length - 1]?.id || null
+  }
+
+  const handleScanPress = () => {
+    const eventId = getActiveEventId()
+    if (!eventId) {
+      alert('No active event found. You need to be assigned to an event to scan IDs.')
+      return
+    }
+    setScanEventId(eventId)
+    setScannerOpen(true)
+  }
 
   const ALL_PAGES: { id: NavPage; label: string; icon: string; adminOnly?: boolean }[] = [
     { id: 'dashboard',    label: 'Dashboard',      icon: '⌂' },
@@ -63,37 +89,56 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
     { id: 'reports',      label: 'Reports',        icon: '📊' },
     { id: 'marketing',    label: 'Marketing',      icon: '📣' },
     { id: 'settings',     label: 'Settings',       icon: '⚙️' },
-    { id: isLiberty ? 'libertyadmin' : 'admin', label: isLiberty ? 'Liberty Admin' : 'Admin Panel', icon: '🔧', adminOnly: true },
+    { id: isLiberty ? 'libertyadmin' : 'admin', label: isLiberty ? 'LEB Admin' : 'Admin', icon: '🔧', adminOnly: true },
     { id: 'stores',       label: 'Stores',         icon: '🏪', adminOnly: true },
-    { id: 'historical',   label: 'Historical',     icon: '📚', adminOnly: true },
+    { id: 'historical',   label: 'Historical',     icon: '📜', adminOnly: true },
   ]
 
   const visiblePages = ALL_PAGES.filter(p => !p.adminOnly || isAdmin)
 
   return (
-    <div style={{ minHeight: '100vh', height: '100%', background: 'var(--cream2)', display: 'flex', flexDirection: 'column', fontFamily: 'Lato, sans-serif', position: 'relative' }}>
-      <div style={{ background: 'var(--sidebar-bg)', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 2px 8px rgba(0,0,0,.2)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ color: isLiberty ? '#93C5FD' : '#7EC8A0', fontWeight: 900, fontSize: 16 }}>
-            {isLiberty ? '★ Liberty' : '◆ BEB Portal'}
+    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--page-bg)' }}>
+      {/* Top bar */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 16px',
+        paddingTop: 'max(env(safe-area-inset-top), 10px)',
+        background: 'var(--sidebar-bg)', color: '#fff',
+        borderBottom: '1px solid rgba(255,255,255,.08)',
+      }}>
+        <button onClick={() => setMenuOpen(true)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 22, cursor: 'pointer', padding: '4px 8px' }}>☰</button>
+
+        {hasLibertyAccess && (
+          <div style={{ display: 'flex', background: 'rgba(255,255,255,.1)', borderRadius: 20, padding: 2 }}>
+            <button onClick={() => setBrand('beb')} style={{
+              padding: '4px 14px', borderRadius: 18, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
+              background: !isLiberty ? 'var(--green)' : 'transparent',
+              color: !isLiberty ? '#fff' : 'rgba(255,255,255,.5)',
+            }}>BEB</button>
+            <button onClick={() => setBrand('liberty')} style={{
+              padding: '4px 14px', borderRadius: 18, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
+              background: isLiberty ? '#1D3A6B' : 'transparent',
+              color: isLiberty ? '#fff' : 'rgba(255,255,255,.5)',
+            }}>LEB</button>
           </div>
-          {hasLibertyAccess && (
-            <div style={{ background: 'rgba(0,0,0,.25)', borderRadius: 8, padding: 2, display: 'flex', gap: 1 }}>
-              <button onClick={() => { setBrand('beb'); setNav('dashboard') }} style={{ padding: '3px 8px', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 900, fontSize: 10, background: !isLiberty ? '#7EC8A0' : 'transparent', color: !isLiberty ? '#0F2D1F' : 'rgba(255,255,255,.45)' }}>BEB</button>
-              <button onClick={() => { setBrand('liberty'); setNav('dashboard') }} style={{ padding: '3px 8px', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 900, fontSize: 10, background: isLiberty ? '#93C5FD' : 'transparent', color: isLiberty ? '#0F172A' : 'rgba(255,255,255,.45)' }}>LEB</button>
-            </div>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button onClick={() => { setMobilePreference(false); window.location.reload() }} style={{ background: 'rgba(255,255,255,.12)', border: 'none', color: 'rgba(255,255,255,.7)', fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 99, cursor: 'pointer' }}>🖥 Desktop</button>
-          <button onClick={() => setMenuOpen(!menuOpen)} style={{ background: 'rgba(255,255,255,.12)', border: 'none', color: '#fff', width: 36, height: 36, borderRadius: 8, cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>☰</button>
-        </div>
+        )}
+
+        <button onClick={() => { setMobilePreference(false); window.location.reload() }} style={{
+          background: 'none', border: 'none', color: 'rgba(255,255,255,.4)', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+        }}>
+          Desktop
+        </button>
       </div>
 
+      {/* Slide-out menu */}
       {menuOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,.5)' }}>
-          <div ref={menuRef} style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 260, background: 'var(--sidebar-bg)', overflowY: 'auto', boxShadow: '-4px 0 24px rgba(0,0,0,.3)' }}>
-            <div style={{ padding: '20px 20px 12px', borderBottom: '1px solid rgba(255,255,255,.1)' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)' }} onClick={() => setMenuOpen(false)} />
+          <div ref={menuRef} style={{
+            position: 'relative', width: 280, background: 'var(--sidebar-bg)', height: '100%',
+            paddingTop: 'max(env(safe-area-inset-top), 16px)', zIndex: 1, overflowY: 'auto',
+          }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,.08)' }}>
               <div style={{ color: isLiberty ? '#93C5FD' : '#7EC8A0', fontWeight: 900, fontSize: 15 }}>{isLiberty ? '★ Liberty Portal' : '◆ BEB Portal'}</div>
               {user && <div style={{ color: 'rgba(255,255,255,.5)', fontSize: 12, marginTop: 4 }}>{user.name}</div>}
             </div>
@@ -116,64 +161,69 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
 
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 100 }}>{children}</div>
 
-      {showScanner && user && (
-        <ReceiptScanner
-          eventId={activeEvent?.id || 'test'}
-          userId={user.id}
-          storeName={activeEvent?.store_name || 'Testing'}
-          dayNumber={activeDayNumber || 1}
-          onClose={() => setShowScanner(false)}
-          onSaved={() => {}}
+      {/* Bottom tab bar — 5 equal slots: 2 tabs | scan | 2 tabs */}
+      <div style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0,
+        background: 'var(--cream)', borderTop: '1px solid var(--pearl)',
+        display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr',
+        alignItems: 'end',
+        zIndex: 999,
+        paddingBottom: 'max(env(safe-area-inset-bottom), 8px)',
+        boxShadow: '0 -2px 12px rgba(0,0,0,.12)',
+        minHeight: 60,
+      }}>
+        {LEFT_TABS.map(tab => {
+          const active = nav === tab.id
+          return (
+            <button key={tab.id} onClick={() => setNav(tab.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '10px 4px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+              <div style={{ fontSize: 22, lineHeight: 1 }}>{tab.icon}</div>
+              <div style={{ fontSize: 10, fontWeight: active ? 900 : 500, color: active ? 'var(--green-dark)' : 'var(--mist)' }}>{tab.label}</div>
+            </button>
+          )
+        })}
+
+        {/* Center scan button — raised circle */}
+        <button onClick={handleScanPress} style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          padding: '0 0 8px 0', position: 'relative',
+        }}>
+          <div style={{
+            width: 52, height: 52,
+            borderRadius: '50%',
+            background: 'var(--green, #1e5c3a)',
+            border: '3px solid var(--cream)',
+            boxShadow: '0 2px 12px rgba(0,0,0,.25)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            marginTop: -20,
+            color: '#fff', fontSize: 22,
+          }}>
+            🪪
+          </div>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mist)', marginTop: 2 }}>
+            Scan
+          </div>
+        </button>
+
+        {RIGHT_TABS.map(tab => {
+          const active = nav === tab.id
+          return (
+            <button key={tab.id} onClick={() => setNav(tab.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '10px 4px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+              <div style={{ fontSize: 22, lineHeight: 1 }}>{tab.icon}</div>
+              <div style={{ fontSize: 10, fontWeight: active ? 900 : 500, color: active ? 'var(--green-dark)' : 'var(--mist)' }}>{tab.label}</div>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* License Scanner overlay */}
+      {scannerOpen && scanEventId && (
+        <LicenseScanner
+          eventId={scanEventId}
+          onClose={() => { setScannerOpen(false); setScanEventId(null) }}
+          onComplete={() => {}}
         />
       )}
-
-      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'var(--cream)', borderTop: '1px solid var(--pearl)', display: 'flex', zIndex: 999, paddingBottom: 'max(env(safe-area-inset-bottom), 8px)', boxShadow: '0 -2px 12px rgba(0,0,0,.12)', minHeight: 60 }}>
-        {true ? (
-          <>
-            {TABS.filter(t => t.id !== 'dayentry').slice(0, 2).map(tab => {
-              const active = nav === tab.id
-              return (
-                <button key={tab.id} onClick={() => setNav(tab.id)} style={{ flex: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '10px 4px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-                  <div style={{ fontSize: 22, lineHeight: 1 }}>{tab.icon}</div>
-                  <div style={{ fontSize: 10, fontWeight: active ? 900 : 500, color: active ? 'var(--green)' : 'var(--mist)' }}>{tab.label}</div>
-                  {active && <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--green)' }} />}
-                </button>
-              )
-            })}
-            <div style={{ flex: 1.2, display: 'flex', justifyContent: 'center', position: 'relative' }}>
-              <button onClick={() => setShowScanner(true)} style={{
-                position: 'absolute', bottom: 8, width: 60, height: 60, borderRadius: '50%',
-                background: 'var(--sidebar-bg)', border: '4px solid var(--cream)',
-                cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <div style={{ color: '#fff', fontSize: 22, lineHeight: 1 }}>📷</div>
-                <div style={{ color: 'rgba(255,255,255,.7)', fontSize: 8, fontWeight: 700, marginTop: 1 }}>SCAN</div>
-              </button>
-            </div>
-            {TABS.filter(t => t.id !== 'dayentry').slice(2).map(tab => {
-              const active = nav === tab.id
-              return (
-                <button key={tab.id} onClick={() => setNav(tab.id)} style={{ flex: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '10px 4px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-                  <div style={{ fontSize: 22, lineHeight: 1 }}>{tab.icon}</div>
-                  <div style={{ fontSize: 10, fontWeight: active ? 900 : 500, color: active ? 'var(--green)' : 'var(--mist)' }}>{tab.label}</div>
-                  {active && <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--green)' }} />}
-                </button>
-              )
-            })}
-          </>
-        ) : (
-          TABS.map(tab => {
-            const active = nav === tab.id
-            return (
-              <button key={tab.id} onClick={() => setNav(tab.id)} style={{ flex: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '10px 4px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-                <div style={{ fontSize: 22, lineHeight: 1 }}>{tab.icon}</div>
-                <div style={{ fontSize: 10, fontWeight: active ? 900 : 500, color: active ? 'var(--green)' : 'var(--mist)' }}>{tab.label}</div>
-                {active && <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--green)' }} />}
-              </button>
-            )
-          })
-        )}
-      </div>
     </div>
   )
 }
