@@ -224,7 +224,6 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
     if (!parsed.isOver18) { setError('Customer must be 18 or older.'); return }
     setSaving(true); setStep('saving')
     try {
-      await supabase.auth.refreshSession()
       const { data: intake, error: err } = await supabase.from('customer_intakes').insert({
         event_id: eventId, buyer_id: user.id,
         first_name: parsed.firstName, last_name: parsed.lastName,

@@ -6,22 +6,9 @@ export const supabase = createClient(
   {
     auth: {
       persistSession: true,
-      autoRefreshToken: false,
+      autoRefreshToken: true,
       detectSessionInUrl: true,
       flowType: 'implicit',
     },
   }
 )
-
-// Manually refresh token on tab focus and every 10 minutes
-if (typeof window !== 'undefined') {
-  const refreshToken = async () => {
-    try { await supabase.auth.refreshSession() } catch {}
-  }
-
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') refreshToken()
-  })
-
-  setInterval(refreshToken, 10 * 60 * 1000)
-}

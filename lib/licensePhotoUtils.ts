@@ -71,8 +71,6 @@ export async function uploadLicensePhoto(
   eventId: string,
   intakeId: string
 ): Promise<string> {
-  await supabase.auth.refreshSession()
-
   const path = `${eventId}/${intakeId}.jpg`
 
   const { error: uploadError } = await supabase.storage
