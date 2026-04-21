@@ -7,6 +7,19 @@ import { supabase } from '@/lib/supabase'
 
 type ViewMode = 'month' | 'timeline' | 'agenda' | 'kanban'
 
+function useIsNarrow(breakpoint = 768) {
+  const [narrow, setNarrow] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth <= breakpoint
+  )
+  useEffect(() => {
+    const handler = () => setNarrow(window.innerWidth <= breakpoint)
+    handler()
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [breakpoint])
+  return narrow
+}
+
 const COLORS = [
   '#2D6A4F','#1B4332','#40916C','#264653','#D62828',
   '#E76F51','#F4A261','#457B9D','#6D4C41','#7B2D8B',
@@ -34,6 +47,7 @@ export default function Schedule() {
     if (typeof window === 'undefined') return true
     return localStorage.getItem('beb-show-vacations') !== 'false'
   })
+  const isNarrow = useIsNarrow()
 
   useEffect(() => {
     supabase.from('buyer_vacations').select('*').then(({ data }) => setVacations(data || []))
@@ -53,39 +67,57 @@ export default function Schedule() {
   ]
 
   return (
-    <div style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+    <div style={{ padding: isNarrow ? 14 : 24, maxWidth: 1100, margin: '0 auto' }}>
+      <div style={{
+        display: 'flex',
+        flexDirection: isNarrow ? 'column' : 'row',
+        alignItems: isNarrow ? 'stretch' : 'center',
+        justifyContent: 'space-between',
+        marginBottom: isNarrow ? 14 : 20,
+        flexWrap: 'wrap', gap: isNarrow ? 10 : 12,
+      }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)', margin: 0 }}>Calendar</h1>
+          <h1 style={{ fontSize: isNarrow ? 18 : 22, fontWeight: 900, color: 'var(--ink)', margin: 0 }}>Calendar</h1>
           <div style={{ fontSize: 13, color: 'var(--mist)', marginTop: 2 }}>Visual planning view · {events.length} events</div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <button onClick={toggleShowVacations} style={{
-          padding: '7px 12px', borderRadius: 'var(--r)', border: '1px solid var(--pearl)', cursor: 'pointer',
-          fontSize: 12, fontWeight: 700, background: showVacations ? 'var(--cream2)' : 'transparent',
-          color: showVacations ? 'var(--ash)' : 'var(--fog)',
-        }}>
-          ☀ Vacations {showVacations ? 'ON' : 'OFF'}
-        </button>
-        <div style={{ display: 'flex', gap: 4, background: 'var(--cream2)', padding: 4, borderRadius: 'var(--r)', border: '1px solid var(--pearl)' }}>
-          {views.map(v => (
-            <button key={v.id} onClick={() => setView(v.id)} style={{
-              padding: '7px 16px', borderRadius: 'calc(var(--r) - 2px)', border: 'none', cursor: 'pointer',
-              fontSize: 13, fontWeight: 700, transition: 'all .15s',
-              background: view === v.id ? 'var(--sidebar-bg)' : 'transparent',
-              color: view === v.id ? '#fff' : 'var(--ash)',
-            }}>{v.label}</button>
-          ))}
-        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={toggleShowVacations} style={{
+            padding: isNarrow ? '10px 14px' : '7px 12px', borderRadius: 'var(--r)',
+            border: '1px solid var(--pearl)', cursor: 'pointer',
+            fontSize: 13, fontWeight: 700,
+            background: showVacations ? 'var(--cream2)' : 'transparent',
+            color: showVacations ? 'var(--ash)' : 'var(--fog)',
+            minHeight: isNarrow ? 44 : undefined,
+          }}>
+            ☀ Vacations {showVacations ? 'ON' : 'OFF'}
+          </button>
+          <div style={{
+            display: isNarrow ? 'grid' : 'flex',
+            gridTemplateColumns: isNarrow ? 'repeat(4, 1fr)' : undefined,
+            gap: 4, background: 'var(--cream2)', padding: 4,
+            borderRadius: 'var(--r)', border: '1px solid var(--pearl)',
+            flex: isNarrow ? '1 1 auto' : undefined,
+          }}>
+            {views.map(v => (
+              <button key={v.id} onClick={() => setView(v.id)} style={{
+                padding: isNarrow ? '10px 6px' : '7px 16px',
+                borderRadius: 'calc(var(--r) - 2px)', border: 'none', cursor: 'pointer',
+                fontSize: isNarrow ? 12 : 13, fontWeight: 700, transition: 'all .15s',
+                background: view === v.id ? 'var(--sidebar-bg)' : 'transparent',
+                color: view === v.id ? '#fff' : 'var(--ash)',
+                minHeight: isNarrow ? 44 : undefined,
+              }}>{v.label}</button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {view === 'month'    && <MonthView    events={events} stores={stores} users={users} vacations={showVacations ? vacations : []} currentUserId={user?.id} onSelect={setDetail} />}
-      {view === 'timeline' && <TimelineView events={events} stores={stores} onSelect={setDetail} />}
-      {view === 'agenda'   && <AgendaView   events={events} stores={stores} onSelect={setDetail} />}
-      {view === 'kanban'   && <KanbanView   events={events} stores={stores} onSelect={setDetail} />}
+      {view === 'month'    && <MonthView    events={events} stores={stores} users={users} vacations={showVacations ? vacations : []} currentUserId={user?.id} onSelect={setDetail} isNarrow={isNarrow} />}
+      {view === 'timeline' && <TimelineView events={events} stores={stores} onSelect={setDetail} isNarrow={isNarrow} onSwitchView={setView} />}
+      {view === 'agenda'   && <AgendaView   events={events} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
+      {view === 'kanban'   && <KanbanView   events={events} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
 
-      {detail && <DetailModal ev={detail} stores={stores} onClose={() => setDetail(null)} />}
+      {detail && <DetailModal ev={detail} stores={stores} onClose={() => setDetail(null)} isNarrow={isNarrow} />}
     </div>
   )
 }
@@ -93,7 +125,7 @@ export default function Schedule() {
 /* ══════════════════════════════════════════
    MONTH VIEW
 ══════════════════════════════════════════ */
-function MonthView({ events, stores, users, vacations, currentUserId, onSelect }: { events: Event[]; stores: any[]; users: any[]; vacations: BuyerVacation[]; currentUserId?: string; onSelect: (e: Event) => void }) {
+function MonthView({ events, stores, users, vacations, currentUserId, onSelect, isNarrow }: { events: Event[]; stores: any[]; users: any[]; vacations: BuyerVacation[]; currentUserId?: string; onSelect: (e: Event) => void; isNarrow: boolean }) {
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
@@ -122,11 +154,11 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect }
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', background: 'var(--sidebar-bg)' }}>
-        <button onClick={prev} style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 30, height: 30, borderRadius: '50%', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
+        <button onClick={prev} style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 44, height: 44, borderRadius: '50%', cursor: 'pointer', fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
         <div style={{ fontWeight: 900, fontSize: 16, color: '#fff' }}>
           {new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
         </div>
-        <button onClick={next} style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 30, height: 30, borderRadius: '50%', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
+        <button onClick={next} style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 44, height: 44, borderRadius: '50%', cursor: 'pointer', fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', background: 'var(--cream2)', borderBottom: '1px solid var(--pearl)' }}>
@@ -139,28 +171,36 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect }
         {cells.map((day, i) => {
           const dayEvs = day ? eventsOnDay(day) : []
           const isToday = day ? ds(day) === todayStr : false
+          const dayVacs = day ? vacationsOnDay(day) : []
           return (
             <div key={i} style={{
-              minHeight: 90, padding: '6px 6px',
+              minHeight: isNarrow ? 64 : 90, padding: isNarrow ? '3px 3px' : '6px 6px',
               borderRight: '1px solid var(--cream2)', borderBottom: '1px solid var(--cream2)',
               background: !day ? 'rgba(0,0,0,.02)' : isToday ? 'rgba(45,106,79,.05)' : 'var(--cream)',
             }}>
               {day && (
                 <>
                   <div style={{
-                    width: 24, height: 24, borderRadius: '50%', fontSize: 12, fontWeight: isToday ? 900 : 400,
+                    width: isNarrow ? 20 : 24, height: isNarrow ? 20 : 24, borderRadius: '50%',
+                    fontSize: isNarrow ? 11 : 12, fontWeight: isToday ? 900 : 400,
                     color: isToday ? '#fff' : 'var(--ash)', background: isToday ? 'var(--green)' : 'transparent',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 3,
                   }}>{day}</div>
-                  {dayEvs.map(ev => (
+                  {dayEvs.slice(0, isNarrow ? 2 : 99).map(ev => (
                     <div key={ev.id} onClick={() => onSelect(ev)} style={{
                       background: storeColor(ev.store_id, stores), color: '#fff',
-                      fontSize: 10, fontWeight: 700, padding: '2px 5px', borderRadius: 3,
+                      fontSize: isNarrow ? 9 : 10, fontWeight: 700,
+                      padding: isNarrow ? '1px 3px' : '2px 5px', borderRadius: 3,
                       marginBottom: 2, cursor: 'pointer', overflow: 'hidden',
                       whiteSpace: 'nowrap', textOverflow: 'ellipsis',
-                    }}>◆ {ev.store_name}</div>
+                    }}>{isNarrow ? ev.store_name : `◆ ${ev.store_name}`}</div>
                   ))}
-                  {vacationsOnDay(day).map(v => (
+                  {isNarrow && dayEvs.length > 2 && (
+                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--mist)', padding: '0 3px' }}>
+                      +{dayEvs.length - 2}
+                    </div>
+                  )}
+                  {!isNarrow && dayVacs.map(v => (
                     <div key={v.id} title={v.note || 'Vacation'} style={{
                       fontSize: 9, padding: '1px 5px', borderRadius: 99, marginTop: 2,
                       background: v.isMe ? 'var(--green-pale)' : 'var(--cream2)',
@@ -169,6 +209,12 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect }
                       border: v.isMe ? '1px solid var(--green3)' : '1px solid var(--pearl)',
                     }}>☀ {v.userName}</div>
                   ))}
+                  {isNarrow && dayVacs.length > 0 && (
+                    <div style={{
+                      fontSize: 9, fontWeight: 700, color: 'var(--mist)',
+                      padding: '0 3px', marginTop: 1,
+                    }}>☀ {dayVacs.length}</div>
+                  )}
                 </>
               )}
             </div>
@@ -182,9 +228,30 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect }
 /* ══════════════════════════════════════════
    TIMELINE VIEW
 ══════════════════════════════════════════ */
-function TimelineView({ events, stores, onSelect }: { events: Event[]; stores: any[]; onSelect: (e: Event) => void }) {
+function TimelineView({ events, stores, onSelect, isNarrow, onSwitchView }: { events: Event[]; stores: any[]; onSelect: (e: Event) => void; isNarrow: boolean; onSwitchView: (v: ViewMode) => void }) {
   const today = new Date(); today.setHours(0,0,0,0)
   const [offset, setOffset] = useState(0)
+
+  if (isNarrow) {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: '32px 20px' }}>
+        <div style={{ fontSize: 36, marginBottom: 10 }}>▬</div>
+        <div style={{ fontSize: 15, fontWeight: 900, color: 'var(--ink)', marginBottom: 6 }}>
+          Timeline needs a wider screen
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 16, lineHeight: 1.5 }}>
+          The 6-week gantt view doesn't fit on mobile. Agenda shows the same events in a scrollable list.
+        </div>
+        <button onClick={() => onSwitchView('agenda')} style={{
+          padding: '12px 20px', borderRadius: 'var(--r)', border: 'none',
+          background: 'var(--green)', color: '#fff', fontSize: 14, fontWeight: 700,
+          cursor: 'pointer', minHeight: 44,
+        }}>
+          ☰  Switch to Agenda
+        </button>
+      </div>
+    )
+  }
 
   const start = new Date(today)
   start.setDate(today.getDate() - today.getDay() + offset * 7)
@@ -280,7 +347,7 @@ function TimelineView({ events, stores, onSelect }: { events: Event[]; stores: a
 /* ══════════════════════════════════════════
    AGENDA VIEW
 ══════════════════════════════════════════ */
-function AgendaView({ events, stores, onSelect }: { events: Event[]; stores: any[]; onSelect: (e: Event) => void }) {
+function AgendaView({ events, stores, onSelect, isNarrow }: { events: Event[]; stores: any[]; onSelect: (e: Event) => void; isNarrow: boolean }) {
   const today = new Date(); today.setHours(0,0,0,0)
   const todayStr = today.toISOString().slice(0,10)
 
@@ -300,21 +367,44 @@ function AgendaView({ events, stores, onSelect }: { events: Event[]; stores: any
   const isUpcoming = (ev: Event) => !isPast(ev)
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 24, alignItems: 'start' }}>
-      {/* Mini month index */}
-      <div className="card card-accent" style={{ margin: 0, position: 'sticky', top: 20 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', marginBottom: 10 }}>Jump to Month</div>
-        {Object.keys(grouped).map(k => (
-          <a key={k} href={`#month-${k}`} style={{
-            display: 'block', padding: '5px 8px', borderRadius: 6, fontSize: 13, fontWeight: 600,
-            color: 'var(--green-dark)', textDecoration: 'none', marginBottom: 2,
-            background: k === todayStr.slice(0,7) ? 'var(--green-pale)' : 'transparent',
-          }}>
-            {fmtMonth(k)}
-            <span style={{ float: 'right', fontSize: 11, color: 'var(--mist)', fontWeight: 400 }}>{grouped[k].length}</span>
-          </a>
-        ))}
-      </div>
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: isNarrow ? '1fr' : '180px 1fr',
+      gap: isNarrow ? 14 : 24, alignItems: 'start',
+    }}>
+      {/* Mini month index — desktop: sticky sidebar; mobile: horizontal scroll row */}
+      {isNarrow ? (
+        <div style={{
+          display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4,
+          WebkitOverflowScrolling: 'touch',
+        }}>
+          {Object.keys(grouped).map(k => (
+            <a key={k} href={`#month-${k}`} style={{
+              flexShrink: 0, padding: '8px 12px', borderRadius: 99,
+              fontSize: 13, fontWeight: 700, textDecoration: 'none',
+              color: k === todayStr.slice(0,7) ? 'var(--green-dark)' : 'var(--ash)',
+              background: k === todayStr.slice(0,7) ? 'var(--green-pale)' : 'var(--cream2)',
+              border: '1px solid var(--pearl)', minHeight: 36, display: 'inline-flex', alignItems: 'center',
+            }}>
+              {fmtMonth(k)} · {grouped[k].length}
+            </a>
+          ))}
+        </div>
+      ) : (
+        <div className="card card-accent" style={{ margin: 0, position: 'sticky', top: 20 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', marginBottom: 10 }}>Jump to Month</div>
+          {Object.keys(grouped).map(k => (
+            <a key={k} href={`#month-${k}`} style={{
+              display: 'block', padding: '5px 8px', borderRadius: 6, fontSize: 13, fontWeight: 600,
+              color: 'var(--green-dark)', textDecoration: 'none', marginBottom: 2,
+              background: k === todayStr.slice(0,7) ? 'var(--green-pale)' : 'transparent',
+            }}>
+              {fmtMonth(k)}
+              <span style={{ float: 'right', fontSize: 11, color: 'var(--mist)', fontWeight: 400 }}>{grouped[k].length}</span>
+            </a>
+          ))}
+        </div>
+      )}
 
       {/* Event list */}
       <div>
@@ -330,44 +420,56 @@ function AgendaView({ events, stores, onSelect }: { events: Event[]; stores: any
               const purchases = ev.days.reduce((s,d) => s + (d.purchases||0), 0)
               return (
                 <div key={ev.id} onClick={() => onSelect(ev)} style={{
-                  display: 'flex', gap: 14, alignItems: 'flex-start',
-                  padding: '14px 16px', marginBottom: 8, borderRadius: 'var(--r)',
+                  display: 'flex',
+                  flexDirection: isNarrow ? 'column' : 'row',
+                  gap: isNarrow ? 10 : 14,
+                  alignItems: isNarrow ? 'stretch' : 'flex-start',
+                  padding: '14px 16px', marginBottom: 10, borderRadius: 'var(--r)',
                   background: 'var(--cream)', border: `1px solid var(--pearl)`,
                   borderLeft: `4px solid ${color}`,
                   cursor: 'pointer', opacity: past ? 0.65 : 1,
                   transition: 'box-shadow .15s',
                 }}>
-                  {/* Date block */}
-                  <div style={{ textAlign: 'center', minWidth: 48, flexShrink: 0 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--mist)' }}>
-                      {new Date(ev.start_date+'T12:00:00').toLocaleDateString('en-US', {month:'short'})}
-                    </div>
-                    <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--ink)', lineHeight: 1 }}>
-                      {new Date(ev.start_date+'T12:00:00').getDate()}
-                    </div>
-                    <div style={{ fontSize: 10, color: 'var(--mist)' }}>
-                      {new Date(ev.start_date+'T12:00:00').toLocaleDateString('en-US', {weekday:'short'})}
-                    </div>
-                  </div>
-                  {/* Info */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 900, fontSize: 15, color: 'var(--ink)', marginBottom: 2 }}>◆ {ev.store_name}</div>
-                    <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 6 }}>
-                      {fmtDate(ev.start_date)} — {fmtDate(evDays(ev)[2])}
-                      {past && <span style={{ marginLeft: 8, fontSize: 10, background: 'var(--cream2)', padding: '1px 6px', borderRadius: 99, fontWeight: 700 }}>Past</span>}
-                      {isUpcoming(ev) && <span style={{ marginLeft: 8, fontSize: 10, background: 'var(--green-pale)', color: 'var(--green-dark)', padding: '1px 6px', borderRadius: 99, fontWeight: 700 }}>Upcoming</span>}
-                    </div>
-                    {(ev.workers||[]).length > 0 && (
-                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        {(ev.workers||[]).map((w:any) => (
-                          <span key={w.id} style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'var(--green-pale)', color: 'var(--green-dark)' }}>👤 {w.name}</span>
-                        ))}
+                  {/* Top row on mobile: date + info */}
+                  <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
+                    <div style={{ textAlign: 'center', minWidth: 48, flexShrink: 0 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--mist)' }}>
+                        {new Date(ev.start_date+'T12:00:00').toLocaleDateString('en-US', {month:'short'})}
                       </div>
-                    )}
+                      <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--ink)', lineHeight: 1 }}>
+                        {new Date(ev.start_date+'T12:00:00').getDate()}
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--mist)' }}>
+                        {new Date(ev.start_date+'T12:00:00').toLocaleDateString('en-US', {weekday:'short'})}
+                      </div>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 900, fontSize: 15, color: 'var(--ink)', marginBottom: 2 }}>◆ {ev.store_name}</div>
+                      <div style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 6 }}>
+                        {fmtDate(ev.start_date)} — {fmtDate(evDays(ev)[2])}
+                        {past && <span style={{ marginLeft: 8, fontSize: 10, background: 'var(--cream2)', padding: '1px 6px', borderRadius: 99, fontWeight: 700 }}>Past</span>}
+                        {isUpcoming(ev) && <span style={{ marginLeft: 8, fontSize: 10, background: 'var(--green-pale)', color: 'var(--green-dark)', padding: '1px 6px', borderRadius: 99, fontWeight: 700 }}>Upcoming</span>}
+                      </div>
+                      {(ev.workers||[]).length > 0 && (
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          {(ev.workers||[]).map((w:any) => (
+                            <span key={w.id} style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'var(--green-pale)', color: 'var(--green-dark)' }}>👤 {w.name}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  {/* Stats */}
+                  {/* Stats — side on desktop, below (full width row) on mobile */}
                   {ev.days.length > 0 && (
-                    <div style={{ display: 'flex', gap: 16, flexShrink: 0 }}>
+                    <div style={{
+                      display: 'flex',
+                      gap: 16,
+                      flexShrink: 0,
+                      justifyContent: isNarrow ? 'flex-start' : 'flex-end',
+                      paddingTop: isNarrow ? 10 : 0,
+                      borderTop: isNarrow ? '1px solid var(--cream2)' : 'none',
+                      marginLeft: isNarrow ? 62 : 0,
+                    }}>
                       <div style={{ textAlign: 'center' }}>
                         <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--green)' }}>{purchases}</div>
                         <div style={{ fontSize: 10, color: 'var(--mist)' }}>Purchases</div>
@@ -394,7 +496,7 @@ function AgendaView({ events, stores, onSelect }: { events: Event[]; stores: any
 /* ══════════════════════════════════════════
    KANBAN VIEW
 ══════════════════════════════════════════ */
-function KanbanView({ events, stores, onSelect }: { events: Event[]; stores: any[]; onSelect: (e: Event) => void }) {
+function KanbanView({ events, stores, onSelect, isNarrow }: { events: Event[]; stores: any[]; onSelect: (e: Event) => void; isNarrow: boolean }) {
   const today = new Date(); today.setHours(0,0,0,0)
   const weekMs = 7 * 24 * 60 * 60 * 1000
 
@@ -414,7 +516,11 @@ function KanbanView({ events, stores, onSelect }: { events: Event[]; stores: any
   const fmtDate = (ds: string) => new Date(ds+'T12:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'})
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, alignItems: 'start' }}>
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: isNarrow ? '1fr' : 'repeat(3,1fr)',
+      gap: isNarrow ? 20 : 16, alignItems: 'start',
+    }}>
       {cols.map(col => {
         const colEvents = events
           .filter(ev => categorize(ev) === col.id)
@@ -490,7 +596,7 @@ function KanbanView({ events, stores, onSelect }: { events: Event[]; stores: any
 /* ══════════════════════════════════════════
    DETAIL MODAL
 ══════════════════════════════════════════ */
-function DetailModal({ ev, stores, onClose }: { ev: Event; stores: any[]; onClose: () => void }) {
+function DetailModal({ ev, stores, onClose, isNarrow }: { ev: Event; stores: any[]; onClose: () => void; isNarrow: boolean }) {
   const store = stores.find(s => s.id === ev.store_id)
   const days = [...(ev.days||[])].sort((a,b) => a.day_number - b.day_number)
   const totalPurchases = days.reduce((s,d) => s + (d.purchases||0), 0)
@@ -512,7 +618,7 @@ function DetailModal({ ev, stores, onClose }: { ev: Event; stores: any[]; onClos
             <div style={{ color: '#fff', fontSize: 18, fontWeight: 900, marginTop: 2 }}>{ev.store_name}</div>
             <div style={{ color: 'rgba(255,255,255,.6)', fontSize: 12, marginTop: 2 }}>{store?.city}, {store?.state} · {ev.start_date}</div>
           </div>
-          <button onClick={onClose} style={{ background: 'rgba(255,255,255,.2)', border: 'none', color: '#fff', width: 32, height: 32, borderRadius: '50%', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+          <button onClick={onClose} aria-label="Close" style={{ background: 'rgba(255,255,255,.2)', border: 'none', color: '#fff', width: 44, height: 44, borderRadius: '50%', fontSize: 22, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
         </div>
 
         <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -551,7 +657,7 @@ function DetailModal({ ev, stores, onClose }: { ev: Event; stores: any[]; onClos
                     <div style={{ fontWeight: 700, color: 'var(--green)', marginBottom: 8, fontSize: 13 }}>
                       Day {d.day_number}{dayDateStr ? ` — ${fmt(dayDateStr)}` : ''}
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, fontSize: 12 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isNarrow ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 8, fontSize: 13 }}>
                       {[['Customers', d.customers||0], ['Purchases', d.purchases||0], ['Amount Spent', fmtDollars(dayDollars)], ['Close', `${dayCR}%`]].map(([l,v]) => (
                         <div key={l as string}>
                           <div style={{ color: 'var(--mist)', fontSize: 10, marginBottom: 2 }}>{l}</div>
