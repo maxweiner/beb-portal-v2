@@ -17,7 +17,7 @@ interface CalendarState {
 }
 
 export default function Calendar() {
-  const { events, stores } = useApp()
+  const { events, stores, user } = useApp()
   const [calState, setCalState] = useState<CalendarState>({
     appointments: {},
     loading: {},
@@ -28,6 +28,40 @@ export default function Calendar() {
   const [calFilter, setCalFilter] = useState<'active'|'all'|'days30'|'days60'|'past'>('active')
   const storesRef = useRef(stores)
   storesRef.current = stores
+
+  // Viewport detection — the mobile path skips the event-cards picker when
+  // the user is currently assigned to an active event.
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth <= 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
+  // Find the user's currently-active event (today falls within its 3-day range).
+  const myActiveEventId = (() => {
+    if (!user) return null
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    for (const ev of events) {
+      if (!ev.start_date) continue
+      if (!(ev.workers || []).some((w: any) => w.id === user.id)) continue
+      const start = new Date(ev.start_date + 'T12:00:00')
+      const end   = new Date(ev.start_date + 'T12:00:00'); end.setDate(end.getDate() + 2); end.setHours(23, 59, 59)
+      if (today >= start && today <= end) return ev.id
+    }
+    return null
+  })()
+
+  // Auto-select the active event on mobile, once.
+  const autoOpenedRef = useRef(false)
+  useEffect(() => {
+    if (!isMobile || autoOpenedRef.current) return
+    if (myActiveEventId && !selectedEventId) {
+      autoOpenedRef.current = true
+      setSelectedEventId(myActiveEventId)
+    }
+  }, [isMobile, myActiveEventId, selectedEventId])
 
   // Get all events with dates
   const allDatedEvents = events.filter(ev => !!ev.start_date)
@@ -124,8 +158,31 @@ export default function Calendar() {
 
   const selectedEvent = events.find(e => e.id === selectedEventId)
 
+  // My events — used by the mobile drawer to switch between events.
+  const myEvents = user
+    ? events.filter(ev => (ev.workers || []).some((w: any) => w.id === user.id))
+    : []
+
+  if (isMobile && selectedEvent) {
+    return (
+      <MobileActiveAppointmentsView
+        ev={selectedEvent}
+        stores={stores}
+        myEvents={myEvents}
+        appointments={calState.appointments}
+        loading={calState.loading}
+        onPickEvent={(id) => setSelectedEventId(id)}
+        onBack={() => setSelectedEventId(null)}
+        onRefresh={() => {
+          const store = stores.find(s => s.id === selectedEvent.store_id)
+          if (store) fetchForStore(store)
+        }}
+      />
+    )
+  }
+
   return (
-    <div style={{ padding: "24px" }}>
+    <div style={{ padding: isMobile ? 12 : 24 }}>
       {selectedEvent ? (
         <DayView
           ev={selectedEvent}
@@ -527,6 +584,252 @@ function ApptDetail({ appt, tz, pos, onClose }: {
           <div className="text-xs" style={{ color: 'var(--mist)' }}>📍 {appt.location}</div>
         )}
       </div>
+    </div>
+  )
+}
+
+/* ══ MOBILE ACTIVE APPOINTMENTS VIEW ══
+ * Shown when the user is on mobile and currently assigned to an active
+ * event. Auto-opens to today's day. Tappable store-name header opens a
+ * drawer of the user's other events. Solid green day bar with segmented
+ * Day 1/2/3. Hour-grouped appointment list with each row fully tinted by
+ * its detected lead source.
+ */
+function MobileActiveAppointmentsView({
+  ev, stores, myEvents, appointments, loading,
+  onPickEvent, onBack, onRefresh,
+}: {
+  ev: Event
+  stores: Store[]
+  myEvents: Event[]
+  appointments: Record<string, Appointment[]>
+  loading: Record<string, boolean>
+  onPickEvent: (eventId: string) => void
+  onBack: () => void
+  onRefresh: () => void
+}) {
+  const store = stores.find(s => s.id === ev.store_id)
+  const tz = STATE_TZ[(store?.state || '').toUpperCase()] || 'America/New_York'
+  const [day, setDay] = useState(1)
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+
+  // Auto-select today if it's one of the event days.
+  useEffect(() => {
+    const todayInTz = dateInTz(new Date(), tz)
+    for (let d = 1; d <= 3; d++) {
+      if (getEventDayDate(ev.start_date, d) === todayInTz) { setDay(d); return }
+    }
+    setDay(1)
+  }, [ev.id, ev.start_date, tz])
+
+  const isLoading = loading[store?.id || '']
+  const allAppts = appointments[store?.id || ''] || []
+  const dateStr = getEventDayDate(ev.start_date, day)
+  const dayAppts = allAppts.filter(a => dateInTz(a.start, tz) === dateStr)
+  const slots = generateSlots()
+
+  const findAppt = (slot: { h: number; m: number }) => dayAppts.find(a => {
+    const { h, m } = hmInTz(a.start, tz)
+    return Math.abs((h * 60 + m) - (slot.h * 60 + slot.m)) < 20
+  })
+
+  // Group slots by hour (10, 11, 12, …, 17).
+  const byHour = new Map<number, typeof slots>()
+  slots.forEach(s => {
+    if (!byHour.has(s.h)) byHour.set(s.h, [])
+    byHour.get(s.h)!.push(s)
+  })
+
+  const otherEvents = myEvents.filter(e => e.id !== ev.id)
+    .sort((a, b) => b.start_date.localeCompare(a.start_date))
+    .slice(0, 10)
+
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      {/* Tappable header */}
+      <div style={{ padding: '12px 16px', background: 'var(--cream)', borderBottom: '1px solid var(--pearl)' }}>
+        <button onClick={() => setDrawerOpen(true)} style={{
+          width: '100%', background: 'none', border: 'none', textAlign: 'left',
+          padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--ink)' }}>
+              {store?.name || ev.store_name}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--mist)' }}>
+              {store?.city}, {store?.state} · Day {day} · Active
+            </div>
+          </div>
+          {isLoading && <span style={{ fontSize: 11, color: 'var(--mist)', marginRight: 6 }}>↻</span>}
+          <span style={{ fontSize: 16, color: 'var(--green-dark)' }}>▾</span>
+        </button>
+      </div>
+
+      {/* Solid green day bar */}
+      <div style={{ padding: '10px 16px', background: 'var(--green)' }}>
+        <div style={{ display: 'flex', background: 'rgba(0,0,0,.22)', borderRadius: 10, padding: 3 }}>
+          {[1, 2, 3].map(d => (
+            <button key={d} onClick={() => setDay(d)} style={{
+              flex: 1, padding: '8px 0', borderRadius: 8, border: 'none',
+              background: day === d ? 'var(--cream)' : 'transparent',
+              color: day === d ? 'var(--green-dark)' : 'rgba(255,255,255,.85)',
+              fontSize: 13, fontWeight: 900, cursor: 'pointer',
+              boxShadow: day === d ? '0 1px 3px rgba(0,0,0,.2)' : 'none',
+            }}>Day {d}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Hour-grouped list with lead-source-tinted rows */}
+      {store?.calendar_feed_url ? (
+        <div style={{ flex: 1, overflowY: 'auto', background: 'var(--cream)' }}>
+          {Array.from(byHour.entries()).map(([hour, hourSlots]) => {
+            const bookedCount = hourSlots.filter(s => findAppt(s)).length
+            const hourLabel = hour > 12 ? `${hour - 12} PM` : hour === 12 ? '12 PM' : `${hour} AM`
+            return (
+              <div key={hour}>
+                <div style={{
+                  padding: '6px 16px', background: 'var(--cream2)',
+                  fontSize: 10, fontWeight: 900,
+                  letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--mist)',
+                  display: 'flex', justifyContent: 'space-between',
+                }}>
+                  <span>{hourLabel}</span>
+                  <span>{bookedCount}/{hourSlots.length}</span>
+                </div>
+                {hourSlots.map(slot => {
+                  const appt = findAppt(slot)
+                  const key = `${hour}-${slot.m}`
+                  const isOpen = expanded === key
+                  const src = appt ? detectSource(appt) : null
+                  const col = src ? SOURCE_COLORS[src] : null
+                  const tintBg = appt && col ? col.bg : 'var(--cream)'
+                  const detail = appt ? parseApptDetail(appt) : null
+                  return (
+                    <div key={key}
+                      onClick={() => appt && setExpanded(isOpen ? null : key)}
+                      style={{
+                        background: tintBg,
+                        borderBottom: '1px solid rgba(0,0,0,.04)',
+                        padding: '10px 14px',
+                        cursor: appt ? 'pointer' : 'default',
+                        display: 'flex', gap: 10, alignItems: 'flex-start',
+                      }}>
+                      <div style={{
+                        minWidth: 60, fontSize: 11, fontWeight: 800,
+                        color: appt && col ? col.text : (appt ? 'var(--ink)' : 'var(--fog)'),
+                        paddingTop: 1,
+                      }}>{formatSlotTime(slot.h, slot.m)}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {appt && detail ? (
+                          <>
+                            <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink)' }}>
+                              {detail.name || appt.title}
+                            </div>
+                            {col && (
+                              <div style={{ fontSize: 10, color: col.text, fontWeight: 700, marginTop: 2 }}>
+                                {col.label}
+                              </div>
+                            )}
+                            {isOpen && (
+                              <div style={{ marginTop: 6, fontSize: 11, color: 'var(--ash)', lineHeight: 1.6 }}>
+                                <div>🕐 <strong>{timeInTz(appt.start, tz)}</strong> – {timeInTz(appt.end, tz)}</div>
+                                {detail.phone && (
+                                  <div>📞 <a href={`tel:${detail.phone}`} style={{ color: 'var(--green)', textDecoration: 'none', fontWeight: 700 }}>{detail.phone}</a></div>
+                                )}
+                                {detail.email && (
+                                  <div>✉ <a href={`mailto:${detail.email}`} style={{ color: 'var(--green)', textDecoration: 'none' }}>{detail.email}</a></div>
+                                )}
+                                {detail.items && <div>💎 {detail.items}</div>}
+                                {detail.howHeard && <div>📣 {detail.howHeard}</div>}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <span style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--fog)' }}>Available</span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
+          <div>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>📅</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>No calendar feed</div>
+            <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 4, maxWidth: 280 }}>
+              This event's store hasn't set up a Google Calendar feed yet. Ask an admin to add one in Store Details.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Drawer — other events */}
+      {drawerOpen && (
+        <div onClick={() => setDrawerOpen(false)} style={{
+          position: 'absolute', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 10,
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            position: 'absolute', top: 0, right: 0, bottom: 0,
+            width: 280, background: 'var(--cream)', boxShadow: '-4px 0 12px rgba(0,0,0,.2)',
+            display: 'flex', flexDirection: 'column',
+          }}>
+            <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--pearl)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 14, fontWeight: 900, color: 'var(--ink)' }}>My events</span>
+              <button onClick={() => setDrawerOpen(false)}
+                style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--mist)' }}>×</button>
+            </div>
+            <div style={{ padding: '10px 12px', flex: 1, overflowY: 'auto' }}>
+              <div style={{ background: 'var(--green-pale)', padding: 10, borderRadius: 8, marginBottom: 8, border: '1px solid var(--green)' }}>
+                <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--green-dark)', letterSpacing: '.06em' }}>ACTIVE</div>
+                <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--ink)', marginTop: 2 }}>{store?.name || ev.store_name}</div>
+                <div style={{ fontSize: 12, color: 'var(--mist)' }}>{store?.city}, {store?.state}</div>
+              </div>
+              {otherEvents.length === 0 && (
+                <div style={{ fontSize: 12, color: 'var(--mist)', textAlign: 'center', padding: 16 }}>
+                  No other events assigned to you.
+                </div>
+              )}
+              {otherEvents.map(other => {
+                const otherStore = stores.find(s => s.id === other.store_id)
+                return (
+                  <button key={other.id}
+                    onClick={() => { onPickEvent(other.id); setDrawerOpen(false) }}
+                    style={{
+                      width: '100%', textAlign: 'left', background: 'var(--cream)',
+                      border: '1px solid var(--pearl)', borderRadius: 8,
+                      padding: 10, marginBottom: 6, cursor: 'pointer',
+                    }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>
+                      {otherStore?.name || other.store_name}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--mist)' }}>
+                      {otherStore?.city}, {otherStore?.state} · {other.start_date}
+                    </div>
+                  </button>
+                )
+              })}
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--pearl)' }}>
+                <button onClick={() => { onBack(); setDrawerOpen(false) }} style={{
+                  width: '100%', padding: 10, background: 'none',
+                  border: '1px solid var(--pearl)', borderRadius: 8,
+                  fontSize: 12, color: 'var(--mist)', cursor: 'pointer',
+                }}>← All events</button>
+                <button onClick={() => { onRefresh(); setDrawerOpen(false) }} style={{
+                  width: '100%', padding: 10, marginTop: 6, background: 'none',
+                  border: '1px solid var(--pearl)', borderRadius: 8,
+                  fontSize: 12, color: 'var(--mist)', cursor: 'pointer',
+                }}>↻ Refresh feed</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
