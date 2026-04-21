@@ -39,29 +39,43 @@ export default function Calendar() {
     return () => window.removeEventListener('resize', check)
   }, [])
 
-  // Find the user's currently-active event (today falls within its 3-day range).
-  const myActiveEventId = (() => {
+  // Pick the event the buyer should land on when they open Appointments.
+  // Priority: currently-active event they're assigned to → next upcoming
+  // event they're assigned to → null (falls through to event-cards grid).
+  // `events` is already filtered to the current brand upstream in context,
+  // so no extra brand filtering is needed here.
+  const myTargetEventId = (() => {
     if (!user) return null
     const today = new Date(); today.setHours(0, 0, 0, 0)
-    for (const ev of events) {
-      if (!ev.start_date) continue
-      if (!(ev.workers || []).some((w: any) => w.id === user.id)) continue
+    const myEvents = events.filter(ev =>
+      ev.start_date && (ev.workers || []).some((w: any) => w.id === user.id)
+    )
+    // Prefer a currently-active event.
+    for (const ev of myEvents) {
       const start = new Date(ev.start_date + 'T12:00:00')
       const end   = new Date(ev.start_date + 'T12:00:00'); end.setDate(end.getDate() + 2); end.setHours(23, 59, 59)
       if (today >= start && today <= end) return ev.id
     }
-    return null
+    // Fall back to the nearest upcoming event.
+    const upcoming = myEvents
+      .filter(ev => new Date(ev.start_date + 'T12:00:00') > today)
+      .sort((a, b) => a.start_date.localeCompare(b.start_date))
+    return upcoming[0]?.id || null
   })()
 
-  // Auto-select the active event on mobile, once.
+  // One-shot auto-select on mount (for desktop AND mobile). Only runs while
+  // we're still at the cards grid — manual "All Events" back-out stays at
+  // the grid because `autoOpenedRef` is already true. On nav re-click the
+  // Calendar component remounts (key={navKey} in app/page.tsx) which
+  // resets this ref, so the auto-select fires again.
   const autoOpenedRef = useRef(false)
   useEffect(() => {
-    if (!isMobile || autoOpenedRef.current) return
-    if (myActiveEventId && !selectedEventId) {
+    if (autoOpenedRef.current) return
+    if (myTargetEventId && !selectedEventId) {
       autoOpenedRef.current = true
-      setSelectedEventId(myActiveEventId)
+      setSelectedEventId(myTargetEventId)
     }
-  }, [isMobile, myActiveEventId, selectedEventId])
+  }, [myTargetEventId, selectedEventId])
 
   // Get all events with dates
   const allDatedEvents = events.filter(ev => !!ev.start_date)
