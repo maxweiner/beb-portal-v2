@@ -615,10 +615,21 @@ function EmailTab() {
                     padding: '8px 12px',
                     borderBottom: '1px solid var(--pearl)',
                     cursor: 'pointer', background: checked ? 'var(--green-pale)' : 'transparent',
+                    position: 'relative',
                   }}>
                     <input type="checkbox" checked={checked} onChange={() => toggleRecipient(u.id)}
-                      className="w-4 h-4 cursor-pointer"
-                      style={{ accentColor: 'var(--green)' }} />
+                      style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
+                    <div aria-hidden="true" style={{
+                      width: 22, height: 22, flexShrink: 0,
+                      borderRadius: 5,
+                      border: `2px solid ${checked ? 'var(--green)' : 'var(--pearl)'}`,
+                      background: checked ? 'var(--green)' : '#FFFFFF',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#FFFFFF', fontSize: 14, fontWeight: 900, lineHeight: 1,
+                      transition: 'all .15s ease',
+                    }}>
+                      {checked ? '✓' : ''}
+                    </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{u.name || u.email}</div>
                       <div style={{ fontSize: 11, color: 'var(--mist)' }}>{u.email}</div>
