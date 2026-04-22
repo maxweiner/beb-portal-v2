@@ -39,6 +39,27 @@ function nextCheckNumber(checks: CheckRow[]): string {
   return String(n + 1)
 }
 
+// Display "1234.50" as "1,234.50" while the user types. State stores the
+// un-formatted numeric string so downstream parseFloat() calls still work.
+function formatMoneyInput(raw: string): string {
+  if (!raw || raw === '.') return raw
+  if (raw.includes('.')) {
+    const [intPart, decPart = ''] = raw.split('.')
+    const n = parseInt(intPart || '0', 10)
+    const intStr = isNaN(n) ? '0' : n.toLocaleString('en-US')
+    return `${intStr}.${decPart}`
+  }
+  const n = parseInt(raw, 10)
+  return isNaN(n) ? raw : n.toLocaleString('en-US')
+}
+// Strip commas and anything that isn't a digit or the first decimal point.
+function parseMoneyInput(input: string): string {
+  const cleaned = input.replace(/[^\d.]/g, '')
+  const parts = cleaned.split('.')
+  if (parts.length <= 2) return cleaned
+  return parts[0] + '.' + parts.slice(1).join('')
+}
+
 export default function MobileDayEntry() {
   const { events, user } = useApp()
   const [selectedEventId, setSelectedEventId] = useState('')
@@ -633,8 +654,12 @@ export default function MobileDayEntry() {
                         position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
                         color: '#737368', fontWeight: 700, fontSize: 18,
                       }}>$</span>
-                      <input type="number" inputMode="decimal" value={c.amount}
-                        onChange={e => setChecks(p => p.map((x, idx) => idx === i ? { ...x, amount: e.target.value } : x))}
+                      <input type="text" inputMode="decimal"
+                        value={formatMoneyInput(c.amount)}
+                        onChange={e => {
+                          const cleaned = parseMoneyInput(e.target.value)
+                          setChecks(p => p.map((x, idx) => idx === i ? { ...x, amount: cleaned } : x))
+                        }}
                         placeholder="0.00"
                         style={{ ...inputStyle, padding: '0 12px 0 26px', fontSize: 20, fontWeight: 800 }} />
                     </div>
@@ -810,8 +835,12 @@ function FieldRow({ label, value, onChange, money, required, last, fromChecks, c
               fontWeight: 700, color: fromChecks ? '#1D6B44' : '#737368',
             }}>$</span>
           )}
-          <input type="number" inputMode={money ? 'decimal' : 'numeric'}
-            value={value} onChange={e => onChange(e.target.value)} placeholder="0"
+          <input
+            type={money ? 'text' : 'number'}
+            inputMode={money ? 'decimal' : 'numeric'}
+            value={money ? formatMoneyInput(value) : value}
+            onChange={e => onChange(money ? parseMoneyInput(e.target.value) : e.target.value)}
+            placeholder="0"
             style={{
               width: '100%', minHeight: 44, textAlign: 'right',
               padding: money ? '0 10px 0 22px' : '0 10px',
