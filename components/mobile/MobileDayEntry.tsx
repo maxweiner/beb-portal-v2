@@ -641,28 +641,30 @@ export default function MobileDayEntry() {
                   </div>
 
                   <label style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
+                    display: 'flex', alignItems: 'center', gap: 10,
                     marginTop: 10, padding: '8px 10px',
-                    background: c.commission_rate === 5 ? '#FEF2F2' : 'transparent',
-                    border: `1px solid ${c.commission_rate === 5 ? '#FCA5A5' : '#EDE8DF'}`,
+                    background: c.commission_rate === 5 ? 'var(--amber-pale)' : 'transparent',
+                    border: `1px solid ${c.commission_rate === 5 ? 'var(--amber)' : '#EDE8DF'}`,
                     borderRadius: 8, cursor: 'pointer',
                   }}>
                     <input type="checkbox"
                       checked={c.commission_rate === 5}
                       onChange={e => setChecks(p => p.map((x, idx) =>
                         idx === i ? { ...x, commission_rate: e.target.checked ? 5 : 10 } : x))}
-                      style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#DC2626' }}
+                      className="w-5 h-5 cursor-pointer rounded"
+                      style={{ accentColor: 'var(--green)' }}
                     />
                     <span style={{
                       fontSize: 12, fontWeight: 700,
-                      color: c.commission_rate === 5 ? '#991B1B' : '#737368',
+                      color: c.commission_rate === 5 ? 'var(--amber)' : '#737368',
                       letterSpacing: '.02em',
                     }}>
                       5% commission rate
                     </span>
                     <span style={{
                       marginLeft: 'auto', fontSize: 10, fontWeight: 700,
-                      color: '#A8A89A', letterSpacing: '.06em',
+                      color: c.commission_rate === 5 ? 'var(--amber)' : '#A8A89A',
+                      letterSpacing: '.06em',
                     }}>
                       {c.commission_rate === 5 ? '5%' : 'DEFAULT 10%'}
                     </span>
