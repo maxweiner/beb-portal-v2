@@ -78,10 +78,11 @@ function NavEnterIcon({ active, size, dot }: { active: boolean; size: number; do
   const c = active ? NAV_INK : NAV_MIST
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden>
-      <path d="M10 7C10 5.9 10.9 5 12 5H20C21.1 5 22 5.9 22 7V27C22 28.1 21.1 29 20 29H12C10.9 29 10 28.1 10 27V7Z" stroke={c} strokeWidth="3" strokeLinecap="round"/>
-      <rect x="13" y="2" width="6" height="5" rx="1.5" stroke={c} strokeWidth="2.5"/>
-      <path d="M13 18L15 20L19.5 15" stroke={c} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-      {active && <circle cx="24" cy="6" r="4" fill={dot}/>}
+      <path d="M22 4L26 8L14 20H10V16L22 4Z" stroke={c} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M19 7L23 11" stroke={c} strokeWidth="2.5" strokeLinecap="round"/>
+      <line x1="6" y1="28" x2="26" y2="28" stroke={c} strokeWidth="3" strokeLinecap="round"/>
+      <line x1="10" y1="24" x2="18" y2="24" stroke={c} strokeWidth="2" strokeLinecap="round" opacity=".5"/>
+      {active && <circle cx="26" cy="5" r="4" fill={dot}/>}
     </svg>
   )
 }
