@@ -62,10 +62,13 @@ export default function DayEntry() {
   const selectedEvent = myEvents.find(e => e.id === selectedEventId)
   const eventWorkers = (selectedEvent?.workers || []) as { id: string; name: string }[]
 
-  // Auto-select buyer if not superadmin
+  // Auto-select the logged-in user on login and whenever the event changes.
+  // Superadmins can still click any pill to view another buyer afterwards;
+  // non-superadmins can't click other pills (onClick guard below), so they
+  // stay locked to themselves.
   useEffect(() => {
-    if (!isSuperAdmin) setSelectedBuyerId(user?.id || '')
-  }, [user, isSuperAdmin])
+    if (user?.id) setSelectedBuyerId(user.id)
+  }, [user?.id, selectedEventId])
 
   useEffect(() => {
     if (selectedEventId) loadBuyerEntries()
@@ -181,22 +184,31 @@ export default function DayEntry() {
                 </div>
               </div>
 
-              {/* Individual buyer entry */}
-              {selectedBuyerId && eventWorkers.some(w => w.id === selectedBuyerId) && (
-                <BuyerEntryForm
-                  eventId={selectedEventId}
-                  dayNumber={selectedDay}
-                  buyerId={selectedBuyerId}
-                  buyerName={eventWorkers.find(w => w.id === selectedBuyerId)?.name || ''}
-                  existingEntry={myEntry || null}
-                  otherBuyers={eventWorkers.filter(w => w.id !== selectedBuyerId)}
-                  onSaved={loadBuyerEntries}
-                />
+              {/* Individual buyer entry — also renders for superadmins
+                  viewing their own data on events where they aren't on
+                  the worker roster. */}
+              {selectedBuyerId && (eventWorkers.some(w => w.id === selectedBuyerId) || selectedBuyerId === user?.id) && (
+                <>
+                  {!eventWorkers.some(w => w.id === selectedBuyerId) && selectedBuyerId === user?.id && (
+                    <div className="card mb-3" style={{ padding: '10px 14px', fontSize: 13, color: 'var(--mist)', background: 'var(--amber-pale)', border: '1px solid var(--amber)' }}>
+                      ⚠ You're not on this event's worker roster. Viewing your own data anyway.
+                    </div>
+                  )}
+                  <BuyerEntryForm
+                    eventId={selectedEventId}
+                    dayNumber={selectedDay}
+                    buyerId={selectedBuyerId}
+                    buyerName={eventWorkers.find(w => w.id === selectedBuyerId)?.name || user?.name || 'You'}
+                    existingEntry={myEntry || null}
+                    otherBuyers={eventWorkers.filter(w => w.id !== selectedBuyerId)}
+                    onSaved={loadBuyerEntries}
+                  />
+                </>
               )}
 
-              {selectedBuyerId && !eventWorkers.some(w => w.id === selectedBuyerId) && (
+              {selectedBuyerId && !eventWorkers.some(w => w.id === selectedBuyerId) && selectedBuyerId !== user?.id && (
                 <div className="card text-center py-8" style={{ color: 'var(--mist)' }}>
-                  You are not assigned to this event.
+                  Selected buyer is not assigned to this event.
                 </div>
               )}
             </>
