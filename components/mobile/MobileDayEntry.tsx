@@ -56,18 +56,10 @@ export default function MobileDayEntry() {
   const [submitted, setSubmitted] = useState(false)
   const [saving, setSaving] = useState(false)
   const [showOverlay, setShowOverlay] = useState(false)
+  const [showPastEvents, setShowPastEvents] = useState(false)
   const [existingEntry, setExistingEntry] = useState<any>(null)
   const entryIdRef = useRef<string | null>(null)
   const hydratedRef = useRef(false)
-
-  useEffect(() => {
-    if (document.querySelector('#mobile-day-entry-font')) return
-    const link = document.createElement('link')
-    link.id = 'mobile-day-entry-font'
-    link.rel = 'stylesheet'
-    link.href = 'https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700;800;900&display=swap'
-    document.head.appendChild(link)
-  }, [])
 
   useEffect(() => {
     const saved = localStorage.getItem('dayentry-mode')
@@ -75,22 +67,40 @@ export default function MobileDayEntry() {
   }, [])
   useEffect(() => { localStorage.setItem('dayentry-mode', mode) }, [mode])
 
-  const myEvents = events.filter(ev =>
-    (ev.workers || []).some((w: any) => w.id === user?.id)
-  ).sort((a, b) => b.start_date.localeCompare(a.start_date))
-  const selectedEvent = myEvents.find(e => e.id === selectedEventId)
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
 
-  // Prefer today's active event, else most recent.
+  // Admins see every event in the system (they usually aren't on worker lists).
+  // Buyers see only events they're assigned to.
+  const availableEvents = (isAdmin
+    ? events
+    : events.filter(ev => (ev.workers || []).some((w: any) => w.id === user?.id))
+  ).slice().sort((a, b) => b.start_date.localeCompare(a.start_date))
+
+  const selectedEvent = availableEvents.find(e => e.id === selectedEventId)
+
+  const isActive = (ev: any, today: Date) => {
+    const start = new Date(ev.start_date + 'T12:00:00')
+    const end = new Date(ev.start_date + 'T12:00:00'); end.setDate(end.getDate() + 2)
+    return today >= start && today <= end
+  }
+  const isFuture = (ev: any, today: Date) => {
+    const start = new Date(ev.start_date + 'T12:00:00')
+    return today < start
+  }
+
+  // Default = active event, then next upcoming, else no selection (empty state
+  // offers "View past events"). Admins use the full event list, buyers use
+  // only their assigned ones.
   useEffect(() => {
-    if (selectedEventId || myEvents.length === 0) return
+    if (selectedEventId || availableEvents.length === 0) return
     const today = new Date(); today.setHours(0, 0, 0, 0)
-    const active = myEvents.find(ev => {
-      const start = new Date(ev.start_date + 'T12:00:00')
-      const end = new Date(ev.start_date + 'T12:00:00'); end.setDate(end.getDate() + 2)
-      return today >= start && today <= end
-    })
-    setSelectedEventId((active || myEvents[0]).id)
-  }, [myEvents.length, selectedEventId])
+    const active = availableEvents.find(ev => isActive(ev, today))
+    if (active) { setSelectedEventId(active.id); return }
+    // Events are sorted newest-first; reverse to find the SOONEST upcoming.
+    const upcoming = availableEvents.slice().reverse().find(ev => isFuture(ev, today))
+    if (upcoming) { setSelectedEventId(upcoming.id); return }
+    // All events are in the past — leave unselected to trigger empty state.
+  }, [availableEvents.length, selectedEventId])
 
   // Auto-pick today's day within the event, else day 1.
   useEffect(() => {
@@ -219,9 +229,9 @@ export default function MobileDayEntry() {
 
   const fmtMoney = (v: number) => '$' + v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 
-  if (myEvents.length === 0) {
+  if (availableEvents.length === 0) {
     return (
-      <div style={{ padding: 40, textAlign: 'center', fontFamily: '"Fraunces", Georgia, serif' }}>
+      <div style={{ padding: 40, textAlign: 'center' }}>
         <div style={{ fontSize: 40, marginBottom: 12 }}>📭</div>
         <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>No events assigned</div>
         <div style={{ fontSize: 13, color: 'var(--mist)', marginTop: 6 }}>
@@ -231,11 +241,48 @@ export default function MobileDayEntry() {
     )
   }
 
-  if (!selectedEvent) return null
+  // User has events but none are active or upcoming — offer a past-events picker.
+  if (!selectedEvent) {
+    return (
+      <div style={{ padding: '40px 20px', textAlign: 'center', background: '#F5F0E8', minHeight: '100%' }}>
+        <div style={{ fontSize: 40, marginBottom: 12 }}>📅</div>
+        <div style={{ fontSize: 17, fontWeight: 800, color: '#1A1A16' }}>No active or upcoming events</div>
+        <div style={{ fontSize: 13, color: '#737368', marginTop: 6, marginBottom: 18 }}>
+          Check back when your next buy is scheduled.
+        </div>
+        <button onClick={() => setShowPastEvents(v => !v)} style={{
+          padding: '10px 18px', borderRadius: 10, border: '1.5px solid #1D6B44',
+          background: 'transparent', color: '#1D6B44', fontSize: 13, fontWeight: 700,
+          cursor: 'pointer', fontFamily: 'inherit',
+        }}>
+          {showPastEvents ? 'Hide past events' : 'View past events'}
+        </button>
+        {showPastEvents && (
+          <div style={{
+            marginTop: 16, textAlign: 'left',
+            background: '#FFFFFF', borderRadius: 12,
+            border: '1px solid #EDE8DF', overflow: 'hidden',
+          }}>
+            {availableEvents.map(ev => (
+              <button key={ev.id} onClick={() => setSelectedEventId(ev.id)} style={{
+                width: '100%', padding: '12px 14px', background: 'transparent',
+                border: 'none', borderBottom: '1px solid #EDE8DF',
+                textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
+              }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A16' }}>{ev.store_name}</div>
+                <div style={{ fontSize: 11, color: '#737368' }}>
+                  {new Date(ev.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div style={{
-      fontFamily: '"Fraunces", Georgia, serif',
       background: '#F5F0E8', minHeight: '100%',
       paddingBottom: 80,
     }}>
@@ -279,7 +326,7 @@ export default function MobileDayEntry() {
           }}>
             {selectedEvent.store_name}
           </div>
-          {myEvents.length > 1 && (
+          {availableEvents.length > 1 && (
             <button onClick={() => setEventSwitcherOpen(v => !v)} style={{
               background: 'none', border: 'none', color: '#1D6B44',
               fontSize: 12, fontWeight: 700, cursor: 'pointer',
@@ -297,7 +344,7 @@ export default function MobileDayEntry() {
             marginTop: 10, background: '#F5F0E8', borderRadius: 10,
             border: '1px solid #EDE8DF', overflow: 'hidden',
           }}>
-            {myEvents.map(ev => (
+            {availableEvents.map(ev => (
               <button key={ev.id} onClick={() => { setSelectedEventId(ev.id); setEventSwitcherOpen(false) }} style={{
                 width: '100%', padding: '10px 14px',
                 background: ev.id === selectedEventId ? '#F0FDF4' : 'transparent',
