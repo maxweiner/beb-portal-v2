@@ -416,14 +416,20 @@ function MergeTab() {
 
 /* ── EMAIL TAB ── */
 function EmailTab() {
+  const { user } = useApp()
   const [cfg, setCfg] = useState<any>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [testTo, setTestTo] = useState('')
+  const [sendingTest, setSendingTest] = useState(false)
 
   useEffect(() => {
     supabase.from('settings').select('value').eq('key', 'email').maybeSingle()
       .then(({ data }) => { setCfg(data?.value || {}); setLoading(false) })
   }, [])
+
+  // Default the test recipient to the logged-in user's email once loaded.
+  useEffect(() => { if (!testTo && user?.email) setTestTo(user.email) }, [user?.email])
 
   const save = async () => {
     setSaving(true)
@@ -465,13 +471,36 @@ function EmailTab() {
           <button onClick={save} disabled={saving}
             className="btn-primary btn-full"
             >{saving ? 'Saving…' : 'Save Settings'}</button>
-          <button onClick={async () => {
-            const r = await fetch('/api/test-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: cfg.fromEmail }) })
-            const d = await r.json()
-            alert(d.ok ? '✅ Test email sent!' : `❌ ${d.error}`)
-          }}
-            className="w-full py-2.5 rounded-lg text-sm font-bold border"
-            >Send Test Email</button>
+
+          <div style={{ borderTop: '1px solid var(--cream2)', paddingTop: 16, marginTop: 4 }}>
+            <label className="fl">Test Recipient</label>
+            <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 6 }}>
+              Who to send the test email to. Defaults to your own account email.
+            </div>
+            <input type="email" value={testTo} onChange={e => setTestTo(e.target.value)}
+              placeholder="you@example.com"
+              className="w-full px-3 py-2.5 rounded-lg text-sm"
+              style={{ background: 'var(--cream2)', border: '1px solid var(--pearl)', color: 'var(--ink)', marginBottom: 10 }} />
+            <button
+              onClick={async () => {
+                if (!testTo) { alert('Enter a test recipient email first.'); return }
+                setSendingTest(true)
+                try {
+                  const r = await fetch('/api/test-email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ to: testTo }),
+                  })
+                  const d = await r.json()
+                  alert(d.ok ? `✅ Test email sent to ${testTo}` : `❌ ${d.error || 'Failed to send'}`)
+                } finally {
+                  setSendingTest(false)
+                }
+              }}
+              disabled={sendingTest || !testTo}
+              className="w-full py-2.5 rounded-lg text-sm font-bold border"
+              >{sendingTest ? 'Sending…' : 'Send Test Email'}</button>
+          </div>
         </div>
       </div>
     </div>
