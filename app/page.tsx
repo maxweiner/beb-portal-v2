@@ -106,7 +106,7 @@ export default function Home() {
       <main className="flex-1 overflow-y-auto">
         {nav === 'dashboard'  && <Dashboard />}
         {nav === 'calendar'   && <Calendar key={navKey} />}
-        {nav === 'events'     && <Events />}
+        {nav === 'events'     && <Events setNav={setNav} />}
         {nav === 'dayentry'   && <DayEntry />}
         {nav === 'shipping'   && <Shipping />}
         {nav === 'reports'    && <Reports />}
