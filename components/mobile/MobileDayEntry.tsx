@@ -643,27 +643,40 @@ export default function MobileDayEntry() {
                   <label style={{
                     display: 'flex', alignItems: 'center', gap: 10,
                     marginTop: 10, padding: '8px 10px',
-                    background: c.commission_rate === 5 ? 'var(--amber-pale)' : 'transparent',
-                    border: `1px solid ${c.commission_rate === 5 ? 'var(--amber)' : '#EDE8DF'}`,
-                    borderRadius: 8, cursor: 'pointer',
+                    background: c.commission_rate === 5 ? 'var(--green-pale)' : 'transparent',
+                    border: `1px solid ${c.commission_rate === 5 ? 'var(--green3)' : '#EDE8DF'}`,
+                    borderRadius: 8, cursor: 'pointer', position: 'relative',
                   }}>
                     <input type="checkbox"
                       checked={c.commission_rate === 5}
                       onChange={e => setChecks(p => p.map((x, idx) =>
                         idx === i ? { ...x, commission_rate: e.target.checked ? 5 : 10 } : x))}
-                      className="w-5 h-5 cursor-pointer rounded"
-                      style={{ accentColor: 'var(--green)' }}
+                      style={{
+                        position: 'absolute', opacity: 0,
+                        width: 0, height: 0, pointerEvents: 'none',
+                      }}
                     />
+                    <div aria-hidden="true" style={{
+                      width: 22, height: 22, flexShrink: 0,
+                      borderRadius: 5,
+                      border: `2px solid ${c.commission_rate === 5 ? 'var(--green)' : 'var(--pearl)'}`,
+                      background: c.commission_rate === 5 ? 'var(--green)' : '#FFFFFF',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#FFFFFF', fontSize: 14, fontWeight: 900, lineHeight: 1,
+                      transition: 'all .15s ease',
+                    }}>
+                      {c.commission_rate === 5 ? '✓' : ''}
+                    </div>
                     <span style={{
                       fontSize: 12, fontWeight: 700,
-                      color: c.commission_rate === 5 ? 'var(--amber)' : '#737368',
+                      color: c.commission_rate === 5 ? 'var(--green-dark)' : '#737368',
                       letterSpacing: '.02em',
                     }}>
                       5% commission rate
                     </span>
                     <span style={{
                       marginLeft: 'auto', fontSize: 10, fontWeight: 700,
-                      color: c.commission_rate === 5 ? 'var(--amber)' : '#A8A89A',
+                      color: c.commission_rate === 5 ? 'var(--green-dark)' : '#A8A89A',
                       letterSpacing: '.06em',
                     }}>
                       {c.commission_rate === 5 ? '5%' : 'DEFAULT 10%'}
