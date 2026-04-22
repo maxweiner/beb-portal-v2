@@ -416,16 +416,24 @@ function MergeTab() {
 
 /* ── EMAIL TAB ── */
 function EmailTab() {
-  const { user } = useApp()
+  const { user, users } = useApp()
   const [cfg, setCfg] = useState<any>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testTo, setTestTo] = useState('')
   const [sendingTest, setSendingTest] = useState(false)
+  const [selectedRecipients, setSelectedRecipients] = useState<Set<string>>(new Set())
+  const [savingDefaults, setSavingDefaults] = useState(false)
+  const [sendingBriefing, setSendingBriefing] = useState(false)
 
   useEffect(() => {
     supabase.from('settings').select('value').eq('key', 'email').maybeSingle()
-      .then(({ data }) => { setCfg(data?.value || {}); setLoading(false) })
+      .then(({ data }) => {
+        const v = data?.value || {}
+        setCfg(v)
+        setSelectedRecipients(new Set(v.defaultRecipients || []))
+        setLoading(false)
+      })
   }, [])
 
   // Default the test recipient to the logged-in user's email once loaded.
@@ -438,10 +446,55 @@ function EmailTab() {
     alert('Email settings saved!')
   }
 
+  const activeUsers = (users || []).filter(u => u.active !== false)
+
+  const toggleRecipient = (id: string) => {
+    setSelectedRecipients(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+  const selectAllRecipients = () => setSelectedRecipients(new Set(activeUsers.map(u => u.id)))
+  const clearAllRecipients = () => setSelectedRecipients(new Set())
+
+  const saveDefaults = async () => {
+    setSavingDefaults(true)
+    const nextCfg = { ...cfg, defaultRecipients: Array.from(selectedRecipients) }
+    await supabase.from('settings').upsert({ key: 'email', value: nextCfg, updated_at: new Date().toISOString() })
+    setCfg(nextCfg)
+    setSavingDefaults(false)
+    alert(`Saved ${selectedRecipients.size} default recipient${selectedRecipients.size === 1 ? '' : 's'}.`)
+  }
+
+  const sendBriefing = async () => {
+    if (selectedRecipients.size === 0) { alert('Select at least one recipient.'); return }
+    setSendingBriefing(true)
+    try {
+      const r = await fetch('/api/morning-briefing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: Array.from(selectedRecipients) }),
+      })
+      const d = await r.json()
+      if (d.ok && d.skipped) {
+        alert(`ℹ ${d.skipped}`)
+      } else if (d.ok) {
+        alert(`✅ Morning briefing sent to ${d.sent} recipient${d.sent === 1 ? '' : 's'}.`)
+      } else if (d.errors) {
+        alert(`⚠ Sent with issues:\n\n${d.errors.join('\n')}`)
+      } else {
+        alert(`❌ ${d.error || 'Failed to send'}`)
+      }
+    } finally {
+      setSendingBriefing(false)
+    }
+  }
+
   if (loading) return <div className="text-sm" style={{ color: 'var(--mist)' }}>Loading…</div>
 
   return (
-    <div className="max-w-lg">
+    <div className="max-w-lg" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="card">
         <h2 className="font-black text-lg mb-4" style={{ color: 'var(--ink)' }}>Email Settings</h2>
         <div className="space-y-4">
@@ -500,6 +553,93 @@ function EmailTab() {
               disabled={sendingTest || !testTo}
               className="w-full py-2.5 rounded-lg text-sm font-bold border"
               >{sendingTest ? 'Sending…' : 'Send Test Email'}</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <h2 className="font-black text-lg mb-2" style={{ color: 'var(--ink)' }}>Morning Briefing</h2>
+        <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 18 }}>
+          A daily recap email with yesterday's numbers per event, weather per city, and an AI-generated shoutout. Manually triggered for now.
+        </p>
+
+        <div className="space-y-4">
+          <div>
+            <label className="fl">OpenWeatherMap API Key</label>
+            <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 6 }}>
+              Free tier (1,000 calls/day). Sign up at openweathermap.org/api.
+            </div>
+            <input type="password" value={cfg.weatherApiKey || ''}
+              onChange={e => setCfg((p: any) => ({ ...p, weatherApiKey: e.target.value }))}
+              placeholder="••••••••"
+              className="w-full px-3 py-2.5 rounded-lg text-sm"
+              style={{ background: 'var(--cream2)', border: '1px solid var(--pearl)', color: 'var(--ink)' }} />
+          </div>
+
+          <div>
+            <label className="fl">Anthropic API Key</label>
+            <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 6 }}>
+              Powers the AI shoutout. Create at console.anthropic.com.
+            </div>
+            <input type="password" value={cfg.anthropicApiKey || ''}
+              onChange={e => setCfg((p: any) => ({ ...p, anthropicApiKey: e.target.value }))}
+              placeholder="sk-ant-…"
+              className="w-full px-3 py-2.5 rounded-lg text-sm"
+              style={{ background: 'var(--cream2)', border: '1px solid var(--pearl)', color: 'var(--ink)' }} />
+          </div>
+
+          <button onClick={save} disabled={saving}
+            className="w-full py-2.5 rounded-lg text-sm font-bold border"
+            >{saving ? 'Saving…' : 'Save Keys'}</button>
+
+          <div style={{ borderTop: '1px solid var(--cream2)', paddingTop: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <label className="fl" style={{ margin: 0 }}>Recipients ({selectedRecipients.size}/{activeUsers.length})</label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={selectAllRecipients} className="btn-outline btn-xs">Select all</button>
+                <button onClick={clearAllRecipients} className="btn-outline btn-xs">Clear</button>
+              </div>
+            </div>
+            <div style={{
+              maxHeight: 220, overflowY: 'auto',
+              border: '1px solid var(--pearl)', borderRadius: 8,
+              background: 'var(--cream2)',
+            }}>
+              {activeUsers.length === 0 ? (
+                <div style={{ padding: 12, fontSize: 13, color: 'var(--mist)' }}>No active users.</div>
+              ) : activeUsers.map(u => {
+                const checked = selectedRecipients.has(u.id)
+                return (
+                  <label key={u.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '8px 12px',
+                    borderBottom: '1px solid var(--pearl)',
+                    cursor: 'pointer', background: checked ? 'var(--green-pale)' : 'transparent',
+                  }}>
+                    <input type="checkbox" checked={checked} onChange={() => toggleRecipient(u.id)}
+                      className="w-4 h-4 cursor-pointer"
+                      style={{ accentColor: 'var(--green)' }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{u.name || u.email}</div>
+                      <div style={{ fontSize: 11, color: 'var(--mist)' }}>{u.email}</div>
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 6, fontStyle: 'italic' }}>
+              Tip: save this selection as your defaults, then just hit Send.
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={saveDefaults} disabled={savingDefaults}
+              className="flex-1 py-2.5 rounded-lg text-sm font-bold border"
+              >{savingDefaults ? 'Saving…' : 'Save as defaults'}</button>
+            <button onClick={sendBriefing} disabled={sendingBriefing || selectedRecipients.size === 0}
+              className="btn-primary"
+              style={{ flex: 1 }}
+              >{sendingBriefing ? 'Sending…' : `Send briefing (${selectedRecipients.size})`}</button>
           </div>
         </div>
       </div>
