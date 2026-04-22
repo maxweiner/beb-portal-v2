@@ -7,125 +7,9 @@ import { supabase } from '@/lib/supabase'
 import type { NavPage } from '@/app/page'
 import LicenseScanner from '@/components/scan/LicenseScanner'
 
-/* ── ICONS ── Stroke-based SVG set, currentColor so they pick up the
-   button's active/inactive color. 2px stroke at 24px viewBox for a
-   consistent family across bottom nav + hamburger menu + sidebar. */
+/* ── ICONS ── */
 
-type IconProps = { size?: number }
-
-function svg(size: number, children: React.ReactNode) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
-      aria-hidden>{children}</svg>
-  )
-}
-
-function HomeIcon({ size = 22 }: IconProps) {
-  return svg(size, <>
-    <path d="M3 11.5L12 4l9 7.5" />
-    <path d="M5 10.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10.5" />
-  </>)
-}
-
-function EventsIcon({ size = 22 }: IconProps) {
-  return svg(size, <>
-    <rect x="3" y="5" width="18" height="16" rx="2" />
-    <path d="M8 3v4M16 3v4M3 10h18" />
-    <circle cx="8" cy="15" r="1" fill="currentColor" stroke="none" />
-    <circle cx="12" cy="15" r="1" fill="currentColor" stroke="none" />
-    <circle cx="16" cy="15" r="1" fill="currentColor" stroke="none" />
-  </>)
-}
-
-function DayEntryIcon({ size = 22 }: IconProps) {
-  return svg(size, <>
-    <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
-    <rect x="9" y="2" width="6" height="4" rx="1" />
-    <path d="M9 14l2 2 4-4" />
-  </>)
-}
-
-function ClockIcon({ size = 22 }: IconProps) {
-  return svg(size, <>
-    <circle cx="12" cy="12" r="9" />
-    <path d="M12 7v5l3 2" />
-  </>)
-}
-
-function ScheduleIcon({ size = 20 }: IconProps) {
-  return svg(size, <>
-    <rect x="3" y="4" width="18" height="17" rx="2" />
-    <path d="M3 9h18M8 2v4M16 2v4" />
-  </>)
-}
-
-function TravelIcon({ size = 20 }: IconProps) {
-  return svg(size, <path d="M2.5 12.5l19-8.5-4 19-7-7-8-3.5z M10.5 16.5l3-3" />)
-}
-
-function StaffIcon({ size = 20 }: IconProps) {
-  return svg(size, <>
-    <circle cx="9" cy="8" r="3.5" />
-    <circle cx="17" cy="9" r="2.5" />
-    <path d="M2.5 20c0-3.5 2.5-6 6.5-6s6.5 2.5 6.5 6" />
-    <path d="M16 13.5c3 0 5.5 2 5.5 5" />
-  </>)
-}
-
-function ShippingIcon({ size = 20 }: IconProps) {
-  return svg(size, <>
-    <rect x="1.5" y="6" width="13" height="10" rx="1" />
-    <path d="M14.5 9h3.5l3 3v4h-6.5z" />
-    <circle cx="5.5" cy="18" r="2" />
-    <circle cx="17" cy="18" r="2" />
-  </>)
-}
-
-function ReportsIcon({ size = 20 }: IconProps) {
-  return svg(size, <>
-    <rect x="3" y="3" width="18" height="18" rx="2" />
-    <path d="M7 16v-3M12 16v-7M17 16v-5" />
-  </>)
-}
-
-function MarketingIcon({ size = 20 }: IconProps) {
-  return svg(size, <>
-    <path d="M3 11l14-6v14l-14-6v-2z" />
-    <path d="M7 13v4a2 2 0 0 0 4 0v-3" />
-  </>)
-}
-
-function SettingsIcon({ size = 20 }: IconProps) {
-  return svg(size, <>
-    <circle cx="12" cy="12" r="3" />
-    <path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" />
-  </>)
-}
-
-function AdminIcon({ size = 20 }: IconProps) {
-  return svg(size, <>
-    <circle cx="8" cy="8" r="3" />
-    <path d="M2 20c0-3.5 2.5-6 6-6s6 2.5 6 6" />
-    <path d="M15 11l2 2 4-4" />
-  </>)
-}
-
-function StoresIcon({ size = 20 }: IconProps) {
-  return svg(size, <>
-    <path d="M3 9l2-5h14l2 5v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z" />
-    <path d="M4 11v9h16v-9M10 20v-5h4v5" />
-  </>)
-}
-
-function SignOutIcon({ size = 20 }: IconProps) {
-  return svg(size, <>
-    <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" />
-    <path d="M10 17l5-5-5-5M15 12H3" />
-  </>)
-}
-
-function MenuIcon({ size = 18 }: IconProps) {
+function MenuIcon({ size = 18 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
       stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" aria-hidden>
@@ -153,67 +37,100 @@ function CameraIcon({ size = 34 }: { size?: number }) {
   )
 }
 
-// Render the right SVG for a given page id (used by hamburger menu).
-function PageIcon({ id, size = 20 }: { id: NavPage | 'signout'; size?: number }) {
-  switch (id) {
-    case 'dashboard': return <HomeIcon size={size} />
-    case 'events':    return <EventsIcon size={size} />
-    case 'dayentry':  return <DayEntryIcon size={size} />
-    case 'calendar':  return <ClockIcon size={size} />
-    case 'schedule':  return <ScheduleIcon size={size} />
-    case 'travel':    return <TravelIcon size={size} />
-    case 'staff':     return <StaffIcon size={size} />
-    case 'shipping':  return <ShippingIcon size={size} />
-    case 'reports':   return <ReportsIcon size={size} />
-    case 'marketing': return <MarketingIcon size={size} />
-    case 'settings':  return <SettingsIcon size={size} />
-    case 'admin':
-    case 'libertyadmin': return <AdminIcon size={size} />
-    case 'stores':    return <StoresIcon size={size} />
-    case 'signout':   return <SignOutIcon size={size} />
-    default:          return null
-  }
+/* ── BOTTOM-NAV ICON SET — thick outline + per-tab dot ──
+   Each tab has its own accent color. Active = ink stroke + colored dot
+   top-right + label in the tab's color. Inactive = mist everywhere. */
+
+const NAV_INK = '#1A1A1A'
+const NAV_MIST = '#9CA3AF'
+const NAV_DOT_COLORS: Record<string, string> = {
+  dashboard: '#F97316', // Home — orange
+  events:    '#A855F7', // Events — purple
+  dayentry:  '#22C55E', // Enter — green
+  calendar:  '#3B82F6', // Appts — blue
 }
 
-type TabDef = { id: NavPage; label: string; glyph: string }
-const LEFT_TABS: TabDef[] = [
-  { id: 'dashboard', label: 'Home',   glyph: 'home' },
-  { id: 'events',    label: 'Events', glyph: '◆' },
-]
-const RIGHT_TABS: TabDef[] = [
-  { id: 'dayentry',  label: 'Enter',  glyph: 'clipboard' },
-  { id: 'calendar',  label: 'Appts',  glyph: '📅' },
-]
-
-// Restore the original stylized house for the Home tab — only the
-// Travel → Enter swap pulls in a new icon (the clipboard+check).
-function HouseIcon({ active }: { active: boolean }) {
-  const stroke = active ? 'var(--green-dark)' : 'var(--mist)'
-  const accent = 'var(--green)'
+function NavHomeIcon({ active, size, dot }: { active: boolean; size: number; dot: string }) {
+  const c = active ? NAV_INK : NAV_MIST
   return (
-    <svg width={22} height={22} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M4.5 11V19.5C4.5 19.8 4.7 20 5 20H19C19.3 20 19.5 19.8 19.5 19.5V11"
-        stroke={stroke} strokeWidth="1.5" strokeLinejoin="round" style={{ fill: 'var(--cream)' }}/>
-      <path d="M3 11.5L12 4L21 11.5Z" style={{ fill: accent }} stroke={stroke} strokeWidth="1.4" strokeLinejoin="round"/>
-      <path d="M16 6.5V3.5H18V7.5" stroke={stroke} strokeWidth="1.3" style={{ fill: accent }} strokeLinejoin="round"/>
-      <rect x="12.5" y="13" width="3.5" height="3.5" style={{ fill: 'var(--green3)' }} stroke={stroke} strokeWidth="1" rx="0.4"/>
-      <rect x="7.5" y="14.5" width="3" height="5.5" style={{ fill: 'none' }} stroke={stroke} strokeWidth="1.2" rx="0.3"/>
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden>
+      <path d="M5 14L16 4L27 14V26C27 27.1 26.1 28 25 28H7C5.9 28 5 27.1 5 26V14Z" stroke={c} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M12 28V18H20V28" stroke={c} strokeWidth="2.5" strokeLinecap="round"/>
+      {active && <circle cx="25" cy="7" r="4" fill={dot}/>}
     </svg>
   )
 }
 
+function NavEventsIcon({ active, size, dot }: { active: boolean; size: number; dot: string }) {
+  const c = active ? NAV_INK : NAV_MIST
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden>
+      <rect x="4" y="7" width="24" height="21" rx="3" stroke={c} strokeWidth="3" strokeLinecap="round"/>
+      <path d="M4 13H28" stroke={c} strokeWidth="3" strokeLinecap="round"/>
+      <line x1="10" y1="4" x2="10" y2="10" stroke={c} strokeWidth="3" strokeLinecap="round"/>
+      <line x1="22" y1="4" x2="22" y2="10" stroke={c} strokeWidth="3" strokeLinecap="round"/>
+      {active && <circle cx="26" cy="6" r="4" fill={dot}/>}
+    </svg>
+  )
+}
+
+function NavEnterIcon({ active, size, dot }: { active: boolean; size: number; dot: string }) {
+  const c = active ? NAV_INK : NAV_MIST
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden>
+      <path d="M10 7C10 5.9 10.9 5 12 5H20C21.1 5 22 5.9 22 7V27C22 28.1 21.1 29 20 29H12C10.9 29 10 28.1 10 27V7Z" stroke={c} strokeWidth="3" strokeLinecap="round"/>
+      <rect x="13" y="2" width="6" height="5" rx="1.5" stroke={c} strokeWidth="2.5"/>
+      <path d="M13 18L15 20L19.5 15" stroke={c} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+      {active && <circle cx="24" cy="6" r="4" fill={dot}/>}
+    </svg>
+  )
+}
+
+function NavApptsIcon({ active, size, dot }: { active: boolean; size: number; dot: string }) {
+  const c = active ? NAV_INK : NAV_MIST
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden>
+      <circle cx="16" cy="16" r="11" stroke={c} strokeWidth="3"/>
+      <path d="M16 9V16.5L20 19" stroke={c} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+      {active && <circle cx="25" cy="7" r="4" fill={dot}/>}
+    </svg>
+  )
+}
+
+type TabDef = { id: NavPage; label: string; kind: 'home' | 'events' | 'enter' | 'appts' }
+const LEFT_TABS: TabDef[] = [
+  { id: 'dashboard', label: 'Home',   kind: 'home' },
+  { id: 'events',    label: 'Events', kind: 'events' },
+]
+const RIGHT_TABS: TabDef[] = [
+  { id: 'dayentry',  label: 'Enter',  kind: 'enter' },
+  { id: 'calendar',  label: 'Appts',  kind: 'appts' },
+]
+
+function renderNavIcon(kind: TabDef['kind'], active: boolean, size: number, dot: string) {
+  switch (kind) {
+    case 'home':   return <NavHomeIcon   active={active} size={size} dot={dot} />
+    case 'events': return <NavEventsIcon active={active} size={size} dot={dot} />
+    case 'enter':  return <NavEnterIcon  active={active} size={size} dot={dot} />
+    case 'appts':  return <NavApptsIcon  active={active} size={size} dot={dot} />
+  }
+}
+
 /* ── SHARED TAB BUTTON ── */
 function TabBtn({ tab, active, onClick }: { tab: TabDef; active: boolean; onClick: () => void }) {
+  const accent = NAV_DOT_COLORS[tab.id] || '#22C55E'
   return (
     <button onClick={onClick} style={{
       background: 'none', border: 'none', cursor: 'pointer',
-      padding: '10px 4px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-      color: active ? 'var(--green-dark)' : 'var(--mist)',
+      padding: '8px 4px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
     }}>
-      {tab.glyph === 'home' ? <HouseIcon active={active} />
-        : tab.glyph === 'clipboard' ? <DayEntryIcon size={22} />
-        : <div style={{ fontSize: 22, lineHeight: 1 }}>{tab.glyph}</div>}
-      <div style={{ fontSize: 10, fontWeight: active ? 900 : 500 }}>{tab.label}</div>
+      {renderNavIcon(tab.kind, active, 28, accent)}
+      <div style={{
+        fontSize: 10,
+        fontWeight: active ? 800 : 600,
+        color: active ? accent : NAV_MIST,
+        letterSpacing: '.02em',
+      }}>{tab.label}</div>
     </button>
   )
 }
