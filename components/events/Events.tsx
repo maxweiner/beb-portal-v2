@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
+import { isMobileDevice } from '@/lib/mobile'
 import type { Event, BuyerVacation } from '@/types'
 import type { NavPage } from '@/app/page'
 import EventNotesPanel from './EventNotesPanel'
@@ -42,6 +43,20 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   const [notesEvent, setNotesEvent] = useState<Event | null>(null)
   const [noteCounts, setNoteCounts] = useState<Record<string, number>>({})
   const [noteCountsTick, setNoteCountsTick] = useState(0)
+
+  // Mobile detection — forks the event card layout only on mobile. Desktop
+  // path stays identical to before.
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => { setIsMobile(isMobileDevice()) }, [])
+
+  // Per-card expanded state for the mobile card layout. Desktop cards are
+  // always "expanded" (the existing full markup).
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set())
+  const toggleCard = (id: string) => setExpandedCards(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
 
   // Lightweight count query — only pulls event_id columns. Refreshes whenever
   // a note is saved/deleted so the event-card badges stay accurate.
@@ -286,6 +301,27 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
 
   const fmt = (ds: string) => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   const fmtDollars = (n: number) => `$${Math.round(n).toLocaleString()}`
+  const fmtRange = (startDate: string) => {
+    const start = new Date(startDate + 'T12:00:00')
+    const end = new Date(startDate + 'T12:00:00'); end.setDate(end.getDate() + 2)
+    const sMonth = start.toLocaleDateString('en-US', { month: 'short' })
+    const eMonth = end.toLocaleDateString('en-US', { month: 'short' })
+    if (sMonth === eMonth) return `${sMonth} ${start.getDate()}–${end.getDate()}`
+    return `${sMonth} ${start.getDate()} – ${eMonth} ${end.getDate()}`
+  }
+  const todayISO = today.toISOString().split('T')[0]
+
+  // Auto-expand current + upcoming mobile cards; collapse past + stale.
+  useEffect(() => {
+    if (!isMobile) return
+    const next = new Set<string>()
+    for (const ev of filtered) {
+      const start = new Date(ev.start_date + 'T12:00:00')
+      if (isCurrent(ev) || (!isStale(ev) && start > today)) next.add(ev.id)
+    }
+    setExpandedCards(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile, filtered.length, filtered.map(e => e.id).join('|')])
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -357,6 +393,207 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
           const stale = isStale(ev)
           const upcoming = !cur && !stale && new Date(ev.start_date + 'T12:00:00') > today
 
+          /* ───── Mobile card layout — rendered only on mobile ───── */
+          if (isMobile) {
+            const expanded = expandedCards.has(ev.id)
+            const isSuperAdmin = user?.role === 'superadmin'
+            const noteCount = noteCounts[ev.id] || 0
+            const AVATAR_COLORS = ['#1D6B44', '#166038', '#14532d', '#0F4A28']
+
+            return (
+              <div key={ev.id} style={{
+                background: 'var(--card-bg)',
+                border: '1px solid var(--pearl)',
+                borderRadius: 10,
+                overflow: 'hidden',
+                marginBottom: 12,
+                opacity: stale ? 0.55 : 1,
+                transition: 'opacity .2s',
+              }}>
+                {/* Header — tappable, toggles collapse */}
+                <div onClick={() => toggleCard(ev.id)} style={{
+                  background: 'var(--sidebar-bg)',
+                  color: '#fff',
+                  padding: '12px 14px',
+                  cursor: 'pointer',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{
+                      fontSize: 15, fontWeight: 900, flex: 1, minWidth: 0,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>{ev.store_name}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      <span style={{ fontSize: 15, fontWeight: 900, color: '#86efac' }}>{fmtDollars(dollars)}</span>
+                      <span aria-hidden style={{
+                        fontSize: 16, color: 'rgba(255,255,255,.7)', display: 'inline-block',
+                        transition: 'transform .2s',
+                        transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)',
+                      }}>▾</span>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,.5)', marginTop: 3 }}>
+                    {store?.city}{store?.state ? ', ' + store.state : ''} · {fmtRange(ev.start_date)}
+                    {cur && <span style={{ color: '#86efac', fontWeight: 700, marginLeft: 6 }}>· Current</span>}
+                  </div>
+                </div>
+
+                {expanded && (
+                  <>
+                    {/* Avatar stack + comma-separated first names */}
+                    <div style={{ padding: '10px 14px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {evWorkers.length === 0 ? (
+                        <div style={{ fontSize: 13, color: 'var(--mist)', fontStyle: 'italic' }}>No buyers assigned</div>
+                      ) : (
+                        <>
+                          <div style={{ display: 'flex', alignItems: 'center' }}>
+                            {evWorkers.slice(0, 5).map((w, i) => {
+                              const displayAsMore = i === 4 && evWorkers.length > 5
+                              const initials = displayAsMore
+                                ? `+${evWorkers.length - 4}`
+                                : (w.name || '').split(/\s+/).map(s => s[0] || '').slice(0, 2).join('').toUpperCase() || '?'
+                              const total = Math.min(evWorkers.length, 5)
+                              return (
+                                <div key={displayAsMore ? 'more' : w.id} style={{
+                                  width: 28, height: 28, borderRadius: '50%',
+                                  background: displayAsMore ? '#9CA3AF' : AVATAR_COLORS[i % AVATAR_COLORS.length],
+                                  border: '2px solid var(--card-bg)',
+                                  color: '#fff', fontSize: 11, fontWeight: 900,
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  marginLeft: i === 0 ? 0 : -8,
+                                  zIndex: total - i,
+                                  position: 'relative',
+                                }}>{initials}</div>
+                              )
+                            })}
+                          </div>
+                          <div style={{
+                            fontSize: 13, fontWeight: 700, color: 'var(--ash)',
+                            flex: 1, minWidth: 0,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>
+                            {evWorkers.map(w => (w.name || '').split(/\s+/)[0]).filter(Boolean).join(', ')}
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Day-by-day spend cards. Body click opens detail modal. */}
+                    <div onClick={e => { e.stopPropagation(); setDetail(ev) }}
+                      style={{ padding: '10px 14px 0', display: 'flex', gap: 6, cursor: 'pointer' }}>
+                      {[1, 2, 3].map(d => {
+                        const day = (ev.days || []).find((x: any) => x.day_number === d)
+                        const dayDollars = day ? (Number(day.dollars10) || 0) + (Number(day.dollars5) || 0) : 0
+                        const dayPurch = day ? (Number(day.purchases) || 0) : 0
+                        const hasData = !!day && (dayDollars > 0 || dayPurch > 0 || (Number(day.customers) || 0) > 0)
+                        const dayDate = new Date(ev.start_date + 'T12:00:00')
+                        dayDate.setDate(dayDate.getDate() + d - 1)
+                        const dayISO = dayDate.toISOString().split('T')[0]
+                        const isToday = dayISO === todayISO
+                        if (hasData) {
+                          return (
+                            <div key={d} style={{
+                              flex: 1, background: '#fff',
+                              border: '1px solid var(--green3)',
+                              borderRadius: 8, padding: '8px 6px', textAlign: 'center',
+                            }}>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--green-dark)', marginBottom: 2 }}>Day {d}</div>
+                              <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--green)' }}>{fmtDollars(dayDollars)}</div>
+                              <div style={{ fontSize: 10, color: 'var(--mist)' }}>{dayPurch} purch</div>
+                            </div>
+                          )
+                        }
+                        return (
+                          <div key={d} style={{
+                            flex: 1, background: 'var(--cream2)',
+                            border: '1px dashed var(--pearl)',
+                            borderRadius: 8, padding: '8px 6px', textAlign: 'center',
+                          }}>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--silver)' }}>Day {d}</div>
+                            <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--silver)' }}>—</div>
+                            <div style={{ fontSize: 10, color: 'var(--silver)', minHeight: 12 }}>{isToday ? 'today' : ''}</div>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* Existing inline workers + spend panels. Reuse the same
+                        markup so desktop and mobile stay in sync. */}
+                    {wOpen && (
+                      <div className="m-3 p-3 rounded-xl" style={{ background: 'var(--cream2)', border: '1px solid var(--pearl)' }} onClick={e => e.stopPropagation()}>
+                        <div className="fl">Who Worked This Event</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                          {buyers.map(b => {
+                            const on = evWorkers.some((w: any) => w.id === b.id)
+                            return (
+                              <div key={b.id} onClick={() => toggleWorker(ev, b.id, b.name)}
+                                style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14, padding: '6px 0', minHeight: 36 }}>
+                                <div style={{
+                                  width: 26, height: 26, borderRadius: 6, flexShrink: 0,
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  ...(on ? { background: 'var(--green)' } : { border: '2.5px solid var(--pearl)' })
+                                }}>
+                                  {on && <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 12.5 C6 12.5, 8 17, 9.5 19 C12 14, 16 8, 20 5" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                </div>
+                                <span style={{ fontWeight: on ? 700 : 400, color: on ? 'var(--green-dark)' : 'var(--ash)' }}>{b.name}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    {spendOpen === ev.id && (
+                      <div onClick={e => e.stopPropagation()} style={{ padding: '0 12px' }}>
+                        <SpendPanel ev={ev} onClose={() => setSpendOpen(null)} refetchEvents={fetchEvents} />
+                      </div>
+                    )}
+
+                    {/* Action toolbar */}
+                    <div style={{
+                      display: 'flex', marginTop: 10,
+                      borderTop: '1px solid var(--cream2)',
+                    }} onClick={e => e.stopPropagation()}>
+                      {[
+                        { id: 'workers', icon: '👤', label: 'Who worked', onTap: () => setWorkersOpen(wOpen ? null : ev.id) },
+                        { id: 'spend',   icon: '💰', label: 'Ad spend',   onTap: () => setSpendOpen(spendOpen === ev.id ? null : ev.id) },
+                        { id: 'notes',   icon: '📝', label: 'Notes',      onTap: () => setNotesEvent(ev) },
+                        { id: 'link',    icon: '🔗', label: 'Copy link',  onTap: () => copyLink(ev) },
+                        ...(isSuperAdmin ? [{ id: 'del', icon: '🗑️', label: 'Delete', onTap: () => deleteEvent(ev.id), danger: true as const }] : []),
+                      ].map((btn, i, arr) => (
+                        <button key={btn.id} onClick={e => { e.stopPropagation(); btn.onTap() }} style={{
+                          flex: 1, background: 'none', border: 'none',
+                          borderRight: i < arr.length - 1 ? '1px solid var(--cream2)' : 'none',
+                          padding: '11px 0', cursor: 'pointer',
+                          minHeight: 44, position: 'relative',
+                          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+                          color: (btn as any).danger ? 'var(--red)' : 'var(--ash)',
+                        }}>
+                          <div style={{ fontSize: 13, lineHeight: 1 }}>{btn.icon}</div>
+                          <div style={{ fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            {btn.label}
+                            {btn.id === 'notes' && noteCount > 0 && (
+                              <span style={{
+                                background: 'var(--green-pale)', color: 'var(--green-dark)',
+                                fontSize: 10, padding: '1px 6px', borderRadius: 8,
+                              }}>{noteCount}</span>
+                            )}
+                          </div>
+                          {btn.id === 'notes' && noteCount === 0 && (
+                            <span aria-hidden style={{
+                              position: 'absolute', top: 6, right: 12,
+                              width: 7, height: 7, borderRadius: '50%',
+                              background: '#D97706',
+                            }} />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )
+          }
+
+          /* ───── Desktop card layout (unchanged) ───── */
           return (
             <div key={ev.id} className="card"
               style={{
