@@ -17,54 +17,132 @@ const LEAD_SOURCES = [
   { key: 'src_other', label: 'Other' },
 ]
 
+interface CheckRow {
+  id?: string
+  check_number: string
+  buy_form_number: string
+  amount: string
+  payment_type: string
+}
+function emptyCheck(): CheckRow {
+  return { check_number: '', buy_form_number: '', amount: '', payment_type: 'check' }
+}
+// When the user taps "+ Add Check" we pre-fill the next sequential number.
+// Only auto-fills when the last row's number is a clean integer — otherwise
+// blank so the user can correct without surprise.
+function nextCheckNumber(checks: CheckRow[]): string {
+  const last = checks[checks.length - 1]?.check_number.trim() || ''
+  if (!last) return ''
+  const n = parseInt(last, 10)
+  if (isNaN(n) || String(n) !== last) return ''
+  return String(n + 1)
+}
+
 export default function MobileDayEntry() {
   const { events, user } = useApp()
   const [selectedEventId, setSelectedEventId] = useState('')
   const [selectedDay, setSelectedDay] = useState(1)
-  const [existingEntry, setExistingEntry] = useState<any>(null)
-  const [checks, setChecks] = useState<any[]>([emptyCheck()])
+  const [eventSwitcherOpen, setEventSwitcherOpen] = useState(false)
+  const [mode, setMode] = useState<'quick' | 'detailed'>('quick')
   const [customers, setCustomers] = useState('')
+  const [purchases, setPurchases] = useState('')
+  const [tenPct, setTenPct] = useState('')
+  const [fivePct, setFivePct] = useState('')
   const [sources, setSources] = useState<Record<string, string>>(
     Object.fromEntries(LEAD_SOURCES.map(s => [s.key, '']))
   )
-  const [saving, setSaving] = useState(false)
+  const [checks, setChecks] = useState<CheckRow[]>([emptyCheck()])
+  const [daysSubmitted, setDaysSubmitted] = useState<Record<number, boolean>>({})
   const [submitted, setSubmitted] = useState(false)
-  const [step, setStep] = useState<'event' | 'data' | 'success'>('event')
+  const [saving, setSaving] = useState(false)
+  const [showOverlay, setShowOverlay] = useState(false)
+  const [existingEntry, setExistingEntry] = useState<any>(null)
   const entryIdRef = useRef<string | null>(null)
   const hydratedRef = useRef(false)
 
-  // Only show events this buyer is assigned to
+  useEffect(() => {
+    if (document.querySelector('#mobile-day-entry-font')) return
+    const link = document.createElement('link')
+    link.id = 'mobile-day-entry-font'
+    link.rel = 'stylesheet'
+    link.href = 'https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700;800;900&display=swap'
+    document.head.appendChild(link)
+  }, [])
+
+  useEffect(() => {
+    const saved = localStorage.getItem('dayentry-mode')
+    if (saved === 'quick' || saved === 'detailed') setMode(saved)
+  }, [])
+  useEffect(() => { localStorage.setItem('dayentry-mode', mode) }, [mode])
+
   const myEvents = events.filter(ev =>
     (ev.workers || []).some((w: any) => w.id === user?.id)
   ).sort((a, b) => b.start_date.localeCompare(a.start_date))
+  const selectedEvent = myEvents.find(e => e.id === selectedEventId)
 
-  // Auto-select most recent event
+  // Prefer today's active event, else most recent.
   useEffect(() => {
-    if (myEvents.length === 1) setSelectedEventId(myEvents[0].id)
-  }, [myEvents.length])
+    if (selectedEventId || myEvents.length === 0) return
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const active = myEvents.find(ev => {
+      const start = new Date(ev.start_date + 'T12:00:00')
+      const end = new Date(ev.start_date + 'T12:00:00'); end.setDate(end.getDate() + 2)
+      return today >= start && today <= end
+    })
+    setSelectedEventId((active || myEvents[0]).id)
+  }, [myEvents.length, selectedEventId])
+
+  // Auto-pick today's day within the event, else day 1.
+  useEffect(() => {
+    if (!selectedEvent) return
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const start = new Date(selectedEvent.start_date + 'T12:00:00')
+    const diff = Math.round((today.getTime() - start.getTime()) / 86400000)
+    if (diff >= 0 && diff <= 2) setSelectedDay(diff + 1)
+    else setSelectedDay(1)
+  }, [selectedEventId])
 
   useEffect(() => {
-    if (selectedEventId) loadEntry()
+    if (selectedEventId) loadEntries()
   }, [selectedEventId, selectedDay])
 
-  const loadEntry = async () => {
+  const loadEntries = async () => {
     hydratedRef.current = false
-    const { data } = await supabase.from('buyer_entries')
-      .select('*').eq('event_id', selectedEventId)
-      .eq('day_number', selectedDay).eq('buyer_id', user?.id).maybeSingle()
-    if (data) {
-      setExistingEntry(data)
-      entryIdRef.current = data.id
-      setCustomers(String(data.customers_seen || ''))
-      setSources(Object.fromEntries(LEAD_SOURCES.map(s => [s.key, String((data as any)[s.key] || '')])))
-      setSubmitted(!!data.submitted_at)
+    const { data: rows } = await supabase.from('buyer_entries')
+      .select('*')
+      .eq('event_id', selectedEventId)
+      .eq('buyer_id', user?.id)
+      .in('day_number', [1, 2, 3])
+    const byDay: Record<number, any> = {}
+    ;(rows || []).forEach((r: any) => { byDay[r.day_number] = r })
+    setDaysSubmitted({
+      1: !!byDay[1]?.submitted_at,
+      2: !!byDay[2]?.submitted_at,
+      3: !!byDay[3]?.submitted_at,
+    })
+    const current = byDay[selectedDay]
+    if (current) {
+      setExistingEntry(current)
+      entryIdRef.current = current.id
+      setCustomers(String(current.customers_seen || ''))
+      setPurchases(current.purchases_made != null ? String(current.purchases_made) : '')
+      setTenPct(current.dollars_at_10pct != null ? String(current.dollars_at_10pct) : '')
+      setFivePct(current.dollars_at_5pct != null ? String(current.dollars_at_5pct) : '')
+      setSources(Object.fromEntries(LEAD_SOURCES.map(s => [s.key, String((current as any)[s.key] || '')])))
+      setSubmitted(!!current.submitted_at)
       const { data: chks } = await supabase.from('buyer_checks')
-        .select('*').eq('entry_id', data.id).order('created_at')
-      setChecks(chks && chks.length > 0 ? chks : [emptyCheck()])
+        .select('*').eq('entry_id', current.id).order('created_at')
+      setChecks(chks && chks.length > 0 ? chks.map((c: any) => ({
+        id: c.id,
+        check_number: c.check_number || '',
+        buy_form_number: c.buy_form_number || '',
+        amount: c.amount != null ? String(c.amount) : '',
+        payment_type: c.payment_type || 'check',
+      })) : [emptyCheck()])
     } else {
       setExistingEntry(null)
       entryIdRef.current = null
-      setCustomers('')
+      setCustomers(''); setPurchases(''); setTenPct(''); setFivePct('')
       setSources(Object.fromEntries(LEAD_SOURCES.map(s => [s.key, ''])))
       setChecks([emptyCheck()])
       setSubmitted(false)
@@ -72,16 +150,26 @@ export default function MobileDayEntry() {
     setTimeout(() => { hydratedRef.current = true }, 0)
   }
 
-  function emptyCheck() { return { check_number: '', buy_form_number: '', amount: '', payment_type: 'check' } }
+  const nF = (s: string) => parseFloat(s) || 0
+  const totalSpend = nF(tenPct) + nF(fivePct)
+  const closeRate = nF(customers) > 0 ? Math.round((nF(purchases) / nF(customers)) * 100) : 0
+  const commission = nF(tenPct) * 0.1 + nF(fivePct) * 0.05
+  const touched = nF(customers) + nF(purchases) + totalSpend > 0
 
   const validChecks = checks.filter(c => c.amount && parseFloat(c.amount) > 0)
-  const totalAmount = validChecks.reduce((s, c) => s + parseFloat(c.amount || 0), 0)
+  const checksTotal = validChecks.reduce((s, c) => s + parseFloat(c.amount || '0'), 0)
 
   const persist = async (submit: boolean) => {
-    const payload = {
-      event_id: selectedEventId, day_number: selectedDay, day: selectedDay,
-      buyer_id: user?.id, buyer_name: user?.name,
+    const payload: any = {
+      event_id: selectedEventId,
+      day_number: selectedDay,
+      day: selectedDay,
+      buyer_id: user?.id,
+      buyer_name: user?.name,
       customers_seen: parseInt(customers) || 0,
+      purchases_made: purchases !== '' ? parseInt(purchases) || 0 : null,
+      dollars_at_10pct: tenPct !== '' ? parseFloat(tenPct) : null,
+      dollars_at_5pct: fivePct !== '' ? parseFloat(fivePct) : null,
       ...Object.fromEntries(LEAD_SOURCES.map(s => [s.key, parseInt(sources[s.key]) || 0])),
       submitted_at: submit ? new Date().toISOString() : existingEntry?.submitted_at || null,
     }
@@ -109,173 +197,438 @@ export default function MobileDayEntry() {
   }
 
   const autosaveStatus = useAutosave(
-    { customers, sources, checks },
+    { customers, purchases, tenPct, fivePct, sources, checks },
     async () => { await persist(false) },
     { enabled: !!selectedEventId && hydratedRef.current && !saving, delay: 1000 }
   )
 
-  const submit = async () => {
+  const handleSubmit = async () => {
+    if (!selectedEventId) return
     setSaving(true)
     try {
       await persist(true)
       setSubmitted(true)
-      setStep('success')
+      setDaysSubmitted(prev => ({ ...prev, [selectedDay]: true }))
+      setShowOverlay(true)
+      setTimeout(() => setShowOverlay(false), 2200)
     } catch (err: any) {
       alert('Error: ' + (err?.message || 'unknown'))
     }
     setSaving(false)
   }
 
-  const fmt = (ds: string) => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  const selectedEvent = myEvents.find(e => e.id === selectedEventId)
+  const fmtMoney = (v: number) => '$' + v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 
-  if (step === 'success') return (
-    <div style={{ padding: 24, textAlign: 'center' }}>
-      <div style={{ fontSize: 64, marginBottom: 16 }}>✅</div>
-      <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)', marginBottom: 8 }}>Day {selectedDay} Submitted!</div>
-      <div style={{ fontSize: 14, color: 'var(--mist)', marginBottom: 8 }}>{selectedEvent?.store_name}</div>
-      <div style={{ background: 'var(--green-pale)', borderRadius: 12, padding: 16, marginBottom: 24, border: '1px solid var(--green3)' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          {[['Customers', customers || '0'], ['Purchases', String(validChecks.length)], ['Amount', `$${totalAmount.toLocaleString()}`], ['Sources', String(Object.values(sources).reduce((s, v) => s + (parseInt(v) || 0), 0))]].map(([l, v]) => (
-            <div key={l}>
-              <div style={{ fontSize: 10, color: 'var(--green-dark)', fontWeight: 700, textTransform: 'uppercase' }}>{l}</div>
-              <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--green)' }}>{v}</div>
-            </div>
-          ))}
+  if (myEvents.length === 0) {
+    return (
+      <div style={{ padding: 40, textAlign: 'center', fontFamily: '"Fraunces", Georgia, serif' }}>
+        <div style={{ fontSize: 40, marginBottom: 12 }}>📭</div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>No events assigned</div>
+        <div style={{ fontSize: 13, color: 'var(--mist)', marginTop: 6 }}>
+          Once you're added to an event, it'll show up here.
         </div>
       </div>
-      <button onClick={() => { setStep('event'); setSelectedEventId(''); setSelectedDay(1) }}
-        style={{ width: '100%', padding: 14, borderRadius: 12, border: 'none', background: 'var(--sidebar-bg)', color: '#fff', fontWeight: 900, fontSize: 16, cursor: 'pointer' }}>
-        Enter Another Day
-      </button>
-    </div>
-  )
+    )
+  }
+
+  if (!selectedEvent) return null
 
   return (
-    <div style={{ padding: 16 }}>
-      <h2 style={{ fontSize: 20, fontWeight: 900, color: 'var(--ink)', marginBottom: 16 }}>📝 Enter Day Data</h2>
-
-      {/* Event + Day selector */}
-      <div style={{ background: 'var(--cream)', borderRadius: 12, padding: 16, marginBottom: 16, border: '1px solid var(--pearl)' }}>
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', display: 'block', marginBottom: 6 }}>Event</label>
-          <select value={selectedEventId} onChange={e => setSelectedEventId(e.target.value)} style={{ width: '100%', padding: '10px 12px', fontSize: 15 }}>
-            <option value="">Select event…</option>
-            {myEvents.map(ev => <option key={ev.id} value={ev.id}>{ev.store_name} — {fmt(ev.start_date)}</option>)}
-          </select>
+    <div style={{
+      fontFamily: '"Fraunces", Georgia, serif',
+      background: '#F5F0E8', minHeight: '100%',
+      paddingBottom: 80,
+    }}>
+      {showOverlay && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(26,26,22,.78)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          animation: 'mdeFade .2s ease-out',
+        }}>
+          <div style={{
+            background: '#FFFFFF', padding: '32px 36px', borderRadius: 20,
+            textAlign: 'center', maxWidth: 300,
+            animation: 'mdePop .3s cubic-bezier(.2,1.4,.4,1)',
+          }}>
+            <div style={{
+              width: 72, height: 72, borderRadius: '50%',
+              background: '#1D6B44', margin: '0 auto 16px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 38, color: '#FFF', fontWeight: 900,
+            }}>✓</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: '#1A1A16', marginBottom: 6 }}>Day {selectedDay} Submitted!</div>
+            <div style={{ fontSize: 13, color: '#737368' }}>Admins have been notified</div>
+          </div>
         </div>
-        {selectedEventId && (
-          <div>
-            <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', display: 'block', marginBottom: 6 }}>Day</label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {[1, 2, 3].map(d => (
-                <button key={d} onClick={() => setSelectedDay(d)} style={{
-                  flex: 1, padding: '10px 0', borderRadius: 8, border: `2px solid ${selectedDay === d ? 'var(--green)' : 'var(--pearl)'}`,
-                  background: selectedDay === d ? 'var(--green-pale)' : 'var(--cream2)',
-                  color: selectedDay === d ? 'var(--green-dark)' : 'var(--ash)',
-                  fontWeight: 700, fontSize: 15, cursor: 'pointer',
-                }}>Day {d}</button>
-              ))}
+      )}
+      <style>{`
+        @keyframes mdeFade { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes mdePop  { from { transform: scale(.85); opacity: 0 } to { transform: scale(1); opacity: 1 } }
+        input[type=number]::-webkit-outer-spin-button,
+        input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+      `}</style>
+
+      <div style={{ background: '#FFFFFF', padding: '16px 18px 14px', borderBottom: '1px solid #EDE8DF' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#737368', letterSpacing: '.1em', textTransform: 'uppercase' }}>Entering Data For</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+          <div style={{
+            fontSize: 20, fontWeight: 800, color: '#1A1A16', marginTop: 2,
+            lineHeight: 1.15, flex: 1, minWidth: 0,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {selectedEvent.store_name}
+          </div>
+          {myEvents.length > 1 && (
+            <button onClick={() => setEventSwitcherOpen(v => !v)} style={{
+              background: 'none', border: 'none', color: '#1D6B44',
+              fontSize: 12, fontWeight: 700, cursor: 'pointer',
+              padding: '4px 6px', fontFamily: 'inherit',
+            }}>
+              {eventSwitcherOpen ? 'Cancel' : 'Change'}
+            </button>
+          )}
+        </div>
+        <div style={{ fontSize: 13, color: '#737368', marginTop: 2 }}>
+          {new Date(selectedEvent.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+        </div>
+        {eventSwitcherOpen && (
+          <div style={{
+            marginTop: 10, background: '#F5F0E8', borderRadius: 10,
+            border: '1px solid #EDE8DF', overflow: 'hidden',
+          }}>
+            {myEvents.map(ev => (
+              <button key={ev.id} onClick={() => { setSelectedEventId(ev.id); setEventSwitcherOpen(false) }} style={{
+                width: '100%', padding: '10px 14px',
+                background: ev.id === selectedEventId ? '#F0FDF4' : 'transparent',
+                border: 'none', borderBottom: '1px solid #EDE8DF',
+                textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
+              }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A16' }}>{ev.store_name}</div>
+                <div style={{ fontSize: 11, color: '#737368' }}>
+                  {new Date(ev.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
+          {[1, 2, 3].map(d => {
+            const done = daysSubmitted[d]
+            const cur = selectedDay === d
+            return (
+              <button key={d} onClick={() => setSelectedDay(d)} style={{
+                flex: 1, padding: '8px 0', borderRadius: 8, border: 'none',
+                background: cur ? '#1D6B44' : done ? '#86EFAC' : '#EDE8DF',
+                color: cur ? '#FFF' : done ? '#14532D' : '#737368',
+                fontSize: 11, fontWeight: 800, textAlign: 'center', letterSpacing: '.08em',
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}>
+                {done && !cur ? '✓ ' : ''}DAY {d}{cur ? ' · TODAY' : ''}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div style={{
+        margin: '10px 14px 0', padding: 4, borderRadius: 12,
+        background: '#FFFFFF', display: 'flex', border: '1px solid #EDE8DF',
+      }}>
+        {(['quick', 'detailed'] as const).map(m => {
+          const active = mode === m
+          return (
+            <button key={m} onClick={() => setMode(m)} style={{
+              flex: 1, padding: '10px 0', borderRadius: 8, border: 'none',
+              background: active ? '#1D6B44' : 'transparent',
+              color: active ? '#FFFFFF' : '#737368',
+              fontWeight: 800, fontSize: 13, cursor: 'pointer',
+              fontFamily: 'inherit', letterSpacing: '.02em',
+              transition: 'all .2s',
+            }}>
+              {m === 'quick' ? '⚡ Quick' : '📋 Detailed'}
+            </button>
+          )
+        })}
+      </div>
+
+      {submitted && !showOverlay && (
+        <div style={{
+          margin: '10px 14px 0', padding: '10px 14px',
+          background: '#F0FDF4', border: '1px solid #86EFAC',
+          borderRadius: 10, fontSize: 13, color: '#14532D', fontWeight: 600,
+        }}>
+          ✓ Day {selectedDay} submitted. You can edit and re-submit.
+        </div>
+      )}
+
+      <div style={{ padding: '14px 14px 0' }}>
+        <div style={cardStyle}>
+          <SectionLabel>Today's Numbers</SectionLabel>
+          <FieldRow label="Customers Seen" value={customers} onChange={setCustomers} />
+          <FieldRow label="Purchases Made" value={purchases} onChange={setPurchases} required />
+          <FieldRow label="$ @ 10% Commission" value={tenPct} onChange={setTenPct} money required />
+          <FieldRow label="$ @ 5% Commission" value={fivePct} onChange={setFivePct} money last />
+        </div>
+
+        {touched && (
+          <div style={{ ...cardStyle, background: '#F0FDF4', borderColor: '#86EFAC' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+              <Stat label="Total" value={fmtMoney(totalSpend)} />
+              <Stat label="Close Rate" value={`${closeRate}%`} />
+              <Stat label="Commission" value={fmtMoney(commission)} />
             </div>
           </div>
         )}
-      </div>
 
-      {selectedEventId && (
-        <>
-          {submitted && (
-            <div style={{ background: 'var(--green-pale)', border: '1px solid var(--green3)', borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 13, color: 'var(--green-dark)', fontWeight: 600 }}>
-              ✓ Day {selectedDay} already submitted. You can edit and re-submit.
-            </div>
-          )}
-
-          {/* Customers */}
-          <div style={{ background: 'var(--cream)', borderRadius: 12, padding: 16, marginBottom: 12, border: '1px solid var(--pearl)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', margin: 0 }}>Customers Seen</label>
-              <AutosaveIndicator status={autosaveStatus} />
-            </div>
-            <input type="number" inputMode="numeric" value={customers} onChange={e => setCustomers(e.target.value)}
-              placeholder="0" style={{ width: '100%', fontSize: 28, fontWeight: 900, padding: '8px 0', border: 'none', background: 'transparent', color: 'var(--ink)', outline: 'none' }} />
-          </div>
-
-          {/* Checks */}
-          <div style={{ background: 'var(--cream)', borderRadius: 12, padding: 16, marginBottom: 12, border: '1px solid var(--pearl)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <div>
-                <div style={{ fontWeight: 900, fontSize: 15, color: 'var(--ink)' }}>Checks & Payments</div>
-                {validChecks.length > 0 && <div style={{ fontSize: 12, color: 'var(--green)', marginTop: 2 }}>{validChecks.length} purchases · ${totalAmount.toLocaleString()}</div>}
-              </div>
-            </div>
-            {checks.map((c, i) => (
-              <div key={i} style={{ background: 'var(--cream2)', borderRadius: 10, padding: 12, marginBottom: 10, border: '1px solid var(--pearl)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--mist)' }}>#{i + 1}</span>
-                  <select value={c.payment_type} onChange={e => setChecks(p => p.map((x, idx) => idx === i ? { ...x, payment_type: e.target.value } : x))}
-                    style={{ flex: 1, fontSize: 14, padding: '6px 8px' }}>
-                    <option value="check">Check</option>
-                    <option value="cash">Cash</option>
-                  </select>
-                  <button onClick={() => setChecks(p => p.filter((_, idx) => idx !== i))}
-                    aria-label={`Remove check ${i + 1}`}
-                    style={{ background: 'none', border: 'none', color: 'var(--mist)', fontSize: 22, cursor: 'pointer', padding: 0, width: 44, height: 44, flexShrink: 0 }}>×</button>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-                  <div>
-                    <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--mist)', display: 'block', marginBottom: 4 }}>CHECK #</label>
-                    <input type="text" inputMode="numeric" value={c.check_number}
-                      onChange={e => setChecks(p => p.map((x, idx) => idx === i ? { ...x, check_number: e.target.value } : x))}
-                      placeholder="—" style={{ width: '100%', fontSize: 16, padding: '8px 10px' }} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--mist)', display: 'block', marginBottom: 4 }}>BUY FORM #</label>
-                    <input type="text" inputMode="numeric" value={c.buy_form_number}
-                      onChange={e => setChecks(p => p.map((x, idx) => idx === i ? { ...x, buy_form_number: e.target.value } : x))}
-                      placeholder="—" style={{ width: '100%', fontSize: 16, padding: '8px 10px' }} />
-                  </div>
-                </div>
-                <div>
-                  <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--mist)', display: 'block', marginBottom: 4 }}>AMOUNT</label>
-                  <div style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)', fontSize: 18, fontWeight: 700 }}>$</span>
-                    <input type="number" inputMode="decimal" value={c.amount}
-                      onChange={e => setChecks(p => p.map((x, idx) => idx === i ? { ...x, amount: e.target.value } : x))}
-                      placeholder="0.00" style={{ width: '100%', fontSize: 22, fontWeight: 900, padding: '8px 10px 8px 28px' }} />
-                  </div>
-                </div>
-              </div>
-            ))}
-            <button onClick={() => setChecks(p => [...p, emptyCheck()])}
-              style={{ width: '100%', padding: '10px 0', borderRadius: 8, border: '2px dashed var(--pearl)', background: 'transparent', color: 'var(--mist)', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-              + Add Check
-            </button>
-          </div>
-
-          {/* Lead sources */}
-          <div style={{ background: 'var(--cream)', borderRadius: 12, padding: 16, marginBottom: 20, border: '1px solid var(--pearl)' }}>
-            <div style={{ fontWeight: 900, fontSize: 15, color: 'var(--ink)', marginBottom: 12 }}>Lead Sources</div>
+        <div style={{
+          maxHeight: mode === 'detailed' ? 5000 : 0,
+          opacity: mode === 'detailed' ? 1 : 0,
+          overflow: 'hidden',
+          transition: 'max-height .4s ease, opacity .25s ease',
+        }}>
+          <div style={cardStyle}>
+            <SectionLabel>Lead Sources</SectionLabel>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {LEAD_SOURCES.map(s => (
-                <div key={s.key}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--mist)', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>{s.label}</label>
-                  <input type="number" inputMode="numeric" value={sources[s.key]}
-                    onChange={e => setSources(p => ({ ...p, [s.key]: e.target.value }))}
-                    placeholder="0" style={{ width: '100%', fontSize: 18, fontWeight: 700, padding: '8px 10px' }} />
-                </div>
+                <MiniField key={s.key} label={s.label}
+                  value={sources[s.key]}
+                  onChange={v => setSources(p => ({ ...p, [s.key]: v }))} />
               ))}
             </div>
           </div>
 
-              {/* Actions */}
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <AutosaveIndicator status={autosaveStatus} />
-            <button onClick={submit} disabled={saving}
-              style={{ flex: 1, padding: 14, borderRadius: 12, border: 'none', background: 'var(--sidebar-bg)', color: '#fff', fontWeight: 900, fontSize: 15, cursor: 'pointer' }}>
-              {saving ? 'Saving…' : `✓ Submit Day ${selectedDay}`}
+          <div style={cardStyle}>
+            <SectionLabel>Checks</SectionLabel>
+            {checks.map((c, i) => {
+              const isAuto = i > 0 && !!c.check_number && !c.amount
+              return (
+                <div key={c.id || i} style={{
+                  background: '#F5F0E8', borderRadius: 12, padding: 12,
+                  marginBottom: 10, border: '1px solid #EDE8DF',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: '#737368', letterSpacing: '.1em' }}>#{i + 1}</span>
+                    <select value={c.payment_type}
+                      onChange={e => setChecks(p => p.map((x, idx) => idx === i ? { ...x, payment_type: e.target.value } : x))}
+                      style={{
+                        flex: 1, padding: '6px 8px', fontSize: 13, borderRadius: 8,
+                        border: '1px solid #D8D3CA', background: '#FFF', fontFamily: 'inherit',
+                      }}>
+                      <option value="check">Check</option>
+                      <option value="cash">Cash</option>
+                    </select>
+                    {checks.length > 1 && (
+                      <button
+                        onClick={() => setChecks(p => p.filter((_, idx) => idx !== i))}
+                        aria-label={`Remove check ${i + 1}`}
+                        style={{
+                          width: 36, height: 36, borderRadius: 8,
+                          border: '1px solid #EDE8DF', background: '#FFF',
+                          color: '#A8A89A', fontSize: 20, cursor: 'pointer',
+                          padding: 0, lineHeight: 1, fontFamily: 'inherit',
+                        }}>×</button>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                    <div>
+                      <label style={labelStyle}>
+                        Check # {isAuto && <span style={{ color: '#1D6B44', fontStyle: 'italic', textTransform: 'none', letterSpacing: 0 }}>auto</span>}
+                      </label>
+                      <input type="text" inputMode="numeric" value={c.check_number}
+                        onChange={e => setChecks(p => p.map((x, idx) => idx === i ? { ...x, check_number: e.target.value } : x))}
+                        placeholder={i === 0 ? '1045' : ''}
+                        style={{
+                          ...inputStyle,
+                          border: `1.5px solid ${isAuto ? '#86EFAC' : '#D8D3CA'}`,
+                          background: isAuto ? '#F0FDF4' : '#FFFFFF',
+                        }} />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Buy Form #</label>
+                      <input type="text" inputMode="numeric" value={c.buy_form_number}
+                        onChange={e => setChecks(p => p.map((x, idx) => idx === i ? { ...x, buy_form_number: e.target.value } : x))}
+                        placeholder="—" style={inputStyle} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={labelStyle}>Amount</label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{
+                        position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
+                        color: '#737368', fontWeight: 700, fontSize: 18,
+                      }}>$</span>
+                      <input type="number" inputMode="decimal" value={c.amount}
+                        onChange={e => setChecks(p => p.map((x, idx) => idx === i ? { ...x, amount: e.target.value } : x))}
+                        placeholder="0.00"
+                        style={{ ...inputStyle, padding: '0 12px 0 26px', fontSize: 20, fontWeight: 800 }} />
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+
+            <button
+              onClick={() => setChecks(p => [...p, { ...emptyCheck(), check_number: nextCheckNumber(p) }])}
+              style={{
+                width: '100%', padding: '12px 0', borderRadius: 10,
+                border: '1.5px dashed #D8D3CA', background: 'transparent',
+                color: '#1D6B44', fontWeight: 700, fontSize: 14,
+                cursor: 'pointer', fontFamily: 'inherit', marginTop: 4,
+              }}>
+              + Add Check
+            </button>
+
+            {validChecks.length > 0 && (
+              <div style={{
+                fontSize: 12, color: '#14532D', marginTop: 10,
+                fontWeight: 700, textAlign: 'right',
+              }}>
+                {validChecks.length} check{validChecks.length === 1 ? '' : 's'} · {fmtMoney(checksTotal)}
+              </div>
+            )}
+          </div>
+
+          <div style={{ padding: '0 2px 14px' }}>
+            <button disabled style={{
+              width: '100%', padding: '14px 16px', borderRadius: 12,
+              background: '#F5F0E8', border: '1.5px dashed #D8D3CA',
+              color: '#737368', fontWeight: 700, fontSize: 14,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              cursor: 'not-allowed', opacity: .75, fontFamily: 'inherit',
+            }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="6" height="6" rx="1" /><rect x="15" y="3" width="6" height="6" rx="1" />
+                <rect x="3" y="15" width="6" height="6" rx="1" /><path d="M13 13h2v2h-2z M17 13h2M13 17h2m2 0h2m-4 2h2" />
+            </svg>
+              Scan Mode — Coming Soon
+              <span style={{
+                fontSize: 9, fontWeight: 900, letterSpacing: '.1em',
+                padding: '2px 6px', borderRadius: 4,
+                background: '#1D6B44', color: '#FFF',
+              }}>BETA</span>
             </button>
           </div>
-        </>
-      )}
+        </div>
+      </div>
+
+      <div style={{
+        position: 'fixed', left: 0, right: 0,
+        bottom: 'calc(72px + env(safe-area-inset-bottom))',
+        padding: '20px 14px 10px',
+        background: 'linear-gradient(to top, rgba(245,240,232,1) 75%, rgba(245,240,232,0))',
+        zIndex: 500,
+      }}>
+        <div style={{ maxWidth: 540, margin: '0 auto', display: 'flex', gap: 10, alignItems: 'center' }}>
+          <div style={{ flexShrink: 0 }}><AutosaveIndicator status={autosaveStatus} /></div>
+          <button onClick={handleSubmit} disabled={saving || !selectedEventId} style={{
+            flex: 1, minHeight: 52, borderRadius: 14, border: 'none',
+            background: saving ? '#737368' : '#1D6B44', color: '#FFF',
+            fontWeight: 900, fontSize: 16, cursor: saving ? 'default' : 'pointer',
+            fontFamily: 'inherit', letterSpacing: '.02em',
+            boxShadow: '0 6px 16px rgba(29,107,68,.25)',
+          }}>
+            {saving ? 'Saving…' : `✓ Submit Day ${selectedDay}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const cardStyle: React.CSSProperties = {
+  background: '#FFFFFF', borderRadius: 14, padding: 14,
+  marginBottom: 12, border: '1px solid #EDE8DF',
+}
+const labelStyle: React.CSSProperties = {
+  fontSize: 10, fontWeight: 700, color: '#737368',
+  letterSpacing: '.08em', textTransform: 'uppercase',
+  display: 'block', marginBottom: 4,
+}
+const inputStyle: React.CSSProperties = {
+  width: '100%', minHeight: 44, padding: '0 12px',
+  fontSize: 16, fontWeight: 700,
+  borderRadius: 10, border: '1.5px solid #D8D3CA',
+  background: '#FFFFFF', color: '#1A1A16',
+  outline: 'none', fontFamily: 'inherit',
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      fontSize: 11, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase',
+      color: '#737368', marginBottom: 10,
+    }}>{children}</div>
+  )
+}
+
+function FieldRow({ label, value, onChange, money, required, last }: {
+  label: string; value: string; onChange: (v: string) => void
+  money?: boolean; required?: boolean; last?: boolean
+}) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 12,
+      padding: '10px 0',
+      borderBottom: last ? 'none' : `1px solid #F0EDE6`,
+    }}>
+      <label style={{
+        flex: 1, fontSize: 13, fontWeight: 600, color: '#4A4A42',
+      }}>
+        {label}{required && <span style={{ color: '#DC2626' }}> *</span>}
+      </label>
+      <div style={{ position: 'relative', width: 140 }}>
+        {money && (
+          <span style={{
+            position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+            fontWeight: 700, color: '#737368',
+          }}>$</span>
+        )}
+        <input type="number" inputMode={money ? 'decimal' : 'numeric'}
+          value={value} onChange={e => onChange(e.target.value)} placeholder="0"
+          style={{
+            width: '100%', minHeight: 44, textAlign: 'right',
+            padding: money ? '0 10px 0 22px' : '0 10px',
+            fontSize: 20, fontWeight: 800,
+            borderRadius: 10, border: '1.5px solid #D8D3CA',
+            background: '#F5F0E8', color: '#1A1A16',
+            outline: 'none', fontFamily: 'inherit',
+          }} />
+      </div>
+    </div>
+  )
+}
+
+function MiniField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <label style={{
+        fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase',
+        color: '#737368', display: 'block', marginBottom: 4,
+      }}>{label}</label>
+      <input type="number" inputMode="numeric" value={value} onChange={e => onChange(e.target.value)}
+        placeholder="0" style={{
+          width: '100%', minHeight: 44, padding: '0 10px',
+          fontSize: 18, fontWeight: 700,
+          borderRadius: 10, border: '1.5px solid #D8D3CA',
+          background: '#FFFFFF', color: '#1A1A16',
+          outline: 'none', fontFamily: 'inherit',
+        }} />
+    </div>
+  )
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div style={{
+        fontSize: 10, fontWeight: 800, letterSpacing: '.12em',
+        color: '#14532D', textTransform: 'uppercase',
+      }}>{label}</div>
+      <div style={{ fontSize: 18, fontWeight: 900, color: '#1D6B44', marginTop: 2 }}>{value}</div>
     </div>
   )
 }
