@@ -780,7 +780,7 @@ function CombinedEntryForm({ event, dayNumber, onSaved }: {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div className="card card-accent" style={{ margin: 0, border: '2px solid var(--green3)' }}>
+      <div className="card card-accent" style={{ margin: 0, border: '2px solid var(--green)' }}>
         <div className="card-title" style={{ display: 'flex', alignItems: 'center' }}>
           Combined Day {dayNumber} Data
           <AutosaveIndicator status={status} />
