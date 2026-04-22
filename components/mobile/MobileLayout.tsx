@@ -37,63 +37,53 @@ function CameraIcon({ size = 34 }: { size?: number }) {
   )
 }
 
-/* ── BOTTOM-NAV ICON SET — thick outline + per-tab dot ──
-   Each tab has its own accent color. Active = ink stroke + colored dot
-   top-right + label in the tab's color. Inactive = mist everywhere. */
+/* ── BOTTOM-NAV ICON SET — thick outline in each tab's brand color.
+   Selection is shown by a colored halo + lift behind the active icon,
+   not by graying the others out. */
 
-const NAV_INK = '#1A1A1A'
-const NAV_MIST = '#9CA3AF'
-const NAV_DOT_COLORS: Record<string, string> = {
-  dashboard: '#F97316', // Home — orange
+const NAV_TAB_COLORS: Record<string, string> = {
+  dashboard: '#F97316', // Home   — orange
   events:    '#A855F7', // Events — purple
-  dayentry:  '#22C55E', // Enter — green
-  calendar:  '#3B82F6', // Appts — blue
+  dayentry:  '#22C55E', // Enter  — green
+  calendar:  '#3B82F6', // Appts  — blue
 }
 
-function NavHomeIcon({ active, size, dot }: { active: boolean; size: number; dot: string }) {
-  const c = active ? NAV_INK : NAV_MIST
+function NavHomeIcon({ size, color }: { size: number; color: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden>
-      <path d="M5 14L16 4L27 14V26C27 27.1 26.1 28 25 28H7C5.9 28 5 27.1 5 26V14Z" stroke={c} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M12 28V18H20V28" stroke={c} strokeWidth="2.5" strokeLinecap="round"/>
-      {active && <circle cx="25" cy="7" r="4" fill={dot}/>}
+      <path d="M5 14L16 4L27 14V26C27 27.1 26.1 28 25 28H7C5.9 28 5 27.1 5 26V14Z" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M12 28V18H20V28" stroke={color} strokeWidth="2.5" strokeLinecap="round"/>
     </svg>
   )
 }
 
-function NavEventsIcon({ active, size, dot }: { active: boolean; size: number; dot: string }) {
-  const c = active ? NAV_INK : NAV_MIST
+function NavEventsIcon({ size, color }: { size: number; color: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden>
-      <rect x="4" y="7" width="24" height="21" rx="3" stroke={c} strokeWidth="3" strokeLinecap="round"/>
-      <path d="M4 13H28" stroke={c} strokeWidth="3" strokeLinecap="round"/>
-      <line x1="10" y1="4" x2="10" y2="10" stroke={c} strokeWidth="3" strokeLinecap="round"/>
-      <line x1="22" y1="4" x2="22" y2="10" stroke={c} strokeWidth="3" strokeLinecap="round"/>
-      {active && <circle cx="26" cy="6" r="4" fill={dot}/>}
+      <rect x="4" y="7" width="24" height="21" rx="3" stroke={color} strokeWidth="3" strokeLinecap="round"/>
+      <path d="M4 13H28" stroke={color} strokeWidth="3" strokeLinecap="round"/>
+      <line x1="10" y1="4" x2="10" y2="10" stroke={color} strokeWidth="3" strokeLinecap="round"/>
+      <line x1="22" y1="4" x2="22" y2="10" stroke={color} strokeWidth="3" strokeLinecap="round"/>
     </svg>
   )
 }
 
-function NavEnterIcon({ active, size, dot }: { active: boolean; size: number; dot: string }) {
-  const c = active ? NAV_INK : NAV_MIST
+function NavEnterIcon({ size, color }: { size: number; color: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden>
-      <path d="M22 4L26 8L14 20H10V16L22 4Z" stroke={c} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M19 7L23 11" stroke={c} strokeWidth="2.5" strokeLinecap="round"/>
-      <line x1="6" y1="28" x2="26" y2="28" stroke={c} strokeWidth="3" strokeLinecap="round"/>
-      <line x1="10" y1="24" x2="18" y2="24" stroke={c} strokeWidth="2" strokeLinecap="round" opacity=".5"/>
-      {active && <circle cx="26" cy="5" r="4" fill={dot}/>}
+      <path d="M22 4L26 8L14 20H10V16L22 4Z" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M19 7L23 11" stroke={color} strokeWidth="2.5" strokeLinecap="round"/>
+      <line x1="6" y1="28" x2="26" y2="28" stroke={color} strokeWidth="3" strokeLinecap="round"/>
+      <line x1="10" y1="24" x2="18" y2="24" stroke={color} strokeWidth="2" strokeLinecap="round" opacity=".5"/>
     </svg>
   )
 }
 
-function NavApptsIcon({ active, size, dot }: { active: boolean; size: number; dot: string }) {
-  const c = active ? NAV_INK : NAV_MIST
+function NavApptsIcon({ size, color }: { size: number; color: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden>
-      <circle cx="16" cy="16" r="11" stroke={c} strokeWidth="3"/>
-      <path d="M16 9V16.5L20 19" stroke={c} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-      {active && <circle cx="25" cy="7" r="4" fill={dot}/>}
+      <circle cx="16" cy="16" r="11" stroke={color} strokeWidth="3"/>
+      <path d="M16 9V16.5L20 19" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   )
 }
@@ -108,28 +98,41 @@ const RIGHT_TABS: TabDef[] = [
   { id: 'calendar',  label: 'Appts',  kind: 'appts' },
 ]
 
-function renderNavIcon(kind: TabDef['kind'], active: boolean, size: number, dot: string) {
+function renderNavIcon(kind: TabDef['kind'], color: string, size: number) {
   switch (kind) {
-    case 'home':   return <NavHomeIcon   active={active} size={size} dot={dot} />
-    case 'events': return <NavEventsIcon active={active} size={size} dot={dot} />
-    case 'enter':  return <NavEnterIcon  active={active} size={size} dot={dot} />
-    case 'appts':  return <NavApptsIcon  active={active} size={size} dot={dot} />
+    case 'home':   return <NavHomeIcon   size={size} color={color} />
+    case 'events': return <NavEventsIcon size={size} color={color} />
+    case 'enter':  return <NavEnterIcon  size={size} color={color} />
+    case 'appts':  return <NavApptsIcon  size={size} color={color} />
   }
 }
 
-/* ── SHARED TAB BUTTON ── */
+/* ── SHARED TAB BUTTON ──
+   Icon is always the tab's brand color. Selection = a colored halo
+   (tinted chip + soft drop shadow + small lift) under the icon. */
 function TabBtn({ tab, active, onClick }: { tab: TabDef; active: boolean; onClick: () => void }) {
-  const accent = NAV_DOT_COLORS[tab.id] || '#22C55E'
+  const accent = NAV_TAB_COLORS[tab.id] || '#22C55E'
   return (
     <button onClick={onClick} style={{
       background: 'none', border: 'none', cursor: 'pointer',
-      padding: '8px 4px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+      padding: '6px 4px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
     }}>
-      {renderNavIcon(tab.kind, active, 28, accent)}
+      <div style={{
+        width: 44, height: 44, borderRadius: 14,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: active ? `${accent}22` : 'transparent',
+        boxShadow: active
+          ? `0 6px 14px -4px ${accent}88, inset 0 0 0 1.5px ${accent}44`
+          : 'none',
+        transform: active ? 'translateY(-2px)' : 'none',
+        transition: 'background .18s ease, box-shadow .18s ease, transform .18s ease',
+      }}>
+        {renderNavIcon(tab.kind, accent, 28)}
+      </div>
       <div style={{
         fontSize: 10,
-        fontWeight: active ? 800 : 600,
-        color: active ? accent : NAV_MIST,
+        fontWeight: active ? 900 : 600,
+        color: accent,
         letterSpacing: '.02em',
       }}>{tab.label}</div>
     </button>
