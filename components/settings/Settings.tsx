@@ -25,6 +25,7 @@ export default function Settings() {
   const THEMES = brand === 'liberty' ? LIBERTY_THEMES : BEB_THEMES
   const [profile, setProfile] = useState({ name: user?.name || '', phone: user?.phone || '' })
   const [notifyMaster, setNotifyMaster] = useState(user?.notify || false)
+  const [notifySms, setNotifySms] = useState(user?.notify_sms || false)
   const [storePrefs, setStorePrefs] = useState<Record<string, boolean>>({})
   const [loadingPrefs, setLoadingPrefs] = useState(true)
   const [photoUrl, setPhotoUrl] = useState(user?.photo_url || '')
@@ -69,6 +70,14 @@ export default function Settings() {
     const next = !notifyMaster
     setNotifyMaster(next)
     await supabase.from('users').update({ notify: next }).eq('id', user.id)
+    reload()
+  }
+
+  const toggleSmsNotify = async () => {
+    if (!user) return
+    const next = !notifySms
+    setNotifySms(next)
+    await supabase.from('users').update({ notify_sms: next }).eq('id', user.id)
     reload()
   }
 
@@ -266,6 +275,27 @@ export default function Settings() {
             })}
           </div>
         )}
+      </div>
+
+      {/* SMS Notifications */}
+      <div className="card">
+        <div className="card-title">SMS Notifications</div>
+        <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 20 }}>Receive text message alerts when events are active.</p>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--ink)' }}>Text Alerts</div>
+            <div style={{ fontSize: 12, color: 'var(--mist)' }}>
+              {profile.phone
+                ? <>Messages go to <strong>{profile.phone}</strong></>
+                : <>Add your phone number above to receive SMS notifications.</>}
+            </div>
+          </div>
+          <button onClick={toggleSmsNotify} disabled={!profile.phone}
+            style={{ width: 48, height: 24, borderRadius: 12, background: notifySms ? 'var(--green)' : 'var(--pearl)', position: 'relative', border: 'none', cursor: profile.phone ? 'pointer' : 'not-allowed', transition: 'background .2s', opacity: profile.phone ? 1 : 0.5 }}>
+            <div style={{ position: 'absolute', top: 4, width: 16, height: 16, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.2)', transition: 'left .2s', left: notifySms ? 28 : 4 }} />
+          </button>
+        </div>
       </div>
 
       {/* Theme */}

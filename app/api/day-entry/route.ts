@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { sendSMS, formatPhone } from '@/lib/sms'
 
 const sb = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -124,7 +125,34 @@ export async function POST(request: NextRequest) {
     </div>`
 
     await sendEmail(cfg, recipients, subject, html)
-    return NextResponse.json({ ok: true, sent: recipients.length })
+
+    // SMS notifications — sent after email, independent success path.
+    // Queries admins who have notify_sms = true AND a non-empty phone.
+    // SMS send failures are logged and skipped; emails already went out.
+    let smsSent = 0
+    try {
+      const { data: smsUsers } = await sb.from('users')
+        .select('phone, name')
+        .in('role', ['admin', 'superadmin'])
+        .eq('active', true)
+        .eq('notify_sms', true)
+        .not('phone', 'is', null)
+      const smsBody = `📋 ${store?.name} Day ${day_number}\n${entered_by_name || 'Buyer'} submitted:\n${day.purchases || 0} purchases · $${dollars.toLocaleString()}\nClose rate: ${closeRate}%`
+      for (const u of smsUsers || []) {
+        const to = formatPhone(u.phone || '')
+        if (!to) continue
+        try {
+          await sendSMS(to, smsBody)
+          smsSent += 1
+        } catch (err: any) {
+          console.warn(`[day-entry SMS] failed for ${u.name || to}:`, err?.message)
+        }
+      }
+    } catch (err: any) {
+      console.warn('[day-entry SMS] batch failed:', err?.message)
+    }
+
+    return NextResponse.json({ ok: true, sent: recipients.length, sms: smsSent })
   } catch (err: any) {
     console.error('day-entry email error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })

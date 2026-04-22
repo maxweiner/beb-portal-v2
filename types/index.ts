@@ -8,6 +8,7 @@ export interface User {
   role: Role
   active: boolean
   notify: boolean
+  notify_sms?: boolean
   phone: string
   is_buyer: boolean
   photo_url?: string

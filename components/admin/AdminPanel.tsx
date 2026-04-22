@@ -5,7 +5,7 @@ import { useApp, DEFAULT_PERMS } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { User, Role } from '@/types'
 
-type Tab = 'users' | 'invite' | 'merge' | 'email' | 'permissions'
+type Tab = 'users' | 'invite' | 'merge' | 'email' | 'sms' | 'permissions'
 
 export default function AdminPanel() {
   const [tab, setTab] = useState<Tab>('users')
@@ -22,6 +22,7 @@ export default function AdminPanel() {
           ['invite', 'Invite User'],
           ['merge', 'Merge Users'],
           ['email', 'Email Settings'],
+          ['sms', 'SMS Settings'],
           ['permissions', 'Permissions'],
         ] as [Tab, string][]).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
@@ -35,6 +36,7 @@ export default function AdminPanel() {
       {tab === 'invite' && <InviteTab />}
       {tab === 'merge' && <MergeTab />}
       {tab === 'email' && <EmailTab />}
+      {tab === 'sms' && <SmsTab />}
       {tab === 'permissions' && <PermissionsTab />}
     </div>
   )
@@ -538,6 +540,97 @@ function EmailTab() {
           <button onClick={save} disabled={saving}
             className="w-full py-2.5 rounded-lg text-sm font-bold border"
             >{saving ? 'Saving…' : 'Save Keys'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── SMS TAB ── */
+function SmsTab() {
+  const { user } = useApp()
+  const [cfg, setCfg] = useState<any>({})
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [testTo, setTestTo] = useState('')
+  const [sendingTest, setSendingTest] = useState(false)
+
+  useEffect(() => {
+    supabase.from('settings').select('value').eq('key', 'sms').maybeSingle()
+      .then(({ data }) => { setCfg(data?.value || {}); setLoading(false) })
+  }, [])
+
+  useEffect(() => { if (!testTo && user?.phone) setTestTo(user.phone) }, [user?.phone])
+
+  const save = async () => {
+    setSaving(true)
+    await supabase.from('settings').upsert({
+      key: 'sms',
+      value: cfg,
+      updated_at: new Date().toISOString(),
+      updated_by: user?.id,
+    })
+    setSaving(false)
+    alert('SMS settings saved!')
+  }
+
+  if (loading) return <div className="text-sm" style={{ color: 'var(--mist)' }}>Loading…</div>
+
+  return (
+    <div className="max-w-lg">
+      <div className="card">
+        <h2 className="font-black text-lg mb-4" style={{ color: 'var(--ink)' }}>SMS Settings</h2>
+        <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 18 }}>
+          Twilio credentials for SMS alerts. Create them at console.twilio.com → Account → API keys & tokens.
+        </p>
+        <div className="space-y-4">
+          {[
+            ['Account SID', 'accountSid', 'text', 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'],
+            ['Auth Token', 'authToken', 'password', '••••••••'],
+            ['From Number', 'fromNumber', 'tel', '+1234567890'],
+          ].map(([label, key, type, placeholder]) => (
+            <div key={key}>
+              <label className="fl">{label}</label>
+              <input type={type} value={cfg[key] || ''} onChange={e => setCfg((p: any) => ({ ...p, [key]: e.target.value }))}
+                placeholder={placeholder}
+                className="w-full px-3 py-2.5 rounded-lg text-sm"
+                style={{ background: 'var(--cream2)', border: '1px solid var(--pearl)', color: 'var(--ink)' }} />
+            </div>
+          ))}
+          <button onClick={save} disabled={saving} className="btn-primary btn-full">
+            {saving ? 'Saving…' : 'Save Settings'}
+          </button>
+
+          <div style={{ borderTop: '1px solid var(--cream2)', paddingTop: 16, marginTop: 4 }}>
+            <label className="fl">Test Recipient</label>
+            <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 6 }}>
+              Phone to send the test SMS to. Defaults to your profile number.
+            </div>
+            <input type="tel" value={testTo} onChange={e => setTestTo(e.target.value)}
+              placeholder="+1234567890"
+              className="w-full px-3 py-2.5 rounded-lg text-sm"
+              style={{ background: 'var(--cream2)', border: '1px solid var(--pearl)', color: 'var(--ink)', marginBottom: 10 }} />
+            <button
+              onClick={async () => {
+                if (!testTo) { alert('Enter a test recipient number first.'); return }
+                setSendingTest(true)
+                try {
+                  const r = await fetch('/api/test-sms', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ to: testTo }),
+                  })
+                  const d = await r.json()
+                  alert(d.ok ? `✅ Test SMS sent to ${testTo}` : `❌ ${d.error || 'Failed to send'}`)
+                } finally {
+                  setSendingTest(false)
+                }
+              }}
+              disabled={sendingTest || !testTo}
+              className="w-full py-2.5 rounded-lg text-sm font-bold border">
+              {sendingTest ? 'Sending…' : 'Send Test SMS'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
