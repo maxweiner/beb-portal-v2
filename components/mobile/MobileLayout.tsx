@@ -332,20 +332,20 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
 
   const fmtDate = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
-  const ALL_PAGES: { id: NavPage; label: string; adminOnly?: boolean }[] = [
-    { id: 'dashboard',    label: 'Dashboard' },
-    { id: 'events',       label: 'Events' },
-    { id: 'dayentry',     label: 'Enter Day Data' },
-    { id: 'calendar',     label: 'Appointments' },
-    { id: 'schedule',     label: 'Calendar' },
-    { id: 'travel',       label: 'Travel Share' },
-    { id: 'staff',        label: 'Staff' },
-    { id: 'shipping',     label: 'Shipping' },
-    { id: 'reports',      label: 'Reports' },
-    { id: 'marketing',    label: 'Marketing' },
-    { id: 'settings',     label: 'Settings' },
-    { id: isLiberty ? 'libertyadmin' : 'admin', label: isLiberty ? 'LEB Admin' : 'Admin', adminOnly: true },
-    { id: 'stores',       label: 'Stores', adminOnly: true },
+  const ALL_PAGES: { id: NavPage; label: string; icon: string; adminOnly?: boolean }[] = [
+    { id: 'dashboard',    label: 'Dashboard',      icon: '⌂' },
+    { id: 'events',       label: 'Events',         icon: '◆' },
+    { id: 'dayentry',     label: 'Enter Day Data', icon: '📝' },
+    { id: 'calendar',     label: 'Appointments',   icon: '📅' },
+    { id: 'schedule',     label: 'Calendar',       icon: '🗓' },
+    { id: 'travel',       label: 'Travel Share',   icon: '✈️' },
+    { id: 'staff',        label: 'Staff',          icon: '👥' },
+    { id: 'shipping',     label: 'Shipping',       icon: '📦' },
+    { id: 'reports',      label: 'Reports',        icon: '📊' },
+    { id: 'marketing',    label: 'Marketing',      icon: '📣' },
+    { id: 'settings',     label: 'Settings',       icon: '⚙️' },
+    { id: isLiberty ? 'libertyadmin' : 'admin', label: isLiberty ? 'LEB Admin' : 'Admin', icon: '🔧', adminOnly: true },
+    { id: 'stores',       label: 'Stores',         icon: '🏪', adminOnly: true },
   ]
 
   const visiblePages = ALL_PAGES.filter(p => !p.adminOnly || isAdmin)
@@ -380,63 +380,21 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
       {/* Slide-out menu */}
       {menuOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex' }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={() => setMenuOpen(false)} />
-          <div ref={menuRef} style={{
-            position: 'relative', width: 'min(80vw, 320px)',
-            background: 'var(--cream)', height: '100%',
-            paddingTop: 'max(env(safe-area-inset-top), 16px)',
-            zIndex: 1, overflowY: 'auto',
-            boxShadow: '4px 0 24px rgba(0,0,0,.12)',
-            animation: 'mlSlideIn .2s ease-out',
-          }}>
-            <style>{`@keyframes mlSlideIn { from { transform: translateX(-16px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`}</style>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--pearl)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ color: 'var(--green-dark)', fontWeight: 900, fontSize: 15 }}>{isLiberty ? '★ Liberty Portal' : '◆ BEB Portal'}</div>
-                {user && <div style={{ color: 'var(--mist)', fontSize: 12, marginTop: 4 }}>{user.name}</div>}
-              </div>
-              <button onClick={() => setMenuOpen(false)} aria-label="Close menu" style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                width: 36, height: 36, borderRadius: 8, color: 'var(--mist)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 20, fontWeight: 600,
-              }}>×</button>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)' }} onClick={() => setMenuOpen(false)} />
+          <div ref={menuRef} style={{ position: 'relative', width: 280, background: 'var(--sidebar-bg)', height: '100%', paddingTop: 'max(env(safe-area-inset-top), 16px)', zIndex: 1, overflowY: 'auto' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,.08)' }}>
+              <div style={{ color: isLiberty ? '#93C5FD' : '#7EC8A0', fontWeight: 900, fontSize: 15 }}>{isLiberty ? '★ Liberty Portal' : '◆ BEB Portal'}</div>
+              {user && <div style={{ color: 'rgba(255,255,255,.5)', fontSize: 12, marginTop: 4 }}>{user.name}</div>}
             </div>
-            <div style={{ padding: '8px 0' }}>
-              {visiblePages.map(p => {
-                const active = nav === p.id
-                return (
-                  <button key={p.id} onClick={() => { setNav(p.id); setMenuOpen(false) }} style={{
-                    width: '100%', padding: '14px 20px',
-                    background: active ? 'var(--green-pale)' : 'transparent',
-                    border: 'none', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: 14,
-                    color: active ? 'var(--green-dark)' : 'var(--ink)',
-                    fontWeight: active ? 700 : 600, fontSize: 15,
-                    textAlign: 'left',
-                    borderLeft: active ? '3px solid var(--green)' : '3px solid transparent',
-                    minHeight: 48,
-                  }}>
-                    <span style={{ display: 'inline-flex', width: 20, justifyContent: 'center', color: active ? 'var(--green)' : 'var(--mist)' }}>
-                      <PageIcon id={p.id} size={20} />
-                    </span>
-                    {p.label}
-                  </button>
-                )
-              })}
-              <div style={{ borderTop: '1px solid var(--pearl)', margin: '8px 0' }} />
-              <button onClick={() => supabase.auth.signOut()} style={{
-                width: '100%', padding: '14px 20px',
-                background: 'transparent', border: 'none', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: 14,
-                color: '#B91C1C', fontWeight: 700, fontSize: 15,
-                textAlign: 'left', minHeight: 48,
-                borderLeft: '3px solid transparent',
-              }}>
-                <span style={{ display: 'inline-flex', width: 20, justifyContent: 'center', color: '#B91C1C' }}>
-                  <PageIcon id="signout" size={20} />
-                </span>
-                Sign Out
+            <div style={{ padding: '12px 0' }}>
+              {visiblePages.map(p => (
+                <button key={p.id} onClick={() => { setNav(p.id); setMenuOpen(false) }} style={{ width: '100%', padding: '14px 20px', background: nav === p.id ? 'rgba(255,255,255,.1)' : 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 12, color: nav === p.id ? '#fff' : 'rgba(255,255,255,.6)', fontWeight: nav === p.id ? 700 : 400, fontSize: 14, textAlign: 'left', borderLeft: nav === p.id ? '3px solid var(--green3)' : '3px solid transparent', minHeight: 44 }}>
+                  <span style={{ fontSize: 16, width: 20, textAlign: 'center', flexShrink: 0 }}>{p.icon}</span>{p.label}
+                </button>
+              ))}
+              <div style={{ borderTop: '1px solid rgba(255,255,255,.1)', margin: '12px 0 0' }} />
+              <button onClick={() => supabase.auth.signOut()} style={{ width: '100%', padding: '14px 20px', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 12, color: '#FCA5A5', fontWeight: 700, fontSize: 14, textAlign: 'left', minHeight: 44 }}>
+                <span style={{ fontSize: 16, width: 20, textAlign: 'center', flexShrink: 0 }}>🚪</span>Sign Out
               </button>
             </div>
           </div>
