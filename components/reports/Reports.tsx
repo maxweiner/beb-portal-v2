@@ -109,6 +109,10 @@ function ReportsGrid({ onOpen }: { onOpen: (v: View) => void }) {
                 position: 'relative',
                 transition: 'transform .12s ease, box-shadow .12s ease',
                 boxShadow: clickable ? '0 2px 8px rgba(0,0,0,.04)' : 'none',
+                minWidth: 0,
+                whiteSpace: 'normal',
+                overflowWrap: 'anywhere',
+                fontFamily: 'inherit',
               }}
               onMouseEnter={e => {
                 if (!clickable) return
@@ -132,13 +136,13 @@ function ReportsGrid({ onOpen }: { onOpen: (v: View) => void }) {
                 width: 44, height: 44, borderRadius: 12,
                 background: `${t.accent}1F`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: t.accent,
+                color: t.accent, flexShrink: 0,
               }}>
                 <t.Icon size={24} color={t.accent} />
               </div>
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)' }}>{t.title}</div>
-                <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 4, lineHeight: 1.4 }}>{t.description}</div>
+              <div style={{ width: '100%', minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)', wordBreak: 'break-word' }}>{t.title}</div>
+                <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 4, lineHeight: 1.4, wordBreak: 'break-word' }}>{t.description}</div>
               </div>
             </button>
           )
