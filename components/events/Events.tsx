@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import type { Event, BuyerVacation } from '@/types'
 import type { NavPage } from '@/app/page'
+import EventNotesPanel from './EventNotesPanel'
 
 type Filter = 'thisweek' | 'active' | 'all' | 'current' | 'past' | 'future' | 'days30' | 'days60'
 type Sort = 'date-desc' | 'date-asc' | 'name-asc'
@@ -38,6 +39,22 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   const [workersOpen, setWorkersOpen] = useState<string | null>(null)
   const [spendOpen, setSpendOpen] = useState<string | null>(null)
   const [detail, setDetail] = useState<Event | null>(null)
+  const [notesEvent, setNotesEvent] = useState<Event | null>(null)
+  const [noteCounts, setNoteCounts] = useState<Record<string, number>>({})
+  const [noteCountsTick, setNoteCountsTick] = useState(0)
+
+  // Lightweight count query — only pulls event_id columns. Refreshes whenever
+  // a note is saved/deleted so the event-card badges stay accurate.
+  useEffect(() => {
+    ;(async () => {
+      const { data } = await supabase.from('event_notes').select('event_id')
+      const counts: Record<string, number> = {}
+      for (const row of (data as { event_id: string }[] | null) || []) {
+        counts[row.event_id] = (counts[row.event_id] || 0) + 1
+      }
+      setNoteCounts(counts)
+    })()
+  }, [noteCountsTick])
 
   // Navigate to Enter Day Data with event+day pre-selected. For superadmins,
   // land in Combined mode when event_days has data for that day, else By
@@ -508,6 +525,28 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                   className={spendOpen === ev.id ? 'btn-ghost btn-xs' : 'btn-outline btn-xs'}>
                   💰 Ad Spend
                 </button>
+                <button onClick={e => { e.stopPropagation(); setNotesEvent(ev) }}
+                  className="btn-outline btn-xs" style={{ position: 'relative' }}>
+                  📝 Notes
+                  {(() => {
+                    const count = noteCounts[ev.id] || 0
+                    if (count === 0) {
+                      return (
+                        <span aria-hidden style={{
+                          position: 'absolute', top: -3, right: -3,
+                          width: 8, height: 8, borderRadius: '50%',
+                          background: '#D97706', border: '2px solid var(--cream)',
+                        }} />
+                      )
+                    }
+                    return (
+                      <span style={{
+                        marginLeft: 6, background: 'var(--green-pale)', color: 'var(--green-dark)',
+                        fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 10,
+                      }}>{count}</span>
+                    )
+                  })()}
+                </button>
                 <button onClick={e => { e.stopPropagation(); copyLink(ev) }} className="btn-outline btn-xs">
                   🔗 Copy Link
                 </button>
@@ -525,6 +564,15 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
         <EventDetailModal ev={detail} stores={stores} onClose={() => setDetail(null)} fmtDollars={fmtDollars} />
       )}
 
+      {/* Notes panel */}
+      {notesEvent && (
+        <EventNotesPanel
+          event={notesEvent}
+          store={stores.find(s => s.id === notesEvent.store_id)}
+          onClose={() => setNotesEvent(null)}
+          onNotesChanged={() => setNoteCountsTick(t => t + 1)}
+        />
+      )}
     </div>
   )
 }

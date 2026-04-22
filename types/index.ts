@@ -19,6 +19,20 @@ export interface User {
   sort_order?: number
 }
 
+export type EventNoteCategory = 'worked' | 'didnt_work' | 'do_differently'
+
+export interface EventNote {
+  id: string
+  event_id: string
+  store_id: string
+  user_id: string
+  user_name: string
+  category: EventNoteCategory
+  content: string
+  created_at: string
+  updated_at: string
+}
+
 export interface Store {
   id: string
   name: string

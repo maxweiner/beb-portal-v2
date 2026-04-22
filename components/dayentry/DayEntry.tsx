@@ -5,6 +5,7 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import { rollupEventDay } from '@/lib/dayRollup'
+import EventNotesNudge from '@/components/events/EventNotesNudge'
 
 interface BuyerEntry {
   id: string
@@ -310,8 +311,9 @@ function BuyerEntryForm({ eventId, dayNumber, buyerId, buyerName, existingEntry,
   existingEntry: BuyerEntry | null; otherBuyers: { id: string; name: string }[]
   onSaved: () => void
 }) {
-  const { user } = useApp()
+  const { user, events, stores } = useApp()
   const [inputMode, setInputMode] = useState<InputMode>('grid')
+  const [showNotesNudge, setShowNotesNudge] = useState(false)
   const [customersSeeen, setCustomersSeen] = useState(String(existingEntry?.customers_seen || ''))
   const [purchases, setPurchases] = useState(existingEntry?.purchases_made != null ? String(existingEntry.purchases_made) : '')
   const [tenPct, setTenPct] = useState(existingEntry?.dollars_at_10pct != null ? String(existingEntry.dollars_at_10pct) : '')
@@ -457,14 +459,45 @@ function BuyerEntryForm({ eventId, dayNumber, buyerId, buyerName, existingEntry,
       setSubmitted(true)
       onSaved()
       alert(`✅ Day ${dayNumber} submitted! ${otherBuyers.length > 0 ? 'Other buyers have been notified.' : ''}`)
+      // Day 3 soft nudge — only shows once per (event, user).
+      if (dayNumber === 3 && user?.id) {
+        const flagKey = `beb_notes_nudge_${eventId}_${user.id}`
+        const alreadyShown = typeof window !== 'undefined' && localStorage.getItem(flagKey) === '1'
+        if (!alreadyShown) {
+          try {
+            const { data: existing } = await supabase.from('event_notes')
+              .select('id').eq('event_id', eventId).eq('user_id', user.id).limit(1)
+            if (!existing || existing.length === 0) setShowNotesNudge(true)
+          } catch { /* non-blocking */ }
+        }
+      }
     } catch (err: any) {
       alert('Error: ' + err.message)
     }
     setSaving(false)
   }
 
+  const dismissNudge = () => {
+    if (user?.id) {
+      try { localStorage.setItem(`beb_notes_nudge_${eventId}_${user.id}`, '1') } catch {}
+    }
+    setShowNotesNudge(false)
+  }
+  const nudgeEvent = events.find(e => e.id === eventId)
+  const nudgeStore = nudgeEvent ? stores.find(s => s.id === nudgeEvent.store_id) : undefined
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {showNotesNudge && nudgeEvent && user && (
+        <EventNotesNudge
+          event={nudgeEvent}
+          store={nudgeStore}
+          userId={user.id}
+          userName={user.name}
+          onClose={dismissNudge}
+          onSaved={dismissNudge}
+        />
+      )}
       {/* Buyer header */}
       <div className="card" style={{ background: isSubmitted ? 'var(--green-pale)' : 'var(--cream)', border: `2px solid ${isSubmitted ? 'var(--green)' : 'var(--pearl)'}` }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
