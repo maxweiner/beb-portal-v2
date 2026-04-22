@@ -416,24 +416,16 @@ function MergeTab() {
 
 /* ── EMAIL TAB ── */
 function EmailTab() {
-  const { user, users } = useApp()
+  const { user } = useApp()
   const [cfg, setCfg] = useState<any>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testTo, setTestTo] = useState('')
   const [sendingTest, setSendingTest] = useState(false)
-  const [selectedRecipients, setSelectedRecipients] = useState<Set<string>>(new Set())
-  const [savingDefaults, setSavingDefaults] = useState(false)
-  const [sendingBriefing, setSendingBriefing] = useState(false)
 
   useEffect(() => {
     supabase.from('settings').select('value').eq('key', 'email').maybeSingle()
-      .then(({ data }) => {
-        const v = data?.value || {}
-        setCfg(v)
-        setSelectedRecipients(new Set(v.defaultRecipients || []))
-        setLoading(false)
-      })
+      .then(({ data }) => { setCfg(data?.value || {}); setLoading(false) })
   }, [])
 
   // Default the test recipient to the logged-in user's email once loaded.
@@ -444,51 +436,6 @@ function EmailTab() {
     await supabase.from('settings').upsert({ key: 'email', value: cfg, updated_at: new Date().toISOString() })
     setSaving(false)
     alert('Email settings saved!')
-  }
-
-  const activeUsers = (users || []).filter(u => u.active !== false)
-
-  const toggleRecipient = (id: string) => {
-    setSelectedRecipients(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
-  }
-  const selectAllRecipients = () => setSelectedRecipients(new Set(activeUsers.map(u => u.id)))
-  const clearAllRecipients = () => setSelectedRecipients(new Set())
-
-  const saveDefaults = async () => {
-    setSavingDefaults(true)
-    const nextCfg = { ...cfg, defaultRecipients: Array.from(selectedRecipients) }
-    await supabase.from('settings').upsert({ key: 'email', value: nextCfg, updated_at: new Date().toISOString() })
-    setCfg(nextCfg)
-    setSavingDefaults(false)
-    alert(`Saved ${selectedRecipients.size} default recipient${selectedRecipients.size === 1 ? '' : 's'}.`)
-  }
-
-  const sendBriefing = async () => {
-    if (selectedRecipients.size === 0) { alert('Select at least one recipient.'); return }
-    setSendingBriefing(true)
-    try {
-      const r = await fetch('/api/morning-briefing', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: Array.from(selectedRecipients) }),
-      })
-      const d = await r.json()
-      if (d.ok && d.skipped) {
-        alert(`ℹ ${d.skipped}`)
-      } else if (d.ok) {
-        alert(`✅ Morning briefing sent to ${d.sent} recipient${d.sent === 1 ? '' : 's'}.`)
-      } else if (d.errors) {
-        alert(`⚠ Sent with issues:\n\n${d.errors.join('\n')}`)
-      } else {
-        alert(`❌ ${d.error || 'Failed to send'}`)
-      }
-    } finally {
-      setSendingBriefing(false)
-    }
   }
 
   if (loading) return <div className="text-sm" style={{ color: 'var(--mist)' }}>Loading…</div>
@@ -558,9 +505,9 @@ function EmailTab() {
       </div>
 
       <div className="card">
-        <h2 className="font-black text-lg mb-2" style={{ color: 'var(--ink)' }}>Morning Briefing</h2>
+        <h2 className="font-black text-lg mb-2" style={{ color: 'var(--ink)' }}>Morning Briefing Keys</h2>
         <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 18 }}>
-          A daily recap email with yesterday's numbers per event, weather per city, and an AI-generated shoutout. Manually triggered for now.
+          API keys powering the Morning Briefing email. Pick recipients and send from <strong>Reports → Morning Briefing</strong>.
         </p>
 
         <div className="space-y-4">
@@ -591,67 +538,6 @@ function EmailTab() {
           <button onClick={save} disabled={saving}
             className="w-full py-2.5 rounded-lg text-sm font-bold border"
             >{saving ? 'Saving…' : 'Save Keys'}</button>
-
-          <div style={{ borderTop: '1px solid var(--cream2)', paddingTop: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <label className="fl" style={{ margin: 0 }}>Recipients ({selectedRecipients.size}/{activeUsers.length})</label>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={selectAllRecipients} className="btn-outline btn-xs">Select all</button>
-                <button onClick={clearAllRecipients} className="btn-outline btn-xs">Clear</button>
-              </div>
-            </div>
-            <div style={{
-              maxHeight: 220, overflowY: 'auto',
-              border: '1px solid var(--pearl)', borderRadius: 8,
-              background: 'var(--cream2)',
-            }}>
-              {activeUsers.length === 0 ? (
-                <div style={{ padding: 12, fontSize: 13, color: 'var(--mist)' }}>No active users.</div>
-              ) : activeUsers.map(u => {
-                const checked = selectedRecipients.has(u.id)
-                return (
-                  <label key={u.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '8px 12px',
-                    borderBottom: '1px solid var(--pearl)',
-                    cursor: 'pointer', background: checked ? 'var(--green-pale)' : 'transparent',
-                    position: 'relative',
-                  }}>
-                    <input type="checkbox" checked={checked} onChange={() => toggleRecipient(u.id)}
-                      style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
-                    <div aria-hidden="true" style={{
-                      width: 22, height: 22, flexShrink: 0,
-                      borderRadius: 5,
-                      border: `2px solid ${checked ? 'var(--green)' : 'var(--pearl)'}`,
-                      background: checked ? 'var(--green)' : '#FFFFFF',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: '#FFFFFF', fontSize: 14, fontWeight: 900, lineHeight: 1,
-                      transition: 'all .15s ease',
-                    }}>
-                      {checked ? '✓' : ''}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{u.name || u.email}</div>
-                      <div style={{ fontSize: 11, color: 'var(--mist)' }}>{u.email}</div>
-                    </div>
-                  </label>
-                )
-              })}
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 6, fontStyle: 'italic' }}>
-              Tip: save this selection as your defaults, then just hit Send.
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={saveDefaults} disabled={savingDefaults}
-              className="flex-1 py-2.5 rounded-lg text-sm font-bold border"
-              >{savingDefaults ? 'Saving…' : 'Save as defaults'}</button>
-            <button onClick={sendBriefing} disabled={sendingBriefing || selectedRecipients.size === 0}
-              className="btn-primary"
-              style={{ flex: 1 }}
-              >{sendingBriefing ? 'Sending…' : `Send briefing (${selectedRecipients.size})`}</button>
-          </div>
         </div>
       </div>
     </div>
