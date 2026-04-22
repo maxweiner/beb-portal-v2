@@ -175,15 +175,32 @@ function PageIcon({ id, size = 20 }: { id: NavPage | 'signout'; size?: number })
   }
 }
 
-type TabDef = { id: NavPage; label: string; Icon: (props: IconProps) => React.ReactElement }
+type TabDef = { id: NavPage; label: string; glyph: string }
 const LEFT_TABS: TabDef[] = [
-  { id: 'dashboard', label: 'Home',   Icon: HomeIcon },
-  { id: 'events',    label: 'Events', Icon: EventsIcon },
+  { id: 'dashboard', label: 'Home',   glyph: 'home' },
+  { id: 'events',    label: 'Events', glyph: '◆' },
 ]
 const RIGHT_TABS: TabDef[] = [
-  { id: 'dayentry',  label: 'Enter',  Icon: DayEntryIcon },
-  { id: 'calendar',  label: 'Appts',  Icon: ClockIcon },
+  { id: 'dayentry',  label: 'Enter',  glyph: 'clipboard' },
+  { id: 'calendar',  label: 'Appts',  glyph: '📅' },
 ]
+
+// Restore the original stylized house for the Home tab — only the
+// Travel → Enter swap pulls in a new icon (the clipboard+check).
+function HouseIcon({ active }: { active: boolean }) {
+  const stroke = active ? 'var(--green-dark)' : 'var(--mist)'
+  const accent = 'var(--green)'
+  return (
+    <svg width={22} height={22} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M4.5 11V19.5C4.5 19.8 4.7 20 5 20H19C19.3 20 19.5 19.8 19.5 19.5V11"
+        stroke={stroke} strokeWidth="1.5" strokeLinejoin="round" style={{ fill: 'var(--cream)' }}/>
+      <path d="M3 11.5L12 4L21 11.5Z" style={{ fill: accent }} stroke={stroke} strokeWidth="1.4" strokeLinejoin="round"/>
+      <path d="M16 6.5V3.5H18V7.5" stroke={stroke} strokeWidth="1.3" style={{ fill: accent }} strokeLinejoin="round"/>
+      <rect x="12.5" y="13" width="3.5" height="3.5" style={{ fill: 'var(--green3)' }} stroke={stroke} strokeWidth="1" rx="0.4"/>
+      <rect x="7.5" y="14.5" width="3" height="5.5" style={{ fill: 'none' }} stroke={stroke} strokeWidth="1.2" rx="0.3"/>
+    </svg>
+  )
+}
 
 /* ── SHARED TAB BUTTON ── */
 function TabBtn({ tab, active, onClick }: { tab: TabDef; active: boolean; onClick: () => void }) {
@@ -191,10 +208,12 @@ function TabBtn({ tab, active, onClick }: { tab: TabDef; active: boolean; onClic
     <button onClick={onClick} style={{
       background: 'none', border: 'none', cursor: 'pointer',
       padding: '10px 4px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-      color: active ? 'var(--green)' : 'var(--mist)',
+      color: active ? 'var(--green-dark)' : 'var(--mist)',
     }}>
-      <tab.Icon size={22} />
-      <div style={{ fontSize: 10, fontWeight: active ? 800 : 600, letterSpacing: '.02em' }}>{tab.label}</div>
+      {tab.glyph === 'home' ? <HouseIcon active={active} />
+        : tab.glyph === 'clipboard' ? <DayEntryIcon size={22} />
+        : <div style={{ fontSize: 22, lineHeight: 1 }}>{tab.glyph}</div>}
+      <div style={{ fontSize: 10, fontWeight: active ? 900 : 500 }}>{tab.label}</div>
     </button>
   )
 }
