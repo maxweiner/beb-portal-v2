@@ -191,6 +191,48 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  // ── Supabase Realtime: live-refresh shared state when any of the
+  // watched tables change so every signed-in session stays in sync
+  // without manual reloads. reloadRef is used (not `reload`) to avoid
+  // stale closures and to keep this effect stable across renders —
+  // the subscription is torn down + rebuilt only when the user changes
+  // (login / logout).
+  useEffect(() => {
+    if (!user?.id) return
+    const TABLES = [
+      'event_days', 'buyer_entries', 'buyer_checks',
+      'events', 'stores', 'users', 'shipments',
+    ] as const
+
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+    const scheduleReload = () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => { reloadRef.current() }, 500)
+    }
+
+    // Chain .on() for every table onto a single channel.
+    let channelBuilder: any = supabase.channel(`db-realtime-${user.id}`)
+    for (const table of TABLES) {
+      channelBuilder = channelBuilder.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table },
+        scheduleReload,
+      )
+    }
+    const channel = channelBuilder.subscribe((status: string) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('[Realtime] Connected — listening for changes')
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        console.warn(`[Realtime] ${status} — supabase-js will auto-reconnect`)
+      }
+    })
+
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
+      supabase.removeChannel(channel)
+    }
+  }, [user?.id])
+
   const setTheme = (t: Theme) => {
     localStorage.setItem('beb-theme', t)
     setThemeState(t)
