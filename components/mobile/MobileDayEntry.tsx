@@ -90,9 +90,15 @@ export default function MobileDayEntry() {
   }, [])
   useEffect(() => { localStorage.setItem('dayentry-mode', mode) }, [mode])
 
+  // When a deep-link intent lands (Events pill tap), the event+day we set
+  // here must win — otherwise the "auto-pick today" effect below would
+  // immediately overwrite the day on the next render.
+  const skipAutoDayPickRef = useRef(false)
+
   // Consume a deep-link intent (e.g. tapped from an Events day pill) once.
   useEffect(() => {
     if (!dayEntryIntent) return
+    skipAutoDayPickRef.current = true
     setSelectedEventId(dayEntryIntent.eventId)
     setSelectedDay(dayEntryIntent.day)
     setDayEntryIntent(null)
@@ -136,6 +142,7 @@ export default function MobileDayEntry() {
   // Auto-pick today's day within the event, else day 1.
   useEffect(() => {
     if (!selectedEvent) return
+    if (skipAutoDayPickRef.current) { skipAutoDayPickRef.current = false; return }
     const today = new Date(); today.setHours(0, 0, 0, 0)
     const start = new Date(selectedEvent.start_date + 'T12:00:00')
     const diff = Math.round((today.getTime() - start.getTime()) / 86400000)
