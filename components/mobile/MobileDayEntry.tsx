@@ -23,9 +23,10 @@ interface CheckRow {
   buy_form_number: string
   amount: string
   payment_type: string
+  commission_rate: number // 10 (default) or 5
 }
 function emptyCheck(): CheckRow {
-  return { check_number: '', buy_form_number: '', amount: '', payment_type: 'check' }
+  return { check_number: '', buy_form_number: '', amount: '', payment_type: 'check', commission_rate: 10 }
 }
 // When the user taps "+ Add Check" we pre-fill the next sequential number.
 // Only auto-fills when the last row's number is a clean integer — otherwise
@@ -58,6 +59,12 @@ export default function MobileDayEntry() {
   const [showOverlay, setShowOverlay] = useState(false)
   const [showPastEvents, setShowPastEvents] = useState(false)
   const [existingEntry, setExistingEntry] = useState<any>(null)
+  // "Dirty" = user manually overrode the checks-derived value. We keep their
+  // value and ask for confirmation at submit if it still differs from checks.
+  const [purchasesDirty, setPurchasesDirty] = useState(false)
+  const [tenPctDirty, setTenPctDirty] = useState(false)
+  const [fivePctDirty, setFivePctDirty] = useState(false)
+  const [mismatchPopupOpen, setMismatchPopupOpen] = useState(false)
   const entryIdRef = useRef<string | null>(null)
   const hydratedRef = useRef(false)
 
@@ -142,13 +149,26 @@ export default function MobileDayEntry() {
       setSubmitted(!!current.submitted_at)
       const { data: chks } = await supabase.from('buyer_checks')
         .select('*').eq('entry_id', current.id).order('created_at')
-      setChecks(chks && chks.length > 0 ? chks.map((c: any) => ({
+      const loadedChecks: CheckRow[] = chks && chks.length > 0 ? chks.map((c: any) => ({
         id: c.id,
         check_number: c.check_number || '',
         buy_form_number: c.buy_form_number || '',
         amount: c.amount != null ? String(c.amount) : '',
         payment_type: c.payment_type || 'check',
-      })) : [emptyCheck()])
+        commission_rate: c.commission_rate === 5 ? 5 : 10,
+      })) : [emptyCheck()]
+      setChecks(loadedChecks)
+      // Initialize dirty flags based on whether stored aggregates match
+      // the per-check derivation. If they match, clean (auto-fill active).
+      // If they don't, the user overrode — keep that flag set.
+      const valid = loadedChecks.filter(c => c.amount && parseFloat(c.amount) > 0)
+      const dCount = valid.length
+      const d10 = valid.filter(c => c.commission_rate === 10).reduce((s, c) => s + parseFloat(c.amount), 0)
+      const d5  = valid.filter(c => c.commission_rate === 5 ).reduce((s, c) => s + parseFloat(c.amount), 0)
+      const approxEq = (a: number, b: number) => Math.abs(a - b) < 0.01
+      setPurchasesDirty(current.purchases_made != null && current.purchases_made !== dCount)
+      setTenPctDirty(current.dollars_at_10pct != null && !approxEq(parseFloat(current.dollars_at_10pct), d10))
+      setFivePctDirty(current.dollars_at_5pct  != null && !approxEq(parseFloat(current.dollars_at_5pct),  d5))
     } else {
       setExistingEntry(null)
       entryIdRef.current = null
@@ -156,6 +176,7 @@ export default function MobileDayEntry() {
       setSources(Object.fromEntries(LEAD_SOURCES.map(s => [s.key, ''])))
       setChecks([emptyCheck()])
       setSubmitted(false)
+      setPurchasesDirty(false); setTenPctDirty(false); setFivePctDirty(false)
     }
     setTimeout(() => { hydratedRef.current = true }, 0)
   }
@@ -168,6 +189,35 @@ export default function MobileDayEntry() {
 
   const validChecks = checks.filter(c => c.amount && parseFloat(c.amount) > 0)
   const checksTotal = validChecks.reduce((s, c) => s + parseFloat(c.amount || '0'), 0)
+  const derivedPurchases = validChecks.length
+  const derived10 = validChecks.filter(c => c.commission_rate === 10).reduce((s, c) => s + parseFloat(c.amount), 0)
+  const derived5  = validChecks.filter(c => c.commission_rate === 5 ).reduce((s, c) => s + parseFloat(c.amount), 0)
+
+  // Auto-fill clean fields from check totals whenever checks change.
+  // Dirty fields (user overrides) stay put until the user clears them.
+  useEffect(() => {
+    if (!hydratedRef.current) return
+    if (!purchasesDirty) setPurchases(derivedPurchases > 0 ? String(derivedPurchases) : '')
+    if (!tenPctDirty)    setTenPct(derived10 > 0 ? String(derived10) : '')
+    if (!fivePctDirty)   setFivePct(derived5  > 0 ? String(derived5)  : '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [derivedPurchases, derived10, derived5])
+
+  // Mismatch detection for the submit-time confirmation popup.
+  const approxEq = (a: number, b: number) => Math.abs(a - b) < 0.01
+  const hasValidChecks = validChecks.length > 0
+  const mismatches: { label: string; entered: string; fromChecks: string }[] = []
+  if (hasValidChecks) {
+    if (purchasesDirty && parseInt(purchases || '0') !== derivedPurchases) {
+      mismatches.push({ label: 'Purchases Made', entered: purchases || '0', fromChecks: String(derivedPurchases) })
+    }
+    if (tenPctDirty && !approxEq(nF(tenPct), derived10)) {
+      mismatches.push({ label: '$ @ 10% Commission', entered: '$' + (tenPct || '0'), fromChecks: '$' + derived10.toLocaleString() })
+    }
+    if (fivePctDirty && !approxEq(nF(fivePct), derived5)) {
+      mismatches.push({ label: '$ @ 5% Commission', entered: '$' + (fivePct || '0'), fromChecks: '$' + derived5.toLocaleString() })
+    }
+  }
 
   const persist = async (submit: boolean) => {
     const payload: any = {
@@ -201,6 +251,7 @@ export default function MobileDayEntry() {
         entry_id: entryId!, event_id: selectedEventId,
         check_number: c.check_number, buy_form_number: c.buy_form_number,
         amount: parseFloat(c.amount) || 0, payment_type: c.payment_type,
+        commission_rate: c.commission_rate === 5 ? 5 : 10,
       })))
       if (error) throw error
     }
@@ -212,8 +263,8 @@ export default function MobileDayEntry() {
     { enabled: !!selectedEventId && hydratedRef.current && !saving, delay: 1000 }
   )
 
-  const handleSubmit = async () => {
-    if (!selectedEventId) return
+  const doSubmit = async () => {
+    setMismatchPopupOpen(false)
     setSaving(true)
     try {
       await persist(true)
@@ -225,6 +276,13 @@ export default function MobileDayEntry() {
       alert('Error: ' + (err?.message || 'unknown'))
     }
     setSaving(false)
+  }
+
+  const handleSubmit = () => {
+    if (!selectedEventId) return
+    // If the user manually overrode any checks-derived field, confirm first.
+    if (mismatches.length > 0) { setMismatchPopupOpen(true); return }
+    doSubmit()
   }
 
   const fmtMoney = (v: number) => '$' + v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })
@@ -305,6 +363,55 @@ export default function MobileDayEntry() {
             }}>✓</div>
             <div style={{ fontSize: 22, fontWeight: 900, color: '#1A1A16', marginBottom: 6 }}>Day {selectedDay} Submitted!</div>
             <div style={{ fontSize: 13, color: '#737368' }}>Admins have been notified</div>
+          </div>
+        </div>
+      )}
+      {mismatchPopupOpen && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(26,26,22,.70)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+          animation: 'mdeFade .2s ease-out',
+        }}>
+          <div style={{
+            background: '#FFFFFF', padding: 24, borderRadius: 18,
+            maxWidth: 360, width: '100%',
+            animation: 'mdePop .3s cubic-bezier(.2,1.4,.4,1)',
+          }}>
+            <div style={{ fontSize: 32, textAlign: 'center', marginBottom: 8 }}>⚠️</div>
+            <div style={{
+              fontSize: 18, fontWeight: 900, color: '#1A1A16',
+              textAlign: 'center', marginBottom: 8,
+            }}>Are you sure?</div>
+            <div style={{ fontSize: 13, color: '#737368', textAlign: 'center', marginBottom: 16 }}>
+              The amounts don't match your checks.
+            </div>
+            <div style={{
+              background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 10,
+              padding: 12, marginBottom: 16,
+            }}>
+              {mismatches.map(m => (
+                <div key={m.label} style={{ fontSize: 12, marginBottom: 6, lineHeight: 1.5 }}>
+                  <div style={{ fontWeight: 700, color: '#991B1B' }}>{m.label}</div>
+                  <div style={{ color: '#4A4A42' }}>
+                    You entered <b>{m.entered}</b> · From checks <b>{m.fromChecks}</b>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setMismatchPopupOpen(false)} style={{
+                flex: 1, padding: 12, borderRadius: 10, border: '1.5px solid #D8D3CA',
+                background: '#FFF', color: '#4A4A42', fontWeight: 700, fontSize: 14,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}>Cancel</button>
+              <button onClick={doSubmit} disabled={saving} style={{
+                flex: 1, padding: 12, borderRadius: 10, border: 'none',
+                background: '#1D6B44', color: '#FFF', fontWeight: 800, fontSize: 14,
+                cursor: saving ? 'default' : 'pointer', fontFamily: 'inherit',
+              }}>
+                {saving ? 'Saving…' : 'Submit anyway'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -414,9 +521,27 @@ export default function MobileDayEntry() {
         <div style={cardStyle}>
           <SectionLabel>Today's Numbers</SectionLabel>
           <FieldRow label="Customers Seen" value={customers} onChange={setCustomers} />
-          <FieldRow label="Purchases Made" value={purchases} onChange={setPurchases} required />
-          <FieldRow label="$ @ 10% Commission" value={tenPct} onChange={setTenPct} money required />
-          <FieldRow label="$ @ 5% Commission" value={fivePct} onChange={setFivePct} money last />
+          <FieldRow label="Purchases Made" value={purchases}
+            onChange={v => { setPurchases(v); setPurchasesDirty(v !== '') }}
+            required
+            fromChecks={hasValidChecks && !purchasesDirty}
+            canReset={hasValidChecks && purchasesDirty}
+            onReset={() => { setPurchasesDirty(false); setPurchases(derivedPurchases > 0 ? String(derivedPurchases) : '') }}
+          />
+          <FieldRow label="$ @ 10% Commission" value={tenPct}
+            onChange={v => { setTenPct(v); setTenPctDirty(v !== '') }}
+            money required
+            fromChecks={hasValidChecks && !tenPctDirty}
+            canReset={hasValidChecks && tenPctDirty}
+            onReset={() => { setTenPctDirty(false); setTenPct(derived10 > 0 ? String(derived10) : '') }}
+          />
+          <FieldRow label="$ @ 5% Commission" value={fivePct}
+            onChange={v => { setFivePct(v); setFivePctDirty(v !== '') }}
+            money last
+            fromChecks={hasValidChecks && !fivePctDirty}
+            canReset={hasValidChecks && fivePctDirty}
+            onReset={() => { setFivePctDirty(false); setFivePct(derived5 > 0 ? String(derived5) : '') }}
+          />
         </div>
 
         {touched && (
@@ -514,6 +639,34 @@ export default function MobileDayEntry() {
                         style={{ ...inputStyle, padding: '0 12px 0 26px', fontSize: 20, fontWeight: 800 }} />
                     </div>
                   </div>
+
+                  <label style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    marginTop: 10, padding: '8px 10px',
+                    background: c.commission_rate === 5 ? '#FEF2F2' : 'transparent',
+                    border: `1px solid ${c.commission_rate === 5 ? '#FCA5A5' : '#EDE8DF'}`,
+                    borderRadius: 8, cursor: 'pointer',
+                  }}>
+                    <input type="checkbox"
+                      checked={c.commission_rate === 5}
+                      onChange={e => setChecks(p => p.map((x, idx) =>
+                        idx === i ? { ...x, commission_rate: e.target.checked ? 5 : 10 } : x))}
+                      style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#DC2626' }}
+                    />
+                    <span style={{
+                      fontSize: 12, fontWeight: 700,
+                      color: c.commission_rate === 5 ? '#991B1B' : '#737368',
+                      letterSpacing: '.02em',
+                    }}>
+                      5% commission rate
+                    </span>
+                    <span style={{
+                      marginLeft: 'auto', fontSize: 10, fontWeight: 700,
+                      color: '#A8A89A', letterSpacing: '.06em',
+                    }}>
+                      {c.commission_rate === 5 ? '5%' : 'DEFAULT 10%'}
+                    </span>
+                  </label>
                 </div>
               )
             })}
@@ -532,9 +685,16 @@ export default function MobileDayEntry() {
             {validChecks.length > 0 && (
               <div style={{
                 fontSize: 12, color: '#14532D', marginTop: 10,
-                fontWeight: 700, textAlign: 'right',
+                fontWeight: 700, textAlign: 'right', lineHeight: 1.5,
               }}>
-                {validChecks.length} check{validChecks.length === 1 ? '' : 's'} · {fmtMoney(checksTotal)}
+                <div>
+                  {validChecks.length} check{validChecks.length === 1 ? '' : 's'} · {fmtMoney(checksTotal)}
+                </div>
+                {derived5 > 0 && (
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#737368' }}>
+                    {fmtMoney(derived10)} @ 10% · {fmtMoney(derived5)} @ 5%
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -612,39 +772,59 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
-function FieldRow({ label, value, onChange, money, required, last }: {
+function FieldRow({ label, value, onChange, money, required, last, fromChecks, canReset, onReset }: {
   label: string; value: string; onChange: (v: string) => void
   money?: boolean; required?: boolean; last?: boolean
+  fromChecks?: boolean
+  canReset?: boolean
+  onReset?: () => void
 }) {
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 12,
       padding: '10px 0',
       borderBottom: last ? 'none' : `1px solid #F0EDE6`,
     }}>
-      <label style={{
-        flex: 1, fontSize: 13, fontWeight: 600, color: '#4A4A42',
-      }}>
-        {label}{required && <span style={{ color: '#DC2626' }}> *</span>}
-      </label>
-      <div style={{ position: 'relative', width: 140 }}>
-        {money && (
-          <span style={{
-            position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
-            fontWeight: 700, color: '#737368',
-          }}>$</span>
-        )}
-        <input type="number" inputMode={money ? 'decimal' : 'numeric'}
-          value={value} onChange={e => onChange(e.target.value)} placeholder="0"
-          style={{
-            width: '100%', minHeight: 44, textAlign: 'right',
-            padding: money ? '0 10px 0 22px' : '0 10px',
-            fontSize: 20, fontWeight: 800,
-            borderRadius: 10, border: '1.5px solid #D8D3CA',
-            background: '#F5F0E8', color: '#1A1A16',
-            outline: 'none', fontFamily: 'inherit',
-          }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <label style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#4A4A42' }}>
+          {label}{required && <span style={{ color: '#DC2626' }}> *</span>}
+        </label>
+        <div style={{ position: 'relative', width: 140 }}>
+          {money && (
+            <span style={{
+              position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+              fontWeight: 700, color: fromChecks ? '#1D6B44' : '#737368',
+            }}>$</span>
+          )}
+          <input type="number" inputMode={money ? 'decimal' : 'numeric'}
+            value={value} onChange={e => onChange(e.target.value)} placeholder="0"
+            style={{
+              width: '100%', minHeight: 44, textAlign: 'right',
+              padding: money ? '0 10px 0 22px' : '0 10px',
+              fontSize: 20, fontWeight: 800,
+              borderRadius: 10,
+              border: `1.5px solid ${fromChecks ? '#86EFAC' : '#D8D3CA'}`,
+              background: fromChecks ? '#F0FDF4' : '#F5F0E8',
+              color: '#1A1A16', outline: 'none', fontFamily: 'inherit',
+            }} />
+        </div>
       </div>
+      {(fromChecks || canReset) && (
+        <div style={{
+          display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8,
+          marginTop: 4, fontSize: 11, color: '#737368', fontStyle: 'italic',
+        }}>
+          {fromChecks && <span style={{ color: '#1D6B44', fontStyle: 'normal', fontWeight: 600 }}>from checks</span>}
+          {canReset && onReset && (
+            <button onClick={onReset} style={{
+              background: 'none', border: 'none',
+              color: '#1D6B44', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+              fontFamily: 'inherit', padding: '2px 6px',
+            }}>
+              ↺ reset to checks
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
