@@ -4,6 +4,12 @@ import { createContext, useContext, useEffect, useState, useRef, useMemo } from 
 import { supabase } from '@/lib/supabase'
 import type { User, Store, Event, Shipment, Theme, Brand, AppState } from '@/types'
 
+export type DayEntryIntent = {
+  eventId: string
+  day: number
+  mode?: 'buyer' | 'combined'
+} | null
+
 interface AppContextType extends AppState {
   setTheme: (t: Theme) => void
   setYear: (y: string) => void
@@ -12,6 +18,8 @@ interface AppContextType extends AppState {
   setUser: (u: User | null) => void
   setStores: (stores: Store[]) => void
   setEvents: (events: Event[]) => void
+  dayEntryIntent: DayEntryIntent
+  setDayEntryIntent: (i: DayEntryIntent) => void
 }
 
 const AppContext = createContext<AppContextType | null>(null)
@@ -47,6 +55,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [connectionError, setConnectionError] = useState(false)
   const [brand, setBrandState] = useState<Brand>(() => readLocal('beb-brand', 'beb'))
+  const [dayEntryIntent, setDayEntryIntent] = useState<DayEntryIntent>(null)
 
   const brandRef = useRef(brand); brandRef.current = brand
   const themeRef = useRef(theme); themeRef.current = theme
@@ -222,10 +231,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     theme, year, loading, brand, connectionError,
     setTheme, setYear, setBrand, reload, setUser,
     setStores, setEvents,
+    dayEntryIntent, setDayEntryIntent,
   }), [
     user, users, stores, events, shipments, permissions,
     theme, year, loading, brand, connectionError,
-    reload,
+    reload, dayEntryIntent,
   ])
 
   return (

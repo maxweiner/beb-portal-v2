@@ -15,7 +15,6 @@ import Staff from '@/components/staff/Staff'
 import Schedule from '@/components/schedule/Schedule'
 import Travel from '@/components/travel/Travel'
 import Marketing from '@/components/marketing/Marketing'
-import Historical from '@/components/historical/Historical'
 import Calendar from '@/components/calendar/Calendar'
 import { RoleGuard } from '@/components/ui/RoleGuard'
 import LibertyAdminPanel from '@/components/admin/LibertyAdminPanel'
@@ -27,7 +26,7 @@ import MobileTravel from '@/components/mobile/MobileTravel'
 import MobileStaff from '@/components/mobile/MobileStaff'
 import { shouldUseMobile, setMobilePreference } from '@/lib/mobile'
 
-export type NavPage = 'dashboard' | 'calendar' | 'events' | 'schedule' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'stores' | 'historical' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'libertyadmin'
+export type NavPage = 'dashboard' | 'calendar' | 'events' | 'schedule' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'libertyadmin'
 
 export default function Home() {
   const { user, loading, connectionError, reload } = useApp()
@@ -77,7 +76,7 @@ export default function Home() {
         <MobileLayout nav={nav} setNav={setNav}>
           {nav === 'dashboard' && <MobileDashboard />}
           {nav === 'dayentry'  && <MobileDayEntry />}
-          {nav === 'events'    && <Events />}
+          {nav === 'events'    && <Events setNav={setNav} />}
           {nav === 'calendar'  && <Calendar key={navKey} />}
           {nav === 'schedule'  && <Schedule />}
           {nav === 'travel'    && <MobileTravel />}
@@ -129,11 +128,6 @@ export default function Home() {
         {nav === 'stores' && (
           <RoleGuard roles={['admin', 'superadmin']}>
             <Stores />
-          </RoleGuard>
-        )}
-        {nav === 'historical' && (
-          <RoleGuard roles={['admin', 'superadmin']}>
-            <Historical />
           </RoleGuard>
         )}
       </main>

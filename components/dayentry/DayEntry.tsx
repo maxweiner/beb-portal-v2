@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
+import { rollupEventDay } from '@/lib/dayRollup'
 
 interface BuyerEntry {
   id: string
@@ -12,6 +13,9 @@ interface BuyerEntry {
   buyer_id: string
   buyer_name: string
   customers_seen: number
+  purchases_made: number | null
+  dollars_at_10pct: number | null
+  dollars_at_5pct: number | null
   submitted_at: string | null
   src_vdp: number; src_postcard: number; src_social: number
   src_wordofmouth: number; src_repeat: number; src_store: number
@@ -25,6 +29,7 @@ interface BuyerCheck {
   buy_form_number: string
   amount: number
   payment_type: string
+  commission_rate: number
 }
 
 type InputMode = 'grid' | 'card'
@@ -42,9 +47,46 @@ const LEAD_SOURCES = [
 ]
 
 export default function DayEntry() {
-  const { events, users, user, reload } = useApp()
+  const { events, users, user, stores, reload, dayEntryIntent, setDayEntryIntent } = useApp()
   const isSuperAdmin = user?.role === 'superadmin'
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
+  const [creatingPastEvent, setCreatingPastEvent] = useState(false)
+  const [pastStoreId, setPastStoreId] = useState('')
+  const [pastStartDate, setPastStartDate] = useState('')
+  const [creatingSaving, setCreatingSaving] = useState(false)
+
+  const createOrFindPastEvent = async () => {
+    if (!pastStoreId || !pastStartDate) return
+    setCreatingSaving(true)
+    try {
+      const { data: existing } = await supabase
+        .from('events')
+        .select('id')
+        .eq('store_id', pastStoreId)
+        .eq('start_date', pastStartDate)
+        .maybeSingle()
+      let eventId: string | null = existing?.id ?? null
+      if (!eventId) {
+        const store = stores.find(s => s.id === pastStoreId)
+        const { data: newEv, error } = await supabase
+          .from('events')
+          .insert({ store_id: pastStoreId, store_name: store?.name || '', start_date: pastStartDate, created_by: user?.id })
+          .select('id')
+          .single()
+        if (error) { alert(error.message); setCreatingSaving(false); return }
+        eventId = newEv.id
+      }
+      await reload()
+      if (eventId) setSelectedEventId(eventId)
+      setMode('all') // land in Combined mode for past-event aggregate entry
+      setSelectedDay(1)
+      setCreatingPastEvent(false)
+      setPastStoreId('')
+      setPastStartDate('')
+    } finally {
+      setCreatingSaving(false)
+    }
+  }
 
   // Only show events this buyer is assigned to (or all for admin)
   const myEvents = events.filter(ev => {
@@ -69,6 +111,15 @@ export default function DayEntry() {
   useEffect(() => {
     if (user?.id) setSelectedBuyerId(user.id)
   }, [user?.id, selectedEventId])
+
+  // Consume a deep-link intent (e.g. tapped an Events day pill). One-shot.
+  useEffect(() => {
+    if (!dayEntryIntent) return
+    setSelectedEventId(dayEntryIntent.eventId)
+    setSelectedDay(dayEntryIntent.day)
+    if (dayEntryIntent.mode && isSuperAdmin) setMode(dayEntryIntent.mode === 'combined' ? 'all' : 'buyer')
+    setDayEntryIntent(null)
+  }, [dayEntryIntent, isSuperAdmin])
 
   useEffect(() => {
     if (selectedEventId) loadBuyerEntries()
@@ -109,24 +160,58 @@ export default function DayEntry() {
       </div>
 
       {/* Event + Day selector */}
-      <div className="card mb-5" style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <div className="field" style={{ flex: 2, minWidth: 200 }}>
-          <label className="fl">Event</label>
-          <select value={selectedEventId} onChange={e => { setSelectedEventId(e.target.value); setSelectedDay(1) }}>
-            <option value="">Select event…</option>
-            {myEvents.map(ev => (
-              <option key={ev.id} value={ev.id}>{ev.store_name} — {fmt(ev.start_date)}</option>
-            ))}
-          </select>
+      <div className="card mb-5">
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div className="field" style={{ flex: 2, minWidth: 200 }}>
+            <label className="fl">Event</label>
+            <select value={selectedEventId} onChange={e => { setSelectedEventId(e.target.value); setSelectedDay(1) }}>
+              <option value="">Select event…</option>
+              {myEvents.map(ev => (
+                <option key={ev.id} value={ev.id}>{ev.store_name} — {fmt(ev.start_date)}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label className="fl">Day</label>
+            <select value={selectedDay} onChange={e => setSelectedDay(Number(e.target.value))}>
+              <option value={1}>Day 1</option>
+              <option value={2}>Day 2</option>
+              <option value={3}>Day 3</option>
+            </select>
+          </div>
+          {isSuperAdmin && !creatingPastEvent && (
+            <button className="btn-outline btn-sm" onClick={() => setCreatingPastEvent(true)}>
+              + Create past event
+            </button>
+          )}
         </div>
-        <div className="field">
-          <label className="fl">Day</label>
-          <select value={selectedDay} onChange={e => setSelectedDay(Number(e.target.value))}>
-            <option value={1}>Day 1</option>
-            <option value={2}>Day 2</option>
-            <option value={3}>Day 3</option>
-          </select>
-        </div>
+        {isSuperAdmin && creatingPastEvent && (
+          <div style={{ marginTop: 14, padding: 14, background: 'var(--cream2)', border: '1px solid var(--pearl)', borderRadius: 'var(--r)' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginBottom: 10 }}>Create a past event</div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div className="field" style={{ flex: 2, minWidth: 200 }}>
+                <label className="fl">Store</label>
+                <select value={pastStoreId} onChange={e => setPastStoreId(e.target.value)}>
+                  <option value="">Select store…</option>
+                  {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label className="fl">Start date</label>
+                <input type="date" value={pastStartDate} onChange={e => setPastStartDate(e.target.value)} />
+              </div>
+              <button className="btn-primary btn-sm" disabled={!pastStoreId || !pastStartDate || creatingSaving} onClick={createOrFindPastEvent}>
+                {creatingSaving ? 'Saving…' : 'Create & select'}
+              </button>
+              <button className="btn-outline btn-sm" onClick={() => { setCreatingPastEvent(false); setPastStoreId(''); setPastStartDate('') }}>
+                Cancel
+              </button>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 8 }}>
+              If an event already exists for that store and date, it will be selected instead of duplicated.
+            </div>
+          </div>
+        )}
       </div>
 
       {!selectedEventId && (
@@ -228,6 +313,9 @@ function BuyerEntryForm({ eventId, dayNumber, buyerId, buyerName, existingEntry,
   const { user } = useApp()
   const [inputMode, setInputMode] = useState<InputMode>('grid')
   const [customersSeeen, setCustomersSeen] = useState(String(existingEntry?.customers_seen || ''))
+  const [purchases, setPurchases] = useState(existingEntry?.purchases_made != null ? String(existingEntry.purchases_made) : '')
+  const [tenPct, setTenPct] = useState(existingEntry?.dollars_at_10pct != null ? String(existingEntry.dollars_at_10pct) : '')
+  const [fivePct, setFivePct] = useState(existingEntry?.dollars_at_5pct != null ? String(existingEntry.dollars_at_5pct) : '')
   const [sources, setSources] = useState<Record<string, string>>(
     Object.fromEntries(LEAD_SOURCES.map(s => [s.key, String((existingEntry as any)?.[s.key] || '')]))
   )
@@ -243,13 +331,15 @@ function BuyerEntryForm({ eventId, dayNumber, buyerId, buyerName, existingEntry,
     hydratedRef.current = false
     entryIdRef.current = existingEntry?.id || null
     setCustomersSeen(String(existingEntry?.customers_seen || ''))
+    setPurchases(existingEntry?.purchases_made != null ? String(existingEntry.purchases_made) : '')
+    setTenPct(existingEntry?.dollars_at_10pct != null ? String(existingEntry.dollars_at_10pct) : '')
+    setFivePct(existingEntry?.dollars_at_5pct != null ? String(existingEntry.dollars_at_5pct) : '')
     setSources(Object.fromEntries(LEAD_SOURCES.map(s => [s.key, String((existingEntry as any)?.[s.key] || '')])))
     setSubmitted(!!existingEntry?.submitted_at)
     if (existingEntry?.id) loadChecks(existingEntry.id)
     else {
-      setChecks([{ check_number: '', buy_form_number: '', amount: 0, payment_type: 'check', event_id: eventId, created_at: '' } as any])
+      setChecks([emptyCheck()])
       setLoadingChecks(false)
-      // mark hydrated on next tick for new entries
       setTimeout(() => { hydratedRef.current = true }, 0)
     }
   }, [existingEntry?.id])
@@ -257,16 +347,21 @@ function BuyerEntryForm({ eventId, dayNumber, buyerId, buyerName, existingEntry,
   const loadChecks = async (entryId: string) => {
     setLoadingChecks(true)
     const { data } = await supabase.from('buyer_checks').select('*').eq('entry_id', entryId).order('created_at')
-    setChecks(data && data.length > 0 ? data : [emptyCheck()])
+    setChecks(data && data.length > 0
+      ? data.map((c: any) => ({ ...c, commission_rate: c.commission_rate === 5 ? 5 : 10 }))
+      : [emptyCheck()])
     setLoadingChecks(false)
     setTimeout(() => { hydratedRef.current = true }, 0)
   }
 
-  const emptyCheck = () => ({ check_number: '', buy_form_number: '', amount: '' as any, payment_type: 'check', event_id: eventId })
+  const emptyCheck = () => ({
+    check_number: '', buy_form_number: '', amount: '' as any,
+    payment_type: 'check', event_id: eventId, commission_rate: 10,
+  })
 
   const addRows = () => setChecks(p => [...p, emptyCheck(), emptyCheck(), emptyCheck(), emptyCheck(), emptyCheck()])
 
-  const updateCheck = (i: number, field: string, value: string) => {
+  const updateCheck = (i: number, field: string, value: string | number) => {
     setChecks(p => p.map((c, idx) => idx === i ? { ...c, [field]: value } : c))
   }
 
@@ -275,12 +370,22 @@ function BuyerEntryForm({ eventId, dayNumber, buyerId, buyerName, existingEntry,
   const validChecks = checks.filter(c => c.amount && parseFloat(String(c.amount)) > 0)
   const totalAmount = validChecks.reduce((s, c) => s + parseFloat(String(c.amount) || '0'), 0)
   const totalPurchases = validChecks.length
+  const derived10 = validChecks.filter(c => c.commission_rate === 10).reduce((s, c) => s + parseFloat(String(c.amount)), 0)
+  const derived5  = validChecks.filter(c => c.commission_rate === 5 ).reduce((s, c) => s + parseFloat(String(c.amount)), 0)
+  const hasValidChecks = validChecks.length > 0
 
-  const persist = async (submit: boolean) => {
-    const entryPayload = {
+  type Overrides = Partial<{ purchases: string; tenPct: string; fivePct: string }>
+  const persist = async (submit: boolean, overrides: Overrides = {}) => {
+    const effPurchases = overrides.purchases ?? purchases
+    const effTenPct    = overrides.tenPct    ?? tenPct
+    const effFivePct   = overrides.fivePct   ?? fivePct
+    const entryPayload: any = {
       event_id: eventId, day_number: dayNumber, day: dayNumber,
       buyer_id: buyerId, buyer_name: buyerName,
       customers_seen: parseInt(customersSeeen) || 0,
+      purchases_made: effPurchases !== '' ? parseInt(effPurchases) || 0 : null,
+      dollars_at_10pct: effTenPct !== '' ? parseFloat(effTenPct) : null,
+      dollars_at_5pct: effFivePct !== '' ? parseFloat(effFivePct) : null,
       ...Object.fromEntries(LEAD_SOURCES.map(s => [s.key, parseInt(sources[s.key]) || 0])),
       submitted_at: submit ? new Date().toISOString() : existingEntry?.submitted_at || null,
     }
@@ -308,22 +413,38 @@ function BuyerEntryForm({ eventId, dayNumber, buyerId, buyerName, existingEntry,
           buy_form_number: c.buy_form_number,
           amount: parseFloat(String(c.amount)) || 0,
           payment_type: c.payment_type,
+          commission_rate: c.commission_rate === 5 ? 5 : 10,
         }))
       )
       if (error) throw error
     }
+
+    // Roll the per-buyer totals up into event_days so Dashboard / Events
+    // pills / Reports show consistent numbers.
+    await rollupEventDay(eventId, dayNumber)
   }
 
   const autosaveStatus = useAutosave(
-    { customersSeeen, sources, checks },
+    { customersSeeen, purchases, tenPct, fivePct, sources, checks },
     async () => { await persist(false) },
     { enabled: hydratedRef.current && !loadingChecks && !saving, delay: 1000 }
   )
 
   const submit = async () => {
     setSaving(true)
+    // On Submit, check totals OVERWRITE top aggregate fields (Q7).
+    const overrides: Overrides = hasValidChecks ? {
+      purchases: String(totalPurchases),
+      tenPct: derived10 > 0 ? String(derived10) : '',
+      fivePct: derived5 > 0 ? String(derived5) : '',
+    } : {}
+    if (hasValidChecks) {
+      setPurchases(overrides.purchases!)
+      setTenPct(overrides.tenPct!)
+      setFivePct(overrides.fivePct!)
+    }
     try {
-      await persist(true)
+      await persist(true, overrides)
       if (otherBuyers.length > 0) {
         try {
           await fetch('/api/day-entry', {
@@ -360,19 +481,56 @@ function BuyerEntryForm({ eventId, dayNumber, buyerId, buyerName, existingEntry,
         )}
       </div>
 
-      {/* Customers seen + lead sources */}
+      {/* Day totals — top aggregate fields, reporting source of truth.
+          Populated by user or auto-filled from check totals on Submit (Q7). */}
       <div className="card card-accent" style={{ margin: 0 }}>
         <div className="card-title" style={{ display: 'flex', alignItems: 'center' }}>
-          Customers & Lead Sources
+          Day Totals
           <AutosaveIndicator status={autosaveStatus} />
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label className="fl">Customers Seen Today</label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+          <div>
+            <label className="fl">Customers Seen</label>
             <input type="number" min="0" value={customersSeeen}
               onChange={e => setCustomersSeen(e.target.value)}
-              placeholder="0" style={{ maxWidth: 160 }} />
+              placeholder="0" />
           </div>
+          <div>
+            <label className="fl">Purchases Made</label>
+            <input type="number" min="0" value={purchases}
+              onChange={e => setPurchases(e.target.value)}
+              placeholder="0" />
+          </div>
+          <div>
+            <label className="fl">$ @ 10% Commission</label>
+            <div style={{ position: 'relative' }}>
+              <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)' }}>$</span>
+              <input type="number" min="0" step="0.01" value={tenPct}
+                onChange={e => setTenPct(e.target.value)}
+                placeholder="0" style={{ paddingLeft: 20 }} />
+            </div>
+          </div>
+          <div>
+            <label className="fl">$ @ 5% Commission</label>
+            <div style={{ position: 'relative' }}>
+              <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)' }}>$</span>
+              <input type="number" min="0" step="0.01" value={fivePct}
+                onChange={e => setFivePct(e.target.value)}
+                placeholder="0" style={{ paddingLeft: 20 }} />
+            </div>
+          </div>
+        </div>
+        {hasValidChecks && (
+          <div style={{ marginTop: 12, padding: 10, background: 'var(--green-pale)', border: '1px solid var(--green3)', borderRadius: 'var(--r)', fontSize: 12, color: 'var(--green-dark)' }}>
+            ℹ On Submit, the $ and Purchases fields above will be replaced with your check totals ({totalPurchases} checks · ${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}).
+          </div>
+        )}
+      </div>
+
+      {/* Lead sources */}
+      <div className="card card-accent" style={{ margin: 0 }}>
+        <div className="card-title">Lead Sources</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
           {LEAD_SOURCES.map(s => (
             <div key={s.key}>
               <label className="fl">{s.label}</label>
@@ -415,7 +573,7 @@ function BuyerEntryForm({ eventId, dayNumber, buyerId, buyerName, existingEntry,
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid var(--pearl)' }}>
-                  {['#', 'Type', 'Check #', 'Buy Form #', 'Amount', ''].map(h => (
+                  {['#', 'Type', 'Check #', 'Buy Form #', 'Amount', '5%', ''].map(h => (
                     <th key={h} style={{ padding: '6px 8px', textAlign: 'left', fontWeight: 700, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--mist)', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
@@ -445,6 +603,14 @@ function BuyerEntryForm({ eventId, dayNumber, buyerId, buyerName, existingEntry,
                         <input type="number" min="0" step="0.01" value={c.amount || ''} onChange={e => updateCheck(i, 'amount', e.target.value)}
                           placeholder="0.00" style={{ paddingLeft: 20, width: '100%', fontSize: 13, padding: '4px 8px 4px 20px' }} />
                       </div>
+                    </td>
+                    <td style={{ padding: '4px 8px', textAlign: 'center' }}>
+                      <input type="checkbox"
+                        checked={c.commission_rate === 5}
+                        onChange={e => updateCheck(i, 'commission_rate', e.target.checked ? 5 : 10)}
+                        className="w-4 h-4 cursor-pointer"
+                        style={{ accentColor: 'var(--green)' }}
+                        aria-label="5% commission rate" />
                     </td>
                     <td style={{ padding: '4px 8px' }}>
                       <button onClick={() => removeCheck(i)} style={{ background: 'none', border: 'none', color: 'var(--mist)', cursor: 'pointer', fontSize: 16, padding: '0 4px' }}>×</button>
@@ -483,6 +649,22 @@ function BuyerEntryForm({ eventId, dayNumber, buyerId, buyerName, existingEntry,
                       placeholder="0.00" style={{ paddingLeft: 20, width: 110 }} />
                   </div>
                 </div>
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+                  padding: '6px 10px', borderRadius: 'var(--r)',
+                  background: c.commission_rate === 5 ? 'var(--green-pale)' : 'transparent',
+                  border: `1px solid ${c.commission_rate === 5 ? 'var(--green3)' : 'var(--pearl)'}`,
+                  marginBottom: 2,
+                }}>
+                  <input type="checkbox"
+                    checked={c.commission_rate === 5}
+                    onChange={e => updateCheck(i, 'commission_rate', e.target.checked ? 5 : 10)}
+                    className="w-4 h-4 cursor-pointer"
+                    style={{ accentColor: 'var(--green)' }} />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: c.commission_rate === 5 ? 'var(--green-dark)' : 'var(--mist)' }}>
+                    5%
+                  </span>
+                </label>
                 <button onClick={() => removeCheck(i)} style={{ background: 'none', border: 'none', color: 'var(--mist)', cursor: 'pointer', fontSize: 18, padding: '0 4px', marginBottom: 2 }}>×</button>
               </div>
             ))}
@@ -494,6 +676,11 @@ function BuyerEntryForm({ eventId, dayNumber, buyerId, buyerName, existingEntry,
           {totalPurchases > 0 && (
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--green-dark)', marginLeft: 8 }}>
               {totalPurchases} purchases · ${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              {derived5 > 0 && (
+                <span style={{ fontWeight: 500, color: 'var(--mist)', marginLeft: 6 }}>
+                  (${derived10.toLocaleString('en-US', { minimumFractionDigits: 0 })} @ 10% · ${derived5.toLocaleString('en-US', { minimumFractionDigits: 0 })} @ 5%)
+                </span>
+              )}
             </div>
           )}
         </div>

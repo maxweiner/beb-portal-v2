@@ -5,6 +5,7 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import type { Event, BuyerVacation } from '@/types'
+import type { NavPage } from '@/app/page'
 
 type Filter = 'thisweek' | 'active' | 'all' | 'current' | 'past' | 'future' | 'days30' | 'days60'
 type Sort = 'date-desc' | 'date-asc' | 'name-asc'
@@ -20,9 +21,10 @@ const withTimeout = (promise: PromiseLike<any>, ms = 10000): Promise<any> => {
   ])
 }
 
-export default function Events() {
-  const { stores, users, user, brand, setEvents: setContextEvents } = useApp()
+export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
+  const { stores, users, user, brand, setEvents: setContextEvents, setDayEntryIntent } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
+  const isSuperAdmin = user?.role === 'superadmin'
 
   const [events, setEvents] = useState<Event[]>([])
   const [eventsLoaded, setEventsLoaded] = useState(false)
@@ -36,7 +38,20 @@ export default function Events() {
   const [workersOpen, setWorkersOpen] = useState<string | null>(null)
   const [spendOpen, setSpendOpen] = useState<string | null>(null)
   const [detail, setDetail] = useState<Event | null>(null)
-  const [dayEdit, setDayEdit] = useState<{ ev: Event; dayNumber: number } | null>(null)
+
+  // Navigate to Enter Day Data with event+day pre-selected. For superadmins,
+  // land in Combined mode when event_days has data for that day, else By
+  // Buyer — so legacy aggregate entries stay visible.
+  const openDayEntry = (ev: Event, dayNumber: number) => {
+    if (!setNav) return
+    const evDay = (ev as any).days?.find((d: any) => d.day_number === dayNumber)
+    const hasCombined = !!evDay && (
+      (evDay.customers ?? 0) + (evDay.purchases ?? 0) + (evDay.dollars10 ?? 0) + (evDay.dollars5 ?? 0)
+    ) > 0
+    const mode: 'buyer' | 'combined' = isSuperAdmin && hasCombined ? 'combined' : 'buyer'
+    setDayEntryIntent({ eventId: ev.id, day: dayNumber, mode })
+    setNav('dayentry')
+  }
 
   const today = new Date(); today.setHours(0,0,0,0)
   const buyers = users.filter(u => u.active && u.is_buyer !== false)
@@ -404,7 +419,8 @@ export default function Events() {
                 </div>
               </div>
 
-              {/* Day dots */}
+              {/* Day pills — navigation links to Enter Day Data. Pill total
+                  is hybrid (Q1): per-buyer sum if any rows, else event_days. */}
               <div className="flex gap-2 mt-4" onClick={e => e.stopPropagation()}>
                 {[1, 2, 3].map(d => {
                   const day = (ev.days || []).find(x => x.day_number === d)
@@ -412,14 +428,23 @@ export default function Events() {
                   const eventWorkerCount = (ev.workers || []).length
                   const submittedCount = dayBuyerEntries.filter((e: any) => e.submitted_at).length
                   const startedCount = dayBuyerEntries.length
-                  const hasData = day && (day.purchases > 0 || day.customers > 0 || day.dollars10 > 0)
+
+                  const buyerTotal = dayBuyerEntries.reduce(
+                    (s: number, e: any) => s + (Number(e.dollars_at_10pct) || 0) + (Number(e.dollars_at_5pct) || 0),
+                    0
+                  )
+                  const aggregateTotal = day ? (Number(day.dollars10) || 0) + (Number(day.dollars5) || 0) : 0
+                  const dayTotal = dayBuyerEntries.length > 0 ? buyerTotal : aggregateTotal
+
+                  const hasData = dayTotal > 0 || (day && (day.purchases > 0 || day.customers > 0))
                   const allSubmitted = eventWorkerCount > 0 && submittedCount === eventWorkerCount
                   const someSubmitted = submittedCount > 0 || startedCount > 0
                   const dotColor = hasData || allSubmitted ? 'var(--green)' : someSubmitted ? '#f59e0b' : 'var(--cream2)'
                   const textColor = (hasData || allSubmitted || someSubmitted) ? '#fff' : 'var(--silver)'
+                  const totalLabel = dayTotal > 0 ? ` · $${Math.round(dayTotal).toLocaleString('en-US')}` : ''
                   return (
                     <button key={d}
-                      onClick={e => { e.stopPropagation(); setDayEdit({ ev, dayNumber: d }) }}
+                      onClick={e => { e.stopPropagation(); openDayEntry(ev, d) }}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 6,
                         padding: '6px 12px', borderRadius: 99, border: 'none', cursor: 'pointer',
@@ -433,8 +458,8 @@ export default function Events() {
                         background: (hasData || allSubmitted || someSubmitted) ? '#fff' : 'var(--silver)',
                         display: 'inline-block', flexShrink: 0,
                       }} />
-                      Day {d}
-                      {someSubmitted && <span style={{ opacity: .8, fontSize: 11 }}>{submittedCount}/{eventWorkerCount}</span>}
+                      Day {d}{totalLabel}
+                      {someSubmitted && !dayTotal && <span style={{ opacity: .8, fontSize: 11 }}>{submittedCount}/{eventWorkerCount}</span>}
                     </button>
                   )
                 })}
@@ -500,15 +525,6 @@ export default function Events() {
         <EventDetailModal ev={detail} stores={stores} onClose={() => setDetail(null)} fmtDollars={fmtDollars} />
       )}
 
-      {/* Day Edit Modal */}
-      {dayEdit && (
-        <DayEditModal
-          ev={dayEdit.ev}
-          dayNumber={dayEdit.dayNumber}
-          onClose={() => setDayEdit(null)}
-          onSaved={() => { setDayEdit(null); fetchEvents() }}
-        />
-      )}
     </div>
   )
 }
@@ -696,151 +712,3 @@ function SpendPanel({ ev, onClose, refetchEvents }: { ev: Event; onClose: () => 
   )
 }
 
-/* ══ DAY EDIT MODAL ══ */
-function DayEditModal({ ev, dayNumber, onClose, onSaved }: {
-  ev: Event
-  dayNumber: number
-  onClose: () => void
-  onSaved: () => void
-}) {
-  const [existing, setExisting] = useState<any>(ev.days.find(d => d.day_number === dayNumber) || null)
-  const [loading, setLoading] = useState(true)
-  const n = (v: string) => parseFloat(v) || 0
-
-  const [form, setForm] = useState({
-    customers: '', purchases: '', dollars10: '', dollars5: '',
-    src_vdp: '', src_postcard: '', src_social: '',
-    src_wordofmouth: '', src_repeat: '', src_other: '', src_store: '', src_text: '', src_newspaper: '',
-  })
-
-  useEffect(() => {
-    withTimeout(
-      supabase.from('event_days')
-        .select('*')
-        .eq('event_id', ev.id)
-        .eq('day_number', dayNumber)
-        .maybeSingle()
-    ).then(({ data }) => {
-      const d = data || existing
-      if (d) {
-        setExisting(d)
-        setForm({
-          customers:       String(d.customers       || ''),
-          purchases:       String(d.purchases       || ''),
-          dollars10:       String(d.dollars10       || ''),
-          dollars5:        String(d.dollars5        || ''),
-          src_vdp:         String(d.src_vdp         || ''),
-          src_postcard:    String(d.src_postcard    || ''),
-          src_social:      String(d.src_social      || ''),
-          src_wordofmouth: String(d.src_wordofmouth || ''),
-          src_repeat:      String(d.src_repeat      || ''),
-          src_other:       String(d.src_other       || ''),
-          src_store:       String(d.src_store        || ''),
-          src_text:        String(d.src_text         || ''),
-          src_newspaper:   String(d.src_newspaper   || ''),
-        })
-      }
-      setLoading(false)
-    }).catch(() => setLoading(false))
-  }, [ev.id, dayNumber])
-
-  const dayDate = new Date(ev.start_date + 'T12:00:00')
-  dayDate.setDate(dayDate.getDate() + dayNumber - 1)
-  const dayLabel = isNaN(dayDate.getTime()) ? `Day ${dayNumber}` :
-    `Day ${dayNumber} — ${dayDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`
-
-  const status = useAutosave(
-    form,
-    async (f) => {
-      const payload = {
-        event_id: ev.id, day_number: dayNumber, day: dayNumber,
-        customers: n(f.customers), purchases: n(f.purchases),
-        dollars10: n(f.dollars10), dollars5: n(f.dollars5),
-        src_vdp: n(f.src_vdp), src_postcard: n(f.src_postcard),
-        src_social: n(f.src_social), src_wordofmouth: n(f.src_wordofmouth),
-        src_repeat: n(f.src_repeat), src_other: n(f.src_other),
-        src_store: n(f.src_store), src_text: n(f.src_text), src_newspaper: n(f.src_newspaper),
-      }
-      if (existing) {
-        const { error } = await withTimeout(
-          supabase.from('event_days').update(payload).eq('id', existing.id)
-        )
-        if (error) throw error
-      } else {
-        const { data, error } = await withTimeout(
-          supabase.from('event_days').insert(payload).select().single()
-        )
-        if (error) throw error
-        if (data) setExisting(data)
-      }
-    },
-    { enabled: !loading, delay: 1000 }
-  )
-
-  const handleDone = () => {
-    onSaved()
-  }
-
-  const inp = (label: string, key: keyof typeof form, hint?: string) => (
-    <div key={key}>
-      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', marginBottom: 4 }}>
-        {label}{hint && <span style={{ color: 'var(--green)', marginLeft: 4 }}>{hint}</span>}
-      </label>
-      <input type="number" min="0" value={form[key]}
-        onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}
-        style={{ width: '100%' }} />
-    </div>
-  )
-
-  return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1000, overflowY: 'auto', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px' }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--cream)', borderRadius: 'var(--r2)', maxWidth: 540, width: '100%', boxShadow: 'var(--shadow-lg)' }}>
-        <div style={{ background: 'var(--sidebar-bg)', padding: '20px 24px', borderRadius: 'var(--r2) var(--r2) 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ color: '#7EC8A0', fontSize: 13 }}>◆ {ev.store_name}</div>
-            <div style={{ color: '#fff', fontSize: 17, fontWeight: 900, marginTop: 2 }}>{dayLabel}</div>
-            {existing && <div style={{ color: 'rgba(255,255,255,.5)', fontSize: 12, marginTop: 2 }}>Editing existing data</div>}
-          </div>
-          <button onClick={onClose} style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 32, height: 32, borderRadius: '50%', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
-        </div>
-        {loading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--mist)' }}>Loading day data…</div>
-        ) : (
-          <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <div className="card card-accent" style={{ margin: 0 }}>
-              <div className="card-title" style={{ display: 'flex', alignItems: 'center' }}>
-                Sales Data
-                <AutosaveIndicator status={status} />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                {inp('Customers Seen', 'customers')}
-                {inp('Purchases Made', 'purchases', '★')}
-                {inp('Commission at 10%', 'dollars10', '★')}
-                {inp('Commission at 5%', 'dollars5')}
-              </div>
-            </div>
-            <div className="card card-accent" style={{ margin: 0 }}>
-              <div className="card-title">Lead Sources</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                {inp('VDP / Large Postcard', 'src_vdp')}
-                {inp('Store Postcard', 'src_postcard')}
-                {inp('Social Media', 'src_social')}
-                {inp('Word of Mouth', 'src_wordofmouth')}
-                {inp('Repeat Customer', 'src_repeat')}
-                {inp('Store', 'src_store')}
-                {inp('Text Message', 'src_text')}
-                {inp('Newspaper', 'src_newspaper')}
-                {inp('Other', 'src_other')}
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button className="btn-primary" onClick={handleDone} style={{ flex: 1 }}>
-                Done
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}

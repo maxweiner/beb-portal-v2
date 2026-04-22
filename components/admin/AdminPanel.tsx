@@ -487,7 +487,6 @@ const FEATURES = [
   { key: 'shipping',   label: 'Shipping Log' },
   { key: 'reports',    label: 'Reports' },
   { key: 'stores',     label: 'Stores' },
-  { key: 'historical', label: 'Historical Data' },
   { key: 'admin',      label: 'Admin Panel' },
 ]
 
