@@ -256,6 +256,13 @@ function EventCards({ activeEvents, stores, appointments, loading, lastRefresh, 
   onRefreshAll: () => void
   isMobile: boolean
 }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const toggle = (id: string) => setExpanded(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
+
   const fmtRange = (ds: string) => {
     const s = new Date(ds + 'T12:00:00')
     const e = new Date(ds + 'T12:00:00'); e.setDate(e.getDate() + 2)
@@ -335,9 +342,17 @@ function EventCards({ activeEvents, stores, appointments, loading, lastRefresh, 
           const total = dayCounts.reduce((a, b) => a + b, 0)
           const pct = Math.min(Math.round(total / 63 * 100), 100)
 
+          // Mobile uses per-card collapse: tapping the header row toggles
+          // body visibility; only the "View Appointments →" button navigates.
+          // Desktop keeps whole-card-clickable behavior.
+          const isOpen = !isMobile || expanded.has(ev.id)
+          const handleCardClick = isMobile
+            ? () => toggle(ev.id)
+            : () => onOpen(ev)
+
           return (
             <div key={ev.id}
-              onClick={() => onOpen(ev)}
+              onClick={handleCardClick}
               style={{
                 background: '#fff',
                 border: '1.5px solid var(--pearl)',
@@ -348,23 +363,43 @@ function EventCards({ activeEvents, stores, appointments, loading, lastRefresh, 
                 overflow: 'hidden',
               }}
               onMouseEnter={e => {
+                if (isMobile) return
                 e.currentTarget.style.transform = 'translateY(-1px)'
                 e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,.08)'
               }}
               onMouseLeave={e => {
+                if (isMobile) return
                 e.currentTarget.style.transform = 'none'
                 e.currentTarget.style.boxShadow = 'none'
               }}>
 
               <div style={{ padding: '14px 16px 12px', flex: 1 }}>
-                <div style={{ fontSize: 15, fontWeight: 900, color: 'var(--ink)', marginBottom: 2 }}>
-                  {store?.name || ev.store_name}
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--mist)' }}>
-                  {store?.city}{store?.state ? `, ${store.state}` : ''} · {fmtRange(ev.start_date)}
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 900, color: 'var(--ink)', marginBottom: 2 }}>
+                      {store?.name || ev.store_name}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--mist)' }}>
+                      {store?.city}{store?.state ? `, ${store.state}` : ''} · {fmtRange(ev.start_date)}
+                    </div>
+                  </div>
+                  {isMobile && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                      {hasFeed && (
+                        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--green-dark)', background: 'var(--green-pale)', padding: '2px 8px', borderRadius: 99 }}>
+                          {isLoading ? '…' : `${total} appts`}
+                        </span>
+                      )}
+                      <span aria-hidden style={{
+                        color: 'var(--mist)', fontSize: 12, lineHeight: 1,
+                        transform: isOpen ? 'rotate(90deg)' : 'none',
+                        transition: 'transform .15s', display: 'inline-block', width: 12, textAlign: 'center',
+                      }}>▸</span>
+                    </div>
+                  )}
                 </div>
 
-                {hasFeed ? (
+                {isOpen && (hasFeed ? (
                   <>
                     {/* Day breakdown */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, marginTop: 12 }}>
@@ -423,11 +458,15 @@ function EventCards({ activeEvents, stores, appointments, loading, lastRefresh, 
                       }} />
                     </div>
                   </div>
-                )}
+                ))}
               </div>
 
+              {isOpen && (
               <button
-                onClick={e => { if (!hasFeed) { e.stopPropagation() } }}
+                onClick={e => {
+                  if (!hasFeed) { e.stopPropagation(); return }
+                  if (isMobile) { e.stopPropagation(); onOpen(ev) }
+                }}
                 style={{
                   borderTop: '1px solid var(--pearl)',
                   padding: '10px 0', width: '100%',
@@ -441,6 +480,7 @@ function EventCards({ activeEvents, stores, appointments, loading, lastRefresh, 
                 onMouseLeave={e => { if (hasFeed) e.currentTarget.style.background = '#D8EDDF' }}>
                 {hasFeed ? 'View Appointments →' : 'No Calendar Available'}
               </button>
+              )}
             </div>
           )
         })}
