@@ -25,7 +25,7 @@ export default function Calendar() {
   })
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [selectedDay, setSelectedDay] = useState(1)
-  const [calFilter, setCalFilter] = useState<'active'|'all'|'days30'|'days60'|'past'>('active')
+  const [calFilter, setCalFilter] = useState<'thisweek'|'all'|'current'|'upcoming'|'past'>('thisweek')
   const storesRef = useRef(stores)
   storesRef.current = stores
 
@@ -63,24 +63,33 @@ export default function Calendar() {
     return upcoming[0]?.id || null
   })()
 
-  // One-shot auto-select on mount (for desktop AND mobile). Only runs while
-  // we're still at the cards grid — manual "All Events" back-out stays at
-  // the grid because `autoOpenedRef` is already true. On nav re-click the
-  // Calendar component remounts (key={navKey} in app/page.tsx) which
-  // resets this ref, so the auto-select fires again.
+  // One-shot auto-select on mount — MOBILE ONLY. Desktop always lands on
+  // the event-cards grid so users can browse. The nav re-click remounts
+  // Calendar via key={navKey} in app/page.tsx, so this still fires each
+  // time a mobile user taps the Appts tab.
   const autoOpenedRef = useRef(false)
   useEffect(() => {
+    if (!isMobile) return
     if (autoOpenedRef.current) return
     if (myTargetEventId && !selectedEventId) {
       autoOpenedRef.current = true
       setSelectedEventId(myTargetEventId)
+      // Land on the correct day-of-event for today (Day 1 / Day 2 / Day 3).
+      const ev = events.find(e => e.id === myTargetEventId)
+      if (ev?.start_date) {
+        const start = new Date(ev.start_date + 'T00:00:00'); start.setHours(0,0,0,0)
+        const t = new Date(); t.setHours(0,0,0,0)
+        const diff = Math.floor((t.getTime() - start.getTime()) / 86400000)
+        if (diff >= 0 && diff <= 2) setSelectedDay(diff + 1)
+      }
     }
-  }, [myTargetEventId, selectedEventId])
+  }, [isMobile, myTargetEventId, selectedEventId, events])
 
   // Get all events with dates
   const allDatedEvents = events.filter(ev => !!ev.start_date)
 
-  // Apply calendar filter
+  // Apply calendar filter — "This Week" = Monday through Sunday of the
+  // current calendar week (same convention as the dashboard).
   const activeEvents = allDatedEvents.filter(ev => {
     const today = new Date(); today.setHours(0, 0, 0, 0)
     const start = new Date(ev.start_date + 'T12:00:00')
@@ -88,10 +97,15 @@ export default function Calendar() {
     const isPast = end < today
     const isFut = start > today
     const isCur = today >= start && today <= end
-    if (calFilter === 'active') return isCur || isFut
+    if (calFilter === 'current') return isCur
+    if (calFilter === 'upcoming') return isFut
     if (calFilter === 'past') return isPast
-    if (calFilter === 'days30') { const d = new Date(today); d.setDate(d.getDate() + 30); return start <= d && end >= today }
-    if (calFilter === 'days60') { const d = new Date(today); d.setDate(d.getDate() + 60); return start <= d && end >= today }
+    if (calFilter === 'thisweek') {
+      const dow = today.getDay()
+      const mon = new Date(today); mon.setDate(today.getDate() - ((dow + 6) % 7))
+      const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23, 59, 59)
+      return start <= sun && end >= mon
+    }
     return true
   })
 
@@ -240,134 +254,191 @@ function EventCards({ activeEvents, stores, appointments, loading, lastRefresh, 
   onOpen: (ev: Event) => void
   onRefreshAll: () => void
 }) {
+  const fmtRange = (ds: string) => {
+    const s = new Date(ds + 'T12:00:00')
+    const e = new Date(ds + 'T12:00:00'); e.setDate(e.getDate() + 2)
+    const sm = s.toLocaleDateString('en-US', { month: 'short' })
+    const em = e.toLocaleDateString('en-US', { month: 'short' })
+    const year = s.getFullYear()
+    return sm !== em
+      ? `${sm} ${s.getDate()} – ${em} ${e.getDate()}, ${year}`
+      : `${sm} ${s.getDate()}–${e.getDate()}, ${year}`
+  }
+
+  const FILTERS: { id: 'thisweek'|'all'|'current'|'upcoming'|'past'; label: string }[] = [
+    { id: 'thisweek', label: 'This Week' },
+    { id: 'all',      label: 'All' },
+    { id: 'current',  label: 'Current' },
+    { id: 'upcoming', label: 'Upcoming' },
+    { id: 'past',     label: 'Past' },
+  ]
+
   return (
     <>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-black" style={{ color: 'var(--ink)' }}>Calendar</h1>
-        <div className="flex items-center gap-3">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 12 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)' }}>Appointments</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {lastRefresh && (
-            <span className="text-xs" style={{ color: 'var(--mist)' }}>
+            <span style={{ fontSize: 12, color: 'var(--mist)' }}>
               Updated {lastRefresh.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
             </span>
           )}
-          <select value={calFilter} onChange={e => setCalFilter(e.target.value)} style={{ width: 'auto', fontSize: 13, padding: '6px 12px' }}>
-            <option value="active">Current & Upcoming</option>
-            <option value="all">All Events</option>
-            <option value="days30">Next 30 Days</option>
-            <option value="days60">Next 60 Days</option>
-            <option value="past">Past</option>
-          </select>
-          <button onClick={onRefreshAll}
-            className="btn-outline btn-sm"
-            >
-            ⟳ Refresh All
-          </button>
+          <button onClick={onRefreshAll} className="btn-outline btn-sm">⟳ Refresh All</button>
         </div>
       </div>
 
+      {/* Pill filter bar */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
+        {FILTERS.map(f => {
+          const active = calFilter === f.id
+          return (
+            <button key={f.id} onClick={() => setCalFilter(f.id)} style={{
+              padding: '7px 16px', borderRadius: 20,
+              background: active ? 'var(--gradient-primary)' : '#fff',
+              color: active ? '#fff' : 'var(--mist)',
+              border: active ? '1.5px solid var(--green)' : '1.5px solid var(--pearl)',
+              fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              fontFamily: 'inherit', transition: 'all .15s',
+            }}>
+              {f.label}
+            </button>
+          )
+        })}
+      </div>
+
       {activeEvents.length === 0 && (
-        <div className="text-center py-20" style={{ color: 'var(--mist)' }}>
-          <div className="text-5xl mb-4">📅</div>
-          <div className="font-bold text-lg">No active events</div>
-          <div className="text-sm mt-1">Events within the past/next 2 weeks will appear here</div>
+        <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--mist)' }}>
+          <div style={{ fontSize: 42, marginBottom: 12 }}>📅</div>
+          <div style={{ fontSize: 17, fontWeight: 700 }}>
+            {calFilter === 'thisweek' ? 'No events this week' : 'No events match this filter'}
+          </div>
+          <div style={{ fontSize: 13, marginTop: 4 }}>
+            {calFilter === 'thisweek' ? 'Try "All" or "Upcoming" to see more.' : 'Pick a different filter above.'}
+          </div>
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
         {activeEvents.map(ev => {
           const store = stores.find(s => s.id === ev.store_id)
           const tz = STATE_TZ[(store?.state || '').toUpperCase()] || 'America/New_York'
-          const tzLabel = tz.replace('America/', '').replace(/_/g, ' ')
           const appts = appointments[store?.id || ''] || []
           const isLoading = loading[store?.id || '']
-          const today = dateInTz(new Date(), tz)
+          const hasFeed = !!store?.calendar_feed_url
 
           const dayCounts = [1, 2, 3].map(d => {
             const ds = getEventDayDate(ev.start_date, d)
             return appts.filter(a => dateInTz(a.start, tz) === ds).length
           })
           const total = dayCounts.reduce((a, b) => a + b, 0)
-          const pct = Math.min(Math.round(total / 63 * 100), 100) // 63 = 3 days × 21 slots
-
-          const evEnd = new Date(ev.start_date + 'T12:00:00')
-          evEnd.setDate(evEnd.getDate() + 2); evEnd.setHours(23,59,59)
-          const evStart = new Date(ev.start_date + 'T12:00:00')
-          const todayDate = new Date(); todayDate.setHours(0,0,0,0)
-          const stale = (todayDate.getTime() - evEnd.getTime()) > 7 * 24 * 60 * 60 * 1000
-          const cur = todayDate >= evStart && todayDate <= evEnd
-          const upcoming = !cur && !stale && evStart > todayDate
+          const pct = Math.min(Math.round(total / 63 * 100), 100)
 
           return (
             <div key={ev.id}
-              className="rounded-xl p-5 cursor-pointer transition-all hover:shadow-md"
+              onClick={() => onOpen(ev)}
               style={{
-                background: 'var(--card-bg)',
-                border: cur ? '1px solid var(--green)' : upcoming ? '1px solid var(--green)' : '1px solid var(--pearl)',
-                borderLeft: cur ? '4px solid var(--green)' : upcoming ? '4px solid var(--green)' : stale ? '4px solid var(--pearl)' : '1px solid var(--pearl)',
-                boxShadow: cur ? '0 0 0 2px var(--green-pale)' : 'none',
-                opacity: stale ? 0.55 : 1,
-                transition: 'opacity .2s',
+                background: '#fff',
+                border: '1.5px solid var(--pearl)',
+                borderRadius: 14,
+                cursor: 'pointer',
+                transition: 'all .15s',
+                display: 'flex', flexDirection: 'column',
+                overflow: 'hidden',
               }}
-              onClick={() => onOpen(ev)}>
+              onMouseEnter={e => {
+                e.currentTarget.style.transform = 'translateY(-1px)'
+                e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,.08)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = 'none'
+                e.currentTarget.style.boxShadow = 'none'
+              }}>
 
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <div className="font-black text-base" style={{ color: 'var(--ink)' }}>◆ {store?.name || ev.store_name}</div>
-                  <div className="text-xs mt-0.5" style={{ color: 'var(--mist)' }}>
-                    {store?.city}, {store?.state} · {ev.start_date} · ⏰ {tzLabel}
-                  </div>
+              <div style={{ padding: '14px 16px 12px', flex: 1 }}>
+                <div style={{ fontSize: 15, fontWeight: 900, color: 'var(--ink)', marginBottom: 2 }}>
+                  {store?.name || ev.store_name}
                 </div>
-                {isLoading ? (
-                  <div className="text-xs" style={{ color: 'var(--mist)' }}>Loading…</div>
-                ) : store?.calendar_feed_url ? (
-                  <div className="text-right">
-                    <div className="text-2xl font-black" style={{ color: 'var(--green)' }}>{total}</div>
-                    <div className="text-xs" style={{ color: 'var(--mist)' }}>appts</div>
-                  </div>
+                <div style={{ fontSize: 11, color: 'var(--mist)' }}>
+                  {store?.city}{store?.state ? `, ${store.state}` : ''} · {fmtRange(ev.start_date)}
+                </div>
+
+                {hasFeed ? (
+                  <>
+                    {/* Day breakdown */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, marginTop: 12 }}>
+                      {[1, 2, 3].map((d, i) => {
+                        const has = dayCounts[i] > 0
+                        return (
+                          <div key={d} style={{
+                            padding: '8px 0', borderRadius: 8, textAlign: 'center',
+                            background: has ? '#D8EDDF' : '#F0EDE6',
+                            border: has ? '1px solid #A8D5B8' : '1px solid transparent',
+                            color: has ? '#1D6B44' : '#B5B5A8',
+                          }}>
+                            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.04em' }}>DAY {d}</div>
+                            <div style={{ fontSize: 14, fontWeight: 800, color: has ? '#0F4D2E' : '#B5B5A8', lineHeight: 1.1, marginTop: 2 }}>
+                              {isLoading ? '…' : dayCounts[i]}
+                            </div>
+                            <div style={{ fontSize: 8, color: has ? '#1D6B44' : '#B5B5A8', marginTop: 1 }}>appts</div>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* Fill rate */}
+                    <div style={{ marginTop: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--mist)', marginBottom: 4 }}>
+                        <span>{total} of 63 slots booked</span>
+                        <span style={{ fontWeight: 700 }}>{pct}%</span>
+                      </div>
+                      <div style={{ height: 5, borderRadius: 3, background: 'var(--cream2)', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: 'var(--gradient-primary)' }} />
+                      </div>
+                    </div>
+                  </>
                 ) : (
-                  <span className="text-xs badge badge-gold">No feed</span>
+                  <div style={{ marginTop: 20, marginBottom: 18, textAlign: 'center', position: 'relative' }}
+                    onMouseEnter={e => {
+                      const tip = e.currentTarget.querySelector('[data-tip]') as HTMLElement | null
+                      if (tip) tip.style.opacity = '1'
+                    }}
+                    onMouseLeave={e => {
+                      const tip = e.currentTarget.querySelector('[data-tip]') as HTMLElement | null
+                      if (tip) tip.style.opacity = '0'
+                    }}>
+                    <div style={{ fontSize: 12, color: '#B5B5A8', fontWeight: 600 }}>No Calendar Linked</div>
+                    <div data-tip style={{
+                      position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)',
+                      background: 'var(--ink)', color: '#fff', fontSize: 11, padding: '6px 10px',
+                      borderRadius: 6, whiteSpace: 'nowrap', opacity: 0, transition: 'opacity .15s',
+                      pointerEvents: 'none', zIndex: 10,
+                    }}>
+                      Add a Google Calendar iCal feed URL in store settings to see appointments
+                      <span style={{
+                        position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)',
+                        borderLeft: '5px solid transparent', borderRight: '5px solid transparent',
+                        borderTop: '5px solid var(--ink)',
+                      }} />
+                    </div>
+                  </div>
                 )}
               </div>
 
-              {/* Progress bar */}
-              {store?.calendar_feed_url && !isLoading && (
-                <div className="mb-3">
-                  <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--cream2)' }}>
-                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: 'var(--green)' }} />
-                  </div>
-                </div>
-              )}
-
-              {/* Day pills */}
-              <div className="flex gap-2">
-                {[1, 2, 3].map((d, i) => {
-                  const ds = getEventDayDate(ev.start_date, d)
-                  const isToday = ds === today
-                  return (
-                    <div key={d} className="flex-1 rounded-lg p-2 text-center text-xs"
-                      style={{
-                        background: isToday ? 'var(--green-pale)' : 'var(--cream2)',
-                        border: isToday ? '1px solid var(--green3)' : '1px solid transparent',
-                        color: isToday ? 'var(--green-dark)' : 'var(--mist)',
-                      }}>
-                      <div className="font-bold">Day {d}</div>
-                      <div className="font-black text-lg" style={{ color: isToday ? 'var(--green)' : 'var(--ash)' }}>
-                        {store?.calendar_feed_url ? dayCounts[i] : '—'}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-
-              {!store?.calendar_feed_url && (
-                <div className="mt-3 text-xs notice notice-gold">
-                  Add a Google Calendar feed URL in Store Details to see appointments
-                </div>
-              )}
-
-              <div className="mt-3 text-xs text-right font-bold" style={{ color: 'var(--green)' }}>
-                View Calendar →
-              </div>
+              <button
+                onClick={e => { if (!hasFeed) { e.stopPropagation() } }}
+                style={{
+                  borderTop: '1px solid var(--pearl)',
+                  padding: '10px 0', width: '100%',
+                  background: hasFeed ? '#D8EDDF' : 'var(--cream2)',
+                  color: hasFeed ? '#1D6B44' : 'var(--silver)',
+                  fontWeight: 700, fontSize: 13, border: 'none',
+                  cursor: hasFeed ? 'pointer' : 'default',
+                  fontFamily: 'inherit', letterSpacing: '.02em',
+                }}
+                onMouseEnter={e => { if (hasFeed) e.currentTarget.style.background = '#C4E5CF' }}
+                onMouseLeave={e => { if (hasFeed) e.currentTarget.style.background = '#D8EDDF' }}>
+                {hasFeed ? 'View Appointments →' : 'No Calendar Available'}
+              </button>
             </div>
           )
         })}
