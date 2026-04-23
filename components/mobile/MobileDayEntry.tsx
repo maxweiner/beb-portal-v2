@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
-import { rollupEventDay } from '@/lib/dayRollup'
 
 const LEAD_SOURCES = [
   { key: 'src_vdp', label: 'VDP' },
@@ -161,47 +160,53 @@ export default function MobileDayEntry() {
   const loadEntries = async () => {
     hydratedRef.current = false
     setLoadingEntry(true)
-    const { data: rows } = await supabase.from('buyer_entries')
+    // Shared per-event-day row on event_days (no buyer filter — anyone on
+    // the event edits the same record).
+    const { data: rows } = await supabase.from('event_days')
       .select('*')
       .eq('event_id', selectedEventId)
-      .eq('buyer_id', user?.id)
       .in('day_number', [1, 2, 3])
     const byDay: Record<number, any> = {}
     ;(rows || []).forEach((r: any) => { byDay[r.day_number] = r })
+    // event_days has no submitted_at — treat "row has data" as submitted.
+    const hasData = (r: any) => !!r && ((r.customers || 0) + (r.purchases || 0) + (r.dollars10 || 0) + (r.dollars5 || 0) > 0)
     setDaysStatus({
-      1: byDay[1]?.submitted_at ? 'submitted' : (byDay[1] ? 'draft' : null),
-      2: byDay[2]?.submitted_at ? 'submitted' : (byDay[2] ? 'draft' : null),
-      3: byDay[3]?.submitted_at ? 'submitted' : (byDay[3] ? 'draft' : null),
+      1: hasData(byDay[1]) ? 'submitted' : (byDay[1] ? 'draft' : null),
+      2: hasData(byDay[2]) ? 'submitted' : (byDay[2] ? 'draft' : null),
+      3: hasData(byDay[3]) ? 'submitted' : (byDay[3] ? 'draft' : null),
     })
     const current = byDay[selectedDay]
     if (current) {
       setExistingEntry(current)
       entryIdRef.current = current.id
-      setCustomers(String(current.customers_seen || ''))
-      setPurchases(current.purchases_made != null ? String(current.purchases_made) : '')
-      setTenPct(current.dollars_at_10pct != null ? String(current.dollars_at_10pct) : '')
-      setFivePct(current.dollars_at_5pct != null ? String(current.dollars_at_5pct) : '')
+      setCustomers(String(current.customers ?? ''))
+      setPurchases(current.purchases != null ? String(current.purchases) : '')
+      setTenPct(current.dollars10 != null ? String(current.dollars10) : '')
+      setFivePct(current.dollars5  != null ? String(current.dollars5)  : '')
       setSources(Object.fromEntries(LEAD_SOURCES.map(s => [s.key, String((current as any)[s.key] || '')])))
-      setSubmitted(!!current.submitted_at)
-      const { data: chks } = await supabase.from('buyer_checks')
-        .select('*').eq('entry_id', current.id).order('created_at')
-      const loadedChecks: CheckRow[] = chks && chks.length > 0 ? chks.map((c: any) => ({
-        id: c.id,
-        check_number: c.check_number || '',
-        buy_form_number: c.buy_form_number || '',
-        amount: c.amount != null ? String(c.amount) : '',
-        payment_type: c.payment_type || 'check',
-        commission_rate: c.commission_rate === 5 ? 5 : 10,
-      })) : [emptyCheck()]
-      setChecks(loadedChecks)
+      setSubmitted(hasData(current))
     } else {
       setExistingEntry(null)
       entryIdRef.current = null
       setCustomers(''); setPurchases(''); setTenPct(''); setFivePct('')
       setSources(Object.fromEntries(LEAD_SOURCES.map(s => [s.key, ''])))
-      setChecks([emptyCheck()])
       setSubmitted(false)
     }
+    // Day-level checks — matched by (event_id, day_number), no entry_id.
+    const { data: chks } = await supabase.from('buyer_checks')
+      .select('*')
+      .eq('event_id', selectedEventId)
+      .eq('day_number', selectedDay)
+      .is('entry_id', null)
+      .order('created_at')
+    setChecks(chks && chks.length > 0 ? chks.map((c: any) => ({
+      id: c.id,
+      check_number: c.check_number || '',
+      buy_form_number: c.buy_form_number || '',
+      amount: c.amount != null ? String(c.amount) : '',
+      payment_type: c.payment_type || 'check',
+      commission_rate: c.commission_rate === 5 ? 5 : 10,
+    })) : [emptyCheck()])
     setLoadingEntry(false)
     setTimeout(() => { hydratedRef.current = true }, 0)
   }
@@ -222,12 +227,12 @@ export default function MobileDayEntry() {
   // Top aggregate fields (purchases / $ @ 10% / $ @ 5%) stay raw-editable.
   // On Submit, check totals OVERWRITE these fields (Q7). To avoid stale
   // state on the same tick, persist() takes an `overrides` arg.
+  // Writes directly to event_days (day-level shared record) — buyers
+  // assigned to the event + admins all edit the same row.
   type Overrides = Partial<{ purchases: string; tenPct: string; fivePct: string }>
-  const persist = async (submit: boolean, overrides: Overrides = {}) => {
-    // Drop concurrent persist calls — autosave + rapid Submit taps would
-    // otherwise both read entryIdRef.current === null and both INSERT,
-    // producing duplicate buyer_entries for the same (event, day, buyer).
+  const persist = async (_submit: boolean, overrides: Overrides = {}) => {
     if (persistInFlightRef.current) return
+    if (!selectedEventId || !user?.id) return
     persistInFlightRef.current = true
     try {
       const effPurchases = overrides.purchases ?? purchases
@@ -237,59 +242,58 @@ export default function MobileDayEntry() {
         event_id: selectedEventId,
         day_number: selectedDay,
         day: selectedDay,
-        buyer_id: user?.id,
-        buyer_name: user?.name,
-        customers_seen: parseInt(customers) || 0,
-        purchases_made: effPurchases !== '' ? parseInt(effPurchases) || 0 : null,
-        dollars_at_10pct: effTenPct !== '' ? parseFloat(effTenPct) : null,
-        dollars_at_5pct: effFivePct !== '' ? parseFloat(effFivePct) : null,
+        customers: parseInt(customers) || 0,
+        purchases: effPurchases !== '' ? parseInt(effPurchases) || 0 : 0,
+        dollars10: effTenPct !== '' ? parseFloat(effTenPct) || 0 : 0,
+        dollars5:  effFivePct !== '' ? parseFloat(effFivePct) || 0 : 0,
         ...Object.fromEntries(LEAD_SOURCES.map(s => [s.key, parseInt(sources[s.key]) || 0])),
-        submitted_at: submit ? new Date().toISOString() : existingEntry?.submitted_at || null,
+        entered_by: user.id,
+        entered_by_name: user.name,
+        entered_at: new Date().toISOString(),
       }
 
-      // Fresh-existing check — DB is the source of truth. Guards against
-      // a stale null ref racing with a prior INSERT from another tab, or
-      // pre-existing legacy duplicates in the table.
-      let entryId = entryIdRef.current
-      if (!entryId && selectedEventId && user?.id) {
-        const { data: existingRows } = await supabase.from('buyer_entries')
+      // Fresh-existing lookup guards stale-null races (two tabs, etc.).
+      let rowId = entryIdRef.current
+      if (!rowId) {
+        const { data: existingRows } = await supabase.from('event_days')
           .select('id')
           .eq('event_id', selectedEventId)
           .eq('day_number', selectedDay)
-          .eq('buyer_id', user.id)
           .limit(1)
         if (existingRows && existingRows.length > 0) {
-          entryId = existingRows[0].id
-          entryIdRef.current = entryId
+          rowId = existingRows[0].id
+          entryIdRef.current = rowId
         }
       }
 
-      if (entryId) {
-        const { error } = await supabase.from('buyer_entries').update(payload).eq('id', entryId)
+      if (rowId) {
+        const { error } = await supabase.from('event_days').update(payload).eq('id', rowId)
         if (error) throw error
       } else {
-        const { data, error } = await supabase.from('buyer_entries').insert(payload).select().single()
+        const { data, error } = await supabase.from('event_days').insert(payload).select().single()
         if (error) throw error
-        entryId = data?.id || null
-        entryIdRef.current = entryId
+        rowId = data?.id || null
+        entryIdRef.current = rowId
       }
-      if (!entryId) throw new Error('Failed to save entry')
+      if (!rowId) throw new Error('Failed to save day')
 
-      const { error: delErr } = await supabase.from('buyer_checks').delete().eq('entry_id', entryId)
+      // Day-level checks — entry_id is null; keyed by event_id + day_number.
+      const { error: delErr } = await supabase.from('buyer_checks').delete()
+        .eq('event_id', selectedEventId)
+        .eq('day_number', selectedDay)
+        .is('entry_id', null)
       if (delErr) throw delErr
       if (validChecks.length > 0) {
         const { error } = await supabase.from('buyer_checks').insert(validChecks.map(c => ({
-          entry_id: entryId!, event_id: selectedEventId,
+          entry_id: null,
+          event_id: selectedEventId,
+          day_number: selectedDay,
           check_number: c.check_number, buy_form_number: c.buy_form_number,
           amount: parseFloat(c.amount) || 0, payment_type: c.payment_type,
           commission_rate: c.commission_rate === 5 ? 5 : 10,
         })))
         if (error) throw error
       }
-
-      // Roll the per-buyer totals up into event_days so downstream readers
-      // (Dashboard, Events pill fallback, Reports) stay consistent.
-      await rollupEventDay(selectedEventId, selectedDay)
     } finally {
       persistInFlightRef.current = false
     }
