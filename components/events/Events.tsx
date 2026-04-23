@@ -23,6 +23,26 @@ const withTimeout = (promise: PromiseLike<any>, ms = 10000): Promise<any> => {
   ])
 }
 
+// Stable per-user avatar colors. Same user → same color every render.
+const AVATAR_COLORS = [
+  '#1D6B44', '#2E86AB', '#6D4C41', '#5C6BC0', '#00897B',
+  '#E65100', '#AD1457', '#546E7A', '#7B1FA2', '#2E7D32',
+] as const
+function getAvatarColor(userId: string): string {
+  let hash = 0
+  for (let i = 0; i < userId.length; i++) {
+    hash = ((hash << 5) - hash) + userId.charCodeAt(i)
+    hash = hash | 0
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
+}
+function getInitials(name: string): string {
+  const parts = (name || '').trim().split(/\s+/)
+  if (parts.length === 0 || !parts[0]) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
 export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   const { stores, users, user, brand, setEvents: setContextEvents, setDayEntryIntent } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
@@ -323,6 +343,15 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMobile, filtered.length, filtered.map(e => e.id).join('|')])
 
+  // Desktop: only auto-expand current events. Upcoming + past start collapsed.
+  useEffect(() => {
+    if (isMobile) return
+    const next = new Set<string>()
+    for (const ev of filtered) if (isCurrent(ev)) next.add(ev.id)
+    setExpandedCards(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile, filtered.length, filtered.map(e => e.id).join('|')])
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
@@ -593,193 +622,220 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
             )
           }
 
-          /* ───── Desktop card — condensed single-column layout ───── */
-          const accent = cur ? '#1D6B44' : upcoming ? '#F59E0B' : 'var(--pearl)'
-          const statusLabel = cur ? 'Current' : upcoming ? 'Upcoming' : 'Past'
-          const statusPillBg = cur ? '#1D6B44' : upcoming ? '#FFF8E1' : 'var(--cream2)'
-          const statusPillColor = cur ? '#fff' : upcoming ? '#92400E' : 'var(--mist)'
+          /* ───── Desktop card — mobile-style collapsible ───── */
+          const expanded = expandedCards.has(ev.id)
+          const statusText = cur ? 'Current' : upcoming ? 'Upcoming' : 'Past'
+          const statusColor = cur ? '#1D6B44' : upcoming ? '#92400E' : '#8A8A7A'
           const noteCount = noteCounts[ev.id] || 0
-          const totalCustomers = ev.days.reduce((s: number, d: any) => s + (d.customers || 0), 0)
-          const closeRate = totalCustomers > 0 ? Math.round(purchases / totalCustomers * 100) : null
-          const closeColor = closeRate == null ? 'var(--mist)'
-            : closeRate >= 65 ? '#1D6B44'
-            : closeRate >= 50 ? '#F59E0B'
-            : '#DC2626'
-          const hasAny = dollars > 0 || purchases > 0 || totalCustomers > 0
-          const costPerLead = totalSpend > 0 && totalCustomers > 0 ? totalSpend / totalCustomers : null
-          const adSpendRatio = totalSpend > 0 && dollars > 0 ? dollars / totalSpend : null
 
           return (
-            <div key={ev.id}
-              style={{
-                background: 'var(--card-bg)',
-                border: '1px solid var(--pearl)',
-                borderLeft: `4px solid ${accent}`,
-                borderRadius: 'var(--r2)',
-                padding: 16,
-                opacity: stale ? 0.7 : 1,
-                cursor: 'pointer',
-                transition: 'opacity .2s, transform .12s, box-shadow .12s',
-              }}
-              onClick={() => setDetail(ev)}
-              onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,.05)' }}
+            <div key={ev.id} style={{
+              background: '#FFFFFF',
+              border: '1.5px solid #E8E0D0',
+              borderRadius: 16,
+              overflow: 'hidden',
+              marginBottom: 12,
+              opacity: stale ? 0.7 : 1,
+              transition: 'box-shadow .15s',
+            }}
+              onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,.07)' }}
               onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none' }}>
 
-              {/* Top row — store info on the left, 3 stats on the right */}
-              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                <div style={{ flex: 1, minWidth: 200 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 2 }}>
-                    <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--ink)' }}>{ev.store_name}</span>
-                    <span style={{
-                      fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em',
-                      padding: '2px 8px', borderRadius: 99,
-                      background: statusPillBg, color: statusPillColor,
-                    }}>{statusLabel}</span>
+              {/* Dark green header — clicks toggle expand/collapse */}
+              <div onClick={() => toggleCard(ev.id)} style={{
+                background: '#2D3B2D',
+                padding: '14px 20px',
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 14,
+                transition: 'background .12s',
+              }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#344534' }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#2D3B2D' }}>
+                <span aria-hidden style={{
+                  color: 'rgba(255,255,255,.5)', fontSize: 14, lineHeight: 1,
+                  transition: 'transform .2s',
+                  transform: expanded ? 'rotate(90deg)' : 'none',
+                  display: 'inline-block', flexShrink: 0, width: 14,
+                }}>▸</span>
+                <span style={{
+                  flex: 1, fontSize: 17, fontWeight: 900, color: '#fff',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
+                }}>
+                  {ev.store_name}
+                </span>
+                <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+                  {[1, 2, 3].map(d => {
+                    const day = ev.days.find((x: any) => x.day_number === d)
+                    const has = !!day && ((day.purchases || 0) > 0 || (day.dollars10 || 0) > 0 || (day.dollars5 || 0) > 0)
+                    return (
+                      <span key={d} aria-hidden style={{
+                        width: 8, height: 8, borderRadius: '50%',
+                        background: has ? '#6BBF8A' : 'rgba(255,255,255,.3)',
+                      }} />
+                    )
+                  })}
+                </div>
+                <span style={{
+                  fontSize: 18, fontWeight: 800,
+                  color: dollars > 0 ? '#6BBF8A' : 'rgba(255,255,255,.35)',
+                  flexShrink: 0, minWidth: 90, textAlign: 'right',
+                }}>
+                  {dollars > 0 ? fmtDollars(dollars) : '—'}
+                </span>
+                <span aria-hidden style={{
+                  color: 'rgba(255,255,255,.4)', fontSize: 14, flexShrink: 0,
+                }}>▾</span>
+              </div>
+
+              {expanded && (
+                <>
+                  {/* Meta line */}
+                  <div onClick={() => setDetail(ev)} style={{
+                    padding: '10px 20px 0', fontSize: 12, color: '#8A8A7A', cursor: 'pointer',
+                  }}>
+                    {store?.city}{store?.state ? ', ' + store.state : ''} · {fmtRange(ev.start_date)}
+                    <span style={{ color: statusColor, fontWeight: 700 }}> · {statusText}</span>
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--mist)' }}>
-                    {store?.city}{store?.state ? ', ' + store.state : ''} · {fmt(ev.start_date)}
-                  </div>
+
+                  {/* Avatar stack + buyer first names */}
                   {evWorkers.length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
-                      {evWorkers.map(w => {
-                        const first = (w.name || '').split(/\s+/)[0]
-                        const u = users.find(x => x.id === w.id)
-                        const tip = [u?.phone, u?.email].filter(Boolean).join(' · ') || ''
-                        return (
-                          <span key={w.id} title={tip} style={{
-                            fontSize: 11, color: 'var(--mist)',
-                            background: 'var(--cream2)', borderRadius: 10,
-                            padding: '2px 8px', cursor: tip ? 'help' : 'default',
-                          }}>
-                            {first}
-                          </span>
-                        )
-                      })}
+                    <div onClick={() => setDetail(ev)} style={{
+                      padding: '10px 20px 0', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
+                    }}>
+                      <div style={{ display: 'flex' }}>
+                        {evWorkers.map((w, i) => (
+                          <div key={w.id} title={w.name} style={{
+                            width: 30, height: 30, borderRadius: '50%',
+                            background: getAvatarColor(w.id),
+                            color: '#fff', fontWeight: 800, fontSize: 10,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            border: '2px solid #fff',
+                            marginLeft: i === 0 ? 0 : -8, flexShrink: 0,
+                          }}>{getInitials(w.name)}</div>
+                        ))}
+                      </div>
+                      <div style={{
+                        fontSize: 13, fontWeight: 500, color: '#4A4A40',
+                        flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {evWorkers.map((w: any) => (w.name || '').split(/\s+/)[0]).filter(Boolean).join(', ')}
+                      </div>
                     </div>
                   )}
-                </div>
 
-                {/* Right — stat blocks */}
-                <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-                  {hasAny ? (
-                    <>
-                      <StatBlock value={fmtDollars(dollars)} label="Spend" valueColor="#1D6B44" />
-                      <StatBlock value={closeRate != null ? `${closeRate}%` : '—'} label="Close" valueColor={closeColor} />
-                      <StatBlock value={String(purchases)} label="Purchases" valueColor="var(--ink)" />
-                    </>
-                  ) : (
-                    ['Spend', 'Close', 'Purchases'].map(l => (
-                      <StatBlock key={l} value="—" label={l} valueColor="var(--mist)" />
-                    ))
-                  )}
-                </div>
-              </div>
+                  {/* Day cards */}
+                  <div style={{ padding: '12px 20px 0', display: 'flex', gap: 8 }} onClick={e => e.stopPropagation()}>
+                    {[1, 2, 3].map(d => {
+                      const day = (ev.days || []).find((x: any) => x.day_number === d)
+                      const dayDollars = day ? (Number(day.dollars10) || 0) + (Number(day.dollars5) || 0) : 0
+                      const dayPurch = day ? Number(day.purchases) || 0 : 0
+                      const hasData = !!day && (dayDollars > 0 || dayPurch > 0 || (Number(day.customers) || 0) > 0)
+                      const dayDate = new Date(ev.start_date + 'T12:00:00')
+                      dayDate.setDate(dayDate.getDate() + d - 1)
+                      const isToday = dayDate.toISOString().split('T')[0] === todayISO
 
-              {/* Day pills row */}
-              <div style={{ display: 'flex', gap: 4, marginTop: 12 }} onClick={e => e.stopPropagation()}>
-                {[1, 2, 3].map(d => {
-                  const day = (ev.days || []).find((x: any) => x.day_number === d)
-                  const dayTotal = day ? (Number(day.dollars10) || 0) + (Number(day.dollars5) || 0) : 0
-                  const hasData = dayTotal > 0 || (day && ((day.purchases || 0) > 0 || (day.customers || 0) > 0))
-                  return (
-                    <button key={d}
-                      onClick={e => { e.stopPropagation(); openDayEntry(ev, d) }}
-                      style={{
-                        flex: 1,
-                        background: hasData ? '#D8EDDF' : 'var(--cream2)',
-                        color: hasData ? '#0F4D2E' : 'var(--mist)',
-                        border: 'none',
-                        borderRadius: 6, padding: '5px 0',
-                        textAlign: 'center', fontSize: 11, fontWeight: 500,
-                        cursor: 'pointer', fontFamily: 'inherit',
-                      }}>
-                      Day {d}{hasData && dayTotal > 0 ? ` · $${Math.round(dayTotal).toLocaleString()}` : ''}
-                    </button>
-                  )
-                })}
-              </div>
-
-              {/* Ad spend chip row — only when ad spend data exists */}
-              {totalSpend > 0 && (
-                <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-                  <AdChip label="Ad spend" value={fmtDollars(totalSpend)} />
-                  {costPerLead !== null && <AdChip label="Cost / lead" value={fmtDollars(costPerLead)} />}
-                  {adSpendRatio !== null && <AdChip label="Ad ratio" value={`${adSpendRatio.toFixed(1)}x`} />}
-                </div>
-              )}
-
-              {/* Workers panel */}
-              {wOpen && (
-                <div style={{
-                  marginTop: 10, padding: 12,
-                  background: 'var(--cream2)', border: '1px solid var(--pearl)', borderRadius: 'var(--r)',
-                }} onClick={e => e.stopPropagation()}>
-                  <div className="fl">Who Worked This Event</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-                    {buyers.map(b => {
-                      const on = evWorkers.some(w => w.id === b.id)
+                      const onClick = (e: React.MouseEvent) => { e.stopPropagation(); openDayEntry(ev, d) }
+                      if (hasData) {
+                        return (
+                          <button key={d} onClick={onClick} style={{
+                            flex: 1, background: '#fff', border: '2px solid #1D6B44',
+                            borderRadius: 12, padding: '10px 8px', textAlign: 'center', cursor: 'pointer',
+                            fontFamily: 'inherit', transition: 'background .12s',
+                          }}
+                            onMouseEnter={e => { e.currentTarget.style.background = '#F0FAF4' }}
+                            onMouseLeave={e => { e.currentTarget.style.background = '#fff' }}>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: '#1D6B44', marginBottom: 2 }}>Day {d}</div>
+                            <div style={{ fontSize: 18, fontWeight: 800, color: '#1D6B44', lineHeight: 1.1 }}>{fmtDollars(dayDollars)}</div>
+                            <div style={{ fontSize: 11, color: '#8A8A7A', marginTop: 2 }}>{dayPurch} purch</div>
+                          </button>
+                        )
+                      }
                       return (
-                        <div key={b.id} onClick={() => toggleWorker(ev, b.id, b.name)}
-                          style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14, padding: '4px 0' }}>
-                          <div style={{
-                            width: 26, height: 26, borderRadius: 6, flexShrink: 0,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            ...(on ? { background: 'var(--green)' } : { border: '2.5px solid var(--pearl)' }),
-                          }}>
-                            {on && <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 12.5 C6 12.5, 8 17, 9.5 19 C12 14, 16 8, 20 5" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                          </div>
-                          <span style={{ fontWeight: on ? 700 : 400, color: on ? 'var(--green-dark)' : 'var(--ash)' }}>{b.name}</span>
-                          <span style={{ fontSize: 12, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{b.role}</span>
-                        </div>
+                        <button key={d} onClick={onClick} style={{
+                          flex: 1, background: '#F0EDE6', border: '2px solid transparent',
+                          borderRadius: 12, padding: '10px 8px', textAlign: 'center', cursor: 'pointer',
+                          fontFamily: 'inherit', transition: 'background .12s',
+                        }}
+                          onMouseEnter={e => { e.currentTarget.style.background = '#E8E4DB' }}
+                          onMouseLeave={e => { e.currentTarget.style.background = '#F0EDE6' }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: '#B5B5A8', marginBottom: 2 }}>Day {d}</div>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: '#B5B5A8', lineHeight: 1.1 }}>—</div>
+                          <div style={{ fontSize: 11, color: '#B5B5A8', marginTop: 2, minHeight: 14 }}>{isToday ? 'today' : ''}</div>
+                        </button>
                       )
                     })}
                   </div>
-                </div>
-              )}
 
-              {/* Spend panel */}
-              {spendOpen === ev.id && (
-                <div onClick={e => e.stopPropagation()} style={{ marginTop: 10 }}>
-                  <SpendPanel ev={ev} onClose={() => setSpendOpen(null)} refetchEvents={fetchEvents} />
-                </div>
-              )}
-
-              {/* Action buttons row */}
-              <div style={{
-                display: 'flex', gap: 6, flexWrap: 'wrap',
-                marginTop: 10, paddingTop: 10,
-                borderTop: '1px solid var(--pearl)',
-              }} onClick={e => e.stopPropagation()}>
-                <ActionBtn active={wOpen} onClick={e => { e.stopPropagation(); setWorkersOpen(wOpen ? null : ev.id) }}>
-                  👤 Who worked
-                </ActionBtn>
-                <ActionBtn active={spendOpen === ev.id} onClick={e => { e.stopPropagation(); setSpendOpen(spendOpen === ev.id ? null : ev.id) }}>
-                  💰 Ad spend
-                </ActionBtn>
-                <ActionBtn onClick={e => { e.stopPropagation(); setNotesEvent(ev) }} style={{ position: 'relative' }}>
-                  📝 Notes
-                  {noteCount === 0 ? (
-                    <span aria-hidden style={{
-                      position: 'absolute', top: -3, right: -3,
-                      width: 7, height: 7, borderRadius: '50%',
-                      background: '#D97706', border: '2px solid var(--card-bg)',
-                    }} />
-                  ) : (
-                    <span style={{
-                      marginLeft: 6, background: 'var(--green-pale)', color: 'var(--green-dark)',
-                      fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 8,
-                    }}>{noteCount}</span>
+                  {/* Inline worker / spend expand panels */}
+                  {wOpen && (
+                    <div onClick={e => e.stopPropagation()} style={{ padding: '14px 20px 0' }}>
+                      <div style={{ background: '#F5F0E8', border: '1px solid #E8E0D0', borderRadius: 10, padding: 14 }}>
+                        <div className="fl">Who Worked This Event</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginTop: 8 }}>
+                          {buyers.map(b => {
+                            const on = evWorkers.some(w => w.id === b.id)
+                            return (
+                              <div key={b.id} onClick={() => toggleWorker(ev, b.id, b.name)}
+                                style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14, padding: '4px 0' }}>
+                                <div style={{
+                                  width: 26, height: 26, borderRadius: 6, flexShrink: 0,
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  ...(on ? { background: 'var(--green)' } : { border: '2.5px solid var(--pearl)' }),
+                                }}>
+                                  {on && <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 12.5 C6 12.5, 8 17, 9.5 19 C12 14, 16 8, 20 5" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                </div>
+                                <span style={{ fontWeight: on ? 700 : 400, color: on ? 'var(--green-dark)' : 'var(--ash)' }}>{b.name}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    </div>
                   )}
-                </ActionBtn>
-                <ActionBtn onClick={e => { e.stopPropagation(); copyLink(ev) }}>
-                  🔗 Copy link
-                </ActionBtn>
-                {isAdmin && (
-                  <ActionBtn danger onClick={e => { e.stopPropagation(); deleteEvent(ev.id) }}>
-                    Delete
-                  </ActionBtn>
-                )}
-              </div>
+                  {spendOpen === ev.id && (
+                    <div onClick={e => e.stopPropagation()} style={{ padding: '14px 20px 0' }}>
+                      <SpendPanel ev={ev} onClose={() => setSpendOpen(null)} refetchEvents={fetchEvents} />
+                    </div>
+                  )}
+
+                  {/* Action bar */}
+                  <div style={{
+                    marginTop: 14, padding: '10px 14px',
+                    borderTop: '1px solid #F0EDE6',
+                    display: 'flex',
+                  }} onClick={e => e.stopPropagation()}>
+                    {[
+                      { id: 'workers', icon: '👤', label: 'Who worked', onTap: () => setWorkersOpen(wOpen ? null : ev.id) },
+                      { id: 'spend',   icon: '💰', label: 'Ad spend',   onTap: () => setSpendOpen(spendOpen === ev.id ? null : ev.id) },
+                      { id: 'notes',   icon: '📝', label: 'Notes',      onTap: () => setNotesEvent(ev) },
+                      { id: 'link',    icon: '🔗', label: 'Copy link',  onTap: () => copyLink(ev) },
+                      ...(isAdmin ? [{ id: 'del', icon: '🗑', label: 'Delete', onTap: () => deleteEvent(ev.id), danger: true as const }] : []),
+                    ].map(btn => (
+                      <button key={btn.id} onClick={e => { e.stopPropagation(); btn.onTap() }} style={{
+                        flex: 1, background: 'transparent', border: 'none',
+                        padding: '8px 0', cursor: 'pointer',
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                        borderRadius: 8, position: 'relative',
+                        color: (btn as any).danger ? '#C0392B' : '#8A8A7A',
+                        fontFamily: 'inherit',
+                        transition: 'background .12s',
+                      }}
+                        onMouseEnter={e => { e.currentTarget.style.background = (btn as any).danger ? '#FDEDEC' : '#F5F0E8' }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
+                        <div style={{ fontSize: 18, lineHeight: 1 }}>{btn.icon}</div>
+                        <div style={{ fontSize: 10, fontWeight: 600 }}>{btn.label}</div>
+                        {btn.id === 'notes' && noteCount > 0 && (
+                          <span aria-hidden style={{
+                            position: 'absolute', top: 4, right: 'calc(50% - 22px)',
+                            width: 8, height: 8, borderRadius: '50%',
+                            background: '#E67E22',
+                          }} />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )
         })}
@@ -804,56 +860,6 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
 }
 
 /* ══ EVENT DETAIL MODAL ══ */
-/* ── Desktop card primitives ── */
-function StatBlock({ value, label, valueColor }: { value: string; label: string; valueColor: string }) {
-  return (
-    <div style={{ textAlign: 'center', minWidth: 64 }}>
-      <div style={{ fontSize: 22, fontWeight: 500, color: valueColor, lineHeight: 1.1 }}>{value}</div>
-      <div style={{ fontSize: 10, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 2 }}>{label}</div>
-    </div>
-  )
-}
-
-function AdChip({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={{
-      display: 'inline-flex', alignItems: 'baseline', gap: 6,
-      background: 'var(--cream2)', borderRadius: 6,
-      padding: '4px 10px', fontSize: 11,
-    }}>
-      <span style={{ color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 700 }}>{label}</span>
-      <span style={{ color: 'var(--ash)', fontWeight: 700 }}>{value}</span>
-    </div>
-  )
-}
-
-function ActionBtn({ children, onClick, active, danger, style }: {
-  children: React.ReactNode
-  onClick: (e: React.MouseEvent) => void
-  active?: boolean
-  danger?: boolean
-  style?: React.CSSProperties
-}) {
-  const color = danger ? '#E24B4A' : active ? 'var(--green-dark)' : 'var(--mist)'
-  const borderColor = danger ? '#E24B4A' : active ? 'var(--green3)' : 'var(--pearl)'
-  const bg = active ? 'var(--green-pale)' : 'transparent'
-  const hoverBg = danger ? '#FCEBEB' : 'var(--cream2)'
-  return (
-    <button onClick={onClick} style={{
-      fontSize: 11, padding: '4px 10px', borderRadius: 6,
-      border: `1px solid ${borderColor}`, background: bg, color,
-      cursor: 'pointer', fontWeight: 600, fontFamily: 'inherit',
-      transition: 'background .12s',
-      display: 'inline-flex', alignItems: 'center', gap: 4,
-      ...(style || {}),
-    }}
-      onMouseEnter={e => { e.currentTarget.style.background = hoverBg }}
-      onMouseLeave={e => { e.currentTarget.style.background = bg }}>
-      {children}
-    </button>
-  )
-}
-
 function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
   ev: Event
   stores: any[]
