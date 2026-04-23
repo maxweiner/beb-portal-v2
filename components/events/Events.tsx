@@ -593,135 +593,127 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
             )
           }
 
-          /* ───── Desktop card layout (unchanged) ───── */
-          return (
-            <div key={ev.id} className="card"
-              style={{
-                border: cur ? '1px solid var(--green)' : upcoming ? '1px solid var(--green)' : '1px solid var(--pearl)',
-                boxShadow: cur ? '0 0 0 2px var(--green-pale)' : 'none',
-                borderLeft: cur ? '4px solid var(--green)' : upcoming ? '4px solid var(--green)' : stale ? '4px solid var(--pearl)' : '1px solid var(--pearl)',
-                opacity: stale ? 0.55 : 1,
-                cursor: 'pointer',
-                transition: 'opacity .2s',
-              }}
-              onClick={() => setDetail(ev)}>
+          /* ───── Desktop card — condensed single-column layout ───── */
+          const accent = cur ? '#1D6B44' : upcoming ? '#F59E0B' : 'var(--pearl)'
+          const statusLabel = cur ? 'Current' : upcoming ? 'Upcoming' : 'Past'
+          const statusPillBg = cur ? '#1D6B44' : upcoming ? '#FFF8E1' : 'var(--cream2)'
+          const statusPillColor = cur ? '#fff' : upcoming ? '#92400E' : 'var(--mist)'
+          const noteCount = noteCounts[ev.id] || 0
+          const totalCustomers = ev.days.reduce((s: number, d: any) => s + (d.customers || 0), 0)
+          const closeRate = totalCustomers > 0 ? Math.round(purchases / totalCustomers * 100) : null
+          const closeColor = closeRate == null ? 'var(--mist)'
+            : closeRate >= 65 ? '#1D6B44'
+            : closeRate >= 50 ? '#F59E0B'
+            : '#DC2626'
+          const hasAny = dollars > 0 || purchases > 0 || totalCustomers > 0
+          const costPerLead = totalSpend > 0 && totalCustomers > 0 ? totalSpend / totalCustomers : null
+          const adSpendRatio = totalSpend > 0 && dollars > 0 ? dollars / totalSpend : null
 
-              <div className="flex items-start justify-between gap-4 flex-wrap">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <span className="font-black text-base" style={{ color: 'var(--ink)' }}>◆ {ev.store_name}</span>
-                    {cur && <span className="badge badge-jade">Current</span>}
+          return (
+            <div key={ev.id}
+              style={{
+                background: 'var(--card-bg)',
+                border: '1px solid var(--pearl)',
+                borderLeft: `4px solid ${accent}`,
+                borderRadius: 'var(--r2)',
+                padding: 16,
+                opacity: stale ? 0.7 : 1,
+                cursor: 'pointer',
+                transition: 'opacity .2s, transform .12s, box-shadow .12s',
+              }}
+              onClick={() => setDetail(ev)}
+              onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,.05)' }}
+              onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none' }}>
+
+              {/* Top row — store info on the left, 3 stats on the right */}
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 2 }}>
+                    <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--ink)' }}>{ev.store_name}</span>
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em',
+                      padding: '2px 8px', borderRadius: 99,
+                      background: statusPillBg, color: statusPillColor,
+                    }}>{statusLabel}</span>
                   </div>
-                  <div className="text-sm" style={{ color: 'var(--mist)' }}>
-                    {store?.city}, {store?.state} · {fmt(ev.start_date)}
+                  <div style={{ fontSize: 12, color: 'var(--mist)' }}>
+                    {store?.city}{store?.state ? ', ' + store.state : ''} · {fmt(ev.start_date)}
                   </div>
                   {evWorkers.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-2">
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
                       {evWorkers.map(w => {
+                        const first = (w.name || '').split(/\s+/)[0]
                         const u = users.find(x => x.id === w.id)
                         const tip = [u?.phone, u?.email].filter(Boolean).join(' · ') || ''
                         return (
-                          <span key={w.id} className="px-2 py-0.5 rounded-full text-xs font-bold"
-                            title={tip}
-                            style={{ background: 'var(--green-pale)', color: 'var(--green-dark)', border: '1px solid var(--green3)', cursor: tip ? 'help' : 'default' }}>
-                            👤 {w.name}
+                          <span key={w.id} title={tip} style={{
+                            fontSize: 11, color: 'var(--mist)',
+                            background: 'var(--cream2)', borderRadius: 10,
+                            padding: '2px 8px', cursor: tip ? 'help' : 'default',
+                          }}>
+                            {first}
                           </span>
                         )
                       })}
                     </div>
                   )}
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-                  <div className="flex gap-4">
-                    {(() => {
-                      const stats = [
-                        { label: 'Days', value: ev.days.length },
-                        { label: 'Purchases', value: purchases },
-                        { label: '💰 Amount Spent', value: fmtDollars(dollars) },
-                      ]
-                      if (totalSpend > 0) stats.unshift({ label: 'Ad Spend', value: fmtDollars(totalSpend) })
-                      return stats.map(({ label, value }) => (
-                        <div key={label} className="text-center">
-                          <div className="text-xl font-black" style={{ color: 'var(--green)' }}>{value}</div>
-                          <div className="text-xs" style={{ color: 'var(--mist)' }}>{label}</div>
-                        </div>
-                      ))
-                    })()}
-                  </div>
-                  {(() => {
-                    const totalCustomers = ev.days.reduce((s, d) => s + (d.customers || 0), 0)
-                    const costPerLead = totalSpend > 0 && totalCustomers > 0 ? totalSpend / totalCustomers : null
-                    const adSpendRatio = totalSpend > 0 && dollars > 0 ? dollars / totalSpend : null
-                    if (!costPerLead && !adSpendRatio) return null
-                    return (
-                      <div className="flex gap-4" style={{ paddingTop: 4, borderTop: '1px solid var(--cream2)' }}>
-                        {costPerLead !== null && (
-                          <div className="text-center">
-                            <div className="text-sm font-black" style={{ color: 'var(--ash)' }}>{fmtDollars(costPerLead)}</div>
-                            <div className="text-xs" style={{ color: 'var(--mist)' }}>Cost Per Lead</div>
-                          </div>
-                        )}
-                        {adSpendRatio !== null && (
-                          <div className="text-center">
-                            <div className="text-sm font-black" style={{ color: 'var(--ash)' }}>{adSpendRatio.toFixed(1)}x</div>
-                            <div className="text-xs" style={{ color: 'var(--mist)' }}>Ad Spend Ratio</div>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })()}
+
+                {/* Right — stat blocks */}
+                <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                  {hasAny ? (
+                    <>
+                      <StatBlock value={fmtDollars(dollars)} label="Spend" valueColor="#1D6B44" />
+                      <StatBlock value={closeRate != null ? `${closeRate}%` : '—'} label="Close" valueColor={closeColor} />
+                      <StatBlock value={String(purchases)} label="Purchases" valueColor="var(--ink)" />
+                    </>
+                  ) : (
+                    ['Spend', 'Close', 'Purchases'].map(l => (
+                      <StatBlock key={l} value="—" label={l} valueColor="var(--mist)" />
+                    ))
+                  )}
                 </div>
               </div>
 
-              {/* Day pills — navigation links to Enter Day Data. Pill total
-                  is hybrid (Q1): per-buyer sum if any rows, else event_days. */}
-              <div className="flex gap-2 mt-4" onClick={e => e.stopPropagation()}>
+              {/* Day pills row */}
+              <div style={{ display: 'flex', gap: 4, marginTop: 12 }} onClick={e => e.stopPropagation()}>
                 {[1, 2, 3].map(d => {
-                  const day = (ev.days || []).find(x => x.day_number === d)
-                  const dayBuyerEntries = ((ev as any).buyer_entries || []).filter((e: any) => e.day_number === d)
-                  const eventWorkerCount = (ev.workers || []).length
-                  const submittedCount = dayBuyerEntries.filter((e: any) => e.submitted_at).length
-                  const startedCount = dayBuyerEntries.length
-
-                  const buyerTotal = dayBuyerEntries.reduce(
-                    (s: number, e: any) => s + (Number(e.dollars_at_10pct) || 0) + (Number(e.dollars_at_5pct) || 0),
-                    0
-                  )
-                  const aggregateTotal = day ? (Number(day.dollars10) || 0) + (Number(day.dollars5) || 0) : 0
-                  const dayTotal = dayBuyerEntries.length > 0 ? buyerTotal : aggregateTotal
-
-                  const hasData = dayTotal > 0 || (day && (day.purchases > 0 || day.customers > 0))
-                  const allSubmitted = eventWorkerCount > 0 && submittedCount === eventWorkerCount
-                  const someSubmitted = submittedCount > 0 || startedCount > 0
-                  const dotColor = hasData || allSubmitted ? 'var(--green)' : someSubmitted ? '#f59e0b' : 'var(--cream2)'
-                  const textColor = (hasData || allSubmitted || someSubmitted) ? '#fff' : 'var(--silver)'
-                  const totalLabel = dayTotal > 0 ? ` · $${Math.round(dayTotal).toLocaleString('en-US')}` : ''
+                  const day = (ev.days || []).find((x: any) => x.day_number === d)
+                  const dayTotal = day ? (Number(day.dollars10) || 0) + (Number(day.dollars5) || 0) : 0
+                  const hasData = dayTotal > 0 || (day && ((day.purchases || 0) > 0 || (day.customers || 0) > 0))
                   return (
                     <button key={d}
                       onClick={e => { e.stopPropagation(); openDayEntry(ev, d) }}
                       style={{
-                        display: 'flex', alignItems: 'center', gap: 6,
-                        padding: '6px 12px', borderRadius: 99, border: 'none', cursor: 'pointer',
-                        background: dotColor, color: textColor,
-                        fontWeight: 700, fontSize: 12,
-                        boxShadow: someSubmitted ? '0 1px 4px rgba(45,106,79,.3)' : 'none',
-                        transition: 'all .15s',
+                        flex: 1,
+                        background: hasData ? '#D8EDDF' : 'var(--cream2)',
+                        color: hasData ? '#0F4D2E' : 'var(--mist)',
+                        border: 'none',
+                        borderRadius: 6, padding: '5px 0',
+                        textAlign: 'center', fontSize: 11, fontWeight: 500,
+                        cursor: 'pointer', fontFamily: 'inherit',
                       }}>
-                      <span style={{
-                        width: 8, height: 8, borderRadius: '50%',
-                        background: (hasData || allSubmitted || someSubmitted) ? '#fff' : 'var(--silver)',
-                        display: 'inline-block', flexShrink: 0,
-                      }} />
-                      Day {d}{totalLabel}
-                      {someSubmitted && !dayTotal && <span style={{ opacity: .8, fontSize: 11 }}>{submittedCount}/{eventWorkerCount}</span>}
+                      Day {d}{hasData && dayTotal > 0 ? ` · $${Math.round(dayTotal).toLocaleString()}` : ''}
                     </button>
                   )
                 })}
               </div>
 
+              {/* Ad spend chip row — only when ad spend data exists */}
+              {totalSpend > 0 && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                  <AdChip label="Ad spend" value={fmtDollars(totalSpend)} />
+                  {costPerLead !== null && <AdChip label="Cost / lead" value={fmtDollars(costPerLead)} />}
+                  {adSpendRatio !== null && <AdChip label="Ad ratio" value={`${adSpendRatio.toFixed(1)}x`} />}
+                </div>
+              )}
+
               {/* Workers panel */}
               {wOpen && (
-                <div className="mt-4 p-4 rounded-xl" style={{ background: 'var(--cream2)', border: '1px solid var(--pearl)' }} onClick={e => e.stopPropagation()}>
+                <div style={{
+                  marginTop: 10, padding: 12,
+                  background: 'var(--cream2)', border: '1px solid var(--pearl)', borderRadius: 'var(--r)',
+                }} onClick={e => e.stopPropagation()}>
                   <div className="fl">Who Worked This Event</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
                     {buyers.map(b => {
@@ -730,13 +722,11 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                         <div key={b.id} onClick={() => toggleWorker(ev, b.id, b.name)}
                           style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14, padding: '4px 0' }}>
                           <div style={{
-                            width: 28, height: 28, borderRadius: 6, flexShrink: 0,
+                            width: 26, height: 26, borderRadius: 6, flexShrink: 0,
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            ...(on
-                              ? { background: 'var(--green)' }
-                              : { border: '2.5px solid var(--pearl)' })
+                            ...(on ? { background: 'var(--green)' } : { border: '2.5px solid var(--pearl)' }),
                           }}>
-                            {on && <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 12.5 C6 12.5, 8 17, 9.5 19 C12 14, 16 8, 20 5" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                            {on && <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 12.5 C6 12.5, 8 17, 9.5 19 C12 14, 16 8, 20 5" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                           </div>
                           <span style={{ fontWeight: on ? 700 : 400, color: on ? 'var(--green-dark)' : 'var(--ash)' }}>{b.name}</span>
                           <span style={{ fontSize: 12, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{b.role}</span>
@@ -749,46 +739,45 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
 
               {/* Spend panel */}
               {spendOpen === ev.id && (
-                <SpendPanel ev={ev} onClose={() => setSpendOpen(null)} refetchEvents={fetchEvents} />
+                <div onClick={e => e.stopPropagation()} style={{ marginTop: 10 }}>
+                  <SpendPanel ev={ev} onClose={() => setSpendOpen(null)} refetchEvents={fetchEvents} />
+                </div>
               )}
 
-              {/* Actions */}
-              <div className="flex gap-2 mt-3 pt-3 flex-wrap" style={{ borderTop: '1px solid var(--cream2)' }} onClick={e => e.stopPropagation()}>
-                <button onClick={e => { e.stopPropagation(); setWorkersOpen(wOpen ? null : ev.id) }}
-                  className={wOpen ? 'btn-ghost btn-xs' : 'btn-outline btn-xs'}>
-                  👤 Who Worked
-                </button>
-                <button onClick={e => { e.stopPropagation(); setSpendOpen(spendOpen === ev.id ? null : ev.id) }}
-                  className={spendOpen === ev.id ? 'btn-ghost btn-xs' : 'btn-outline btn-xs'}>
-                  💰 Ad Spend
-                </button>
-                <button onClick={e => { e.stopPropagation(); setNotesEvent(ev) }}
-                  className="btn-outline btn-xs" style={{ position: 'relative' }}>
+              {/* Action buttons row */}
+              <div style={{
+                display: 'flex', gap: 6, flexWrap: 'wrap',
+                marginTop: 10, paddingTop: 10,
+                borderTop: '1px solid var(--pearl)',
+              }} onClick={e => e.stopPropagation()}>
+                <ActionBtn active={wOpen} onClick={e => { e.stopPropagation(); setWorkersOpen(wOpen ? null : ev.id) }}>
+                  👤 Who worked
+                </ActionBtn>
+                <ActionBtn active={spendOpen === ev.id} onClick={e => { e.stopPropagation(); setSpendOpen(spendOpen === ev.id ? null : ev.id) }}>
+                  💰 Ad spend
+                </ActionBtn>
+                <ActionBtn onClick={e => { e.stopPropagation(); setNotesEvent(ev) }} style={{ position: 'relative' }}>
                   📝 Notes
-                  {(() => {
-                    const count = noteCounts[ev.id] || 0
-                    if (count === 0) {
-                      return (
-                        <span aria-hidden style={{
-                          position: 'absolute', top: -3, right: -3,
-                          width: 8, height: 8, borderRadius: '50%',
-                          background: '#D97706', border: '2px solid var(--cream)',
-                        }} />
-                      )
-                    }
-                    return (
-                      <span style={{
-                        marginLeft: 6, background: 'var(--green-pale)', color: 'var(--green-dark)',
-                        fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 10,
-                      }}>{count}</span>
-                    )
-                  })()}
-                </button>
-                <button onClick={e => { e.stopPropagation(); copyLink(ev) }} className="btn-outline btn-xs">
-                  🔗 Copy Link
-                </button>
+                  {noteCount === 0 ? (
+                    <span aria-hidden style={{
+                      position: 'absolute', top: -3, right: -3,
+                      width: 7, height: 7, borderRadius: '50%',
+                      background: '#D97706', border: '2px solid var(--card-bg)',
+                    }} />
+                  ) : (
+                    <span style={{
+                      marginLeft: 6, background: 'var(--green-pale)', color: 'var(--green-dark)',
+                      fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 8,
+                    }}>{noteCount}</span>
+                  )}
+                </ActionBtn>
+                <ActionBtn onClick={e => { e.stopPropagation(); copyLink(ev) }}>
+                  🔗 Copy link
+                </ActionBtn>
                 {isAdmin && (
-                  <button onClick={e => { e.stopPropagation(); deleteEvent(ev.id) }} className="btn-danger btn-xs">Delete</button>
+                  <ActionBtn danger onClick={e => { e.stopPropagation(); deleteEvent(ev.id) }}>
+                    Delete
+                  </ActionBtn>
                 )}
               </div>
             </div>
@@ -815,6 +804,56 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
 }
 
 /* ══ EVENT DETAIL MODAL ══ */
+/* ── Desktop card primitives ── */
+function StatBlock({ value, label, valueColor }: { value: string; label: string; valueColor: string }) {
+  return (
+    <div style={{ textAlign: 'center', minWidth: 64 }}>
+      <div style={{ fontSize: 22, fontWeight: 500, color: valueColor, lineHeight: 1.1 }}>{value}</div>
+      <div style={{ fontSize: 10, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 2 }}>{label}</div>
+    </div>
+  )
+}
+
+function AdChip({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{
+      display: 'inline-flex', alignItems: 'baseline', gap: 6,
+      background: 'var(--cream2)', borderRadius: 6,
+      padding: '4px 10px', fontSize: 11,
+    }}>
+      <span style={{ color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 700 }}>{label}</span>
+      <span style={{ color: 'var(--ash)', fontWeight: 700 }}>{value}</span>
+    </div>
+  )
+}
+
+function ActionBtn({ children, onClick, active, danger, style }: {
+  children: React.ReactNode
+  onClick: (e: React.MouseEvent) => void
+  active?: boolean
+  danger?: boolean
+  style?: React.CSSProperties
+}) {
+  const color = danger ? '#E24B4A' : active ? 'var(--green-dark)' : 'var(--mist)'
+  const borderColor = danger ? '#E24B4A' : active ? 'var(--green3)' : 'var(--pearl)'
+  const bg = active ? 'var(--green-pale)' : 'transparent'
+  const hoverBg = danger ? '#FCEBEB' : 'var(--cream2)'
+  return (
+    <button onClick={onClick} style={{
+      fontSize: 11, padding: '4px 10px', borderRadius: 6,
+      border: `1px solid ${borderColor}`, background: bg, color,
+      cursor: 'pointer', fontWeight: 600, fontFamily: 'inherit',
+      transition: 'background .12s',
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      ...(style || {}),
+    }}
+      onMouseEnter={e => { e.currentTarget.style.background = hoverBg }}
+      onMouseLeave={e => { e.currentTarget.style.background = bg }}>
+      {children}
+    </button>
+  )
+}
+
 function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
   ev: Event
   stores: any[]
