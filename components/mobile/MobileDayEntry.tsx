@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
+import { canEditEvent } from '@/lib/permissions'
 
 const LEAD_SOURCES = [
   { key: 'src_vdp', label: 'VDP' },
@@ -233,6 +234,11 @@ export default function MobileDayEntry() {
   const persist = async (_submit: boolean, overrides: Overrides = {}) => {
     if (persistInFlightRef.current) return
     if (!selectedEventId || !user?.id) return
+    const ev = events.find(e => e.id === selectedEventId)
+    if (!canEditEvent(user, ev as any)) {
+      alert("You're not assigned to this event — save blocked.")
+      return
+    }
     persistInFlightRef.current = true
     try {
       const effPurchases = overrides.purchases ?? purchases

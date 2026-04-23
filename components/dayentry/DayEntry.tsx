@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
+import { canEditEvent } from '@/lib/permissions'
 import EventNotesNudge from '@/components/events/EventNotesNudge'
 
 /* ── Lead sources — day-level aggregates on event_days ── */
@@ -155,6 +156,11 @@ export default function DayEntry() {
   const persist = async (overrides: Overrides = {}) => {
     if (persistInFlightRef.current) return
     if (!selectedEventId || !user?.id) return
+    const ev = events.find(e => e.id === selectedEventId)
+    if (!canEditEvent(user, ev as any)) {
+      alert("You're not assigned to this event — save blocked.")
+      return
+    }
     persistInFlightRef.current = true
     try {
       const effPurch = overrides.purchases ?? purchases

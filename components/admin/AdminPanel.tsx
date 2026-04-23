@@ -757,6 +757,139 @@ function PermissionsTab() {
           ⚠ Only superadmins can edit permissions.
         </div>
       )}
+
+      <DeleteEventSection />
+    </div>
+  )
+}
+
+function DeleteEventSection() {
+  const { user: me, events, reload } = useApp()
+  const isSuperAdmin = me?.role === 'superadmin'
+  const [selectedId, setSelectedId] = useState('')
+  const [confirmText, setConfirmText] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [toast, setToast] = useState('')
+
+  const sortedEvents = [...events].sort((a, b) => b.start_date.localeCompare(a.start_date))
+  const selected = sortedEvents.find(e => e.id === selectedId)
+
+  const fmtDate = (ds: string) =>
+    new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const fmtRange = (ds: string) => {
+    const s = new Date(ds + 'T12:00:00')
+    const e = new Date(ds + 'T12:00:00'); e.setDate(e.getDate() + 2)
+    const sm = s.toLocaleDateString('en-US', { month: 'short' })
+    const em = e.toLocaleDateString('en-US', { month: 'short' })
+    const year = s.getFullYear()
+    return sm !== em
+      ? `${sm} ${s.getDate()} – ${em} ${e.getDate()}, ${year}`
+      : `${sm} ${s.getDate()}–${e.getDate()}, ${year}`
+  }
+
+  const requiredConfirm = selected ? `delete-${selected.start_date}` : ''
+  const canDelete = isSuperAdmin && !!selected && confirmText === requiredConfirm && !deleting
+
+  const handleDelete = async () => {
+    if (!canDelete || !selected) return
+    setDeleting(true)
+    try {
+      // Manual ordered cascade in case FKs aren't set to ON DELETE CASCADE.
+      await supabase.from('buyer_checks').delete().eq('event_id', selected.id)
+      await supabase.from('buyer_entries').delete().eq('event_id', selected.id)
+      await supabase.from('event_days').delete().eq('event_id', selected.id)
+      const { error } = await supabase.from('events').delete().eq('id', selected.id)
+      if (error) throw error
+      setToast(`Event deleted — ${selected.store_name} ${fmtDate(selected.start_date)}`)
+      setSelectedId('')
+      setConfirmText('')
+      await reload()
+      setTimeout(() => setToast(''), 4000)
+    } catch (err: any) {
+      alert('Delete failed: ' + (err?.message || 'unknown'))
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const workerCount = selected?.workers?.length || 0
+  const daysWithData = (selected?.days || []).filter((d: any) =>
+    (d.customers ?? 0) + (d.purchases ?? 0) + (d.dollars10 ?? 0) + (d.dollars5 ?? 0) > 0
+  ).length
+  const totalSpend = selected
+    ? ((selected.spend_vdp || 0) + (selected.spend_newspaper || 0) + (selected.spend_postcard || 0) + (selected.spend_spiffs || 0))
+    : 0
+
+  return (
+    <div className="card mt-6" style={{ padding: 0, overflow: 'hidden', borderTop: '3px solid var(--red)' }}>
+      <div className="px-6 py-4" style={{ borderBottom: '1px solid var(--pearl)' }}>
+        <div className="font-black text-lg flex items-center gap-2" style={{ color: 'var(--ink)' }}>
+          <span aria-hidden>⚠️</span> Delete Event
+        </div>
+        <div className="text-xs mt-0.5" style={{ color: 'var(--mist)' }}>
+          Permanently remove an event and all associated data.
+          {!isSuperAdmin && <span style={{ color: 'var(--red)', marginLeft: 8, fontWeight: 700 }}>Superadmin access required to delete events.</span>}
+        </div>
+      </div>
+
+      <div className="px-6 py-5" style={{ opacity: isSuperAdmin ? 1 : 0.55, pointerEvents: isSuperAdmin ? 'auto' : 'none' }}>
+        <label className="fl">Select event to delete</label>
+        <select value={selectedId} onChange={e => { setSelectedId(e.target.value); setConfirmText('') }} disabled={!isSuperAdmin}>
+          <option value="">Choose an event…</option>
+          {sortedEvents.map(ev => (
+            <option key={ev.id} value={ev.id}>{ev.store_name} — {fmtDate(ev.start_date)}</option>
+          ))}
+        </select>
+
+        {selected && (
+          <div className="mt-4 p-4 rounded-lg" style={{ background: 'var(--cream2)', border: '1px solid var(--pearl)' }}>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div><span className="fl" style={{ marginBottom: 2 }}>Store</span><div style={{ fontWeight: 700, color: 'var(--ink)' }}>{selected.store_name}</div></div>
+              <div><span className="fl" style={{ marginBottom: 2 }}>Dates</span><div style={{ fontWeight: 700, color: 'var(--ink)' }}>{fmtRange(selected.start_date)}</div></div>
+              <div><span className="fl" style={{ marginBottom: 2 }}>Workers assigned</span><div style={{ fontWeight: 700, color: 'var(--ink)' }}>{workerCount}</div></div>
+              <div><span className="fl" style={{ marginBottom: 2 }}>Days with data</span><div style={{ fontWeight: 700, color: 'var(--ink)' }}>{daysWithData} of 3</div></div>
+              <div style={{ gridColumn: '1 / -1' }}><span className="fl" style={{ marginBottom: 2 }}>Total ad spend</span><div style={{ fontWeight: 700, color: 'var(--ink)' }}>${totalSpend.toLocaleString()}</div></div>
+            </div>
+
+            <div className="mt-4 p-3 rounded-md" style={{ background: 'var(--red-pale)', border: '1px solid var(--red)', color: 'var(--red)', fontSize: 13, fontWeight: 600 }}>
+              ⚠ This will permanently delete the event, all day data, all check data, and all associated records. This cannot be undone.
+            </div>
+
+            <div className="mt-4">
+              <label className="fl">Type <code style={{ background: 'var(--cream)', padding: '1px 6px', borderRadius: 4, fontSize: 12 }}>{requiredConfirm}</code> to confirm</label>
+              <input
+                type="text"
+                value={confirmText}
+                onChange={e => setConfirmText(e.target.value)}
+                placeholder={requiredConfirm}
+                autoCapitalize="off"
+                spellCheck={false}
+              />
+            </div>
+
+            <button
+              onClick={handleDelete}
+              disabled={!canDelete}
+              className="btn-full mt-4"
+              style={{
+                background: canDelete ? 'var(--red)' : 'var(--pearl)',
+                color: canDelete ? '#fff' : 'var(--mist)',
+                padding: '12px 22px',
+                cursor: canDelete ? 'pointer' : 'not-allowed',
+                fontWeight: 900,
+              }}>
+              {deleting ? 'Deleting…' : 'Permanently Delete Event'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 rounded-lg shadow-lg z-50"
+          style={{ background: 'var(--green)', color: '#fff', fontWeight: 700, fontSize: 14 }}>
+          ✓ {toast}
+        </div>
+      )}
     </div>
   )
 }

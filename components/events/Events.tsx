@@ -5,6 +5,7 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import { isMobileDevice } from '@/lib/mobile'
+import { canEditEvent } from '@/lib/permissions'
 import type { Event, BuyerVacation } from '@/types'
 import type { NavPage } from '@/app/page'
 import EventNotesPanel from './EventNotesPanel'
@@ -96,6 +97,10 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   // Buyer — so legacy aggregate entries stay visible.
   const openDayEntry = (ev: Event, dayNumber: number) => {
     if (!setNav) return
+    if (!canEditEvent(user, ev)) {
+      alert("You're not assigned to this event")
+      return
+    }
     const evDay = (ev as any).days?.find((d: any) => d.day_number === dayNumber)
     const hasCombined = !!evDay && (
       (evDay.customers ?? 0) + (evDay.purchases ?? 0) + (evDay.dollars10 ?? 0) + (evDay.dollars5 ?? 0)
@@ -231,31 +236,6 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
       alert('Error creating event: ' + (err?.message || 'unknown'))
     } finally {
       setSaving(false)
-    }
-  }
-
-  // ── Optimistic delete ──
-  const deleteEvent = async (id: string) => {
-    if (!confirm('Delete this event? This cannot be undone.')) return
-
-    const prev = events
-    const updated = events.filter(ev => ev.id !== id)
-    setEvents(updated)
-    setContextEvents(updated)
-
-    try {
-      const { error } = await withTimeout(
-        supabase.from('events').delete().eq('id', id)
-      )
-      if (error) {
-        setEvents(prev)
-        setContextEvents(prev)
-        alert('Delete failed: ' + error.message)
-      }
-    } catch (err: any) {
-      setEvents(prev)
-      setContextEvents(prev)
-      alert('Delete failed: ' + (err?.message || 'timeout'))
     }
   }
 
@@ -549,24 +529,29 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                         markup so desktop and mobile stay in sync. */}
                     {wOpen && (
                       <div className="m-3 p-3 rounded-xl" style={{ background: 'var(--cream2)', border: '1px solid var(--pearl)' }} onClick={e => e.stopPropagation()}>
-                        <div className="fl">Who Worked This Event</div>
+                        <div className="fl">Who Worked This Event{!isAdmin && ' (read only)'}</div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                          {buyers.map(b => {
+                          {(isAdmin ? buyers : buyers.filter(b => evWorkers.some((w: any) => w.id === b.id))).map(b => {
                             const on = evWorkers.some((w: any) => w.id === b.id)
                             return (
-                              <div key={b.id} onClick={() => toggleWorker(ev, b.id, b.name)}
-                                style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14, padding: '6px 0', minHeight: 36 }}>
-                                <div style={{
-                                  width: 26, height: 26, borderRadius: 6, flexShrink: 0,
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  ...(on ? { background: 'var(--green)' } : { border: '2.5px solid var(--pearl)' })
-                                }}>
-                                  {on && <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 12.5 C6 12.5, 8 17, 9.5 19 C12 14, 16 8, 20 5" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                                </div>
+                              <div key={b.id} onClick={isAdmin ? () => toggleWorker(ev, b.id, b.name) : undefined}
+                                style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: isAdmin ? 'pointer' : 'default', fontSize: 14, padding: '6px 0', minHeight: 36 }}>
+                                {isAdmin && (
+                                  <div style={{
+                                    width: 26, height: 26, borderRadius: 6, flexShrink: 0,
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    ...(on ? { background: 'var(--green)' } : { border: '2.5px solid var(--pearl)' })
+                                  }}>
+                                    {on && <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 12.5 C6 12.5, 8 17, 9.5 19 C12 14, 16 8, 20 5" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                  </div>
+                                )}
                                 <span style={{ fontWeight: on ? 700 : 400, color: on ? 'var(--green-dark)' : 'var(--ash)' }}>{b.name}</span>
                               </div>
                             )
                           })}
+                          {!isAdmin && evWorkers.length === 0 && (
+                            <div style={{ fontSize: 13, color: 'var(--mist)', fontStyle: 'italic' }}>No workers assigned yet.</div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -583,10 +568,9 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                     }} onClick={e => e.stopPropagation()}>
                       {[
                         { id: 'workers', icon: '👤', label: 'Who worked', onTap: () => setWorkersOpen(wOpen ? null : ev.id) },
-                        { id: 'spend',   icon: '💰', label: 'Ad spend',   onTap: () => setSpendOpen(spendOpen === ev.id ? null : ev.id) },
+                        ...(isAdmin ? [{ id: 'spend', icon: '💰', label: 'Ad spend', onTap: () => setSpendOpen(spendOpen === ev.id ? null : ev.id) }] : []),
                         { id: 'notes',   icon: '📝', label: 'Notes',      onTap: () => setNotesEvent(ev) },
                         { id: 'link',    icon: '🔗', label: 'Copy link',  onTap: () => copyLink(ev) },
-                        ...(isSuperAdmin ? [{ id: 'del', icon: '🗑️', label: 'Delete', onTap: () => deleteEvent(ev.id), danger: true as const }] : []),
                       ].map((btn, i, arr) => (
                         <button key={btn.id} onClick={e => { e.stopPropagation(); btn.onTap() }} style={{
                           flex: 1, background: 'none', border: 'none',
@@ -770,24 +754,29 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                   {wOpen && (
                     <div onClick={e => e.stopPropagation()} style={{ padding: '14px 20px 0' }}>
                       <div style={{ background: 'var(--cream)', border: '1px solid var(--pearl)', borderRadius: 10, padding: 14 }}>
-                        <div className="fl">Who Worked This Event</div>
+                        <div className="fl">Who Worked This Event{!isAdmin && ' (read only)'}</div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginTop: 8 }}>
-                          {buyers.map(b => {
+                          {(isAdmin ? buyers : buyers.filter(b => evWorkers.some(w => w.id === b.id))).map(b => {
                             const on = evWorkers.some(w => w.id === b.id)
                             return (
-                              <div key={b.id} onClick={() => toggleWorker(ev, b.id, b.name)}
-                                style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14, padding: '4px 0' }}>
-                                <div style={{
-                                  width: 26, height: 26, borderRadius: 6, flexShrink: 0,
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  ...(on ? { background: 'var(--green)' } : { border: '2.5px solid var(--pearl)' }),
-                                }}>
-                                  {on && <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 12.5 C6 12.5, 8 17, 9.5 19 C12 14, 16 8, 20 5" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                                </div>
+                              <div key={b.id} onClick={isAdmin ? () => toggleWorker(ev, b.id, b.name) : undefined}
+                                style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: isAdmin ? 'pointer' : 'default', fontSize: 14, padding: '4px 0' }}>
+                                {isAdmin && (
+                                  <div style={{
+                                    width: 26, height: 26, borderRadius: 6, flexShrink: 0,
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    ...(on ? { background: 'var(--green)' } : { border: '2.5px solid var(--pearl)' }),
+                                  }}>
+                                    {on && <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 12.5 C6 12.5, 8 17, 9.5 19 C12 14, 16 8, 20 5" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                  </div>
+                                )}
                                 <span style={{ fontWeight: on ? 700 : 400, color: on ? 'var(--green-dark)' : 'var(--ash)' }}>{b.name}</span>
                               </div>
                             )
                           })}
+                          {!isAdmin && evWorkers.length === 0 && (
+                            <div style={{ fontSize: 13, color: 'var(--mist)', fontStyle: 'italic', gridColumn: '1 / -1' }}>No workers assigned yet.</div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -806,10 +795,9 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                   }} onClick={e => e.stopPropagation()}>
                     {[
                       { id: 'workers', icon: '👤', label: 'Who worked', onTap: () => setWorkersOpen(wOpen ? null : ev.id) },
-                      { id: 'spend',   icon: '💰', label: 'Ad spend',   onTap: () => setSpendOpen(spendOpen === ev.id ? null : ev.id) },
+                      ...(isAdmin ? [{ id: 'spend', icon: '💰', label: 'Ad spend', onTap: () => setSpendOpen(spendOpen === ev.id ? null : ev.id) }] : []),
                       { id: 'notes',   icon: '📝', label: 'Notes',      onTap: () => setNotesEvent(ev) },
                       { id: 'link',    icon: '🔗', label: 'Copy link',  onTap: () => copyLink(ev) },
-                      ...(isAdmin ? [{ id: 'del', icon: '🗑', label: 'Delete', onTap: () => deleteEvent(ev.id), danger: true as const }] : []),
                     ].map(btn => (
                       <button key={btn.id} onClick={e => { e.stopPropagation(); btn.onTap() }} style={{
                         flex: 1, background: 'transparent', border: 'none',
