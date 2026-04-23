@@ -377,53 +377,79 @@ function BuyerEntryForm({ eventId, dayNumber, buyerId, buyerName, existingEntry,
   const hasValidChecks = validChecks.length > 0
 
   type Overrides = Partial<{ purchases: string; tenPct: string; fivePct: string }>
+  // Mutex so overlapping autosave + manual-submit calls don't both INSERT
+  // before the first one's id has been written back into entryIdRef.
+  const persistInFlightRef = useRef(false)
   const persist = async (submit: boolean, overrides: Overrides = {}) => {
-    const effPurchases = overrides.purchases ?? purchases
-    const effTenPct    = overrides.tenPct    ?? tenPct
-    const effFivePct   = overrides.fivePct   ?? fivePct
-    const entryPayload: any = {
-      event_id: eventId, day_number: dayNumber, day: dayNumber,
-      buyer_id: buyerId, buyer_name: buyerName,
-      customers_seen: parseInt(customersSeeen) || 0,
-      purchases_made: effPurchases !== '' ? parseInt(effPurchases) || 0 : null,
-      dollars_at_10pct: effTenPct !== '' ? parseFloat(effTenPct) : null,
-      dollars_at_5pct: effFivePct !== '' ? parseFloat(effFivePct) : null,
-      ...Object.fromEntries(LEAD_SOURCES.map(s => [s.key, parseInt(sources[s.key]) || 0])),
-      submitted_at: submit ? new Date().toISOString() : existingEntry?.submitted_at || null,
+    if (persistInFlightRef.current) return
+    persistInFlightRef.current = true
+    try {
+      const effPurchases = overrides.purchases ?? purchases
+      const effTenPct    = overrides.tenPct    ?? tenPct
+      const effFivePct   = overrides.fivePct   ?? fivePct
+      const entryPayload: any = {
+        event_id: eventId, day_number: dayNumber, day: dayNumber,
+        buyer_id: buyerId, buyer_name: buyerName,
+        customers_seen: parseInt(customersSeeen) || 0,
+        purchases_made: effPurchases !== '' ? parseInt(effPurchases) || 0 : null,
+        dollars_at_10pct: effTenPct !== '' ? parseFloat(effTenPct) : null,
+        dollars_at_5pct: effFivePct !== '' ? parseFloat(effFivePct) : null,
+        ...Object.fromEntries(LEAD_SOURCES.map(s => [s.key, parseInt(sources[s.key]) || 0])),
+        submitted_at: submit ? new Date().toISOString() : existingEntry?.submitted_at || null,
+      }
+
+      // Fresh-existing check — DB wins over stale state. Adopts an existing
+      // row's id instead of INSERTing a new one, which stops concurrent
+      // autosave + submit from creating duplicates.
+      let entryId = entryIdRef.current
+      if (!entryId && eventId && buyerId) {
+        const { data: existingRows } = await supabase.from('buyer_entries')
+          .select('id')
+          .eq('event_id', eventId)
+          .eq('day_number', dayNumber)
+          .eq('buyer_id', buyerId)
+          .limit(1)
+        if (existingRows && existingRows.length > 0) {
+          entryId = existingRows[0].id
+          entryIdRef.current = entryId
+        }
+      }
+
+      if (entryId) {
+        const { error } = await supabase.from('buyer_entries').update(entryPayload).eq('id', entryId)
+        if (error) throw error
+      } else {
+        const { data, error } = await supabase.from('buyer_entries').insert(entryPayload).select().single()
+        if (error) throw error
+        entryId = data?.id || null
+        entryIdRef.current = entryId
+      }
+
+      if (!entryId) throw new Error('Failed to save entry')
+
+      const { error: delErr } = await supabase.from('buyer_checks').delete().eq('entry_id', entryId)
+      if (delErr) throw delErr
+      if (validChecks.length > 0) {
+        const { error } = await supabase.from('buyer_checks').insert(
+          validChecks.map(c => ({
+            entry_id: entryId!,
+            event_id: eventId,
+            check_number: c.check_number,
+            buy_form_number: c.buy_form_number,
+            amount: parseFloat(String(c.amount)) || 0,
+            payment_type: c.payment_type,
+            commission_rate: c.commission_rate === 5 ? 5 : 10,
+          }))
+        )
+        if (error) throw error
+      }
+
+      // Roll the per-buyer totals up into event_days so Dashboard / Events
+      // pills / Reports show consistent numbers.
+      await rollupEventDay(eventId, dayNumber)
+    } finally {
+      persistInFlightRef.current = false
     }
-
-    let entryId = entryIdRef.current
-    if (entryId) {
-      const { error } = await supabase.from('buyer_entries').update(entryPayload).eq('id', entryId)
-      if (error) throw error
-    } else {
-      const { data, error } = await supabase.from('buyer_entries').insert(entryPayload).select().single()
-      if (error) throw error
-      entryId = data?.id || null
-      entryIdRef.current = entryId
-    }
-
-    if (!entryId) throw new Error('Failed to save entry')
-
-    await supabase.from('buyer_checks').delete().eq('entry_id', entryId)
-    if (validChecks.length > 0) {
-      const { error } = await supabase.from('buyer_checks').insert(
-        validChecks.map(c => ({
-          entry_id: entryId!,
-          event_id: eventId,
-          check_number: c.check_number,
-          buy_form_number: c.buy_form_number,
-          amount: parseFloat(String(c.amount)) || 0,
-          payment_type: c.payment_type,
-          commission_rate: c.commission_rate === 5 ? 5 : 10,
-        }))
-      )
-      if (error) throw error
-    }
-
-    // Roll the per-buyer totals up into event_days so Dashboard / Events
-    // pills / Reports show consistent numbers.
-    await rollupEventDay(eventId, dayNumber)
   }
 
   const autosaveStatus = useAutosave(
@@ -433,6 +459,7 @@ function BuyerEntryForm({ eventId, dayNumber, buyerId, buyerName, existingEntry,
   )
 
   const submit = async () => {
+    if (saving) return            // guard against rapid double-clicks
     setSaving(true)
     // On Submit, check totals OVERWRITE top aggregate fields (Q7).
     const overrides: Overrides = hasValidChecks ? {
