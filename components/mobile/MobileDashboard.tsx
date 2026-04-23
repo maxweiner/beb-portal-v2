@@ -110,7 +110,7 @@ export default function MobileDashboard({ setNav }: Props) {
     <div style={{ background: 'var(--cream2)', minHeight: '100%' }}>
       {/* Slim hero — greeting + tappable name */}
       <div style={{
-        background: 'var(--gradient-primary)',
+        background: 'linear-gradient(160deg, var(--sidebar-bg) 0%, var(--green-dark) 50%, var(--green) 100%)',
         padding: '22px 18px 20px', borderRadius: '0 0 24px 24px',
         position: 'relative', overflow: 'hidden',
       }}>
