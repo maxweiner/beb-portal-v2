@@ -1,6 +1,7 @@
 'use client'
 
 import { useApp } from '@/lib/context'
+import type { NavPage } from '@/app/page'
 
 // Count days worked: past events = 3 days, current/future = days with data
 const countDays = (ev: any) => {
@@ -12,7 +13,7 @@ const countDays = (ev: any) => {
 }
 
 
-export default function Dashboard() {
+export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void }) {
   const { user, users, stores, events, year, setYear } = useApp()
 
   const YEARS = Array.from(
@@ -32,10 +33,33 @@ export default function Dashboard() {
   sunday.setDate(monday.getDate() + 6)
   sunday.setHours(23, 59, 59, 999)
 
-  const weekEvents = events.filter(e => {
-    const d = new Date(e.start_date + 'T12:00:00')
-    return d >= monday && d <= sunday
-  })
+  // An event "falls in" the week if ANY of its 3 days overlaps Mon–Sun.
+  const overlapsWeek = (e: any, weekStart: Date, weekEnd: Date) => {
+    if (!e.start_date) return false
+    const evStart = new Date(e.start_date + 'T00:00:00')
+    const evEnd = new Date(e.start_date + 'T00:00:00'); evEnd.setDate(evEnd.getDate() + 2)
+    evEnd.setHours(23, 59, 59, 999)
+    return evStart <= weekEnd && evEnd >= weekStart
+  }
+  const weekEvents = events.filter(e => overlapsWeek(e, monday, sunday))
+
+  // Fallback: if nothing this week, peek at next week's window.
+  const nextWeekStart = new Date(monday); nextWeekStart.setDate(monday.getDate() + 7)
+  const nextWeekEnd = new Date(sunday); nextWeekEnd.setDate(sunday.getDate() + 7)
+  const nextWeekFallback = weekEvents.length === 0
+    ? events.filter(e => overlapsWeek(e, nextWeekStart, nextWeekEnd))
+    : []
+  const showingNextWeek = weekEvents.length === 0 && nextWeekFallback.length > 0
+  const displayedEvents = weekEvents.length > 0 ? weekEvents : nextWeekFallback
+
+  const getEventSpend = (ev: any): number =>
+    (ev.days || []).reduce((s: number, d: any) => s + (Number(d.dollars10) || 0) + (Number(d.dollars5) || 0), 0)
+  const getEventDayStatus = (ev: any): string => {
+    const entered = (ev.days || []).filter((d: any) =>
+      (Number(d.purchases) || 0) > 0 || (Number(d.dollars10) || 0) > 0 || (Number(d.dollars5) || 0) > 0
+    ).length
+    return entered === 0 ? '' : `Day ${entered} of 3`
+  }
 
   const weekTotals = weekEvents.reduce((acc, ev) => {
     ev.days.forEach((d: any) => {
@@ -171,6 +195,54 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
+
+          {/* This week's events — one card per event, live spend + day status */}
+          {displayedEvents.length > 0 && (
+            <div style={{ marginTop: 18 }}>
+              <div style={{
+                fontSize: 11, fontWeight: 700, color: 'rgba(245,240,232,.75)',
+                textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 10,
+              }}>
+                {showingNextWeek
+                  ? 'Nothing this week — here\'s what\'s coming'
+                  : 'This week\'s events'}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+                {displayedEvents.map(ev => {
+                  const spend = getEventSpend(ev)
+                  const status = getEventDayStatus(ev)
+                  const store = stores.find(s => s.id === ev.store_id)
+                  return (
+                    <button key={ev.id} onClick={() => setNav?.('events')} style={{
+                      background: 'rgba(240,253,244,.95)', borderRadius: 12, padding: '14px 16px',
+                      border: '1px solid var(--green3)',
+                      boxShadow: '0 2px 10px rgba(0,0,0,.08)',
+                      textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
+                      display: 'flex', flexDirection: 'column', gap: 4,
+                    }}>
+                      <div style={{
+                        fontSize: 14, fontWeight: 900, color: 'var(--green-dark)',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>{ev.store_name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--green-dark)', opacity: 0.65 }}>
+                        {store?.city}{store?.state ? ', ' + store.state : ''}
+                      </div>
+                      {spend > 0 ? (
+                        <div style={{ marginTop: 4, display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                          <span style={{ fontSize: 22, fontWeight: 900, color: 'var(--green-dark)' }}>{fmt(spend)}</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--green-dark)', opacity: 0.65 }}>{status}</span>
+                        </div>
+                      ) : (
+                        <div style={{ marginTop: 4, fontSize: 11, fontWeight: 700, color: 'var(--green-dark)', opacity: 0.55 }}>
+                          Not started
+                        </div>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

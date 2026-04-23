@@ -74,7 +74,7 @@ export default function Home() {
       <>
         <ConnectionBanner />
         <MobileLayout nav={nav} setNav={setNav}>
-          {nav === 'dashboard' && <MobileDashboard />}
+          {nav === 'dashboard' && <MobileDashboard setNav={setNav} />}
           {nav === 'dayentry'  && <MobileDayEntry />}
           {nav === 'events'    && <Events setNav={setNav} />}
           {nav === 'calendar'  && <Calendar key={navKey} />}
@@ -104,7 +104,7 @@ export default function Home() {
       </button>
       <Sidebar nav={nav} setNav={setNav} />
       <main className="flex-1 overflow-y-auto">
-        {nav === 'dashboard'  && <Dashboard />}
+        {nav === 'dashboard'  && <Dashboard setNav={setNav} />}
         {nav === 'calendar'   && <Calendar key={navKey} />}
         {nav === 'events'     && <Events setNav={setNav} />}
         {nav === 'dayentry'   && <DayEntry />}

@@ -1,6 +1,8 @@
 'use client'
 
+import { useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
+import type { NavPage } from '@/app/page'
 
 const countDays = (ev: any) => {
   const end = new Date(ev.start_date + 'T12:00:00')
@@ -15,35 +17,80 @@ const TIERS: Record<number, { label: string; icon: string; color: string }> = {
   3: { label: 'Gold',         icon: '🥇', color: '#C9A84C' },
 }
 
-const fmt = (n: number) => `$${Math.round(n).toLocaleString()}`
-const fmtDate = (ds: string) => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+const INELIGIBLE = ['joe', 'max', 'rich']
+const fmtMoney = (n: number) => `$${Math.round(n).toLocaleString()}`
 
-export default function MobileDashboard() {
-  const { user, users, events } = useApp()
+const weekStart = (d: Date) => {
+  const r = new Date(d); r.setHours(0, 0, 0, 0)
+  const day = r.getDay()
+  const diff = r.getDate() - day + (day === 0 ? -6 : 1)
+  r.setDate(diff)
+  return r
+}
+const weekEnd = (d: Date) => {
+  const r = weekStart(d); r.setDate(r.getDate() + 6); r.setHours(23, 59, 59, 999); return r
+}
+const overlapsWeek = (e: any, ws: Date, we: Date) => {
+  if (!e.start_date) return false
+  const s = new Date(e.start_date + 'T00:00:00')
+  const en = new Date(e.start_date + 'T00:00:00'); en.setDate(en.getDate() + 2); en.setHours(23, 59, 59, 999)
+  return s <= we && en >= ws
+}
+const eventSpend = (ev: any) =>
+  (ev.days || []).reduce((s: number, d: any) => s + (Number(d.dollars10) || 0) + (Number(d.dollars5) || 0), 0)
+const eventDayStatus = (ev: any) => {
+  const entered = (ev.days || []).filter((d: any) =>
+    (Number(d.purchases) || 0) > 0 || (Number(d.dollars10) || 0) > 0 || (Number(d.dollars5) || 0) > 0
+  ).length
+  return entered === 0 ? '' : `Day ${entered} of 3`
+}
+
+interface Props {
+  setNav?: (n: NavPage) => void
+}
+
+export default function MobileDashboard({ setNav }: Props) {
+  const { user, users, events, setDayEntryIntent } = useApp()
   const currentYear = String(new Date().getFullYear())
-  const yearEvents = events.filter(e => e.start_date?.startsWith(currentYear))
-  const buyers = users.filter(u => u.active && u.is_buyer !== false)
-  const ineligibleNames = ['joe', 'max', 'rich']
-
-  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
   const greet = new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'
 
+  const yearEvents = events.filter(e => e.start_date?.startsWith(currentYear))
+  const buyers = users.filter(u => u.active && u.is_buyer !== false)
+
+  /* ── Week calc ── */
+  const today = new Date()
+  const ws = weekStart(today)
+  const we = weekEnd(today)
+  const thisWeek = events.filter(e => overlapsWeek(e, ws, we))
+  const nextWs = new Date(ws); nextWs.setDate(ws.getDate() + 7)
+  const nextWe = new Date(we); nextWe.setDate(we.getDate() + 7)
+  const nextWeek = thisWeek.length === 0 ? events.filter(e => overlapsWeek(e, nextWs, nextWe)) : []
+  const showingFallback = thisWeek.length === 0 && nextWeek.length > 0
+  const displayed = thisWeek.length > 0 ? thisWeek : nextWeek
+
+  // Sort so the user's own events come first (only for buyers).
+  const sortedDisplayed = useMemo(() => {
+    if (isAdmin) return displayed
+    return [...displayed].sort((a, b) => {
+      const aMine = (a.workers || []).some((w: any) => w.id === user?.id) ? 0 : 1
+      const bMine = (b.workers || []).some((w: any) => w.id === user?.id) ? 0 : 1
+      if (aMine !== bMine) return aMine - bMine
+      return a.start_date.localeCompare(b.start_date)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayed, isAdmin, user?.id])
+
+  /* ── Personal stats (for name-tap popup) ── */
   const myDays = yearEvents.reduce((s, ev) =>
     s + ((ev.workers || []).some((w: any) => w.id === user?.id) ? countDays(ev) : 0), 0)
-  const allMyEvents = yearEvents.filter(ev => (ev.workers || []).some((w: any) => w.id === user?.id))
-
-  // Hide past events from "My Events"
-  const myUpcomingEvents = allMyEvents.filter(ev => {
-    const end = new Date(ev.start_date + 'T12:00:00')
-    end.setDate(end.getDate() + 2); end.setHours(23, 59, 59)
-    return end >= today
-  }).sort((a, b) => a.start_date.localeCompare(b.start_date))
+  const myEvents = yearEvents.filter(ev => (ev.workers || []).some((w: any) => w.id === user?.id)).length
 
   let rank = 0; let lastDays = -1
   const ranked = buyers.map(b => {
     const days = yearEvents.reduce((s, ev) =>
       s + ((ev.workers || []).some((w: any) => w.id === b.id) ? countDays(ev) : 0), 0)
-    return { ...b, days, isIneligible: ineligibleNames.some(n => b.name?.toLowerCase().includes(n)) }
+    return { ...b, days, isIneligible: INELIGIBLE.some(n => b.name?.toLowerCase().includes(n)) }
   }).sort((a, b) => b.days - a.days).map((b, i) => {
     if (b.days !== lastDays) { rank = i + 1; lastDays = b.days }
     return { ...b, rank }
@@ -51,33 +98,20 @@ export default function MobileDashboard() {
   const myRank = ranked.find(b => b.id === user?.id)
   const myTier = myRank && myRank.rank <= 3 ? TIERS[myRank.rank] : null
 
-  const activeEvent = allMyEvents.find(ev => {
-    const start = new Date(ev.start_date + 'T12:00:00')
-    const end = new Date(ev.start_date + 'T12:00:00'); end.setDate(end.getDate() + 2); end.setHours(23, 59, 59)
-    return today >= start && today <= end
-  })
-  const activeStats = activeEvent ? {
-    purchases: activeEvent.days.reduce((s: number, d: any) => s + (d.purchases || 0), 0),
-    dollars: activeEvent.days.reduce((s: number, d: any) => s + (d.dollars10 || 0) + (d.dollars5 || 0), 0),
-    customers: activeEvent.days.reduce((s: number, d: any) => s + (d.customers || 0), 0),
-  } : null
+  const [statsOpen, setStatsOpen] = useState(false)
 
-  const futureEvents = [...allMyEvents]
-    .filter(ev => new Date(ev.start_date + 'T12:00:00') > today)
-    .sort((a, b) => a.start_date.localeCompare(b.start_date))
-  const nextEvent = futureEvents[0] || null
-  let daysUntil = 0
-  if (nextEvent) {
-    const nd = new Date(nextEvent.start_date + 'T12:00:00'); nd.setHours(0, 0, 0, 0)
-    daysUntil = Math.round((nd.getTime() - today.getTime()) / 86400000)
+  /* ── Navigate to Enter Day Data with the event pre-selected ── */
+  const openEvent = (ev: any) => {
+    setDayEntryIntent({ eventId: ev.id, day: 1 })
+    setNav?.('dayentry')
   }
 
   return (
     <div style={{ background: 'var(--cream2)', minHeight: '100%' }}>
-      {/* Hero */}
+      {/* Slim hero — greeting + tappable name */}
       <div style={{
         background: 'linear-gradient(160deg, var(--sidebar-bg) 0%, var(--green-dark) 50%, var(--green) 100%)',
-        padding: '22px 18px', borderRadius: '0 0 24px 24px',
+        padding: '22px 18px 20px', borderRadius: '0 0 24px 24px',
         position: 'relative', overflow: 'hidden',
       }}>
         <div style={{
@@ -88,134 +122,91 @@ export default function MobileDashboard() {
           <div style={{ color: 'rgba(245,240,232,.85)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em' }}>
             Good {greet}
           </div>
-          <div style={{ color: '#fff', fontSize: 28, fontWeight: 900, marginTop: 2, letterSpacing: '-.02em' }}>
-            {user?.name?.split(' ')[0]} 👋
-          </div>
+          <button onClick={() => setStatsOpen(true)} style={{
+            background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+            color: '#fff', fontSize: 28, fontWeight: 900, marginTop: 2, letterSpacing: '-.02em',
+            display: 'inline-flex', alignItems: 'baseline', gap: 8, fontFamily: 'inherit',
+          }}>
+            {user?.name?.split(' ')[0]}
+            <span aria-hidden style={{ fontSize: 14, opacity: .7, fontWeight: 500 }}>▾</span>
+          </button>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 16 }}>
-            {[
-              ['Days', String(myDays)],
-              ['Events', String(allMyEvents.length)],
-              ['Rank', myRank ? `#${myRank.rank}` : '—'],
-            ].map(([l, v]) => (
-              <div key={l} style={{
-                background: 'rgba(240,253,244,.95)', borderRadius: 12, padding: '10px 8px',
-                textAlign: 'center', border: '1px solid var(--green3)',
-                boxShadow: '0 2px 8px rgba(0,0,0,.1)',
+          {/* Week event cards — styled to sit inside the glassy hero */}
+          <div style={{ marginTop: 16 }}>
+            {showingFallback && (
+              <div style={{
+                fontSize: 11, fontWeight: 700, color: 'rgba(245,240,232,.8)',
+                textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8,
               }}>
-                <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--green-dark)', lineHeight: 1 }}>{v}</div>
-                <div style={{ fontSize: 10, color: 'var(--green-dark)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', marginTop: 3, opacity: 0.75 }}>{l}</div>
+                Nothing this week — here's what's coming
               </div>
-            ))}
-          </div>
+            )}
 
-          {myTier && (
-            <div style={{
-              marginTop: 12, padding: '8px 14px', background: 'rgba(255,255,255,.14)',
-              borderRadius: 10, display: 'inline-flex', alignItems: 'center', gap: 8,
-              border: '1px solid rgba(255,255,255,.2)',
-            }}>
-              <span style={{ fontSize: 16 }}>{myTier.icon}</span>
-              <span style={{ color: '#fff', fontWeight: 900, fontSize: 12, letterSpacing: '.02em' }}>{myTier.label} Status</span>
-            </div>
-          )}
+            {displayed.length === 0 ? (
+              <div style={{
+                background: 'rgba(240,253,244,.12)', borderRadius: 12, padding: '18px 14px',
+                border: '1px solid rgba(134,239,172,.2)', textAlign: 'center',
+                color: 'rgba(245,240,232,.75)', fontSize: 13,
+              }}>
+                No events scheduled.
+              </div>
+            ) : (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: displayed.length === 1 ? '1fr' : 'repeat(auto-fill, minmax(150px, 1fr))',
+                gap: 8,
+              }}>
+                {sortedDisplayed.map(ev => {
+                  const isMine = !isAdmin && (ev.workers || []).some((w: any) => w.id === user?.id)
+                  const spend = eventSpend(ev)
+                  const status = eventDayStatus(ev)
+                  return (
+                    <button key={ev.id} onClick={() => openEvent(ev)} style={{
+                      background: 'rgba(240,253,244,.95)', borderRadius: 12,
+                      border: isMine ? '2px solid #F59E0B' : '1px solid var(--green3)',
+                      padding: '10px 12px', textAlign: 'left', cursor: 'pointer',
+                      position: 'relative', fontFamily: 'inherit',
+                      boxShadow: '0 2px 8px rgba(0,0,0,.1)',
+                      display: 'flex', flexDirection: 'column', gap: 2,
+                    }}>
+                      {isMine && (
+                        <span style={{
+                          position: 'absolute', top: 6, right: 6,
+                          background: '#F59E0B', color: '#fff',
+                          fontSize: 9, fontWeight: 900, letterSpacing: '.06em',
+                          padding: '2px 6px', borderRadius: 99,
+                        }}>YOU</span>
+                      )}
+                      <div style={{
+                        fontSize: 13, fontWeight: 900, color: 'var(--green-dark)',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        paddingRight: isMine ? 40 : 0,
+                      }}>{ev.store_name}</div>
+                      {spend > 0 ? (
+                        <>
+                          <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--green-dark)', lineHeight: 1.1 }}>
+                            {fmtMoney(spend)}
+                          </div>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--green-dark)', opacity: 0.65 }}>
+                            {status}
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--green-dark)', opacity: 0.55 }}>
+                          Not started
+                        </div>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
+      {/* Leaderboard (unchanged) */}
       <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {/* Live card */}
-        {activeEvent && activeStats && (
-          <div style={{
-            background: 'linear-gradient(135deg, var(--green-pale), var(--cream))',
-            borderRadius: 14, padding: 16,
-            border: '2px solid var(--green3)',
-            boxShadow: '0 0 0 4px rgba(134,239,172,.25), 0 4px 16px rgba(29,107,68,.12)',
-            position: 'relative',
-          }}>
-            <div style={{ position: 'absolute', top: 12, right: 14, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--green)', boxShadow: '0 0 0 3px rgba(29,107,68,.2)' }} />
-              <span style={{ fontSize: 10, fontWeight: 900, color: 'var(--green-dark)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Live</span>
-            </div>
-            <div style={{ fontWeight: 900, fontSize: 15, color: 'var(--ink)', marginBottom: 10 }}>◆ {activeEvent.store_name}</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
-                <div style={{ fontSize: 10, color: 'var(--mist)', fontWeight: 700, textTransform: 'uppercase' }}>📦 Purchases</div>
-                <div style={{ fontSize: 26, fontWeight: 900, color: 'var(--green)' }}>{activeStats.purchases.toLocaleString()}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 10, color: 'var(--mist)', fontWeight: 700, textTransform: 'uppercase' }}>💰 Amount</div>
-                <div style={{ fontSize: 26, fontWeight: 900, color: 'var(--green)' }}>{fmt(activeStats.dollars)}</div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Countdown when no active event */}
-        {!activeEvent && nextEvent && (
-          <div style={{ background: 'var(--cream)', borderRadius: 14, padding: 14, border: '1px solid var(--pearl)', display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{
-              minWidth: 60, height: 60, borderRadius: 14,
-              background: 'linear-gradient(135deg, var(--green), var(--green-dark))',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              color: '#fff', boxShadow: '0 4px 12px rgba(29,107,68,.3)',
-            }}>
-              {daysUntil <= 0 ? (
-                <div style={{ fontSize: 12, fontWeight: 900 }}>TODAY</div>
-              ) : (
-                <>
-                  <div style={{ fontSize: 22, fontWeight: 900, lineHeight: 1 }}>{daysUntil}</div>
-                  <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', opacity: 0.85, marginTop: 2 }}>{daysUntil === 1 ? 'day' : 'days'}</div>
-                </>
-              )}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 11, color: 'var(--green)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em' }}>Next up</div>
-              <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--ink)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {nextEvent.store_name}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--mist)' }}>{fmtDate(nextEvent.start_date)}</div>
-            </div>
-          </div>
-        )}
-
-        {/* My Events (future/current only) */}
-        {myUpcomingEvents.length > 0 && (
-          <div style={{ background: 'var(--cream)', borderRadius: 14, border: '1px solid var(--pearl)', overflow: 'hidden' }}>
-            <div style={{ background: 'var(--green-pale)', padding: '10px 14px', borderBottom: '1px solid var(--green3)' }}>
-              <div style={{ fontWeight: 900, fontSize: 13, color: 'var(--green-dark)', textTransform: 'uppercase', letterSpacing: '.04em' }}>My Upcoming Events</div>
-            </div>
-            {myUpcomingEvents.slice(0, 5).map((ev, i) => {
-              const now = new Date()
-              const evStart = new Date(ev.start_date + 'T12:00:00')
-              const evEnd = new Date(ev.start_date + 'T12:00:00'); evEnd.setDate(evEnd.getDate() + 2); evEnd.setHours(23, 59, 59)
-              const isCurrent = now >= evStart && now <= evEnd
-              const evDay = new Date(ev.start_date + 'T12:00:00'); evDay.setHours(0, 0, 0, 0)
-              const daysAway = Math.round((evDay.getTime() - today.getTime()) / 86400000)
-              const statusText = isCurrent ? 'NOW' : daysAway <= 0 ? 'TODAY' : daysAway === 1 ? 'Tomorrow' : `in ${daysAway}d`
-              return (
-                <div key={ev.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
-                  borderBottom: i < Math.min(myUpcomingEvents.length, 5) - 1 ? '1px solid var(--cream2)' : 'none',
-                }}>
-                  <div style={{
-                    minWidth: 44, padding: '6px 4px', textAlign: 'center', borderRadius: 8,
-                    background: isCurrent ? 'var(--green)' : 'var(--green-pale)',
-                    color: isCurrent ? '#fff' : 'var(--green-dark)',
-                  }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>{new Date(ev.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short' })}</div>
-                    <div style={{ fontSize: 17, fontWeight: 900, lineHeight: 1 }}>{new Date(ev.start_date + 'T12:00:00').getDate()}</div>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 900, fontSize: 14, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.store_name}</div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: isCurrent ? 'var(--green)' : 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{statusText}</div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Leaderboard */}
         <div style={{ background: 'var(--cream)', borderRadius: 14, border: '1px solid var(--pearl)', overflow: 'hidden' }}>
           <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--cream2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ fontWeight: 900, fontSize: 13, color: 'var(--ink)' }}>🏆 {currentYear} Leaderboard</div>
@@ -248,6 +239,85 @@ export default function MobileDashboard() {
           })}
         </div>
       </div>
+
+      {/* Name-tap personal stats popup */}
+      {statsOpen && (
+        <div onClick={() => setStatsOpen(false)} style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)',
+          zIndex: 1100, display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+          animation: 'mdFade .2s ease-out',
+        }}>
+          <style>{`
+            @keyframes mdFade { from { opacity: 0 } to { opacity: 1 } }
+            @keyframes mdSlide { from { transform: translateY(20px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+          `}</style>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: 'var(--cream)', width: '100%', maxWidth: 500,
+            borderRadius: '20px 20px 0 0',
+            padding: '16px 20px 28px',
+            paddingBottom: 'max(env(safe-area-inset-bottom), 28px)',
+            boxShadow: '0 -10px 40px rgba(0,0,0,.25)',
+            animation: 'mdSlide .25s cubic-bezier(.2,1.2,.4,1)',
+          }}>
+            <div style={{ width: 40, height: 4, borderRadius: 2, background: 'var(--pearl)', margin: '0 auto 14px' }} />
+
+            {/* Avatar + name header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+              {user?.photo_url
+                ? <img src={user.photo_url} alt="" style={{ width: 54, height: 54, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                : <div style={{
+                    width: 54, height: 54, borderRadius: '50%',
+                    background: myTier?.color || 'var(--green)',
+                    color: '#fff', fontWeight: 900, fontSize: 22,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                  }}>{user?.name?.charAt(0)}</div>
+              }
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 19, fontWeight: 900, color: 'var(--ink)' }}>{user?.name}</div>
+                <div style={{ fontSize: 12, color: 'var(--mist)' }}>Your {currentYear} so far</div>
+              </div>
+              <button onClick={() => setStatsOpen(false)} aria-label="Close" style={{
+                background: 'var(--cream2)', border: 'none', cursor: 'pointer',
+                width: 32, height: 32, borderRadius: 8,
+                color: 'var(--mist)', fontSize: 18, fontWeight: 600,
+              }}>×</button>
+            </div>
+
+            {/* Tier award */}
+            {myTier && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 14,
+                padding: '14px 16px', marginBottom: 14,
+                background: `linear-gradient(135deg, ${myTier.color}22, ${myTier.color}11)`,
+                border: `1px solid ${myTier.color}66`, borderRadius: 14,
+              }}>
+                <div style={{ fontSize: 36, lineHeight: 1 }}>{myTier.icon}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: myTier.color, textTransform: 'uppercase', letterSpacing: '.08em' }}>Status</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--ink)' }}>{myTier.label}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Three stat tiles */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 6 }}>
+              {[
+                { label: 'Days', value: String(myDays), color: 'var(--green)' },
+                { label: 'Events', value: String(myEvents), color: '#3B82F6' },
+                { label: 'Rank', value: myRank ? `#${myRank.rank}` : '—', color: myTier?.color || '#737368' },
+              ].map(s => (
+                <div key={s.label} style={{
+                  background: '#fff', border: '1px solid var(--pearl)',
+                  borderRadius: 12, padding: '14px 10px', textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: 26, fontWeight: 900, color: s.color as any, lineHeight: 1 }}>{s.value}</div>
+                  <div style={{ fontSize: 10, color: 'var(--mist)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 4 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
