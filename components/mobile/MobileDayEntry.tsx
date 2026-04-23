@@ -75,10 +75,9 @@ export default function MobileDayEntry() {
     Object.fromEntries(LEAD_SOURCES.map(s => [s.key, '']))
   )
   const [checks, setChecks] = useState<CheckRow[]>([emptyCheck()])
-  const [daysStatus, setDaysStatus] = useState<Record<number, 'submitted' | 'draft' | null>>({ 1: null, 2: null, 3: null })
+  const [daysSubmitted, setDaysSubmitted] = useState<Record<number, boolean>>({})
   const [submitted, setSubmitted] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [loadingEntry, setLoadingEntry] = useState(false)
   const [showOverlay, setShowOverlay] = useState(false)
   const [showPastEvents, setShowPastEvents] = useState(false)
   const [existingEntry, setExistingEntry] = useState<any>(null)
@@ -160,7 +159,6 @@ export default function MobileDayEntry() {
 
   const loadEntries = async () => {
     hydratedRef.current = false
-    setLoadingEntry(true)
     const { data: rows } = await supabase.from('buyer_entries')
       .select('*')
       .eq('event_id', selectedEventId)
@@ -168,10 +166,10 @@ export default function MobileDayEntry() {
       .in('day_number', [1, 2, 3])
     const byDay: Record<number, any> = {}
     ;(rows || []).forEach((r: any) => { byDay[r.day_number] = r })
-    setDaysStatus({
-      1: byDay[1]?.submitted_at ? 'submitted' : (byDay[1] ? 'draft' : null),
-      2: byDay[2]?.submitted_at ? 'submitted' : (byDay[2] ? 'draft' : null),
-      3: byDay[3]?.submitted_at ? 'submitted' : (byDay[3] ? 'draft' : null),
+    setDaysSubmitted({
+      1: !!byDay[1]?.submitted_at,
+      2: !!byDay[2]?.submitted_at,
+      3: !!byDay[3]?.submitted_at,
     })
     const current = byDay[selectedDay]
     if (current) {
@@ -202,7 +200,6 @@ export default function MobileDayEntry() {
       setChecks([emptyCheck()])
       setSubmitted(false)
     }
-    setLoadingEntry(false)
     setTimeout(() => { hydratedRef.current = true }, 0)
   }
 
@@ -323,7 +320,7 @@ export default function MobileDayEntry() {
       // UPDATE path instead of racing into another INSERT.
       await loadEntries()
       setSubmitted(true)
-      setDaysStatus(prev => ({ ...prev, [selectedDay]: 'submitted' }))
+      setDaysSubmitted(prev => ({ ...prev, [selectedDay]: true }))
       setShowOverlay(true)
       setTimeout(() => setShowOverlay(false), 2200)
     } catch (err: any) {
@@ -467,27 +464,17 @@ export default function MobileDayEntry() {
 
         <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
           {[1, 2, 3].map(d => {
-            const status = daysStatus[d]
+            const done = daysSubmitted[d]
             const cur = selectedDay === d
-            const bg = cur ? '#1D6B44'
-              : status === 'submitted' ? '#86EFAC'
-              : status === 'draft' ? '#FEF3C7'
-              : '#EDE8DF'
-            const color = cur ? '#FFF'
-              : status === 'submitted' ? '#14532D'
-              : status === 'draft' ? '#92400E'
-              : '#737368'
-            const marker = status === 'submitted' && !cur ? '✓ '
-              : status === 'draft' && !cur ? '● '
-              : ''
             return (
               <button key={d} onClick={() => setSelectedDay(d)} style={{
                 flex: 1, padding: '8px 0', borderRadius: 8, border: 'none',
-                background: bg, color,
+                background: cur ? '#1D6B44' : done ? '#86EFAC' : '#EDE8DF',
+                color: cur ? '#FFF' : done ? '#14532D' : '#737368',
                 fontSize: 11, fontWeight: 800, textAlign: 'center', letterSpacing: '.08em',
                 cursor: 'pointer', fontFamily: 'inherit',
               }}>
-                {marker}DAY {d}{cur ? ' · TODAY' : ''}
+                {done && !cur ? '✓ ' : ''}DAY {d}{cur ? ' · TODAY' : ''}
               </button>
             )
           })}
@@ -515,34 +502,13 @@ export default function MobileDayEntry() {
         })}
       </div>
 
-      {loadingEntry && (
-        <div style={{
-          margin: '10px 14px 0', padding: '10px 14px',
-          background: '#EDE8DF', border: '1px solid #D8D3CA',
-          borderRadius: 10, fontSize: 13, color: '#737368', fontWeight: 600,
-          textAlign: 'center',
-        }}>
-          Loading Day {selectedDay} data…
-        </div>
-      )}
-
-      {!loadingEntry && submitted && !showOverlay && (
+      {submitted && !showOverlay && (
         <div style={{
           margin: '10px 14px 0', padding: '10px 14px',
           background: '#F0FDF4', border: '1px solid #86EFAC',
           borderRadius: 10, fontSize: 13, color: '#14532D', fontWeight: 600,
         }}>
-          ✓ Day {selectedDay} submitted — edit and re-submit below.
-        </div>
-      )}
-
-      {!loadingEntry && !submitted && existingEntry && (
-        <div style={{
-          margin: '10px 14px 0', padding: '10px 14px',
-          background: '#FEF3C7', border: '1px solid #FCD34D',
-          borderRadius: 10, fontSize: 13, color: '#92400E', fontWeight: 600,
-        }}>
-          ● Day {selectedDay} draft loaded — continue editing below.
+          ✓ Day {selectedDay} submitted. You can edit and re-submit.
         </div>
       )}
 
@@ -768,13 +734,7 @@ export default function MobileDayEntry() {
             fontFamily: 'inherit', letterSpacing: '.02em',
             boxShadow: '0 6px 16px rgba(29,107,68,.25)',
           }}>
-            {saving
-              ? 'Saving…'
-              : submitted
-                ? `✓ Re-Submit Day ${selectedDay}`
-                : existingEntry
-                  ? `✓ Submit Day ${selectedDay}`
-                  : `✓ Submit Day ${selectedDay}`}
+            {saving ? 'Saving…' : `✓ Submit Day ${selectedDay}`}
           </button>
         </div>
       </div>
