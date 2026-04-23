@@ -110,7 +110,7 @@ export default function MobileDashboard({ setNav }: Props) {
     <div style={{ background: 'var(--cream2)', minHeight: '100%' }}>
       {/* Slim hero — greeting + tappable name */}
       <div style={{
-        background: 'linear-gradient(160deg, var(--sidebar-bg) 0%, var(--green-dark) 50%, var(--green) 100%)',
+        background: 'var(--gradient-primary)',
         padding: '22px 18px 20px', borderRadius: '0 0 24px 24px',
         position: 'relative', overflow: 'hidden',
       }}>
@@ -304,7 +304,7 @@ export default function MobileDashboard({ setNav }: Props) {
               {[
                 { label: 'Days', value: String(myDays), color: 'var(--green)' },
                 { label: 'Events', value: String(myEvents), color: '#3B82F6' },
-                { label: 'Rank', value: myRank ? `#${myRank.rank}` : '—', color: myTier?.color || '#737368' },
+                { label: 'Rank', value: myRank ? `#${myRank.rank}` : '—', color: myTier?.color || 'var(--mist)' },
               ].map(s => (
                 <div key={s.label} style={{
                   background: '#fff', border: '1px solid var(--pearl)',

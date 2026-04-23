@@ -452,7 +452,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>{ev.store_name}</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                      <span style={{ fontSize: 15, fontWeight: 900, color: '#86efac' }}>{fmtDollars(dollars)}</span>
+                      <span style={{ fontSize: 15, fontWeight: 900, color: 'var(--green3)' }}>{fmtDollars(dollars)}</span>
                       <span aria-hidden style={{
                         fontSize: 16, color: 'rgba(255,255,255,.7)', display: 'inline-block',
                         transition: 'transform .2s',
@@ -462,7 +462,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                   </div>
                   <div style={{ fontSize: 12, color: 'rgba(255,255,255,.5)', marginTop: 3 }}>
                     {store?.city}{store?.state ? ', ' + store.state : ''} · {fmtRange(ev.start_date)}
-                    {cur && <span style={{ color: '#86efac', fontWeight: 700, marginLeft: 6 }}>· Current</span>}
+                    {cur && <span style={{ color: 'var(--green3)', fontWeight: 700, marginLeft: 6 }}>· Current</span>}
                   </div>
                 </div>
 
@@ -610,7 +610,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                             <span aria-hidden style={{
                               position: 'absolute', top: 6, right: 12,
                               width: 7, height: 7, borderRadius: '50%',
-                              background: '#D97706',
+                              background: 'var(--amber)',
                             }} />
                           )}
                         </button>
@@ -625,13 +625,13 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
           /* ───── Desktop card — mobile-style collapsible ───── */
           const expanded = expandedCards.has(ev.id)
           const statusText = cur ? 'Current' : upcoming ? 'Upcoming' : 'Past'
-          const statusColor = cur ? '#1D6B44' : upcoming ? '#92400E' : '#8A8A7A'
+          const statusColor = cur ? 'var(--green)' : upcoming ? 'var(--amber)' : 'var(--silver)'
           const noteCount = noteCounts[ev.id] || 0
 
           return (
             <div key={ev.id} style={{
-              background: '#FFFFFF',
-              border: '1.5px solid #E8E0D0',
+              background: 'var(--card-bg)',
+              border: '1.5px solid var(--pearl)',
               borderRadius: 16,
               overflow: 'hidden',
               marginBottom: 12,
@@ -641,16 +641,16 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
               onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,.07)' }}
               onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none' }}>
 
-              {/* Dark green header — clicks toggle expand/collapse */}
+              {/* Themed gradient header — clicks toggle expand/collapse */}
               <div onClick={() => toggleCard(ev.id)} style={{
-                background: '#2D3B2D',
+                background: 'var(--gradient-primary)',
                 padding: '14px 20px',
                 cursor: 'pointer',
                 display: 'flex', alignItems: 'center', gap: 14,
-                transition: 'background .12s',
+                transition: 'filter .12s',
               }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#344534' }}
-                onMouseLeave={e => { e.currentTarget.style.background = '#2D3B2D' }}>
+                onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.08)' }}
+                onMouseLeave={e => { e.currentTarget.style.filter = 'none' }}>
                 <span aria-hidden style={{
                   color: 'rgba(255,255,255,.5)', fontSize: 14, lineHeight: 1,
                   transition: 'transform .2s',
@@ -670,14 +670,14 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                     return (
                       <span key={d} aria-hidden style={{
                         width: 8, height: 8, borderRadius: '50%',
-                        background: has ? '#6BBF8A' : 'rgba(255,255,255,.3)',
+                        background: has ? 'var(--green3)' : 'rgba(255,255,255,.3)',
                       }} />
                     )
                   })}
                 </div>
                 <span style={{
                   fontSize: 18, fontWeight: 800,
-                  color: dollars > 0 ? '#6BBF8A' : 'rgba(255,255,255,.35)',
+                  color: dollars > 0 ? 'var(--green3)' : 'rgba(255,255,255,.35)',
                   flexShrink: 0, minWidth: 90, textAlign: 'right',
                 }}>
                   {dollars > 0 ? fmtDollars(dollars) : '—'}
@@ -691,7 +691,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                 <>
                   {/* Meta line */}
                   <div onClick={() => setDetail(ev)} style={{
-                    padding: '10px 20px 0', fontSize: 12, color: '#8A8A7A', cursor: 'pointer',
+                    padding: '10px 20px 0', fontSize: 12, color: 'var(--silver)', cursor: 'pointer',
                   }}>
                     {store?.city}{store?.state ? ', ' + store.state : ''} · {fmtRange(ev.start_date)}
                     <span style={{ color: statusColor, fontWeight: 700 }}> · {statusText}</span>
@@ -715,7 +715,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                         ))}
                       </div>
                       <div style={{
-                        fontSize: 13, fontWeight: 500, color: '#4A4A40',
+                        fontSize: 13, fontWeight: 500, color: 'var(--ash)',
                         flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                       }}>
                         {evWorkers.map((w: any) => (w.name || '').split(/\s+/)[0]).filter(Boolean).join(', ')}
@@ -738,29 +738,29 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                       if (hasData) {
                         return (
                           <button key={d} onClick={onClick} style={{
-                            flex: 1, background: '#fff', border: '2px solid #1D6B44',
+                            flex: 1, background: '#fff', border: '2px solid var(--green)',
                             borderRadius: 12, padding: '10px 8px', textAlign: 'center', cursor: 'pointer',
                             fontFamily: 'inherit', transition: 'background .12s',
                           }}
-                            onMouseEnter={e => { e.currentTarget.style.background = '#F0FAF4' }}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'var(--green-pale)' }}
                             onMouseLeave={e => { e.currentTarget.style.background = '#fff' }}>
-                            <div style={{ fontSize: 11, fontWeight: 600, color: '#1D6B44', marginBottom: 2 }}>Day {d}</div>
-                            <div style={{ fontSize: 18, fontWeight: 800, color: '#1D6B44', lineHeight: 1.1 }}>{fmtDollars(dayDollars)}</div>
-                            <div style={{ fontSize: 11, color: '#8A8A7A', marginTop: 2 }}>{dayPurch} purch</div>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--green)', marginBottom: 2 }}>Day {d}</div>
+                            <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--green)', lineHeight: 1.1 }}>{fmtDollars(dayDollars)}</div>
+                            <div style={{ fontSize: 11, color: 'var(--silver)', marginTop: 2 }}>{dayPurch} purch</div>
                           </button>
                         )
                       }
                       return (
                         <button key={d} onClick={onClick} style={{
-                          flex: 1, background: '#F0EDE6', border: '2px solid transparent',
+                          flex: 1, background: 'var(--cream2)', border: '2px solid transparent',
                           borderRadius: 12, padding: '10px 8px', textAlign: 'center', cursor: 'pointer',
                           fontFamily: 'inherit', transition: 'background .12s',
                         }}
-                          onMouseEnter={e => { e.currentTarget.style.background = '#E8E4DB' }}
-                          onMouseLeave={e => { e.currentTarget.style.background = '#F0EDE6' }}>
-                          <div style={{ fontSize: 11, fontWeight: 600, color: '#B5B5A8', marginBottom: 2 }}>Day {d}</div>
-                          <div style={{ fontSize: 18, fontWeight: 800, color: '#B5B5A8', lineHeight: 1.1 }}>—</div>
-                          <div style={{ fontSize: 11, color: '#B5B5A8', marginTop: 2, minHeight: 14 }}>{isToday ? 'today' : ''}</div>
+                          onMouseEnter={e => { e.currentTarget.style.background = 'var(--pearl)' }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'var(--cream2)' }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fog)', marginBottom: 2 }}>Day {d}</div>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--fog)', lineHeight: 1.1 }}>—</div>
+                          <div style={{ fontSize: 11, color: 'var(--fog)', marginTop: 2, minHeight: 14 }}>{isToday ? 'today' : ''}</div>
                         </button>
                       )
                     })}
@@ -769,7 +769,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                   {/* Inline worker / spend expand panels */}
                   {wOpen && (
                     <div onClick={e => e.stopPropagation()} style={{ padding: '14px 20px 0' }}>
-                      <div style={{ background: '#F5F0E8', border: '1px solid #E8E0D0', borderRadius: 10, padding: 14 }}>
+                      <div style={{ background: 'var(--cream)', border: '1px solid var(--pearl)', borderRadius: 10, padding: 14 }}>
                         <div className="fl">Who Worked This Event</div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginTop: 8 }}>
                           {buyers.map(b => {
@@ -801,7 +801,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                   {/* Action bar */}
                   <div style={{
                     marginTop: 14, padding: '10px 14px',
-                    borderTop: '1px solid #F0EDE6',
+                    borderTop: '1px solid var(--cream2)',
                     display: 'flex',
                   }} onClick={e => e.stopPropagation()}>
                     {[
@@ -816,11 +816,11 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                         padding: '8px 0', cursor: 'pointer',
                         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
                         borderRadius: 8, position: 'relative',
-                        color: (btn as any).danger ? '#C0392B' : '#8A8A7A',
+                        color: (btn as any).danger ? 'var(--red)' : 'var(--silver)',
                         fontFamily: 'inherit',
                         transition: 'background .12s',
                       }}
-                        onMouseEnter={e => { e.currentTarget.style.background = (btn as any).danger ? '#FDEDEC' : '#F5F0E8' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = (btn as any).danger ? 'var(--red-pale)' : 'var(--cream)' }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
                         <div style={{ fontSize: 18, lineHeight: 1 }}>{btn.icon}</div>
                         <div style={{ fontSize: 10, fontWeight: 600 }}>{btn.label}</div>
@@ -828,7 +828,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                           <span aria-hidden style={{
                             position: 'absolute', top: 4, right: 'calc(50% - 22px)',
                             width: 8, height: 8, borderRadius: '50%',
-                            background: '#E67E22',
+                            background: 'var(--amber)',
                           }} />
                         )}
                       </button>
@@ -884,7 +884,7 @@ function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
 
         <div style={{ background: 'var(--sidebar-bg)', padding: '20px 24px', borderRadius: 'var(--r2) var(--r2) 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ color: '#7EC8A0', fontSize: 14 }}>◆ Event Details</div>
+            <div style={{ color: 'var(--green3)', fontSize: 14 }}>◆ Event Details</div>
             <div style={{ color: '#fff', fontSize: 18, fontWeight: 900, marginTop: 2 }}>{ev.store_name}</div>
             <div style={{ color: 'rgba(255,255,255,.5)', fontSize: 13, marginTop: 2 }}>{store?.city}, {store?.state} · {ev.start_date}</div>
           </div>

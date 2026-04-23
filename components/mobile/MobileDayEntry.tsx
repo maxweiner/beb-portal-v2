@@ -353,15 +353,15 @@ export default function MobileDayEntry() {
   // User has events but none are active or upcoming — offer a past-events picker.
   if (!selectedEvent) {
     return (
-      <div style={{ padding: '40px 20px', textAlign: 'center', background: '#F5F0E8', minHeight: '100%' }}>
+      <div style={{ padding: '40px 20px', textAlign: 'center', background: 'var(--cream)', minHeight: '100%' }}>
         <div style={{ fontSize: 40, marginBottom: 12 }}>📅</div>
-        <div style={{ fontSize: 17, fontWeight: 800, color: '#1A1A16' }}>No active or upcoming events</div>
-        <div style={{ fontSize: 13, color: '#737368', marginTop: 6, marginBottom: 18 }}>
+        <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--ink)' }}>No active or upcoming events</div>
+        <div style={{ fontSize: 13, color: 'var(--mist)', marginTop: 6, marginBottom: 18 }}>
           Check back when your next buy is scheduled.
         </div>
         <button onClick={() => setShowPastEvents(v => !v)} style={{
-          padding: '10px 18px', borderRadius: 10, border: '1.5px solid #1D6B44',
-          background: 'transparent', color: '#1D6B44', fontSize: 13, fontWeight: 700,
+          padding: '10px 18px', borderRadius: 10, border: '1.5px solid var(--green)',
+          background: 'transparent', color: 'var(--green)', fontSize: 13, fontWeight: 700,
           cursor: 'pointer', fontFamily: 'inherit',
         }}>
           {showPastEvents ? 'Hide past events' : 'View past events'}
@@ -370,16 +370,16 @@ export default function MobileDayEntry() {
           <div style={{
             marginTop: 16, textAlign: 'left',
             background: '#FFFFFF', borderRadius: 12,
-            border: '1px solid #EDE8DF', overflow: 'hidden',
+            border: '1px solid var(--cream2)', overflow: 'hidden',
           }}>
             {availableEvents.map(ev => (
               <button key={ev.id} onClick={() => setSelectedEventId(ev.id)} style={{
                 width: '100%', padding: '12px 14px', background: 'transparent',
-                border: 'none', borderBottom: '1px solid #EDE8DF',
+                border: 'none', borderBottom: '1px solid var(--cream2)',
                 textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
               }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A16' }}>{ev.store_name}</div>
-                <div style={{ fontSize: 11, color: '#737368' }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>{ev.store_name}</div>
+                <div style={{ fontSize: 11, color: 'var(--mist)' }}>
                   {new Date(ev.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                 </div>
               </button>
@@ -392,7 +392,7 @@ export default function MobileDayEntry() {
 
   return (
     <div style={{
-      background: '#F5F0E8', minHeight: '100%',
+      background: 'var(--cream)', minHeight: '100%',
       paddingBottom: 80,
     }}>
       {showOverlay && (
@@ -408,12 +408,12 @@ export default function MobileDayEntry() {
           }}>
             <div style={{
               width: 72, height: 72, borderRadius: '50%',
-              background: '#1D6B44', margin: '0 auto 16px',
+              background: 'var(--green)', margin: '0 auto 16px',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 38, color: '#FFF', fontWeight: 900,
             }}>✓</div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: '#1A1A16', marginBottom: 6 }}>Day {selectedDay} Submitted!</div>
-            <div style={{ fontSize: 13, color: '#737368' }}>Admins have been notified</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)', marginBottom: 6 }}>Day {selectedDay} Submitted!</div>
+            <div style={{ fontSize: 13, color: 'var(--mist)' }}>Admins have been notified</div>
           </div>
         </div>
       )}
@@ -425,11 +425,11 @@ export default function MobileDayEntry() {
         input[type=number] { -moz-appearance: textfield; }
       `}</style>
 
-      <div style={{ background: '#FFFFFF', padding: '16px 18px 14px', borderBottom: '1px solid #EDE8DF' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#737368', letterSpacing: '.1em', textTransform: 'uppercase' }}>Entering Data For</div>
+      <div style={{ background: '#FFFFFF', padding: '16px 18px 14px', borderBottom: '1px solid var(--cream2)' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--mist)', letterSpacing: '.1em', textTransform: 'uppercase' }}>Entering Data For</div>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
           <div style={{
-            fontSize: 20, fontWeight: 800, color: '#1A1A16', marginTop: 2,
+            fontSize: 20, fontWeight: 800, color: 'var(--ink)', marginTop: 2,
             lineHeight: 1.15, flex: 1, minWidth: 0,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
@@ -437,7 +437,7 @@ export default function MobileDayEntry() {
           </div>
           {availableEvents.length > 1 && (
             <button onClick={() => setEventSwitcherOpen(v => !v)} style={{
-              background: 'none', border: 'none', color: '#1D6B44',
+              background: 'none', border: 'none', color: 'var(--green)',
               fontSize: 12, fontWeight: 700, cursor: 'pointer',
               padding: '4px 6px', fontFamily: 'inherit',
             }}>
@@ -445,23 +445,23 @@ export default function MobileDayEntry() {
             </button>
           )}
         </div>
-        <div style={{ fontSize: 13, color: '#737368', marginTop: 2 }}>
+        <div style={{ fontSize: 13, color: 'var(--mist)', marginTop: 2 }}>
           {new Date(selectedEvent.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
         </div>
         {eventSwitcherOpen && (
           <div style={{
-            marginTop: 10, background: '#F5F0E8', borderRadius: 10,
-            border: '1px solid #EDE8DF', overflow: 'hidden',
+            marginTop: 10, background: 'var(--cream)', borderRadius: 10,
+            border: '1px solid var(--cream2)', overflow: 'hidden',
           }}>
             {availableEvents.map(ev => (
               <button key={ev.id} onClick={() => { setSelectedEventId(ev.id); setEventSwitcherOpen(false) }} style={{
                 width: '100%', padding: '10px 14px',
-                background: ev.id === selectedEventId ? '#F0FDF4' : 'transparent',
-                border: 'none', borderBottom: '1px solid #EDE8DF',
+                background: ev.id === selectedEventId ? 'var(--green-pale)' : 'transparent',
+                border: 'none', borderBottom: '1px solid var(--cream2)',
                 textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
               }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A16' }}>{ev.store_name}</div>
-                <div style={{ fontSize: 11, color: '#737368' }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>{ev.store_name}</div>
+                <div style={{ fontSize: 11, color: 'var(--mist)' }}>
                   {new Date(ev.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                 </div>
               </button>
@@ -473,14 +473,14 @@ export default function MobileDayEntry() {
           {[1, 2, 3].map(d => {
             const status = daysStatus[d]
             const cur = selectedDay === d
-            const bg = cur ? '#1D6B44'
-              : status === 'submitted' ? '#86EFAC'
-              : status === 'draft' ? '#FEF3C7'
-              : '#EDE8DF'
+            const bg = cur ? 'var(--gradient-primary)'
+              : status === 'submitted' ? 'var(--green3)'
+              : status === 'draft' ? 'var(--amber-pale)'
+              : 'var(--cream2)'
             const color = cur ? '#FFF'
-              : status === 'submitted' ? '#14532D'
-              : status === 'draft' ? '#92400E'
-              : '#737368'
+              : status === 'submitted' ? 'var(--green-dark)'
+              : status === 'draft' ? 'var(--amber)'
+              : 'var(--mist)'
             const marker = status === 'submitted' && !cur ? '✓ '
               : status === 'draft' && !cur ? '● '
               : ''
@@ -500,15 +500,15 @@ export default function MobileDayEntry() {
 
       <div style={{
         margin: '10px 14px 0', padding: 4, borderRadius: 12,
-        background: '#FFFFFF', display: 'flex', border: '1px solid #EDE8DF',
+        background: '#FFFFFF', display: 'flex', border: '1px solid var(--cream2)',
       }}>
         {(['quick', 'detailed'] as const).map(m => {
           const active = mode === m
           return (
             <button key={m} onClick={() => setMode(m)} style={{
               flex: 1, padding: '10px 0', borderRadius: 8, border: 'none',
-              background: active ? '#1D6B44' : 'transparent',
-              color: active ? '#FFFFFF' : '#737368',
+              background: active ? 'var(--gradient-primary)' : 'transparent',
+              color: active ? '#FFFFFF' : 'var(--mist)',
               fontWeight: 800, fontSize: 13, cursor: 'pointer',
               fontFamily: 'inherit', letterSpacing: '.02em',
               transition: 'all .2s',
@@ -522,8 +522,8 @@ export default function MobileDayEntry() {
       {loadingEntry && (
         <div style={{
           margin: '10px 14px 0', padding: '10px 14px',
-          background: '#EDE8DF', border: '1px solid #D8D3CA',
-          borderRadius: 10, fontSize: 13, color: '#737368', fontWeight: 600,
+          background: 'var(--cream2)', border: '1px solid var(--pearl)',
+          borderRadius: 10, fontSize: 13, color: 'var(--mist)', fontWeight: 600,
           textAlign: 'center',
         }}>
           Loading Day {selectedDay} data…
@@ -533,8 +533,8 @@ export default function MobileDayEntry() {
       {!loadingEntry && submitted && !showOverlay && (
         <div style={{
           margin: '10px 14px 0', padding: '10px 14px',
-          background: '#F0FDF4', border: '1px solid #86EFAC',
-          borderRadius: 10, fontSize: 13, color: '#14532D', fontWeight: 600,
+          background: 'var(--green-pale)', border: '1px solid var(--green3)',
+          borderRadius: 10, fontSize: 13, color: 'var(--green-dark)', fontWeight: 600,
         }}>
           ✓ Day {selectedDay} submitted — edit and re-submit below.
         </div>
@@ -543,8 +543,8 @@ export default function MobileDayEntry() {
       {!loadingEntry && !submitted && existingEntry && (
         <div style={{
           margin: '10px 14px 0', padding: '10px 14px',
-          background: '#FEF3C7', border: '1px solid #FCD34D',
-          borderRadius: 10, fontSize: 13, color: '#92400E', fontWeight: 600,
+          background: 'var(--amber-pale)', border: '1px solid var(--amber)',
+          borderRadius: 10, fontSize: 13, color: 'var(--amber)', fontWeight: 600,
         }}>
           ● Day {selectedDay} draft loaded — continue editing below.
         </div>
@@ -560,7 +560,7 @@ export default function MobileDayEntry() {
         </div>
 
         {touched && (
-          <div style={{ ...cardStyle, background: '#F0FDF4', borderColor: '#86EFAC' }}>
+          <div style={{ ...cardStyle, background: 'var(--green-pale)', borderColor: 'var(--green3)' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
               <Stat label="Total" value={fmtMoney(totalSpend)} />
               <Stat label="Close Rate" value={`${closeRate}%`} />
@@ -592,16 +592,16 @@ export default function MobileDayEntry() {
               const isAuto = i > 0 && !!c.check_number && !c.amount
               return (
                 <div key={c.id || i} style={{
-                  background: '#F5F0E8', borderRadius: 12, padding: 12,
-                  marginBottom: 10, border: '1px solid #EDE8DF',
+                  background: 'var(--cream)', borderRadius: 12, padding: 12,
+                  marginBottom: 10, border: '1px solid var(--cream2)',
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: '#737368', letterSpacing: '.1em' }}>#{i + 1}</span>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--mist)', letterSpacing: '.1em' }}>#{i + 1}</span>
                     <select value={c.payment_type}
                       onChange={e => setChecks(p => p.map((x, idx) => idx === i ? { ...x, payment_type: e.target.value } : x))}
                       style={{
                         flex: 1, padding: '6px 8px', fontSize: 13, borderRadius: 8,
-                        border: '1px solid #D8D3CA', background: '#FFF', fontFamily: 'inherit',
+                        border: '1px solid var(--pearl)', background: '#FFF', fontFamily: 'inherit',
                       }}>
                       <option value="check">Check</option>
                       <option value="cash">Cash</option>
@@ -612,8 +612,8 @@ export default function MobileDayEntry() {
                         aria-label={`Remove check ${i + 1}`}
                         style={{
                           width: 36, height: 36, borderRadius: 8,
-                          border: '1px solid #EDE8DF', background: '#FFF',
-                          color: '#A8A89A', fontSize: 20, cursor: 'pointer',
+                          border: '1px solid var(--cream2)', background: '#FFF',
+                          color: 'var(--silver)', fontSize: 20, cursor: 'pointer',
                           padding: 0, lineHeight: 1, fontFamily: 'inherit',
                         }}>×</button>
                     )}
@@ -622,15 +622,15 @@ export default function MobileDayEntry() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
                     <div>
                       <label style={labelStyle}>
-                        Check # {isAuto && <span style={{ color: '#1D6B44', fontStyle: 'italic', textTransform: 'none', letterSpacing: 0 }}>auto</span>}
+                        Check # {isAuto && <span style={{ color: 'var(--green)', fontStyle: 'italic', textTransform: 'none', letterSpacing: 0 }}>auto</span>}
                       </label>
                       <input type="text" inputMode="numeric" value={c.check_number}
                         onChange={e => setChecks(p => p.map((x, idx) => idx === i ? { ...x, check_number: e.target.value } : x))}
                         placeholder={i === 0 ? '1045' : ''}
                         style={{
                           ...inputStyle,
-                          border: `1.5px solid ${isAuto ? '#86EFAC' : '#D8D3CA'}`,
-                          background: isAuto ? '#F0FDF4' : '#FFFFFF',
+                          border: `1.5px solid ${isAuto ? 'var(--green3)' : 'var(--pearl)'}`,
+                          background: isAuto ? 'var(--green-pale)' : '#FFFFFF',
                         }} />
                     </div>
                     <div>
@@ -646,7 +646,7 @@ export default function MobileDayEntry() {
                     <div style={{ position: 'relative' }}>
                       <span style={{
                         position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
-                        color: '#737368', fontWeight: 700, fontSize: 18,
+                        color: 'var(--mist)', fontWeight: 700, fontSize: 18,
                       }}>$</span>
                       <input type="text" inputMode="decimal"
                         value={formatMoneyInput(c.amount)}
@@ -663,7 +663,7 @@ export default function MobileDayEntry() {
                     display: 'flex', alignItems: 'center', gap: 10,
                     marginTop: 10, padding: '8px 10px',
                     background: c.commission_rate === 5 ? 'var(--green-pale)' : 'transparent',
-                    border: `1px solid ${c.commission_rate === 5 ? 'var(--green3)' : '#EDE8DF'}`,
+                    border: `1px solid ${c.commission_rate === 5 ? 'var(--green3)' : 'var(--cream2)'}`,
                     borderRadius: 8, cursor: 'pointer', position: 'relative',
                   }}>
                     <input type="checkbox"
@@ -688,14 +688,14 @@ export default function MobileDayEntry() {
                     </div>
                     <span style={{
                       fontSize: 12, fontWeight: 700,
-                      color: c.commission_rate === 5 ? 'var(--green-dark)' : '#737368',
+                      color: c.commission_rate === 5 ? 'var(--green-dark)' : 'var(--mist)',
                       letterSpacing: '.02em',
                     }}>
                       5% commission rate
                     </span>
                     <span style={{
                       marginLeft: 'auto', fontSize: 10, fontWeight: 700,
-                      color: c.commission_rate === 5 ? 'var(--green-dark)' : '#A8A89A',
+                      color: c.commission_rate === 5 ? 'var(--green-dark)' : 'var(--silver)',
                       letterSpacing: '.06em',
                     }}>
                       {c.commission_rate === 5 ? '5%' : 'DEFAULT 10%'}
@@ -709,8 +709,8 @@ export default function MobileDayEntry() {
               onClick={() => setChecks(p => [...p, { ...emptyCheck(), check_number: nextCheckNumber(p) }])}
               style={{
                 width: '100%', padding: '12px 0', borderRadius: 10,
-                border: '1.5px dashed #D8D3CA', background: 'transparent',
-                color: '#1D6B44', fontWeight: 700, fontSize: 14,
+                border: '1.5px dashed var(--pearl)', background: 'transparent',
+                color: 'var(--green)', fontWeight: 700, fontSize: 14,
                 cursor: 'pointer', fontFamily: 'inherit', marginTop: 4,
               }}>
               + Add Check
@@ -718,14 +718,14 @@ export default function MobileDayEntry() {
 
             {validChecks.length > 0 && (
               <div style={{
-                fontSize: 12, color: '#14532D', marginTop: 10,
+                fontSize: 12, color: 'var(--green-dark)', marginTop: 10,
                 fontWeight: 700, textAlign: 'right', lineHeight: 1.5,
               }}>
                 <div>
                   {validChecks.length} check{validChecks.length === 1 ? '' : 's'} · {fmtMoney(checksTotal)}
                 </div>
                 {derived5 > 0 && (
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#737368' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--mist)' }}>
                     {fmtMoney(derived10)} @ 10% · {fmtMoney(derived5)} @ 5%
                   </div>
                 )}
@@ -736,8 +736,8 @@ export default function MobileDayEntry() {
           <div style={{ padding: '0 2px 14px' }}>
             <button disabled style={{
               width: '100%', padding: '14px 16px', borderRadius: 12,
-              background: '#F5F0E8', border: '1.5px dashed #D8D3CA',
-              color: '#737368', fontWeight: 700, fontSize: 14,
+              background: 'var(--cream)', border: '1.5px dashed var(--pearl)',
+              color: 'var(--mist)', fontWeight: 700, fontSize: 14,
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
               cursor: 'not-allowed', opacity: .75, fontFamily: 'inherit',
             }}>
@@ -749,7 +749,7 @@ export default function MobileDayEntry() {
               <span style={{
                 fontSize: 9, fontWeight: 900, letterSpacing: '.1em',
                 padding: '2px 6px', borderRadius: 4,
-                background: '#1D6B44', color: '#FFF',
+                background: 'var(--green)', color: '#FFF',
               }}>BETA</span>
             </button>
           </div>
@@ -767,10 +767,10 @@ export default function MobileDayEntry() {
           <div style={{ flexShrink: 0 }}><AutosaveIndicator status={autosaveStatus} /></div>
           <button onClick={handleSubmit} disabled={saving || !selectedEventId} style={{
             flex: 1, minHeight: 52, borderRadius: 14, border: 'none',
-            background: saving ? '#737368' : '#1D6B44', color: '#FFF',
+            background: saving ? 'var(--mist)' : 'var(--gradient-primary)', color: '#FFF',
             fontWeight: 900, fontSize: 16, cursor: saving ? 'default' : 'pointer',
             fontFamily: 'inherit', letterSpacing: '.02em',
-            boxShadow: '0 6px 16px rgba(29,107,68,.25)',
+            boxShadow: '0 6px 16px rgba(0,0,0,.22)',
           }}>
             {saving
               ? 'Saving…'
@@ -788,18 +788,18 @@ export default function MobileDayEntry() {
 
 const cardStyle: React.CSSProperties = {
   background: '#FFFFFF', borderRadius: 14, padding: 14,
-  marginBottom: 12, border: '1px solid #EDE8DF',
+  marginBottom: 12, border: '1px solid var(--cream2)',
 }
 const labelStyle: React.CSSProperties = {
-  fontSize: 10, fontWeight: 700, color: '#737368',
+  fontSize: 10, fontWeight: 700, color: 'var(--mist)',
   letterSpacing: '.08em', textTransform: 'uppercase',
   display: 'block', marginBottom: 4,
 }
 const inputStyle: React.CSSProperties = {
   width: '100%', minHeight: 44, padding: '0 12px',
   fontSize: 16, fontWeight: 700,
-  borderRadius: 10, border: '1.5px solid #D8D3CA',
-  background: '#FFFFFF', color: '#1A1A16',
+  borderRadius: 10, border: '1.5px solid var(--pearl)',
+  background: '#FFFFFF', color: 'var(--ink)',
   outline: 'none', fontFamily: 'inherit',
 }
 
@@ -807,7 +807,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div style={{
       fontSize: 11, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase',
-      color: '#737368', marginBottom: 10,
+      color: 'var(--mist)', marginBottom: 10,
     }}>{children}</div>
   )
 }
@@ -820,16 +820,16 @@ function FieldRow({ label, value, onChange, money, required, last }: {
     <div style={{
       display: 'flex', alignItems: 'center', gap: 12,
       padding: '10px 0',
-      borderBottom: last ? 'none' : `1px solid #F0EDE6`,
+      borderBottom: last ? 'none' : `1px solid var(--cream2)`,
     }}>
-      <label style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#4A4A42' }}>
-        {label}{required && <span style={{ color: '#DC2626' }}> *</span>}
+      <label style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--ash)' }}>
+        {label}{required && <span style={{ color: 'var(--red)' }}> *</span>}
       </label>
       <div style={{ position: 'relative', width: 140 }}>
         {money && (
           <span style={{
             position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
-            fontWeight: 700, color: '#737368',
+            fontWeight: 700, color: 'var(--mist)',
           }}>$</span>
         )}
         <input
@@ -842,8 +842,8 @@ function FieldRow({ label, value, onChange, money, required, last }: {
             width: '100%', minHeight: 44, textAlign: 'right',
             padding: money ? '0 10px 0 22px' : '0 10px',
             fontSize: 20, fontWeight: 800,
-            borderRadius: 10, border: '1.5px solid #D8D3CA',
-            background: '#F5F0E8', color: '#1A1A16',
+            borderRadius: 10, border: '1.5px solid var(--pearl)',
+            background: 'var(--cream)', color: 'var(--ink)',
             outline: 'none', fontFamily: 'inherit',
           }} />
       </div>
@@ -856,14 +856,14 @@ function MiniField({ label, value, onChange }: { label: string; value: string; o
     <div>
       <label style={{
         fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase',
-        color: '#737368', display: 'block', marginBottom: 4,
+        color: 'var(--mist)', display: 'block', marginBottom: 4,
       }}>{label}</label>
       <input type="number" inputMode="numeric" value={value} onChange={e => onChange(e.target.value)}
         placeholder="0" style={{
           width: '100%', minHeight: 44, padding: '0 10px',
           fontSize: 18, fontWeight: 700,
-          borderRadius: 10, border: '1.5px solid #D8D3CA',
-          background: '#FFFFFF', color: '#1A1A16',
+          borderRadius: 10, border: '1.5px solid var(--pearl)',
+          background: '#FFFFFF', color: 'var(--ink)',
           outline: 'none', fontFamily: 'inherit',
         }} />
     </div>
@@ -875,9 +875,9 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div>
       <div style={{
         fontSize: 10, fontWeight: 800, letterSpacing: '.12em',
-        color: '#14532D', textTransform: 'uppercase',
+        color: 'var(--green-dark)', textTransform: 'uppercase',
       }}>{label}</div>
-      <div style={{ fontSize: 18, fontWeight: 900, color: '#1D6B44', marginTop: 2 }}>{value}</div>
+      <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--green)', marginTop: 2 }}>{value}</div>
     </div>
   )
 }

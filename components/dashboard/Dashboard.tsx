@@ -164,10 +164,10 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
     <div className="p-6 max-w-6xl mx-auto">
       {/* Hero: gradient header with greeting + week stats as interior pills */}
       <div style={{
-        background: 'linear-gradient(160deg, var(--sidebar-bg) 0%, var(--green-dark) 50%, var(--green) 100%)',
+        background: 'var(--gradient-primary)',
         borderRadius: 20, padding: '26px 28px', marginBottom: 24,
         position: 'relative', overflow: 'hidden',
-        boxShadow: '0 8px 28px rgba(29,107,68,.18)',
+        boxShadow: '0 8px 28px rgba(0,0,0,.18)',
       }}>
         <div style={{
           position: 'absolute', top: -40, right: -80, width: 320, height: 320,

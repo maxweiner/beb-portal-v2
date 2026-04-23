@@ -519,7 +519,7 @@ export default function DayEntry() {
                     {(['grid', 'card'] as InputMode[]).map(m => (
                       <button key={m} onClick={() => setInputMode(m)} style={{
                         padding: '4px 12px', borderRadius: 'calc(var(--r) - 2px)', border: 'none', cursor: 'pointer',
-                        background: inputMode === m ? 'var(--sidebar-bg)' : 'transparent',
+                        background: inputMode === m ? 'var(--gradient-primary)' : 'transparent',
                         color: inputMode === m ? '#fff' : 'var(--ash)', fontWeight: 700, fontSize: 12,
                       }}>
                         {m === 'grid' ? '⊞ Grid' : '☰ Cards'}

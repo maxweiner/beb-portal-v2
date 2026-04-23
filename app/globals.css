@@ -30,6 +30,8 @@
   --sidebar-text: rgba(255,255,255,.70);
   --sidebar-muted: rgba(255,255,255,.30);
   --card-bg: #F5F0E8;
+  --gradient-primary: linear-gradient(135deg, #1D6B44 0%, #40916C 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #165A38 0%, #357A5A 100%);
   --r: 6px;
   --r2: 10px;
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
@@ -62,6 +64,8 @@
   --sidebar-text: rgba(255,255,255,.85);
   --sidebar-muted: rgba(255,255,255,.40);
   --card-bg: #FFFFFF;
+  --gradient-primary: linear-gradient(135deg, #0070D2 0%, #1589EE 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #005FB2 0%, #0070D2 100%);
 }
 
 /* ── APPLE THEME ── */
@@ -89,6 +93,8 @@
   --sidebar-text: rgba(255,255,255,.85);
   --sidebar-muted: rgba(255,255,255,.35);
   --card-bg: #FFFFFF;
+  --gradient-primary: linear-gradient(135deg, #007AFF 0%, #5AC8FA 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #0062CC 0%, #007AFF 100%);
 }
 
 /* ── BASE ── */
@@ -165,9 +171,9 @@ body {
 /* ── BUTTONS ── */
 button { cursor: pointer; font-family: 'Lato', sans-serif; font-size: 14px; font-weight: 700; border: none; border-radius: var(--r); transition: all .15s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; letter-spacing: .01em; }
 
-.btn-primary { background: var(--green); color: #fff; padding: 10px 22px; box-shadow: 0 1px 3px rgba(29,107,68,.25), inset 0 1px 0 rgba(255,255,255,.10); }
-.btn-primary:hover:not(:disabled) { background: var(--green2); box-shadow: 0 4px 12px rgba(29,107,68,.35); transform: translateY(-1px); }
-.btn-primary:active:not(:disabled) { transform: translateY(0); box-shadow: 0 1px 3px rgba(29,107,68,.20); }
+.btn-primary { background: var(--gradient-primary); color: #fff; padding: 10px 22px; box-shadow: 0 1px 3px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.12); }
+.btn-primary:hover:not(:disabled) { background: var(--gradient-primary-hover); box-shadow: 0 4px 12px rgba(0,0,0,.22); transform: translateY(-1px); }
+.btn-primary:active:not(:disabled) { transform: translateY(0); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
 .btn-primary:disabled { opacity: .5; cursor: not-allowed; transform: none; }
 
 .btn-ghost { background: transparent; color: var(--green); border: 1.5px solid var(--green); padding: 8px 20px; }
@@ -311,6 +317,8 @@ tr:last-child td { border-bottom: none; }
   --sidebar-text: rgba(255,255,255,.80);
   --sidebar-muted: rgba(255,255,255,.30);
   --card-bg: #FFFFFF;
+  --gradient-primary: linear-gradient(135deg, #1D3A6B 0%, #3B82F6 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #152D54 0%, #1D3A6B 100%);
 }
 
 /* ── LIBERTY GOLD THEME (Navy/Gold/Black) ── */
@@ -340,6 +348,8 @@ tr:last-child td { border-bottom: none; }
   --sidebar-text: rgba(255,255,255,.80);
   --sidebar-muted: rgba(255,255,255,.35);
   --card-bg: #FFFDF5;
+  --gradient-primary: linear-gradient(135deg, #1D3A6B 0%, #C9A84C 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #152D54 0%, #1D3A6B 100%);
 }
 
 /* ── LIBERTY SLATE THEME (Slate/White/Steel) ── */
@@ -369,6 +379,8 @@ tr:last-child td { border-bottom: none; }
   --sidebar-text: rgba(255,255,255,.80);
   --sidebar-muted: rgba(255,255,255,.30);
   --card-bg: #F8FAFC;
+  --gradient-primary: linear-gradient(135deg, #334155 0%, #64748B 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #1E293B 0%, #334155 100%);
 }
 
 /* ── LIBERTY PATRIOT THEME (Red/White/Blue) ── */
@@ -398,4 +410,6 @@ tr:last-child td { border-bottom: none; }
   --sidebar-text: rgba(255,255,255,.85);
   --sidebar-muted: rgba(255,255,255,.35);
   --card-bg: #FFFFFF;
+  --gradient-primary: linear-gradient(135deg, #3C3B6E 0%, #B22234 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #2C2B5E 0%, #3C3B6E 100%);
 }
