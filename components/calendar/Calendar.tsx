@@ -236,6 +236,7 @@ export default function Calendar() {
           lastRefresh={calState.lastRefresh}
           onOpen={openEvent}
           onRefreshAll={refreshAll}
+          isMobile={isMobile}
         />
       )}
     </div>
@@ -243,7 +244,7 @@ export default function Calendar() {
 }
 
 /* ── EVENT CARDS VIEW ── */
-function EventCards({ activeEvents, stores, appointments, loading, lastRefresh, onOpen, onRefreshAll, calFilter, setCalFilter }: {
+function EventCards({ activeEvents, stores, appointments, loading, lastRefresh, onOpen, onRefreshAll, calFilter, setCalFilter, isMobile }: {
   activeEvents: Event[]
   calFilter: string
   setCalFilter: (f: any) => void
@@ -253,6 +254,7 @@ function EventCards({ activeEvents, stores, appointments, loading, lastRefresh, 
   lastRefresh: Date | null
   onOpen: (ev: Event) => void
   onRefreshAll: () => void
+  isMobile: boolean
 }) {
   const fmtRange = (ds: string) => {
     const s = new Date(ds + 'T12:00:00')
@@ -318,7 +320,7 @@ function EventCards({ activeEvents, stores, appointments, loading, lastRefresh, 
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: isMobile ? 10 : 14 }}>
         {activeEvents.map(ev => {
           const store = stores.find(s => s.id === ev.store_id)
           const tz = STATE_TZ[(store?.state || '').toUpperCase()] || 'America/New_York'
