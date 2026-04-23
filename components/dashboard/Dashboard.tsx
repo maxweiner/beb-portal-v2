@@ -1,7 +1,30 @@
 'use client'
 
+import { useState } from 'react'
 import { useApp } from '@/lib/context'
 import type { NavPage } from '@/app/page'
+
+/** Current-year past/current events where `buyerId` is in the workers array. */
+function getBuyerEventsThisYear(buyerId: string, allEvents: any[]): any[] {
+  const yearPrefix = String(new Date().getFullYear())
+  const today = new Date(); today.setHours(23, 59, 59, 999)
+  return allEvents.filter(ev => {
+    if (!ev.start_date?.startsWith(yearPrefix)) return false
+    if (!(ev.workers || []).some((w: any) => w.id === buyerId)) return false
+    const start = new Date(ev.start_date + 'T00:00:00')
+    return start <= today
+  }).sort((a, b) => b.start_date.localeCompare(a.start_date))
+}
+/** "Apr 7–9, 2026" or "Jan 30 – Feb 1, 2026" across a month boundary. */
+function formatEventDateRange(startDate: string): string {
+  const start = new Date(startDate + 'T12:00:00')
+  const end = new Date(startDate + 'T12:00:00'); end.setDate(end.getDate() + 2)
+  const sm = start.toLocaleDateString('en-US', { month: 'short' })
+  const em = end.toLocaleDateString('en-US', { month: 'short' })
+  const year = start.getFullYear()
+  if (sm !== em) return `${sm} ${start.getDate()} – ${em} ${end.getDate()}, ${year}`
+  return `${sm} ${start.getDate()}–${end.getDate()}, ${year}`
+}
 
 // Count days worked: past events = 3 days, current/future = days with data
 const countDays = (ev: any) => {
@@ -15,6 +38,7 @@ const countDays = (ev: any) => {
 
 export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void }) {
   const { user, users, stores, events, year, setYear } = useApp()
+  const [expandedBuyerId, setExpandedBuyerId] = useState<string | null>(null)
 
   const YEARS = Array.from(
     { length: new Date().getFullYear() - 2017 },
@@ -377,28 +401,73 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
                       : rank === 2 ? { label: 'Platinum', icon: '💎', color: '#6B7FD4', bg: 'rgba(107,127,212,.1)' }
                       : rank === 3 ? { label: 'Gold', icon: '🥇', color: '#C9A84C', bg: 'rgba(201,168,76,.1)' }
                       : null
+                    const expanded = expandedBuyerId === b.id
+                    const buyerEvents = expanded ? getBuyerEventsThisYear(b.id, events) : []
                     return (
-                      <div key={b.id} className="flex items-center justify-between text-sm"
-                        style={{ padding: '4px 6px', borderRadius: 6, background: tier ? tier.bg : 'transparent' }}>
-                        <div className="flex items-center gap-2">
-                          <div style={{ width: 18, fontSize: 11, fontWeight: 900, color: tier ? tier.color : 'var(--mist)', textAlign: 'center' }}>
-                            {rank}
-                          </div>
-                          {b.photo_url ? (
-                            <img src={b.photo_url} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                          ) : (
-                            <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black text-white"
-                              style={{ background: tier ? tier.color : 'var(--green)', fontSize: 10 }}>
-                              {b.name?.charAt(0)}
+                      <div key={b.id}>
+                        <div
+                          onClick={() => setExpandedBuyerId(expanded ? null : b.id)}
+                          className="flex items-center justify-between text-sm"
+                          style={{
+                            padding: '4px 6px', borderRadius: 6,
+                            background: tier ? tier.bg : 'transparent',
+                            cursor: 'pointer',
+                          }}>
+                          <div className="flex items-center gap-2">
+                            <span aria-hidden style={{
+                              width: 10, display: 'inline-block',
+                              color: 'var(--mist)', fontSize: 10, lineHeight: 1,
+                              transform: expanded ? 'rotate(90deg)' : 'none',
+                              transition: 'transform .15s',
+                            }}>▸</span>
+                            <div style={{ width: 18, fontSize: 11, fontWeight: 900, color: tier ? tier.color : 'var(--mist)', textAlign: 'center' }}>
+                              {rank}
                             </div>
-                          )}
-                          <span style={{ color: 'var(--ash)', fontWeight: tier ? 700 : 400 }}>{b.name}</span>
-                          {tier && <span style={{ fontSize: 10, fontWeight: 700, color: tier.color }}>{tier.icon} {tier.label}</span>}
-                          {isIneligible && (
-                            <span title="Not eligible for prize" style={{ fontSize: 10, color: 'var(--mist)', cursor: 'help' }}>*</span>
-                          )}
+                            {b.photo_url ? (
+                              <img src={b.photo_url} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                            ) : (
+                              <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black text-white"
+                                style={{ background: tier ? tier.color : 'var(--green)', fontSize: 10 }}>
+                                {b.name?.charAt(0)}
+                              </div>
+                            )}
+                            <span style={{ color: 'var(--ash)', fontWeight: tier ? 700 : 400 }}>{b.name}</span>
+                            {tier && <span style={{ fontSize: 10, fontWeight: 700, color: tier.color }}>{tier.icon} {tier.label}</span>}
+                            {isIneligible && (
+                              <span title="Not eligible for prize" style={{ fontSize: 10, color: 'var(--mist)', cursor: 'help' }}>*</span>
+                            )}
+                          </div>
+                          <span className="text-xs font-bold" style={{ color: tier ? tier.color : 'var(--mist)' }}>{b.days} days</span>
                         </div>
-                        <span className="text-xs font-bold" style={{ color: tier ? tier.color : 'var(--mist)' }}>{b.days} days</span>
+                        {expanded && (
+                          <div style={{
+                            margin: '4px 6px 8px 32px',
+                            background: 'var(--cream2)',
+                            border: '1px solid var(--pearl)',
+                            borderRadius: 6,
+                            padding: '10px 12px',
+                            animation: 'lbExpand .2s ease-out',
+                          }}>
+                            <style>{`@keyframes lbExpand { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+                            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', marginBottom: 6 }}>
+                              {buyerEvents.length} event{buyerEvents.length === 1 ? '' : 's'}
+                            </div>
+                            {buyerEvents.length === 0 ? (
+                              <div style={{ fontSize: 13, color: 'var(--mist)', fontStyle: 'italic' }}>No events yet this year</div>
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                {buyerEvents.map(ev => (
+                                  <div key={ev.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13 }}>
+                                    <span style={{ color: 'var(--ink)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      {ev.store_name}
+                                    </span>
+                                    <span style={{ color: 'var(--mist)', flexShrink: 0 }}>{formatEventDateRange(ev.start_date)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )
                   })
