@@ -131,6 +131,16 @@ export default function ManageClient({
             Status: {isCancelled ? 'Cancelled' : 'Confirmed'}
           </div>
 
+          {!isCancelled && rebookHref && (
+            <a
+              href={`${rebookHref}?reschedule=${token}`}
+              className="block w-full text-center rounded-lg p-3 font-semibold text-white"
+              style={{ background: primary }}
+            >
+              Reschedule
+            </a>
+          )}
+
           {!isCancelled && (
             <button
               onClick={handleCancel}
@@ -159,9 +169,6 @@ export default function ManageClient({
           )}
         </div>
 
-        <p className="text-xs text-gray-500 text-center mt-4">
-          To reschedule, cancel this appointment and book a new time.
-        </p>
       </main>
     </div>
   )

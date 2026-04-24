@@ -135,12 +135,12 @@ export async function sendConfirmation({ appt, store }: SendArgs) {
 
 // ---------- cancellation ----------
 
-export async function sendCancellation({ appt, store }: SendArgs) {
+export async function sendCancellation({ appt, store, skipSms = false }: SendArgs & { skipSms?: boolean }) {
   const date = formatDatePretty(appt.appointment_date)
   const time = formatTimePretty(appt.appointment_time)
   const rebookLink = store.slug ? `${bookingBaseUrl()}/book/${store.slug}` : null
 
-  if (appt.customer_phone) {
+  if (!skipSms && appt.customer_phone) {
     const body =
       `Your appointment at ${store.name} on ${date} at ${time} has been cancelled.` +
       (rebookLink ? ` To rebook: ${rebookLink}` : '')

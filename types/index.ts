@@ -55,6 +55,7 @@ export interface Store {
   slug?: string | null
   color_primary?: string | null
   color_secondary?: string | null
+  timezone?: string | null
 }
 
 export interface EventDay {

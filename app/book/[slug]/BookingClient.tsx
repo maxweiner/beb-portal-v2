@@ -167,18 +167,28 @@ function AccordionDayBody({
 
 // ---------- top-level page ----------
 
+interface RescheduleContext {
+  token: string
+  customer_name: string
+  current_date: string
+  current_time: string
+}
+
 export default function BookingClient({
   slug,
   payload,
   isMock,
+  rescheduling,
 }: {
   slug: string
   payload: MockBookingPayload
   isMock: boolean
+  rescheduling?: RescheduleContext | null
 }) {
   const { store, config, events, override, bookings, blocks } = payload
   const primary = store.color_primary || '#1D6B44'
   const secondary = store.color_secondary || '#F5F0E8'
+  const isReschedule = !!rescheduling
 
   const event = events[0]
   const dayInfos: DayInfo[] = useMemo(() => {
@@ -207,14 +217,17 @@ export default function BookingClient({
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const selectedDay = selectedDayIdx !== null ? dayInfos[selectedDayIdx] : null
-  const canSubmit =
-    selectedDay &&
-    selectedTime &&
-    name.trim().length > 0 &&
-    phone.trim().length > 0 &&
-    email.trim().length > 0 &&
-    items.length > 0 &&
-    howHeard.length > 0
+  const canSubmit = isReschedule
+    ? !!(selectedDay && selectedTime)
+    : !!(
+        selectedDay &&
+        selectedTime &&
+        name.trim().length > 0 &&
+        phone.trim().length > 0 &&
+        email.trim().length > 0 &&
+        items.length > 0 &&
+        howHeard.length > 0
+      )
 
   function toggleItem(item: string) {
     setItems(prev => (prev.includes(item) ? prev.filter(i => i !== item) : [...prev, item]))
@@ -233,21 +246,30 @@ export default function BookingClient({
     }
 
     try {
-      const res = await fetch('/api/appointments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          slug,
-          event_id: event.id,
-          appointment_date: selectedDay!.dateStr,
-          appointment_time: selectedTime,
-          customer_name: name,
-          customer_phone: phone,
-          customer_email: email,
-          items_bringing: items,
-          how_heard: howHeard,
-        }),
-      })
+      const res = isReschedule
+        ? await fetch(`/api/appointments/${rescheduling!.token}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              appointment_date: selectedDay!.dateStr,
+              appointment_time: selectedTime,
+            }),
+          })
+        : await fetch('/api/appointments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              slug,
+              event_id: event.id,
+              appointment_date: selectedDay!.dateStr,
+              appointment_time: selectedTime,
+              customer_name: name,
+              customer_phone: phone,
+              customer_email: email,
+              items_bringing: items,
+              how_heard: howHeard,
+            }),
+          })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
         setSubmitState('idle')
@@ -265,7 +287,9 @@ export default function BookingClient({
     return (
       <div className="min-h-screen flex items-center justify-center p-4" style={{ background: secondary }}>
         <div className="bg-white rounded-2xl shadow-lg max-w-md w-full p-8 text-center">
-          <h1 className="text-2xl font-bold mb-3" style={{ color: primary }}>You're booked!</h1>
+          <h1 className="text-2xl font-bold mb-3" style={{ color: primary }}>
+            {isReschedule ? 'Rescheduled!' : "You're booked!"}
+          </h1>
           <p className="text-gray-700 mb-2">
             We'll see you on <strong>{selectedDay && formatDateLong(selectedDay.dateStr)}</strong> at{' '}
             <strong>{selectedTime && formatTime(selectedTime)}</strong>.
@@ -275,6 +299,15 @@ export default function BookingClient({
               ? '(Mock confirmation — this is the demo store, no real booking was saved.)'
               : 'A confirmation will be sent shortly.'}
           </p>
+          {isReschedule && (
+            <a
+              href={`/book/manage/${rescheduling!.token}`}
+              className="inline-block mt-4 text-sm underline"
+              style={{ color: primary }}
+            >
+              View your appointment
+            </a>
+          )}
         </div>
       </div>
     )
@@ -301,7 +334,9 @@ export default function BookingClient({
                 {store.owner_email && <div className="break-all">{store.owner_email}</div>}
               </div>
             )}
-            <p className="text-base mt-4">Book your appointment</p>
+            <p className="text-base mt-4">
+              {isReschedule ? 'Reschedule your appointment' : 'Book your appointment'}
+            </p>
           </div>
           <div className="shrink-0">
             {store.store_image_url ? (
@@ -320,9 +355,25 @@ export default function BookingClient({
       </header>
 
       <main className="max-w-md mx-auto px-4 pt-6 space-y-6">
+        {isReschedule && (
+          <div
+            className="rounded-xl px-4 py-3 text-sm border-2"
+            style={{ background: '#FEF3C7', borderColor: '#F59E0B', color: '#78350F' }}
+          >
+            <div className="font-bold mb-1">Rescheduling for {rescheduling!.customer_name}</div>
+            <div>
+              Currently booked: {formatDateLong(rescheduling!.current_date)} at{' '}
+              {formatTime(rescheduling!.current_time.length >= 5 ? rescheduling!.current_time.slice(0, 5) : rescheduling!.current_time)}
+            </div>
+            <div className="mt-1 opacity-80">Pick a new time below.</div>
+          </div>
+        )}
+
         {/* Accordion day picker */}
         <section>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Pick a day and time</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            {isReschedule ? 'Pick a new day and time' : 'Pick a day and time'}
+          </label>
           <div className="space-y-2">
             {dayInfos.map((di, idx) => {
               const isOpen = idx === openIdx
@@ -370,8 +421,41 @@ export default function BookingClient({
           </div>
         </section>
 
-        {/* Booking form (only after slot selected) */}
-        {selectedDay && selectedTime && (
+        {/* Reschedule confirm card */}
+        {isReschedule && selectedDay && selectedTime && (
+          <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow p-5 space-y-3">
+            <h2 className="font-semibold text-lg" style={{ color: primary }}>
+              Confirm new time
+            </h2>
+            <p className="text-sm text-gray-700">
+              <strong>{formatDateLong(selectedDay.dateStr)}</strong> at{' '}
+              <strong>{formatTime(selectedTime)}</strong>
+            </p>
+            {submitError && (
+              <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
+                {submitError}
+              </div>
+            )}
+            <button
+              type="submit"
+              disabled={!canSubmit || submitState === 'submitting'}
+              className="w-full rounded-lg p-3 text-white font-semibold disabled:opacity-50"
+              style={{ background: primary }}
+            >
+              {submitState === 'submitting' ? 'Rescheduling…' : 'Confirm reschedule'}
+            </button>
+            <a
+              href={`/book/manage/${rescheduling!.token}`}
+              className="block text-center text-sm underline"
+              style={{ color: primary }}
+            >
+              Cancel reschedule (keep current time)
+            </a>
+          </form>
+        )}
+
+        {/* Booking form (only after slot selected, and not in reschedule mode) */}
+        {!isReschedule && selectedDay && selectedTime && (
           <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow p-5 space-y-4">
             <h2 className="font-semibold text-lg" style={{ color: primary }}>
               Your details

@@ -507,6 +507,7 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
             initialSlug={store.slug ?? null}
             initialPrimary={store.color_primary ?? null}
             initialSecondary={store.color_secondary ?? null}
+            initialTimezone={store.timezone ?? null}
             refetchStores={refetchStores}
           />
 

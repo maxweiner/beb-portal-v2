@@ -7,12 +7,13 @@
 // prior attempt was 'sent' or 'failed'. We don't retry failures here — the
 // notification_log keeps an audit trail to debug.
 //
-// TODO: appointment_date + appointment_time are interpreted in the same
-// timezone as the cron host (Vercel = UTC). For non-UTC stores this will
-// reminder early/late. Fix when stores get a `timezone` column.
+// Timezones: appointment_date + appointment_time are interpreted in each
+// store's `timezone` column (defaults to America/New_York), then converted
+// to UTC for the delta math.
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { fromZonedTime } from 'date-fns-tz'
 import { sendReminder } from '@/lib/appointments/notifications'
 
 export const dynamic = 'force-dynamic'
@@ -27,9 +28,11 @@ function admin() {
 
 const WINDOW_MIN = 20 // ± minutes around the 24h / 2h target
 
-function apptTimestamp(date: string, time: string): number {
+function apptTimestamp(date: string, time: string, tz: string): number {
   const t = time.length >= 5 ? time.slice(0, 5) : time
-  return new Date(`${date}T${t}:00Z`).getTime()
+  // Interpret 'YYYY-MM-DDTHH:MM:00' as local wall-clock time in the store's
+  // timezone, then convert to a UTC timestamp.
+  return fromZonedTime(`${date}T${t}:00`, tz || 'America/New_York').getTime()
 }
 
 async function run(req: Request) {
@@ -71,11 +74,11 @@ async function run(req: Request) {
     sentMap.get(r.appointment_id)!.add(r.type)
   }
 
-  // Resolve store info for the unique store_ids.
+  // Resolve store info (incl. timezone) for the unique store_ids.
   const storeIds = [...new Set(appts.map(a => a.store_id))]
   const { data: stores } = await sb
     .from('stores')
-    .select('id, name, slug, owner_phone, owner_email')
+    .select('id, name, slug, owner_phone, owner_email, timezone')
     .in('id', storeIds)
   const storeMap = new Map((stores ?? []).map(s => [s.id, s]))
 
@@ -86,7 +89,7 @@ async function run(req: Request) {
   for (const a of appts) {
     const store = storeMap.get(a.store_id)
     if (!store) continue
-    const ts = apptTimestamp(a.appointment_date, a.appointment_time)
+    const ts = apptTimestamp(a.appointment_date, a.appointment_time, store.timezone)
     const sentTypes = sentMap.get(a.id) ?? new Set()
     const has24 = sentTypes.has('sms_reminder_24h') || sentTypes.has('email_reminder_24h')
     const has2 = sentTypes.has('sms_reminder_2h') || sentTypes.has('email_reminder_2h')

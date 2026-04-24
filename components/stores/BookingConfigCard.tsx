@@ -57,22 +57,35 @@ function timeToHHMM(t: string | null | undefined): string {
   return t.length >= 5 ? t.slice(0, 5) : t
 }
 
+const TIMEZONE_OPTIONS = [
+  ['America/New_York',    'Eastern (ET) — New York'],
+  ['America/Chicago',     'Central (CT) — Chicago'],
+  ['America/Denver',      'Mountain (MT) — Denver'],
+  ['America/Phoenix',     'Mountain (no DST) — Phoenix'],
+  ['America/Los_Angeles', 'Pacific (PT) — Los Angeles'],
+  ['America/Anchorage',   'Alaska (AKT)'],
+  ['Pacific/Honolulu',    'Hawaii (HST)'],
+] as const
+
 export default function BookingConfigCard({
   storeId,
   initialSlug,
   initialPrimary,
   initialSecondary,
+  initialTimezone,
   refetchStores,
 }: {
   storeId: string
   initialSlug: string | null
   initialPrimary: string | null
   initialSecondary: string | null
+  initialTimezone: string | null
   refetchStores: () => Promise<void>
 }) {
   const [slug, setSlug] = useState(initialSlug || '')
   const [primary, setPrimary] = useState(initialPrimary || '#1D6B44')
   const [secondary, setSecondary] = useState(initialSecondary || '#F5F0E8')
+  const [timezone, setTimezone] = useState(initialTimezone || 'America/New_York')
 
   const [config, setConfig] = useState<BookingConfigState | null>(null)
   const [employees, setEmployees] = useState<AppointmentEmployee[]>([])
@@ -112,15 +125,16 @@ export default function BookingConfigCard({
     return () => { cancelled = true }
   }, [storeId])
 
-  // Autosave: branding (slug + colors) → stores table
+  // Autosave: branding + timezone → stores table
   const brandingStatus = useAutosave(
-    { slug, primary, secondary },
-    async ({ slug, primary, secondary }) => {
+    { slug, primary, secondary, timezone },
+    async ({ slug, primary, secondary, timezone }) => {
       const cleanSlug = normalizeSlug(slug)
       const { error } = await supabase.from('stores').update({
         slug: cleanSlug || null,
         color_primary: primary || null,
         color_secondary: secondary || null,
+        timezone: timezone || 'America/New_York',
       }).eq('id', storeId)
       if (error) throw error
       await refetchStores()
@@ -235,6 +249,19 @@ export default function BookingConfigCard({
           <input type="color" value={secondary} onChange={e => setSecondary(e.target.value)}
             style={{ width: '100%', height: 40, padding: 2 }} />
         </div>
+      </div>
+
+      {/* Timezone */}
+      <div className="field" style={{ marginBottom: 16 }}>
+        <label className="fl">Store timezone</label>
+        <select value={timezone} onChange={e => setTimezone(e.target.value)} style={{ width: '100%' }}>
+          {TIMEZONE_OPTIONS.map(([val, label]) => (
+            <option key={val} value={val}>{label}</option>
+          ))}
+        </select>
+        <p style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
+          Used by the reminder cron — appointment times are interpreted as this timezone.
+        </p>
       </div>
 
       {/* Hours per day */}
