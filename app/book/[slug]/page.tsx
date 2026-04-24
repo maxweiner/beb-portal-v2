@@ -1,8 +1,9 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
-import { getBookingPayload } from '@/lib/appointments/serverData'
+import { getBookingPayload, getStoreBranding } from '@/lib/appointments/serverData'
 import { getMockBookingPayload } from '@/lib/appointments/mockData'
 import BookingClient from './BookingClient'
+import NoEventsPage from './NoEventsPage'
 
 export const metadata = {
   title: 'Book an Appointment',
@@ -28,7 +29,12 @@ export default async function BookingPage({
 }) {
   const real = await getBookingPayload(params.slug)
   const payload = real ?? getMockBookingPayload(params.slug)
-  if (!payload) notFound()
+  if (!payload) {
+    // Store exists but isn't bookable yet → friendly empty state instead of 404.
+    const store = await getStoreBranding(params.slug)
+    if (store) return <NoEventsPage store={store} />
+    notFound()
+  }
 
   let rescheduling: { token: string; customer_name: string; current_date: string; current_time: string } | null = null
   if (searchParams.reschedule) {

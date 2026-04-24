@@ -27,6 +27,21 @@ function todayIso(): string {
 }
 
 /**
+ * Fetch the store row by slug, branding-only. Used by the booking page to
+ * render a friendly "no upcoming events" empty state when the store exists
+ * but isn't currently bookable, instead of a hard 404.
+ */
+export async function getStoreBranding(slug: string): Promise<BookingStore | null> {
+  const sb = admin()
+  const { data } = await sb
+    .from('stores')
+    .select('id, name, slug, store_image_url, color_primary, color_secondary, owner_phone, owner_email')
+    .eq('slug', slug)
+    .maybeSingle()
+  return data ?? null
+}
+
+/**
  * Fetch everything the booking page needs for one store, by slug.
  * Returns null if the store doesn't exist or has no upcoming events.
  */
@@ -68,13 +83,27 @@ export async function getBookingPayload(slug: string): Promise<BookingPayload | 
     .gte('start_date', today)
     .order('start_date', { ascending: true })
 
-  const events: BookingEvent[] = (eventRows ?? []).map(e => ({
-    id: e.id,
-    store_id: e.store_id,
-    start_date: e.start_date,
-    brand: e.brand,
-    days: (e.days ?? []).sort((a: any, b: any) => a.day_number - b.day_number),
-  }))
+  const events: BookingEvent[] = (eventRows ?? []).map(e => {
+    const populatedDays = (e.days ?? []).sort((a: any, b: any) => a.day_number - b.day_number)
+    // If no event_days rows exist yet (event was just created and the daily
+    // entry rows haven't been seeded), assume the standard 1-3 day shape.
+    // BookingClient still filters out days that have no hours in booking_config,
+    // so only the days the store actually opens will show up.
+    const days = populatedDays.length > 0
+      ? populatedDays
+      : [
+          { id: `${e.id}-d1`, day_number: 1 },
+          { id: `${e.id}-d2`, day_number: 2 },
+          { id: `${e.id}-d3`, day_number: 3 },
+        ]
+    return {
+      id: e.id,
+      store_id: e.store_id,
+      start_date: e.start_date,
+      brand: e.brand,
+      days,
+    }
+  })
 
   if (events.length === 0) return null
 
