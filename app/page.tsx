@@ -79,7 +79,7 @@ export default function Home() {
           {nav === 'dashboard' && <MobileDashboard setNav={setNav} />}
           {nav === 'dayentry'  && <MobileDayEntry />}
           {nav === 'events'    && <Events setNav={setNav} />}
-          {nav === 'calendar'  && <Calendar key={navKey} />}
+          {nav === 'calendar'  && <AppointmentsAdmin key={navKey} />}
           {nav === 'schedule'  && <Schedule />}
           {nav === 'travel'    && <MobileTravel />}
           {nav === 'staff'     && <MobileStaff />}
