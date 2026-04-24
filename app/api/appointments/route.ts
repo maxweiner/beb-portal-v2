@@ -19,6 +19,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { buildSlotsForDay, hoursForEventDay } from '@/lib/appointments/slots'
+import { sendConfirmation } from '@/lib/appointments/notifications'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,7 +70,7 @@ export async function POST(req: Request) {
   // Resolve store + brand from slug
   const { data: store, error: storeErr } = await sb
     .from('stores')
-    .select('id, brand')
+    .select('id, name, slug, brand, owner_phone, owner_email')
     .eq('slug', slug)
     .maybeSingle()
   if (storeErr || !store) return bad('Unknown store', 404)
@@ -162,6 +163,25 @@ export async function POST(req: Request) {
     console.error('appointments insert failed', insertErr)
     return bad('Could not create appointment', 500)
   }
+
+  // Best-effort confirmation — never block the booking response on it.
+  sendConfirmation({
+    appt: {
+      id: inserted.id,
+      cancel_token: inserted.cancel_token,
+      customer_name: customer_name.trim(),
+      customer_phone: customer_phone.trim(),
+      customer_email: customer_email.trim(),
+      appointment_date,
+      appointment_time: wantTime,
+    },
+    store: {
+      name: store.name,
+      slug: store.slug,
+      owner_phone: store.owner_phone,
+      owner_email: store.owner_email,
+    },
+  }).catch(err => console.error('sendConfirmation failed', err))
 
   return NextResponse.json({
     ok: true,
