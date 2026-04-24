@@ -501,18 +501,22 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
               onChange={e => { if (e.target.files?.[0]) uploadStoreImage(e.target.files[0]) }} />
           </div>
 
-          {/* Customer Booking Configuration */}
+          {/* Customer Booking URL & QR Codes (slug + channel/custom/employee QRs) */}
+          <QrCodesSection
+            storeId={store.id}
+            storeName={store.name}
+            initialSlug={store.slug ?? null}
+            refetchStores={refetchStores}
+          />
+
+          {/* Customer Booking Configuration (hours / branding / portal token) */}
           <BookingConfigCard
             storeId={store.id}
-            initialSlug={store.slug ?? null}
             initialPrimary={store.color_primary ?? null}
             initialSecondary={store.color_secondary ?? null}
             initialTimezone={store.timezone ?? null}
             refetchStores={refetchStores}
           />
-
-          {/* QR Codes (channel / custom / employee) */}
-          <QrCodesSection storeId={store.id} storeName={store.name} />
 
           {/* Employees */}
           <div className="card card-accent" style={{ margin: 0 }}>

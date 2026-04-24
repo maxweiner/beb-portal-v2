@@ -37,13 +37,6 @@ const DEFAULT_CONFIG: BookingConfigState = {
   hot_show_notify_email: true,
 }
 
-function normalizeSlug(raw: string): string {
-  return raw.trim().toLowerCase()
-    .replace(/[^a-z0-9-]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-}
-
 function timeToHHMM(t: string | null | undefined): string {
   if (!t) return ''
   return t.length >= 5 ? t.slice(0, 5) : t
@@ -61,20 +54,17 @@ const TIMEZONE_OPTIONS = [
 
 export default function BookingConfigCard({
   storeId,
-  initialSlug,
   initialPrimary,
   initialSecondary,
   initialTimezone,
   refetchStores,
 }: {
   storeId: string
-  initialSlug: string | null
   initialPrimary: string | null
   initialSecondary: string | null
   initialTimezone: string | null
   refetchStores: () => Promise<void>
 }) {
-  const [slug, setSlug] = useState(initialSlug || '')
   const [primary, setPrimary] = useState(initialPrimary || '#1D6B44')
   const [secondary, setSecondary] = useState(initialSecondary || '#F5F0E8')
   const [timezone, setTimezone] = useState(initialTimezone || 'America/New_York')
@@ -116,13 +106,12 @@ export default function BookingConfigCard({
     return () => { cancelled = true }
   }, [storeId])
 
-  // Autosave: branding + timezone → stores table
+  // Autosave: branding + timezone → stores table.
+  // (Slug lives in QrCodesSection now since every QR redirect depends on it.)
   const brandingStatus = useAutosave(
-    { slug, primary, secondary, timezone },
-    async ({ slug, primary, secondary, timezone }) => {
-      const cleanSlug = normalizeSlug(slug)
+    { primary, secondary, timezone },
+    async ({ primary, secondary, timezone }) => {
       const { error } = await supabase.from('stores').update({
-        slug: cleanSlug || null,
         color_primary: primary || null,
         color_secondary: secondary || null,
         timezone: timezone || 'America/New_York',
@@ -159,8 +148,6 @@ export default function BookingConfigCard({
     )
   }
 
-  const cleanSlug = normalizeSlug(slug)
-
   const generatePortalToken = async () => {
     if (portalToken && !confirm('Generate a new token? The old store-portal link will stop working.')) return
     // Deactivate existing tokens for this store, then insert a new one.
@@ -190,20 +177,6 @@ export default function BookingConfigCard({
       <div className="card-title" style={{ display: 'flex', alignItems: 'center' }}>
         Customer Booking Configuration
         <AutosaveIndicator status={configStatus === 'idle' ? brandingStatus : configStatus} />
-      </div>
-
-      {/* Booking URL + QR */}
-      <div className="field" style={{ marginBottom: 16 }}>
-        <label className="fl">Booking page URL slug</label>
-        <input
-          type="text"
-          value={slug}
-          placeholder="my-jewelry-store"
-          onChange={e => setSlug(e.target.value)}
-        />
-        <p style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
-          Lowercase letters, numbers, and hyphens. Saved as <code>{cleanSlug || '—'}</code>.
-        </p>
       </div>
 
       {/* Brand colors */}

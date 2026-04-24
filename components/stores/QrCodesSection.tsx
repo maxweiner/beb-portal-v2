@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { supabase } from '@/lib/supabase'
-import { fileSlug, qrShortUrl } from '@/lib/qr/code'
+import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
+import { fileSlug, qrShortUrl, bookingBaseUrl } from '@/lib/qr/code'
 
 interface QrRow {
   id: string
@@ -32,13 +33,44 @@ const DEFAULT_HEAR_ABOUT = [
   'Large Postcard', 'Small Postcard', 'Newspaper', 'Email', 'Text', 'The Store Told Me',
 ]
 
+function normalizeSlug(raw: string): string {
+  return raw.trim().toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
 export default function QrCodesSection({
   storeId,
   storeName,
+  initialSlug,
+  refetchStores,
 }: {
   storeId: string
   storeName: string
+  initialSlug: string | null
+  refetchStores: () => Promise<void>
 }) {
+  // Slug — moved here from BookingConfigCard because every QR redirect
+  // depends on it. If the slug is unset, every QR for this store dead-
+  // redirects to the root.
+  const [slug, setSlug] = useState(initialSlug || '')
+  const cleanSlug = normalizeSlug(slug)
+  const bookingUrl = cleanSlug ? `${bookingBaseUrl()}/book/${cleanSlug}` : ''
+
+  const slugStatus = useAutosave(
+    { slug },
+    async ({ slug }) => {
+      const clean = normalizeSlug(slug)
+      const { error } = await supabase
+        .from('stores')
+        .update({ slug: clean || null })
+        .eq('id', storeId)
+      if (error) throw error
+      await refetchStores()
+    },
+    { delay: 1200 },
+  )
   const [qrs, setQrs] = useState<QrRow[]>([])
   const [employees, setEmployees] = useState<AppointmentEmployee[]>([])
   const [allStores, setAllStores] = useState<StoreLite[]>([])
@@ -170,11 +202,55 @@ export default function QrCodesSection({
 
   if (!loaded) return null
 
+  // QR generation requires a slug — every QR redirects to /book/{slug}.
+  // Without one, scans dead-redirect to the root.
+  const slugReady = cleanSlug.length > 0
+
   return (
     <div className="card card-accent" style={{ margin: 0 }}>
-      <div className="card-title">QR Codes</div>
+      <div className="card-title" style={{ display: 'flex', alignItems: 'center' }}>
+        Customer Booking URL & QR Codes
+        <AutosaveIndicator status={slugStatus} />
+      </div>
+
+      {/* Slug — required prerequisite for QR generation */}
+      <div className="field" style={{ marginBottom: 12 }}>
+        <label className="fl">Booking page URL slug *</label>
+        <input
+          type="text"
+          value={slug}
+          placeholder="my-jewelry-store"
+          onChange={e => setSlug(e.target.value)}
+        />
+        <p style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
+          Lowercase letters, numbers, and hyphens. Saved as <code>{cleanSlug || '—'}</code>.
+        </p>
+      </div>
+
+      {bookingUrl ? (
+        <div style={{
+          padding: 10, marginBottom: 14,
+          background: '#f0fdf4', border: '1px solid #86efac',
+          borderRadius: 'var(--r)', fontSize: 12, color: '#14532d',
+        }}>
+          ✓ All QRs below redirect to{' '}
+          <a href={bookingUrl} target="_blank" rel="noreferrer"
+             style={{ color: '#14532d', fontWeight: 700 }}>
+            {bookingUrl}
+          </a>
+        </div>
+      ) : (
+        <div style={{
+          padding: 10, marginBottom: 14,
+          background: '#fef3c7', border: '1px solid #f59e0b',
+          borderRadius: 'var(--r)', fontSize: 12, color: '#92400e',
+        }}>
+          ⚠️ Set a slug above before generating QRs — without one, scans dead-redirect to the homepage.
+        </div>
+      )}
+
       <p style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 12 }}>
-        Permanent codes for advertising. Each QR redirects to this store's booking page and tracks scans + conversions. The code never changes once generated, so printed materials keep working even if the slug changes.
+        QR codes are permanent. Each redirects to this store's booking page and tracks scans + conversions. The code never changes once generated, so printed materials keep working even if the slug changes.
       </p>
 
       {/* Existing QR list */}
@@ -248,8 +324,9 @@ export default function QrCodesSection({
         </div>
         <button
           className="btn-primary btn-sm"
-          disabled={working || selectedChannels.size === 0}
+          disabled={working || selectedChannels.size === 0 || !slugReady}
           onClick={generateChannelQrs}
+          title={slugReady ? '' : 'Set a slug above first'}
         >
           {working ? 'Generating…' : `Generate ${selectedChannels.size || ''} channel QR${selectedChannels.size === 1 ? '' : 's'}`}
         </button>
@@ -274,8 +351,9 @@ export default function QrCodesSection({
           />
           <button
             className="btn-primary btn-sm"
-            disabled={working || customLabel.trim().length === 0}
+            disabled={working || customLabel.trim().length === 0 || !slugReady}
             onClick={generateCustomQr}
+            title={slugReady ? '' : 'Set a slug above first'}
           >
             Generate
           </button>
@@ -323,8 +401,9 @@ export default function QrCodesSection({
           </div>
           <button
             className="btn-primary btn-sm"
-            disabled={working || selectedEmpIds.size === 0}
+            disabled={working || selectedEmpIds.size === 0 || !slugReady}
             onClick={generateEmployeeQrs}
+            title={slugReady ? '' : 'Set a slug above first'}
           >
             {working ? 'Generating…' : `Generate ${selectedEmpIds.size || ''} employee QR${selectedEmpIds.size === 1 ? '' : 's'}`}
           </button>
