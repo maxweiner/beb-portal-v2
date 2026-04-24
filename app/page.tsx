@@ -16,6 +16,7 @@ import Schedule from '@/components/schedule/Schedule'
 import Travel from '@/components/travel/Travel'
 import Marketing from '@/components/marketing/Marketing'
 import Calendar from '@/components/calendar/Calendar'
+import AppointmentsAdmin from '@/components/appointments-admin/AppointmentsAdmin'
 import { RoleGuard } from '@/components/ui/RoleGuard'
 import LibertyAdminPanel from '@/components/admin/LibertyAdminPanel'
 import ReportRecipients from '@/components/admin/ReportRecipients'
@@ -106,7 +107,7 @@ export default function Home() {
       <Sidebar nav={nav} setNav={setNav} />
       <main className="flex-1 overflow-y-auto">
         {nav === 'dashboard'  && <Dashboard setNav={setNav} />}
-        {nav === 'calendar'   && <Calendar key={navKey} />}
+        {nav === 'calendar'   && <AppointmentsAdmin key={navKey} />}
         {nav === 'events'     && <Events setNav={setNav} />}
         {nav === 'dayentry'   && <DayEntry />}
         {nav === 'shipping'   && <Shipping />}
