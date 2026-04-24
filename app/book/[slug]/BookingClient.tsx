@@ -174,16 +174,23 @@ interface RescheduleContext {
   current_time: string
 }
 
+interface QrAttribution {
+  qr_code_id: string
+  pre_fill_how_heard: string | null
+}
+
 export default function BookingClient({
   slug,
   payload,
   isMock,
   rescheduling,
+  qrAttribution,
 }: {
   slug: string
   payload: MockBookingPayload
   isMock: boolean
   rescheduling?: RescheduleContext | null
+  qrAttribution?: QrAttribution | null
 }) {
   const { store, config, events, override, bookings, blocks } = payload
   const primary = store.color_primary || '#1D6B44'
@@ -212,7 +219,8 @@ export default function BookingClient({
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [items, setItems] = useState<string[]>([])
-  const [howHeard, setHowHeard] = useState('')
+  // Pre-fill how_heard from QR (channel / custom). Employee QRs leave it blank.
+  const [howHeard, setHowHeard] = useState(qrAttribution?.pre_fill_how_heard ?? '')
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'done'>('idle')
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [secondsLeft, setSecondsLeft] = useState(12)
@@ -283,6 +291,7 @@ export default function BookingClient({
               customer_email: email,
               items_bringing: items,
               how_heard: howHeard,
+              qr_code_id: qrAttribution?.qr_code_id ?? null,
             }),
           })
       const json = await res.json().catch(() => ({}))

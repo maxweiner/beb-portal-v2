@@ -25,7 +25,7 @@ export default async function BookingPage({
   searchParams,
 }: {
   params: { slug: string }
-  searchParams: { reschedule?: string }
+  searchParams: { reschedule?: string; src?: string }
 }) {
   const real = await getBookingPayload(params.slug)
   const payload = real ?? getMockBookingPayload(params.slug)
@@ -36,9 +36,10 @@ export default async function BookingPage({
     notFound()
   }
 
+  const sb = admin()
+
   let rescheduling: { token: string; customer_name: string; current_date: string; current_time: string } | null = null
   if (searchParams.reschedule) {
-    const sb = admin()
     const { data: appt } = await sb
       .from('appointments')
       .select('cancel_token, status, customer_name, appointment_date, appointment_time, store_id')
@@ -54,12 +55,34 @@ export default async function BookingPage({
     }
   }
 
+  // QR attribution: arrived from /q/[code] → ?src=<code>. Look up the QR for
+  // pre-fill data; the canonical employee/lead-source is re-derived in
+  // POST /api/appointments so a tampered qr_code_id can't claim spiff credit.
+  let qrAttribution: { qr_code_id: string; pre_fill_how_heard: string | null } | null = null
+  if (searchParams.src) {
+    const { data: qr } = await sb
+      .from('qr_codes')
+      .select('id, type, store_id, lead_source, custom_label')
+      .eq('code', searchParams.src)
+      .maybeSingle()
+    if (qr && qr.store_id === payload.store.id) {
+      qrAttribution = {
+        qr_code_id: qr.id,
+        pre_fill_how_heard:
+          qr.type === 'channel' ? (qr.lead_source ?? null)
+          : qr.type === 'custom' ? (qr.custom_label ?? null)
+          : null, // employee QRs don't pre-fill how_heard
+      }
+    }
+  }
+
   return (
     <BookingClient
       slug={params.slug}
       payload={payload}
       isMock={!real}
       rescheduling={rescheduling}
+      qrAttribution={qrAttribution}
     />
   )
 }

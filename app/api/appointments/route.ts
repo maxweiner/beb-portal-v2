@@ -18,6 +18,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import crypto from 'crypto'
 import { buildSlotsForDay, hoursForEventDay } from '@/lib/appointments/slots'
 import { sendConfirmation } from '@/lib/appointments/notifications'
 
@@ -58,6 +59,8 @@ export async function POST(req: Request) {
     is_walkin,
     booked_by,
     notes,
+    // QR attribution from the customer page (?src=<code>)
+    qr_code_id,
   } = body ?? {}
 
   if (!slug || !event_id || !appointment_date || !appointment_time) {
@@ -145,6 +148,22 @@ export async function POST(req: Request) {
   if (slot.blocked) return bad('That slot is blocked', 409)
   if (slot.available <= 0) return bad('That slot is full', 409)
 
+  // QR attribution: re-derive authoritative fields server-side so a
+  // tampered qr_code_id can't claim arbitrary spiff credit.
+  let resolvedQrCodeId: string | null = null
+  let qrEmployeeId: string | null = null
+  if (qr_code_id) {
+    const { data: qr } = await sb
+      .from('qr_codes')
+      .select('id, store_id, type, appointment_employee_id')
+      .eq('id', qr_code_id)
+      .maybeSingle()
+    if (qr && qr.store_id === store.id) {
+      resolvedQrCodeId = qr.id
+      if (qr.type === 'employee') qrEmployeeId = qr.appointment_employee_id
+    }
+  }
+
   // Insert the appointment. cancel_token defaults via the schema.
   const validBookedBy = booked_by === 'store' || booked_by === 'admin' ? booked_by : 'customer'
 
@@ -162,9 +181,11 @@ export async function POST(req: Request) {
       items_bringing,
       how_heard: how_heard ?? null,
       booked_by: validBookedBy,
-      appointment_employee_id: appointment_employee_id || null,
+      // Employee-portal explicit value wins; fall back to QR-derived employee.
+      appointment_employee_id: appointment_employee_id || qrEmployeeId || null,
       is_walkin: !!is_walkin,
       notes: notes ?? null,
+      qr_code_id: resolvedQrCodeId,
     })
     .select('id, cancel_token')
     .single()
@@ -172,6 +193,36 @@ export async function POST(req: Request) {
   if (insertErr || !inserted) {
     console.error('appointments insert failed', insertErr)
     return bad('Could not create appointment', 500)
+  }
+
+  // Conversion attribution: mark the most recent scan from this IP+QR as
+  // converted. Best-effort — failure is non-fatal.
+  if (resolvedQrCodeId) {
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim()
+      || req.headers.get('x-real-ip')
+    if (ip) {
+      const ipHash = crypto
+        .createHash('sha256')
+        .update(ip + (process.env.QR_IP_HASH_SALT || 'beb-portal-default-salt'))
+        .digest('hex')
+        .slice(0, 32)
+      const { data: latestScan } = await sb.from('qr_scans')
+        .select('id')
+        .eq('qr_code_id', resolvedQrCodeId)
+        .eq('ip_hash', ipHash)
+        .eq('converted', false)
+        .order('scanned_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (latestScan?.id) {
+        await sb.from('qr_scans')
+          .update({ converted: true, appointment_id: inserted.id })
+          .eq('id', latestScan.id)
+          .then(({ error }) => {
+            if (error) console.warn('[qr-conversion] update failed', error)
+          })
+      }
+    }
   }
 
   // Best-effort confirmation — never block the booking response on it.
