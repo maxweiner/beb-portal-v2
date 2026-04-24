@@ -136,22 +136,43 @@ export const SOURCE_COLORS: Record<LeadSource, { bg: string; border: string; tex
   unknown: { bg: '#F3F4F6', border: '#9CA3AF', text: '#374151', label: 'Other' },
 }
 
-// Generate 24 slots per day: 10am–6pm, every 20 minutes
+// Slots covering one day, every `intervalMin` minutes from `startHour` to `endHour`
+// (exclusive of endHour). Default range 10am–6pm at 20-min intervals matches the
+// historical behaviour for stores without a booking_config.
 export interface Slot {
-  h: number   // local hour in store timezone (10-17)
-  m: number   // 0, 20, or 40
-  hourIdx: number
-  slotIdx: number
+  h: number
+  m: number
+  hourIdx: number  // index of the hour band (0 = first hour shown)
+  slotIdx: number  // index within the hour (0, 1, 2 for 20-min intervals)
 }
 
-export function generateSlots(): Slot[] {
+export function generateSlots(opts?: {
+  startHour?: number
+  endHour?: number
+  intervalMin?: number
+}): Slot[] {
+  const startHour = opts?.startHour ?? 10
+  const endHour   = opts?.endHour   ?? 18
+  const interval  = opts?.intervalMin ?? 20
+  const slotsPerHour = Math.max(1, Math.floor(60 / interval))
   const slots: Slot[] = []
-  for (let h = 10; h < 18; h++) {
-    for (let m = 0; m < 60; m += 20) {
-      slots.push({ h, m, hourIdx: h - 10, slotIdx: m / 20 })
+  for (let h = startHour; h < endHour; h++) {
+    for (let m = 0; m < 60; m += interval) {
+      slots.push({ h, m, hourIdx: h - startHour, slotIdx: Math.floor(m / interval) })
     }
   }
   return slots
+}
+
+// Parse 'HH:MM' or 'HH:MM:SS' → { h, m }, or null on bad input.
+export function parseHourMinute(t: string | null | undefined): { h: number; m: number } | null {
+  if (!t) return null
+  const m = t.match(/^(\d{1,2}):(\d{2})/)
+  if (!m) return null
+  const h = Number(m[1])
+  const mm = Number(m[2])
+  if (Number.isNaN(h) || Number.isNaN(mm)) return null
+  return { h, m: mm }
 }
 
 export function formatSlotTime(h: number, m: number): string {

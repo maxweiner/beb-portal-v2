@@ -2,16 +2,26 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
+import { supabase } from '@/lib/supabase'
 import type { Store, Event, Appointment } from '@/types'
 import {
   STATE_TZ, dateInTz, hmInTz, timeInTz,
   parseIcal, detectSource, SOURCE_COLORS,
-  generateSlots, formatSlotTime, getEventDayDate,
+  generateSlots, formatSlotTime, getEventDayDate, parseHourMinute,
   friendlyDate, parseApptDetail
 } from '@/lib/calendar'
 
+interface BookingHours {
+  // Per-day hours, in minutes since midnight. Each entry is { start, end } or null.
+  // Index 0 = day 1, index 1 = day 2, index 2 = day 3.
+  perDay: Array<{ start: number; end: number } | null>
+  intervalMin: number
+  maxConcurrent: number
+}
+
 interface CalendarState {
   appointments: Record<string, Appointment[]> // storeId -> appts
+  bookingHours: Record<string, BookingHours>  // storeId -> per-day hours
   loading: Record<string, boolean>
   lastRefresh: Date | null
 }
@@ -20,6 +30,7 @@ export default function Calendar() {
   const { events, stores, user } = useApp()
   const [calState, setCalState] = useState<CalendarState>({
     appointments: {},
+    bookingHours: {},
     loading: {},
     lastRefresh: null,
   })
@@ -112,23 +123,59 @@ export default function Calendar() {
   const fetchForStore = async (store: Store) => {
     // Fetch from BOTH the legacy Google Calendar (iCal) and the new BEB
     // Portal appointments table in parallel, then merge into one list.
-    // Either source can be empty — we still want to render the other.
+    // Also pull booking_config so the day grid uses the store's actual hours.
     setCalState(prev => ({ ...prev, loading: { ...prev.loading, [store.id]: true } }))
     try {
-      const [icalAppts, portalAppts] = await Promise.all([
+      const [icalAppts, portalAppts, hours] = await Promise.all([
         fetchIcalAppts(store),
         fetchPortalAppts(store.id),
+        fetchBookingHours(store.id),
       ])
       const merged = [...icalAppts, ...portalAppts]
       setCalState(prev => ({
         ...prev,
         appointments: { ...prev.appointments, [store.id]: merged },
+        bookingHours: hours
+          ? { ...prev.bookingHours, [store.id]: hours }
+          : prev.bookingHours,
         lastRefresh: new Date(),
         loading: { ...prev.loading, [store.id]: false },
       }))
     } catch (e: any) {
       console.error('Calendar fetch error:', e)
       setCalState(prev => ({ ...prev, loading: { ...prev.loading, [store.id]: false } }))
+    }
+  }
+
+  async function fetchBookingHours(storeId: string): Promise<BookingHours | null> {
+    try {
+      const { data } = await supabase
+        .from('booking_config')
+        .select('slot_interval_minutes, max_concurrent_slots, day1_start, day1_end, day2_start, day2_end, day3_start, day3_end')
+        .eq('store_id', storeId)
+        .maybeSingle()
+      if (!data) return null
+      const dayBounds = (start: string | null, end: string | null) => {
+        const s = parseHourMinute(start)
+        const e = parseHourMinute(end)
+        if (!s || !e) return null
+        const startMin = s.h * 60 + s.m
+        const endMin = e.h * 60 + e.m
+        if (endMin <= startMin) return null
+        return { start: startMin, end: endMin }
+      }
+      return {
+        perDay: [
+          dayBounds(data.day1_start, data.day1_end),
+          dayBounds(data.day2_start, data.day2_end),
+          dayBounds(data.day3_start, data.day3_end),
+        ],
+        intervalMin: data.slot_interval_minutes ?? 20,
+        maxConcurrent: data.max_concurrent_slots ?? 3,
+      }
+    } catch (e) {
+      console.error('booking_config fetch failed for store', storeId, e)
+      return null
     }
   }
 
@@ -234,6 +281,7 @@ export default function Calendar() {
         stores={stores}
         myEvents={myEvents}
         appointments={calState.appointments}
+        bookingHours={calState.bookingHours}
         loading={calState.loading}
         onPickEvent={(id) => setSelectedEventId(id)}
         onBack={() => setSelectedEventId(null)}
@@ -252,6 +300,7 @@ export default function Calendar() {
           ev={selectedEvent}
           stores={stores}
           appointments={calState.appointments}
+          bookingHours={calState.bookingHours}
           loading={calState.loading}
           selectedDay={selectedDay}
           setSelectedDay={setSelectedDay}
@@ -268,6 +317,7 @@ export default function Calendar() {
           setCalFilter={setCalFilter}
           stores={stores}
           appointments={calState.appointments}
+          bookingHours={calState.bookingHours}
           loading={calState.loading}
           lastRefresh={calState.lastRefresh}
           onOpen={openEvent}
@@ -280,12 +330,13 @@ export default function Calendar() {
 }
 
 /* ── EVENT CARDS VIEW ── */
-function EventCards({ activeEvents, stores, appointments, loading, lastRefresh, onOpen, onRefreshAll, calFilter, setCalFilter, isMobile }: {
+function EventCards({ activeEvents, stores, appointments, bookingHours, loading, lastRefresh, onOpen, onRefreshAll, calFilter, setCalFilter, isMobile }: {
   activeEvents: Event[]
   calFilter: string
   setCalFilter: (f: any) => void
   stores: Store[]
   appointments: Record<string, Appointment[]>
+  bookingHours: Record<string, BookingHours>
   loading: Record<string, boolean>
   lastRefresh: Date | null
   onOpen: (ev: Event) => void
@@ -369,14 +420,26 @@ function EventCards({ activeEvents, stores, appointments, loading, lastRefresh, 
           const tz = STATE_TZ[(store?.state || '').toUpperCase()] || 'America/New_York'
           const appts = appointments[store?.id || ''] || []
           const isLoading = loading[store?.id || '']
-          const hasFeed = !!store?.calendar_feed_url
+          const hours = bookingHours[store?.id || '']
 
           const dayCounts = [1, 2, 3].map(d => {
             const ds = getEventDayDate(ev.start_date, d)
             return appts.filter(a => dateInTz(a.start, tz) === ds).length
           })
           const total = dayCounts.reduce((a, b) => a + b, 0)
-          const pct = Math.min(Math.round(total / 63 * 100), 100)
+          // Total bookable slots = sum of (minutes per day / interval * max-concurrent)
+          // for the days the store actually opens. Falls back to the legacy 63
+          // (8h × 3 / 20min) if no booking_config has been set up yet.
+          const totalSlots = (() => {
+            if (!hours) return 63
+            const per = hours.intervalMin > 0 ? hours.intervalMin : 20
+            const maxC = hours.maxConcurrent > 0 ? hours.maxConcurrent : 3
+            return hours.perDay.reduce((acc, d) => {
+              if (!d) return acc
+              return acc + Math.floor((d.end - d.start) / per) * maxC
+            }, 0) || 63
+          })()
+          const pct = Math.min(Math.round(total / totalSlots * 100), 100)
 
           // Mobile uses per-card collapse: tapping the header row toggles
           // body visibility; only the "View Appointments →" button navigates.
@@ -421,11 +484,9 @@ function EventCards({ activeEvents, stores, appointments, loading, lastRefresh, 
                   </div>
                   {isMobile && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                      {hasFeed && (
-                        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--green-dark)', background: 'var(--green-pale)', padding: '2px 8px', borderRadius: 99 }}>
-                          {isLoading ? '…' : `${total} appts`}
-                        </span>
-                      )}
+                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--green-dark)', background: 'var(--green-pale)', padding: '2px 8px', borderRadius: 99 }}>
+                        {isLoading ? '…' : `${total} appts`}
+                      </span>
                       <span aria-hidden style={{
                         color: 'var(--mist)', fontSize: 12, lineHeight: 1,
                         transform: isOpen ? 'rotate(90deg)' : 'none',
@@ -435,7 +496,7 @@ function EventCards({ activeEvents, stores, appointments, loading, lastRefresh, 
                   )}
                 </div>
 
-                {isOpen && (hasFeed ? (
+                {isOpen && (
                   <>
                     {/* Day breakdown */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, marginTop: 12 }}>
@@ -461,7 +522,7 @@ function EventCards({ activeEvents, stores, appointments, loading, lastRefresh, 
                     {/* Fill rate */}
                     <div style={{ marginTop: 12 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--mist)', marginBottom: 4 }}>
-                        <span>{total} of 63 slots booked</span>
+                        <span>{total} of {totalSlots} slots booked</span>
                         <span style={{ fontWeight: 700 }}>{pct}%</span>
                       </div>
                       <div style={{ height: 5, borderRadius: 3, background: 'var(--cream2)', overflow: 'hidden' }}>
@@ -469,52 +530,26 @@ function EventCards({ activeEvents, stores, appointments, loading, lastRefresh, 
                       </div>
                     </div>
                   </>
-                ) : (
-                  <div style={{ marginTop: 20, marginBottom: 18, textAlign: 'center', position: 'relative' }}
-                    onMouseEnter={e => {
-                      const tip = e.currentTarget.querySelector('[data-tip]') as HTMLElement | null
-                      if (tip) tip.style.opacity = '1'
-                    }}
-                    onMouseLeave={e => {
-                      const tip = e.currentTarget.querySelector('[data-tip]') as HTMLElement | null
-                      if (tip) tip.style.opacity = '0'
-                    }}>
-                    <div style={{ fontSize: 12, color: '#B5B5A8', fontWeight: 600 }}>No Calendar Linked</div>
-                    <div data-tip style={{
-                      position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)',
-                      background: 'var(--ink)', color: '#fff', fontSize: 11, padding: '6px 10px',
-                      borderRadius: 6, whiteSpace: 'nowrap', opacity: 0, transition: 'opacity .15s',
-                      pointerEvents: 'none', zIndex: 10,
-                    }}>
-                      Add a Google Calendar iCal feed URL in store settings to see appointments
-                      <span style={{
-                        position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)',
-                        borderLeft: '5px solid transparent', borderRight: '5px solid transparent',
-                        borderTop: '5px solid var(--ink)',
-                      }} />
-                    </div>
-                  </div>
-                ))}
+                )}
               </div>
 
               {isOpen && (
               <button
                 onClick={e => {
-                  if (!hasFeed) { e.stopPropagation(); return }
                   if (isMobile) { e.stopPropagation(); onOpen(ev) }
                 }}
                 style={{
                   borderTop: '1px solid var(--pearl)',
                   padding: '10px 0', width: '100%',
-                  background: hasFeed ? '#D8EDDF' : 'var(--cream2)',
-                  color: hasFeed ? '#1D6B44' : 'var(--silver)',
+                  background: '#D8EDDF',
+                  color: '#1D6B44',
                   fontWeight: 700, fontSize: 13, border: 'none',
-                  cursor: hasFeed ? 'pointer' : 'default',
+                  cursor: 'pointer',
                   fontFamily: 'inherit', letterSpacing: '.02em',
                 }}
-                onMouseEnter={e => { if (hasFeed) e.currentTarget.style.background = '#C4E5CF' }}
-                onMouseLeave={e => { if (hasFeed) e.currentTarget.style.background = '#D8EDDF' }}>
-                {hasFeed ? 'View Appointments →' : 'No Calendar Available'}
+                onMouseEnter={e => { e.currentTarget.style.background = '#C4E5CF' }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#D8EDDF' }}>
+                View Appointments →
               </button>
               )}
             </div>
@@ -526,10 +561,11 @@ function EventCards({ activeEvents, stores, appointments, loading, lastRefresh, 
 }
 
 /* ── DAY VIEW ── */
-function DayView({ ev, stores, appointments, loading, selectedDay, setSelectedDay, onBack, onRefresh }: {
+function DayView({ ev, stores, appointments, bookingHours, loading, selectedDay, setSelectedDay, onBack, onRefresh }: {
   ev: Event
   stores: Store[]
   appointments: Record<string, Appointment[]>
+  bookingHours: Record<string, BookingHours>
   loading: Record<string, boolean>
   selectedDay: number
   setSelectedDay: (d: number) => void
@@ -544,7 +580,13 @@ function DayView({ ev, stores, appointments, loading, selectedDay, setSelectedDa
 
   const dateStr = getEventDayDate(ev.start_date, selectedDay)
   const dayAppts = allAppts.filter(a => dateInTz(a.start, tz) === dateStr)
-  const slots = generateSlots()
+  const hours = bookingHours[store?.id || '']
+  const dayBounds = hours?.perDay[selectedDay - 1] ?? null
+  const slots = generateSlots(dayBounds ? {
+    startHour: Math.floor(dayBounds.start / 60),
+    endHour: Math.ceil(dayBounds.end / 60),
+    intervalMin: hours.intervalMin,
+  } : undefined)
 
   const [detail, setDetail] = useState<Appointment | null>(null)
   const [detailPos, setDetailPos] = useState({ x: 0, y: 0 })
@@ -760,13 +802,14 @@ function ApptDetail({ appt, tz, pos, onClose }: {
  * list with each row fully tinted by its detected lead source.
  */
 function MobileActiveAppointmentsView({
-  ev, stores, myEvents, appointments, loading,
+  ev, stores, myEvents, appointments, bookingHours, loading,
   onPickEvent, onBack, onRefresh,
 }: {
   ev: Event
   stores: Store[]
   myEvents: Event[]
   appointments: Record<string, Appointment[]>
+  bookingHours: Record<string, BookingHours>
   loading: Record<string, boolean>
   onPickEvent: (eventId: string) => void
   onBack: () => void
@@ -791,7 +834,13 @@ function MobileActiveAppointmentsView({
   const allAppts = appointments[store?.id || ''] || []
   const dateStr = getEventDayDate(ev.start_date, day)
   const dayAppts = allAppts.filter(a => dateInTz(a.start, tz) === dateStr)
-  const slots = generateSlots()
+  const hours = bookingHours[store?.id || '']
+  const dayBounds = hours?.perDay[day - 1] ?? null
+  const slots = generateSlots(dayBounds ? {
+    startHour: Math.floor(dayBounds.start / 60),
+    endHour: Math.ceil(dayBounds.end / 60),
+    intervalMin: hours.intervalMin,
+  } : undefined)
 
   const findAppt = (slot: { h: number; m: number }) => dayAppts.find(a => {
     const { h, m } = hmInTz(a.start, tz)
@@ -942,21 +991,18 @@ function MobileActiveAppointmentsView({
       </div>
 
       {/* Stats strip */}
-      {store?.calendar_feed_url && (
-        <div style={{
-          padding: '8px 16px', background: 'var(--cream2)',
-          fontSize: 11, fontWeight: 700, color: 'var(--ash)',
-          display: 'flex', gap: 14, borderBottom: '1px solid var(--pearl)',
-        }}>
-          <span><strong style={{ color: 'var(--green-dark)' }}>{bookedToday}</strong> booked</span>
-          <span><strong style={{ color: 'var(--mist)' }}>{availToday}</strong> available</span>
-          <span style={{ marginLeft: 'auto', color: 'var(--green)' }}>{fillPct}% full</span>
-        </div>
-      )}
+      <div style={{
+        padding: '8px 16px', background: 'var(--cream2)',
+        fontSize: 11, fontWeight: 700, color: 'var(--ash)',
+        display: 'flex', gap: 14, borderBottom: '1px solid var(--pearl)',
+      }}>
+        <span><strong style={{ color: 'var(--green-dark)' }}>{bookedToday}</strong> booked</span>
+        <span><strong style={{ color: 'var(--mist)' }}>{availToday}</strong> available</span>
+        <span style={{ marginLeft: 'auto', color: 'var(--green)' }}>{fillPct}% full</span>
+      </div>
 
       {/* Hour-grouped list with lead-source-tinted rows */}
-      {store?.calendar_feed_url ? (
-        <div style={{ flex: 1, overflowY: 'auto', background: 'var(--cream)' }}>
+      <div style={{ flex: 1, overflowY: 'auto', background: 'var(--cream)' }}>
           {Array.from(byHour.entries()).map(([hour, hourSlots]) => {
             const bookedCount = hourSlots.filter(s => findAppt(s)).length
             const hourLabel = hour > 12 ? `${hour - 12} PM` : hour === 12 ? '12 PM' : `${hour} AM`
@@ -1029,18 +1075,7 @@ function MobileActiveAppointmentsView({
               </div>
             )
           })}
-        </div>
-      ) : (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
-          <div>
-            <div style={{ fontSize: 36, marginBottom: 8 }}>📅</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>No calendar feed</div>
-            <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 4, maxWidth: 280 }}>
-              This event's store hasn't set up a Google Calendar feed yet. Ask an admin to add one in Store Details.
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
 
     </div>
   )
