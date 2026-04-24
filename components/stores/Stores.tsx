@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import type { Store } from '@/types'
 import BookingConfigCard from './BookingConfigCard'
+import QrCodesSection from './QrCodesSection'
 
 interface Employee { id: string; store_id: string; name: string; phone: string; email: string }
 
@@ -510,6 +511,9 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
             initialTimezone={store.timezone ?? null}
             refetchStores={refetchStores}
           />
+
+          {/* QR Codes (channel / custom / employee) */}
+          <QrCodesSection storeId={store.id} storeName={store.name} />
 
           {/* Employees */}
           <div className="card card-accent" style={{ margin: 0 }}>
