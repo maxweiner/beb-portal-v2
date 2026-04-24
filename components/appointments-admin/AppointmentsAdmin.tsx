@@ -93,7 +93,9 @@ function fmtTime(t: string): string {
 // ---------- data fetching ----------
 
 async function fetchPortalAppts(stores: Store[]): Promise<AppointmentRow[]> {
-  if (stores.length === 0) return []
+  // Don't pre-filter by store window — pull everything portal-side and let
+  // the UI's "When" filter narrow it down. Stores months in the future
+  // (e.g., Dec event scheduled in April) still need to surface.
   const { data, error } = await supabase
     .from('appointments')
     .select(`
@@ -101,14 +103,13 @@ async function fetchPortalAppts(stores: Store[]): Promise<AppointmentRow[]> {
       customer_name, customer_phone, customer_email,
       items_bringing, how_heard, status, cancel_token,
       is_walkin, appointment_employee_id, notes,
-      appointment_employee:store_employees(name)
+      appointment_employee:store_employees(name),
+      store:stores(name)
     `)
-    .in('store_id', stores.map(s => s.id))
     .order('appointment_date', { ascending: true })
     .order('appointment_time', { ascending: true })
   if (error) { console.error('admin fetch portal appts failed', error); return [] }
   return (data || []).map((a: any) => {
-    const store = stores.find(s => s.id === a.store_id)
     const time = (a.appointment_time as string).length >= 5 ? a.appointment_time.slice(0, 5) : a.appointment_time
     return {
       source: 'beb-portal' as const,
@@ -116,7 +117,7 @@ async function fetchPortalAppts(stores: Store[]): Promise<AppointmentRow[]> {
       appointment_date: a.appointment_date,
       appointment_time: time,
       store_id: a.store_id,
-      store_name: store?.name || '(unknown store)',
+      store_name: a.store?.name || stores.find(s => s.id === a.store_id)?.name || '(unknown store)',
       customer_name: a.customer_name || '',
       customer_phone: a.customer_phone || '',
       customer_email: a.customer_email || '',
@@ -189,15 +190,18 @@ export default function AppointmentsAdmin() {
   const [storeFilter, setStoreFilter] = useState<string>('all')
   const [search, setSearch] = useState('')
 
-  // Stores that have an active event in the next/last 2 weeks (matches Calendar's existing scope)
-  const relevantStores = useMemo(() => {
+  // Only fetch iCal (HTTP, expensive) for stores with an event in the next ~2 months.
+  // BEB Portal appointments are a single Supabase query covering everything, so they
+  // ignore this window — far-future bookings (e.g., December event seeded in April)
+  // still need to surface.
+  const icalStores = useMemo(() => {
     const today = new Date(); today.setHours(0, 0, 0, 0)
-    const twoWeeks = 14 * 24 * 60 * 60 * 1000
+    const twoMonths = 60 * 24 * 60 * 60 * 1000
     const ids = new Set(events.filter(ev => {
       if (!ev.start_date) return false
       const start = new Date(ev.start_date + 'T12:00:00')
       const end = new Date(start); end.setDate(end.getDate() + 2)
-      return Math.abs(end.getTime() - today.getTime()) < twoWeeks * 4
+      return Math.abs(end.getTime() - today.getTime()) < twoMonths
     }).map(ev => ev.store_id))
     return stores.filter(s => ids.has(s.id))
   }, [stores, events])
@@ -205,13 +209,13 @@ export default function AppointmentsAdmin() {
   useEffect(() => {
     let cancelled = false
     setLoaded(false)
-    Promise.all([fetchPortalAppts(relevantStores), fetchGcalAppts(relevantStores)]).then(([portal, gcal]) => {
+    Promise.all([fetchPortalAppts(stores), fetchGcalAppts(icalStores)]).then(([portal, gcal]) => {
       if (cancelled) return
       setAppts([...portal, ...gcal])
       setLoaded(true)
     })
     return () => { cancelled = true }
-  }, [relevantStores, refreshTick])
+  }, [stores, icalStores, refreshTick])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -298,7 +302,7 @@ export default function AppointmentsAdmin() {
           <label className="fl">Store</label>
           <select value={storeFilter} onChange={e => setStoreFilter(e.target.value)} style={{ width: '100%' }}>
             <option value="all">All stores</option>
-            {relevantStores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
         <div className="field" style={{ marginBottom: 0 }}>
@@ -316,6 +320,23 @@ export default function AppointmentsAdmin() {
         <p style={{ color: 'var(--mist)', fontSize: 13 }}>Loading appointments…</p>
       )}
 
+      {loaded && (
+        <div style={{
+          fontSize: 12, color: 'var(--mist)', marginBottom: 10,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6,
+        }}>
+          <span>
+            Showing <strong>{filtered.length}</strong> of {appts.length} total
+            {filtered.length < appts.length && dateFilter !== 'all-upcoming' && (
+              <> · <button
+                onClick={() => setDateFilter('all-upcoming')}
+                style={{ background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', fontSize: 12, padding: 0, textDecoration: 'underline' }}
+              >Show all upcoming</button></>
+            )}
+          </span>
+        </div>
+      )}
+
       {loaded && filtered.length === 0 && (
         <div style={{
           padding: 30, textAlign: 'center', background: 'white',
@@ -323,6 +344,14 @@ export default function AppointmentsAdmin() {
           color: 'var(--mist)',
         }}>
           No appointments match these filters.
+          {appts.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <button onClick={() => { setDateFilter('all-upcoming'); setSearch(''); setStatusFilter('all'); setStoreFilter('all'); setSourceFilter('all') }}
+                className="btn-outline btn-sm">
+                Reset filters
+              </button>
+            </div>
+          )}
         </div>
       )}
 
