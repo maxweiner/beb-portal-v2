@@ -59,7 +59,7 @@ export default function QrCodesSection({
         .eq('store_id', storeId)
         .is('deleted_at', null)
         .order('created_at', { ascending: false }),
-      supabase.from('appointment_employees')
+      supabase.from('store_employees')
         .select('id, name')
         .eq('store_id', storeId)
         .eq('active', true)

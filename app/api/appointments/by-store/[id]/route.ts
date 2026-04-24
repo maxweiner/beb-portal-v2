@@ -34,7 +34,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       id, appointment_date, appointment_time, customer_name,
       customer_phone, customer_email, items_bringing, how_heard,
       is_walkin, booked_by, status, cancel_token,
-      appointment_employee:appointment_employees(name)
+      appointment_employee:store_employees(name)
     `)
     .eq('store_id', params.id)
     .eq('status', 'confirmed')

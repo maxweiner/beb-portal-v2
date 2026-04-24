@@ -44,7 +44,7 @@ export default async function Page({ params }: { params: { token: string } }) {
       .neq('status', 'cancelled')
       .order('appointment_date', { ascending: true })
       .order('appointment_time', { ascending: true }),
-    sb.from('appointment_employees')
+    sb.from('store_employees')
       .select('id, name')
       .eq('store_id', tokenRow.store_id)
       .eq('active', true)

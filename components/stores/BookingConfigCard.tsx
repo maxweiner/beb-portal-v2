@@ -18,13 +18,6 @@ interface BookingConfigState {
   hot_show_notify_email: boolean
 }
 
-interface AppointmentEmployee {
-  id: string
-  store_id: string
-  name: string
-  active: boolean
-}
-
 interface StorePortalToken {
   id: string
   token: string
@@ -87,18 +80,15 @@ export default function BookingConfigCard({
   const [timezone, setTimezone] = useState(initialTimezone || 'America/New_York')
 
   const [config, setConfig] = useState<BookingConfigState | null>(null)
-  const [employees, setEmployees] = useState<AppointmentEmployee[]>([])
   const [portalToken, setPortalToken] = useState<StorePortalToken | null>(null)
   const [loaded, setLoaded] = useState(false)
-  const [newEmpName, setNewEmpName] = useState('')
 
   useEffect(() => {
     let cancelled = false
     Promise.all([
       supabase.from('booking_config').select('*').eq('store_id', storeId).maybeSingle(),
-      supabase.from('appointment_employees').select('*').eq('store_id', storeId).order('name'),
       supabase.from('store_portal_tokens').select('id, token, active').eq('store_id', storeId).eq('active', true).maybeSingle(),
-    ]).then(([cfgRes, empRes, tokRes]) => {
+    ]).then(([cfgRes, tokRes]) => {
       if (cancelled) return
       const cfg = cfgRes.data
       if (cfg) {
@@ -120,7 +110,6 @@ export default function BookingConfigCard({
       } else {
         setConfig(DEFAULT_CONFIG)
       }
-      setEmployees(empRes.data || [])
       setPortalToken(tokRes.data || null)
       setLoaded(true)
     })
@@ -171,30 +160,6 @@ export default function BookingConfigCard({
   }
 
   const cleanSlug = normalizeSlug(slug)
-
-  const addEmployee = async () => {
-    const name = newEmpName.trim()
-    if (!name) return
-    const { data, error } = await supabase.from('appointment_employees')
-      .insert({ store_id: storeId, name, active: true })
-      .select().single()
-    if (error) { alert('Error: ' + error.message); return }
-    if (data) setEmployees(p => [...p, data])
-    setNewEmpName('')
-  }
-
-  const removeEmployee = async (id: string) => {
-    if (!confirm('Remove this employee from the spiff list?')) return
-    const { error } = await supabase.from('appointment_employees').delete().eq('id', id)
-    if (error) { alert('Error: ' + error.message); return }
-    setEmployees(p => p.filter(e => e.id !== id))
-  }
-
-  const toggleActive = async (id: string, active: boolean) => {
-    const { error } = await supabase.from('appointment_employees').update({ active }).eq('id', id)
-    if (error) { alert('Error: ' + error.message); return }
-    setEmployees(p => p.map(e => (e.id === id ? { ...e, active } : e)))
-  }
 
   const generatePortalToken = async () => {
     if (portalToken && !confirm('Generate a new token? The old store-portal link will stop working.')) return
@@ -385,43 +350,6 @@ export default function BookingConfigCard({
         <button onClick={generatePortalToken} className="btn-primary btn-sm">
           {portalToken ? 'Rotate token' : 'Generate access token'}
         </button>
-      </div>
-
-      {/* Appointment employees (spiff list) */}
-      <div style={{ borderTop: '1px solid var(--pearl)', paddingTop: 12 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ash)', marginBottom: 4 }}>
-          Spiff Employees
-        </div>
-        <p style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 10 }}>
-          Names that appear in the spiff dropdown when an appointment is booked from the store portal.
-        </p>
-        {employees.length === 0 && (
-          <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 10 }}>None added yet.</p>
-        )}
-        {employees.map(emp => (
-          <div key={emp.id} style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '6px 0', borderBottom: '1px solid var(--pearl)',
-          }}>
-            <span style={{ flex: 1, fontSize: 14, opacity: emp.active ? 1 : 0.5 }}>
-              {emp.name}
-            </span>
-            <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-              <input type="checkbox" checked={emp.active}
-                onChange={e => toggleActive(emp.id, e.target.checked)} />
-              Active
-            </label>
-            <button onClick={() => removeEmployee(emp.id)} className="btn-danger btn-sm">Remove</button>
-          </div>
-        ))}
-        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-          <input type="text" placeholder="Employee name…"
-            value={newEmpName}
-            onChange={e => setNewEmpName(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addEmployee() } }}
-            style={{ flex: 1 }} />
-          <button onClick={addEmployee} className="btn-primary btn-sm">Add</button>
-        </div>
       </div>
     </div>
   )
