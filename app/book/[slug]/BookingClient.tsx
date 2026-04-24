@@ -1,8 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { ChevronDown, ChevronRight, Diamond } from 'lucide-react'
 import { buildSlotsForDay, hoursForEventDay } from '@/lib/appointments/slots'
 import type { MockBookingPayload } from '@/lib/appointments/mockData'
+import type { Slot } from '@/lib/appointments/types'
+
+// ---------- helpers ----------
 
 type DayInfo = {
   dayNumber: 1 | 2 | 3
@@ -16,7 +20,25 @@ function addDays(iso: string, n: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-function formatDate(iso: string): string {
+function ordinal(n: number): string {
+  const v = n % 100
+  if (v >= 11 && v <= 13) return `${n}th`
+  switch (n % 10) {
+    case 1: return `${n}st`
+    case 2: return `${n}nd`
+    case 3: return `${n}rd`
+    default: return `${n}th`
+  }
+}
+
+function formatDateLong(iso: string): string {
+  const d = new Date(iso + 'T12:00:00')
+  const weekday = d.toLocaleDateString(undefined, { weekday: 'long' })
+  const month = d.toLocaleDateString(undefined, { month: 'long' })
+  return `${weekday}, ${month} ${ordinal(d.getDate())}`
+}
+
+function formatDateShort(iso: string): string {
   const d = new Date(iso + 'T12:00:00')
   return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
 }
@@ -28,56 +50,146 @@ function formatTime(hhmm: string): string {
   return `${h12}:${String(m).padStart(2, '0')} ${period}`
 }
 
-export default function BookingClient({ payload }: { payload: MockBookingPayload }) {
-  const { store, config, events, override, bookings, blocks } = payload
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace('#', '')
+  const r = parseInt(h.slice(0, 2), 16)
+  const g = parseInt(h.slice(2, 4), 16)
+  const b = parseInt(h.slice(4, 6), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
 
-  const primary = store.color_primary || '#1D6B44'
-  const secondary = store.color_secondary || '#F5F0E8'
+function todayIso(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
-  const [selectedEventId, setSelectedEventId] = useState(events[0]?.id ?? '')
-  const selectedEvent = events.find(e => e.id === selectedEventId) ?? events[0]
+// ---------- shared sub-components ----------
 
-  // Compute per-day info for the selected event
-  const dayInfos: DayInfo[] = useMemo(() => {
-    if (!selectedEvent) return []
-    return selectedEvent.days
-      .map(d => {
-        const dayNumber = d.day_number as 1 | 2 | 3
-        const dateStr = addDays(selectedEvent.start_date, dayNumber - 1)
-        const hours = hoursForEventDay(dayNumber, config, override)
-        return { dayNumber, dateStr, hours }
-      })
-      .filter(di => {
-        // Hide past days
-        const today = new Date()
-        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-        return di.dateStr >= todayStr
-      })
-  }, [selectedEvent, config, override])
+function SlotGrid({
+  slots,
+  primary,
+  selectedTime,
+  onSelect,
+}: {
+  slots: Slot[]
+  primary: string
+  selectedTime: string | null
+  onSelect: (time: string) => void
+}) {
+  if (slots.length === 0) {
+    return <p className="text-sm text-gray-500">No slots configured for this day.</p>
+  }
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {slots.map(s => {
+        const isUnavailable = s.isPast || s.blocked || s.available === 0
+        const active = selectedTime === s.time
+        const ratio = s.capacity > 0 ? s.available / s.capacity : 0
 
-  const [selectedDay, setSelectedDay] = useState<DayInfo | null>(dayInfos[0] ?? null)
-  // Reset day when the available days list changes (e.g. event switched)
-  useEffect(() => {
-    if (!dayInfos.find(di => di.dateStr === selectedDay?.dateStr)) {
-      setSelectedDay(dayInfos[0] ?? null)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dayInfos])
+        let bg: string, fg: string, borderColor: string
+        if (active) {
+          bg = 'white'; fg = primary; borderColor = primary
+        } else if (isUnavailable) {
+          bg = '#e5e7eb'; fg = '#9ca3af'; borderColor = '#e5e7eb'
+        } else {
+          const alpha = 0.3 + 0.7 * ratio
+          bg = hexToRgba(primary, alpha)
+          fg = alpha > 0.55 ? 'white' : '#1f2937'
+          borderColor = bg
+        }
 
+        return (
+          <button
+            key={s.time}
+            disabled={isUnavailable}
+            onClick={() => onSelect(s.time)}
+            className="relative p-3 rounded-lg text-sm font-semibold border transition-all text-center"
+            style={{
+              background: bg,
+              color: fg,
+              borderColor,
+              borderWidth: active ? 2 : 1,
+              cursor: isUnavailable ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {!isUnavailable && (
+              <span className="absolute top-1 right-1.5 text-[10px] font-bold leading-none">
+                {s.available}
+              </span>
+            )}
+            <span className={s.isPast ? 'line-through' : ''}>{formatTime(s.time)}</span>
+            {s.blocked && <div className="text-[10px] mt-0.5">blocked</div>}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function AccordionDayBody({
+  day,
+  primary,
+  config,
+  override,
+  bookings,
+  blocks,
+  selectedTime,
+  onSelect,
+}: {
+  day: DayInfo
+  primary: string
+  config: MockBookingPayload['config']
+  override: MockBookingPayload['override']
+  bookings: MockBookingPayload['bookings']
+  blocks: MockBookingPayload['blocks']
+  selectedTime: string | null
+  onSelect: (t: string) => void
+}) {
   const slots = useMemo(() => {
-    if (!selectedDay || !selectedDay.hours) return []
+    if (!day.hours) return []
     return buildSlotsForDay({
-      date: selectedDay.dateStr,
-      startTime: selectedDay.hours.start,
-      endTime: selectedDay.hours.end,
+      date: day.dateStr,
+      startTime: day.hours.start,
+      endTime: day.hours.end,
       intervalMinutes: config.slot_interval_minutes,
       maxConcurrent: override?.max_concurrent_slots ?? config.max_concurrent_slots,
       bookings,
       blocks,
     })
-  }, [selectedDay, config, override, bookings, blocks])
+  }, [day, config, override, bookings, blocks])
 
+  return (
+    <div className="p-3 bg-gray-50">
+      <SlotGrid slots={slots} primary={primary} selectedTime={selectedTime} onSelect={onSelect} />
+    </div>
+  )
+}
+
+// ---------- top-level page ----------
+
+export default function BookingClient({ payload }: { payload: MockBookingPayload }) {
+  const { store, config, events, override, bookings, blocks } = payload
+  const primary = store.color_primary || '#1D6B44'
+  const secondary = store.color_secondary || '#F5F0E8'
+
+  const event = events[0]
+  const dayInfos: DayInfo[] = useMemo(() => {
+    if (!event) return []
+    const today = todayIso()
+    return event.days
+      .map(d => {
+        const dayNumber = d.day_number as 1 | 2 | 3
+        const dateStr = addDays(event.start_date, dayNumber - 1)
+        const hours = hoursForEventDay(dayNumber, config, override)
+        return { dayNumber, dateStr, hours }
+      })
+      .filter(di => di.dateStr >= today)
+  }, [event, config, override])
+
+  const [openIdx, setOpenIdx] = useState(0)
+  const [selectedDayIdx, setSelectedDayIdx] = useState<number | null>(null)
   const [selectedTime, setSelectedTime] = useState<string | null>(null)
+
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
@@ -85,7 +197,9 @@ export default function BookingClient({ payload }: { payload: MockBookingPayload
   const [howHeard, setHowHeard] = useState('')
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'done'>('idle')
 
+  const selectedDay = selectedDayIdx !== null ? dayInfos[selectedDayIdx] : null
   const canSubmit =
+    selectedDay &&
     selectedTime &&
     name.trim().length > 0 &&
     phone.trim().length > 0 &&
@@ -101,7 +215,6 @@ export default function BookingClient({ payload }: { payload: MockBookingPayload
     e.preventDefault()
     if (!canSubmit) return
     setSubmitState('submitting')
-    // Mock-only: pretend the booking went through after a short delay
     setTimeout(() => setSubmitState('done'), 600)
   }
 
@@ -111,7 +224,7 @@ export default function BookingClient({ payload }: { payload: MockBookingPayload
         <div className="bg-white rounded-2xl shadow-lg max-w-md w-full p-8 text-center">
           <h1 className="text-2xl font-bold mb-3" style={{ color: primary }}>You're booked!</h1>
           <p className="text-gray-700 mb-2">
-            We'll see you on <strong>{selectedDay && formatDate(selectedDay.dateStr)}</strong> at{' '}
+            We'll see you on <strong>{selectedDay && formatDateLong(selectedDay.dateStr)}</strong> at{' '}
             <strong>{selectedTime && formatTime(selectedTime)}</strong>.
           </p>
           <p className="text-sm text-gray-500 mt-4">
@@ -122,118 +235,98 @@ export default function BookingClient({ payload }: { payload: MockBookingPayload
     )
   }
 
+  if (dayInfos.length === 0) {
+    return (
+      <div className="min-h-screen p-8 text-center text-gray-600" style={{ background: secondary }}>
+        No upcoming days available.
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen pb-12" style={{ background: secondary }}>
       {/* Header */}
       <header className="px-4 pt-8 pb-6 text-white" style={{ background: primary }}>
-        <div className="max-w-md mx-auto">
-          {store.store_image_url && (
-            <img src={store.store_image_url} alt="" className="h-16 mb-3 rounded" />
-          )}
-          <h1 className="text-2xl font-bold">{store.name}</h1>
-          {(store.owner_phone || store.owner_email) && (
-            <p className="text-sm opacity-90 mt-1">
-              {store.owner_phone}
-              {store.owner_phone && store.owner_email ? ' · ' : ''}
-              {store.owner_email}
-            </p>
-          )}
-          <p className="text-base mt-3">Book your appointment</p>
+        <div className="max-w-md mx-auto flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl font-bold leading-tight">{store.name}</h1>
+            {(store.owner_phone || store.owner_email) && (
+              <div className="text-sm opacity-90 mt-2 space-y-1 leading-tight">
+                {store.owner_phone && <div>{store.owner_phone}</div>}
+                {store.owner_email && <div className="break-all">{store.owner_email}</div>}
+              </div>
+            )}
+            <p className="text-base mt-4">Book your appointment</p>
+          </div>
+          <div className="shrink-0">
+            {store.store_image_url ? (
+              <img
+                src={store.store_image_url}
+                alt={`${store.name} logo`}
+                className="h-20 w-20 rounded-xl object-cover shadow-md ring-1 ring-white/20"
+              />
+            ) : (
+              <div className="h-20 w-20 rounded-xl bg-white/10 flex items-center justify-center ring-1 ring-white/20">
+                <Diamond className="h-10 w-10" strokeWidth={1.5} />
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
       <main className="max-w-md mx-auto px-4 pt-6 space-y-6">
-        {/* Event picker (if multiple) */}
-        {events.length > 1 && (
-          <section>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Select an event</label>
-            <select
-              className="w-full rounded-lg border border-gray-300 p-3 bg-white"
-              value={selectedEventId}
-              onChange={e => setSelectedEventId(e.target.value)}
-            >
-              {events.map(ev => (
-                <option key={ev.id} value={ev.id}>
-                  {formatDate(ev.start_date)}
-                </option>
-              ))}
-            </select>
-          </section>
-        )}
-
-        {/* Day picker */}
-        {dayInfos.length > 0 ? (
-          <section>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Pick a day</label>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {dayInfos.map(di => {
-                const active = selectedDay?.dateStr === di.dateStr
-                return (
+        {/* Accordion day picker */}
+        <section>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Pick a day and time</label>
+          <div className="space-y-2">
+            {dayInfos.map((di, idx) => {
+              const isOpen = idx === openIdx
+              return (
+                <div
+                  key={di.dateStr}
+                  className={`border-2 rounded-xl overflow-hidden bg-white transition-colors ${
+                    isOpen ? 'border-yellow-400' : 'border-gray-200'
+                  }`}
+                >
                   <button
-                    key={di.dateStr}
-                    onClick={() => { setSelectedDay(di); setSelectedTime(null) }}
-                    className="px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap border transition-colors"
+                    onClick={() => setOpenIdx(isOpen ? -1 : idx)}
+                    className="w-full flex items-center justify-between px-4 py-3 transition-colors"
                     style={
-                      active
-                        ? { background: primary, color: 'white', borderColor: primary }
-                        : { background: 'white', color: '#374151', borderColor: '#d1d5db' }
+                      isOpen
+                        ? { background: primary + '14', color: primary }
+                        : { background: 'white', color: '#1f2937' }
                     }
                   >
-                    Day {di.dayNumber} · {formatDate(di.dateStr)}
+                    <div className="text-left">
+                      <div className="text-xs font-semibold uppercase tracking-wide opacity-70">
+                        Day {di.dayNumber}
+                      </div>
+                      <div className="text-base font-bold mt-0.5">{formatDateLong(di.dateStr)}</div>
+                    </div>
+                    {isOpen
+                      ? <ChevronDown className="w-5 h-5" />
+                      : <ChevronRight className="w-5 h-5" />}
                   </button>
-                )
-              })}
-            </div>
-          </section>
-        ) : (
-          <section className="bg-white rounded-lg p-6 text-center text-gray-600">
-            No upcoming days available.
-          </section>
-        )}
-
-        {/* Slot grid */}
-        {selectedDay && selectedDay.hours && (
-          <section>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Pick a time</label>
-            <div className="grid grid-cols-3 gap-2">
-              {slots.map(s => {
-                const disabled = s.isPast || s.blocked || s.available === 0
-                const active = selectedTime === s.time
-                return (
-                  <button
-                    key={s.time}
-                    disabled={disabled}
-                    onClick={() => setSelectedTime(s.time)}
-                    className="p-3 rounded-lg text-sm font-medium border transition-colors text-center"
-                    style={
-                      active
-                        ? { background: primary, color: 'white', borderColor: primary }
-                        : disabled
-                        ? { background: '#f3f4f6', color: '#9ca3af', borderColor: '#e5e7eb', cursor: 'not-allowed' }
-                        : { background: 'white', color: '#111827', borderColor: '#d1d5db' }
-                    }
-                  >
-                    <div>{formatTime(s.time)}</div>
-                    {!disabled && s.available < s.capacity && (
-                      <div className="text-[10px] opacity-70 mt-0.5">{s.available} left</div>
-                    )}
-                    {s.blocked && <div className="text-[10px] mt-0.5">blocked</div>}
-                    {!s.blocked && s.available === 0 && !s.isPast && (
-                      <div className="text-[10px] mt-0.5">full</div>
-                    )}
-                    {s.isPast && <div className="text-[10px] mt-0.5">past</div>}
-                  </button>
-                )
-              })}
-            </div>
-            {slots.length === 0 && (
-              <p className="text-gray-600 text-sm">No slots available for this day.</p>
-            )}
-          </section>
-        )}
+                  {isOpen && (
+                    <AccordionDayBody
+                      day={di}
+                      primary={primary}
+                      config={config}
+                      override={override}
+                      bookings={bookings}
+                      blocks={blocks}
+                      selectedTime={selectedDayIdx === idx ? selectedTime : null}
+                      onSelect={t => { setSelectedTime(t); setSelectedDayIdx(idx) }}
+                    />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </section>
 
         {/* Booking form (only after slot selected) */}
-        {selectedTime && (
+        {selectedDay && selectedTime && (
           <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow p-5 space-y-4">
             <h2 className="font-semibold text-lg" style={{ color: primary }}>
               Your details
@@ -282,7 +375,7 @@ export default function BookingClient({ payload }: { payload: MockBookingPayload
                   return (
                     <label
                       key={opt}
-                      className="flex items-center gap-2 p-2 rounded-lg border text-sm cursor-pointer"
+                      className="flex items-center gap-2 p-2 rounded-lg border text-sm cursor-pointer transition-colors"
                       style={
                         checked
                           ? { borderColor: primary, background: primary + '14' }
@@ -293,9 +386,22 @@ export default function BookingClient({ payload }: { payload: MockBookingPayload
                         type="checkbox"
                         checked={checked}
                         onChange={() => toggleItem(opt)}
-                        className="accent-current"
-                        style={{ accentColor: primary }}
+                        className="absolute opacity-0 w-0 h-0 pointer-events-none"
                       />
+                      <span
+                        aria-hidden="true"
+                        className="flex items-center justify-center text-white font-black leading-none transition-colors shrink-0"
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: 5,
+                          border: `2px solid ${checked ? primary : '#d1d5db'}`,
+                          background: checked ? primary : '#FFFFFF',
+                          fontSize: 14,
+                        }}
+                      >
+                        {checked ? '✓' : ''}
+                      </span>
                       <span>{opt}</span>
                     </label>
                   )
@@ -328,7 +434,7 @@ export default function BookingClient({ payload }: { payload: MockBookingPayload
             >
               {submitState === 'submitting'
                 ? 'Booking…'
-                : `Book ${selectedDay && formatDate(selectedDay.dateStr)} at ${formatTime(selectedTime)}`}
+                : `Book ${formatDateShort(selectedDay.dateStr)} at ${formatTime(selectedTime)}`}
             </button>
           </form>
         )}

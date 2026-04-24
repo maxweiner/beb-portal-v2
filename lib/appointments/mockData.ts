@@ -33,7 +33,7 @@ const demoPayload: MockBookingPayload = {
     id: 'demo-store-id',
     name: 'Demo Jewelers',
     slug: DEMO_SLUG,
-    store_image_url: null,
+    store_image_url: '/beb-logo.png',
     color_primary: '#1D6B44',
     color_secondary: '#F5F0E8',
     owner_phone: '(555) 123-4567',
