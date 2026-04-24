@@ -61,12 +61,13 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
     const employeeName = a.appointment_employee?.name as string | undefined
     const items = Array.isArray(a.items_bringing) ? a.items_bringing.join(', ') : ''
+    const howHeard = Array.isArray(a.how_heard) ? a.how_heard.join(', ') : (a.how_heard || '')
     // Format description so the existing parseApptDetail() in lib/calendar.ts
     // pulls out client/items/how-heard exactly the way it does for iCal.
     const descriptionLines = [
       `Client: ${a.customer_name || ''} ${a.customer_phone || ''} ${a.customer_email || ''}`.trim(),
       items ? `What Items: ${items}` : '',
-      a.how_heard ? `How did you find out: ${a.how_heard}` : '',
+      howHeard ? `How did you find out: ${howHeard}` : '',
       a.is_walkin ? 'Walk-in: yes' : '',
       employeeName ? `Spiff: ${employeeName}` : '',
       `Source: BEB Portal (${a.booked_by || 'customer'})`,

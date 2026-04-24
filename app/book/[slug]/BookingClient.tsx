@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, Diamond } from 'lucide-react'
 import { buildSlotsForDay, hoursForEventDay } from '@/lib/appointments/slots'
 import type { MockBookingPayload } from '@/lib/appointments/mockData'
@@ -220,7 +220,11 @@ export default function BookingClient({
   const [email, setEmail] = useState('')
   const [items, setItems] = useState<string[]>([])
   // Pre-fill how_heard from QR (channel / custom). Employee QRs leave it blank.
-  const [howHeard, setHowHeard] = useState(qrAttribution?.pre_fill_how_heard ?? '')
+  // Multi-select: array of selected sources. The pre-filled QR source is locked.
+  const lockedSource = qrAttribution?.pre_fill_how_heard ?? null
+  const [howHeard, setHowHeard] = useState<string[]>(
+    lockedSource ? [lockedSource] : []
+  )
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'done'>('idle')
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [secondsLeft, setSecondsLeft] = useState(12)
@@ -251,6 +255,26 @@ export default function BookingClient({
         items.length > 0 &&
         howHeard.length > 0
       )
+
+  function toggleHowHeard(opt: string) {
+    if (opt === lockedSource) return // can't unlock the QR-derived source
+    setHowHeard(prev => (prev.includes(opt) ? prev.filter(s => s !== opt) : [...prev, opt]))
+  }
+
+  // Auto-scroll to the booking form the first time the customer picks a slot.
+  // Tracked via a ref so picking a different time doesn't re-scroll the page
+  // (would be jumpy if they're shopping around for a different slot).
+  const formRef = useRef<HTMLFormElement | null>(null)
+  const prevSelectedTimeRef = useRef<string | null>(selectedTime)
+  useEffect(() => {
+    if (prevSelectedTimeRef.current === null && selectedTime !== null) {
+      // requestAnimationFrame so the form is mounted before we scroll to it.
+      requestAnimationFrame(() => {
+        formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      })
+    }
+    prevSelectedTimeRef.current = selectedTime
+  }, [selectedTime])
 
   function toggleItem(item: string) {
     setItems(prev => (prev.includes(item) ? prev.filter(i => i !== item) : [...prev, item]))
@@ -520,7 +544,7 @@ export default function BookingClient({
 
         {/* Booking form (only after slot selected, and not in reschedule mode) */}
         {!isReschedule && selectedDay && selectedTime && (
-          <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow p-5 space-y-4">
+          <form ref={formRef} onSubmit={handleSubmit} className="bg-white rounded-2xl shadow p-5 space-y-4 scroll-mt-4">
             <h2 className="font-semibold text-lg" style={{ color: primary }}>
               Your details
             </h2>
@@ -603,20 +627,60 @@ export default function BookingClient({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 How did you hear about us?
               </label>
-              <select
-                required
-                className="w-full rounded-lg border border-gray-300 p-3 bg-white"
-                value={howHeard}
-                onChange={e => setHowHeard(e.target.value)}
-              >
-                <option value="">Choose one…</option>
-                {config.hear_about_options.map(opt => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))}
-              </select>
+              <div className="grid grid-cols-2 gap-2">
+                {config.hear_about_options.map(opt => {
+                  const checked = howHeard.includes(opt)
+                  const isLocked = opt === lockedSource
+                  return (
+                    <label
+                      key={opt}
+                      className={`flex items-center gap-2 p-2 rounded-lg border text-sm transition-colors ${
+                        isLocked ? 'cursor-not-allowed' : 'cursor-pointer'
+                      }`}
+                      style={
+                        checked
+                          ? { borderColor: primary, background: primary + '14' }
+                          : { borderColor: '#d1d5db' }
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={isLocked}
+                        onChange={() => toggleHowHeard(opt)}
+                        className="absolute opacity-0 w-0 h-0 pointer-events-none"
+                      />
+                      <span
+                        aria-hidden="true"
+                        className="flex items-center justify-center text-white font-black leading-none transition-colors shrink-0"
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: 5,
+                          border: `2px solid ${checked ? primary : '#d1d5db'}`,
+                          background: checked ? primary : '#FFFFFF',
+                          fontSize: 14,
+                          opacity: isLocked ? 0.7 : 1,
+                        }}
+                      >
+                        {checked ? '✓' : ''}
+                      </span>
+                      <span style={isLocked ? { color: '#6b7280' } : undefined}>
+                        {opt}
+                        {isLocked && <span className="ml-1 text-[10px] uppercase tracking-wide font-bold">locked</span>}
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+              {lockedSource && (
+                <p className="text-[11px] text-gray-500 mt-2">
+                  We pre-selected the source you came from — you can add more if applicable.
+                </p>
+              )}
             </div>
 
             {submitError && (

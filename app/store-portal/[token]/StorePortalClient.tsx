@@ -105,7 +105,11 @@ export default function StorePortalClient({
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [items, setItems] = useState('')
-  const [howHeard, setHowHeard] = useState('')
+  const [howHeard, setHowHeard] = useState<string[]>([])
+
+  function toggleHowHeard(opt: string) {
+    setHowHeard(prev => (prev.includes(opt) ? prev.filter(s => s !== opt) : [...prev, opt]))
+  }
   const [empId, setEmpId] = useState<string>('')
   const [isWalkin, setIsWalkin] = useState(false)
 
@@ -135,7 +139,7 @@ export default function StorePortalClient({
     setFormDate(dayInfos[0]?.dateStr ?? '')
     setFormTime('')
     setName(''); setPhone(''); setEmail('')
-    setItems(''); setHowHeard(''); setEmpId(''); setIsWalkin(false)
+    setItems(''); setHowHeard([]); setEmpId(''); setIsWalkin(false)
     setError(null)
   }
 
@@ -162,7 +166,7 @@ export default function StorePortalClient({
           items_bringing: items.split(',').map(s => s.trim()).filter(Boolean).length
             ? items.split(',').map(s => s.trim()).filter(Boolean)
             : ['Not specified'],
-          how_heard: howHeard || 'The Store Told Me',
+          how_heard: howHeard.length > 0 ? howHeard : ['The Store Told Me'],
           appointment_employee_id: empId || null,
           is_walkin: isWalkin,
           booked_by: 'store',
@@ -353,27 +357,57 @@ export default function StorePortalClient({
                   placeholder="Gold, Diamonds (comma separated)"
                   className="w-full rounded-lg border border-gray-300 p-2 text-sm" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">How heard</label>
-                  <select value={howHeard} onChange={e => setHowHeard(e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 p-2 text-sm bg-white">
-                    <option value="">— select —</option>
-                    {config.hear_about_options.map(opt => (
-                      <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                  </select>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">How heard (pick any)</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {config.hear_about_options.map(opt => {
+                    const checked = howHeard.includes(opt)
+                    return (
+                      <label
+                        key={opt}
+                        className="flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition-colors"
+                        style={
+                          checked
+                            ? { borderColor: primary, background: primary + '14' }
+                            : { borderColor: '#d1d5db' }
+                        }
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleHowHeard(opt)}
+                          className="absolute opacity-0 w-0 h-0 pointer-events-none"
+                        />
+                        <span
+                          aria-hidden="true"
+                          className="flex items-center justify-center text-white font-black leading-none transition-colors shrink-0"
+                          style={{
+                            width: 20,
+                            height: 20,
+                            borderRadius: 5,
+                            border: `2px solid ${checked ? primary : '#d1d5db'}`,
+                            background: checked ? primary : '#FFFFFF',
+                            fontSize: 13,
+                          }}
+                        >
+                          {checked ? '✓' : ''}
+                        </span>
+                        <span>{opt}</span>
+                      </label>
+                    )
+                  })}
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Spiff to</label>
-                  <select value={empId} onChange={e => setEmpId(e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 p-2 text-sm bg-white">
-                    <option value="">— none —</option>
-                    {employees.map(emp => (
-                      <option key={emp.id} value={emp.id}>{emp.name}</option>
-                    ))}
-                  </select>
-                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Spiff to</label>
+                <select value={empId} onChange={e => setEmpId(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 p-2 text-sm bg-white">
+                  <option value="">— none —</option>
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>{emp.name}</option>
+                  ))}
+                </select>
               </div>
 
               <label className="flex items-center gap-2 text-sm pt-1">
