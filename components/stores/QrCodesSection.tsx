@@ -12,12 +12,18 @@ interface QrRow {
   lead_source: string | null
   custom_label: string | null
   appointment_employee_id: string | null
+  store_id: string | null
   label: string
   active: boolean
   created_at: string
 }
 
 interface AppointmentEmployee {
+  id: string
+  name: string
+}
+
+interface StoreLite {
   id: string
   name: string
 }
@@ -35,6 +41,7 @@ export default function QrCodesSection({
 }) {
   const [qrs, setQrs] = useState<QrRow[]>([])
   const [employees, setEmployees] = useState<AppointmentEmployee[]>([])
+  const [allStores, setAllStores] = useState<StoreLite[]>([])
   const [hearAboutOptions, setHearAboutOptions] = useState<string[]>(DEFAULT_HEAR_ABOUT)
   const [loaded, setLoaded] = useState(false)
   const [working, setWorking] = useState(false)
@@ -46,9 +53,9 @@ export default function QrCodesSection({
   const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set())
 
   async function load() {
-    const [qrRes, empRes, cfgRes] = await Promise.all([
+    const [qrRes, empRes, cfgRes, storesRes] = await Promise.all([
       supabase.from('qr_codes')
-        .select('id, code, type, lead_source, custom_label, appointment_employee_id, label, active, created_at')
+        .select('id, code, type, lead_source, custom_label, appointment_employee_id, store_id, label, active, created_at')
         .eq('store_id', storeId)
         .is('deleted_at', null)
         .order('created_at', { ascending: false }),
@@ -61,10 +68,15 @@ export default function QrCodesSection({
         .select('hear_about_options')
         .eq('store_id', storeId)
         .maybeSingle(),
+      supabase.from('stores')
+        .select('id, name')
+        .eq('active', true)
+        .order('name'),
     ])
     if (qrRes.error) { setError(qrRes.error.message); return }
     setQrs((qrRes.data || []) as QrRow[])
     setEmployees((empRes.data || []) as AppointmentEmployee[])
+    setAllStores((storesRes.data || []) as StoreLite[])
     if (cfgRes.data?.hear_about_options && Array.isArray(cfgRes.data.hear_about_options)) {
       setHearAboutOptions(cfgRes.data.hear_about_options as string[])
     }
@@ -178,6 +190,8 @@ export default function QrCodesSection({
               key={q.id}
               qr={q}
               employees={employees}
+              allStores={allStores}
+              hearAboutOptions={hearAboutOptions}
               onDelete={() => deleteQr(q.id)}
               onUpdated={load}
             />
@@ -323,11 +337,15 @@ export default function QrCodesSection({
 function QrCard({
   qr,
   employees,
+  allStores,
+  hearAboutOptions,
   onDelete,
   onUpdated,
 }: {
   qr: QrRow
   employees: AppointmentEmployee[]
+  allStores: StoreLite[]
+  hearAboutOptions: string[]
   onDelete: () => void
   onUpdated: () => void
 }) {
@@ -335,14 +353,20 @@ function QrCard({
 
   const [editing, setEditing] = useState(false)
   const [label, setLabel] = useState(qr.label)
+  const [type, setType] = useState<QrRow['type']>(qr.type)
+  const [leadSource, setLeadSource] = useState(qr.lead_source || '')
   const [customLabel, setCustomLabel] = useState(qr.custom_label || '')
   const [empId, setEmpId] = useState(qr.appointment_employee_id || '')
+  const [storeId, setStoreId] = useState(qr.store_id || '')
   const [saving, setSaving] = useState(false)
 
   function startEdit() {
     setLabel(qr.label)
+    setType(qr.type)
+    setLeadSource(qr.lead_source || '')
     setCustomLabel(qr.custom_label || '')
     setEmpId(qr.appointment_employee_id || '')
+    setStoreId(qr.store_id || '')
     setEditing(true)
   }
 
@@ -352,12 +376,45 @@ function QrCard({
 
   async function save() {
     if (!label.trim()) { alert('Label cannot be empty.'); return }
-    if (qr.type === 'employee' && !empId) {
+
+    // Validate the type-specific required field
+    if (type === 'channel' && !leadSource) {
+      alert('Channel QR needs a lead source.'); return
+    }
+    if (type === 'custom' && !customLabel.trim()) {
+      alert('Custom QR needs a custom label.'); return
+    }
+    if (type === 'employee' && !empId) {
       if (!confirm('No employee selected — this QR will redirect to the store with no spiff attribution. Continue?')) return
     }
-    const updates: Record<string, any> = { label: label.trim() }
-    if (qr.type === 'custom') updates.custom_label = customLabel.trim()
-    if (qr.type === 'employee') updates.appointment_employee_id = empId || null
+
+    // Warn on attribution-shifting changes
+    const typeChanged = type !== qr.type
+    const sourceChanged = leadSource !== (qr.lead_source || '')
+    const storeChanged = storeId !== (qr.store_id || '')
+    if (typeChanged || sourceChanged || storeChanged) {
+      const what = [
+        typeChanged && `type (${qr.type} → ${type})`,
+        sourceChanged && `lead source (${qr.lead_source || '—'} → ${leadSource || '—'})`,
+        storeChanged && 'store assignment',
+      ].filter(Boolean).join(', ')
+      if (!confirm(
+        `You're changing ${what}. The QR's printed code stays the same, but ` +
+        `attribution / destination will change for every future scan — including ` +
+        `from materials already in print. Continue?`
+      )) return
+    }
+
+    const updates: Record<string, any> = {
+      label: label.trim(),
+      type,
+      // Always send the type-specific fields so old values get cleared on type-switch.
+      lead_source: type === 'channel' ? leadSource : null,
+      custom_label: type === 'custom' ? customLabel.trim() : null,
+      appointment_employee_id: type === 'employee' ? (empId || null) : null,
+      store_id: storeId || null,
+    }
+
     setSaving(true)
     const res = await fetch(`/api/qr/${qr.id}`, {
       method: 'PUT',
@@ -376,6 +433,9 @@ function QrCard({
 
   const employeeName = qr.appointment_employee_id
     ? employees.find(e => e.id === qr.appointment_employee_id)?.name
+    : null
+  const storeName = qr.store_id
+    ? allStores.find(s => s.id === qr.store_id)?.name
     : null
 
   // ---- helpers ----
@@ -514,6 +574,7 @@ function QrCard({
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{qr.label}</div>
             <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2, lineHeight: 1.5 }}>
               Type: <strong>{qr.type}</strong>
+              {storeName && ` · Store: ${storeName}`}
               {qr.lead_source && ` · Source: ${qr.lead_source}`}
               {qr.custom_label && ` · Label: ${qr.custom_label}`}
               {qr.type === 'employee' && (
@@ -532,13 +593,46 @@ function QrCard({
               <label className="fl">Label (display name)</label>
               <input type="text" value={label} onChange={e => setLabel(e.target.value)} />
             </div>
-            {qr.type === 'custom' && (
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               <div className="field" style={{ marginBottom: 0 }}>
-                <label className="fl">Custom label (used in attribution)</label>
+                <label className="fl">Type</label>
+                <select value={type} onChange={e => setType(e.target.value as QrRow['type'])} style={{ width: '100%' }}>
+                  <option value="channel">Channel</option>
+                  <option value="custom">Custom</option>
+                  <option value="employee">Employee</option>
+                  <option value="group">Group</option>
+                </select>
+              </div>
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label className="fl">Store</label>
+                <select value={storeId} onChange={e => setStoreId(e.target.value)} style={{ width: '100%' }}>
+                  <option value="">— none —</option>
+                  {allStores.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {type === 'channel' && (
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label className="fl">Lead source (auto-fills + locks on the booking page)</label>
+                <select value={leadSource} onChange={e => setLeadSource(e.target.value)} style={{ width: '100%' }}>
+                  <option value="">— select —</option>
+                  {hearAboutOptions.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {type === 'custom' && (
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label className="fl">Custom label (used in attribution / reporting)</label>
                 <input type="text" value={customLabel} onChange={e => setCustomLabel(e.target.value)} />
               </div>
             )}
-            {qr.type === 'employee' && (
+            {type === 'employee' && (
               <div className="field" style={{ marginBottom: 0 }}>
                 <label className="fl">Spiff employee</label>
                 <select value={empId} onChange={e => setEmpId(e.target.value)} style={{ width: '100%' }}>
@@ -549,8 +643,11 @@ function QrCard({
                 </select>
               </div>
             )}
+
             <div style={{ fontSize: 11, color: 'var(--mist)' }}>
-              Type, code, and lead source are immutable (changing them would break attribution on already-printed QRs).
+              The 8-char <code>code</code> ({qr.code}) is immutable so already-printed
+              materials keep working. Changing type, lead source, or store will silently
+              shift attribution on every future scan.
             </div>
             <div style={{
               display: 'flex', gap: 6, alignItems: 'center',
