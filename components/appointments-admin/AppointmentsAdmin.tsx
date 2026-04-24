@@ -185,7 +185,6 @@ export default function AppointmentsAdmin() {
   const [refreshTick, setRefreshTick] = useState(0)
 
   const [dateFilter, setDateFilter] = useState<DateFilter>('this-week')
-  const [statusFilter, setStatusFilter] = useState<'confirmed' | 'cancelled' | 'completed' | 'no_show' | 'all'>('confirmed')
   const [sourceFilter, setSourceFilter] = useState<Source | 'all'>('all')
   const [storeFilter, setStoreFilter] = useState<string>('all')
   const [search, setSearch] = useState('')
@@ -222,7 +221,6 @@ export default function AppointmentsAdmin() {
     return appts.filter(a => {
       if (storeFilter !== 'all' && a.store_id !== storeFilter) return false
       if (sourceFilter !== 'all' && a.source !== sourceFilter) return false
-      if (a.source === 'beb-portal' && statusFilter !== 'all' && a.status !== statusFilter) return false
       if (!dateInRange(a.appointment_date, dateFilter)) return false
       if (q) {
         const hay = `${a.customer_name} ${a.customer_phone} ${a.customer_email}`.toLowerCase()
@@ -230,7 +228,7 @@ export default function AppointmentsAdmin() {
       }
       return true
     }).sort((a, b) => (a.startUtc < b.startUtc ? -1 : 1))
-  }, [appts, dateFilter, statusFilter, sourceFilter, storeFilter, search])
+  }, [appts, dateFilter, sourceFilter, storeFilter, search])
 
   const byStore = useMemo(() => {
     const m = new Map<string, AppointmentRow[]>()
@@ -278,16 +276,6 @@ export default function AppointmentsAdmin() {
             <option value="next-week">Next week</option>
             <option value="all-upcoming">All upcoming</option>
             <option value="past">Past</option>
-          </select>
-        </div>
-        <div className="field" style={{ marginBottom: 0 }}>
-          <label className="fl">Status</label>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)} style={{ width: '100%' }}>
-            <option value="confirmed">Confirmed</option>
-            <option value="cancelled">Cancelled</option>
-            <option value="completed">Completed</option>
-            <option value="no_show">No-show</option>
-            <option value="all">All</option>
           </select>
         </div>
         <div className="field" style={{ marginBottom: 0 }}>
@@ -346,7 +334,7 @@ export default function AppointmentsAdmin() {
           No appointments match these filters.
           {appts.length > 0 && (
             <div style={{ marginTop: 10 }}>
-              <button onClick={() => { setDateFilter('all-upcoming'); setSearch(''); setStatusFilter('all'); setStoreFilter('all'); setSourceFilter('all') }}
+              <button onClick={() => { setDateFilter('all-upcoming'); setSearch(''); setStoreFilter('all'); setSourceFilter('all') }}
                 className="btn-outline btn-sm">
                 Reset filters
               </button>
