@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, Diamond } from 'lucide-react'
 import { buildSlotsForDay, hoursForEventDay } from '@/lib/appointments/slots'
 import type { MockBookingPayload } from '@/lib/appointments/mockData'
@@ -215,6 +215,21 @@ export default function BookingClient({
   const [howHeard, setHowHeard] = useState('')
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'done'>('idle')
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [secondsLeft, setSecondsLeft] = useState(12)
+
+  // Auto-redirect back to the booking screen 12 seconds after a successful
+  // booking or reschedule, with a live countdown.
+  useEffect(() => {
+    if (submitState !== 'done') return
+    setSecondsLeft(12)
+    const tick = setInterval(() => {
+      setSecondsLeft(s => Math.max(0, s - 1))
+    }, 1000)
+    const redirect = setTimeout(() => {
+      window.location.href = `/book/${slug}`
+    }, 12000)
+    return () => { clearInterval(tick); clearTimeout(redirect) }
+  }, [submitState, slug])
 
   const selectedDay = selectedDayIdx !== null ? dayInfos[selectedDayIdx] : null
   const canSubmit = isReschedule
@@ -285,30 +300,70 @@ export default function BookingClient({
 
   if (submitState === 'done') {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: secondary }}>
-        <div className="bg-white rounded-2xl shadow-lg max-w-md w-full p-8 text-center">
-          <h1 className="text-2xl font-bold mb-3" style={{ color: primary }}>
-            {isReschedule ? 'Rescheduled!' : "You're booked!"}
-          </h1>
-          <p className="text-gray-700 mb-2">
-            We'll see you on <strong>{selectedDay && formatDateLong(selectedDay.dateStr)}</strong> at{' '}
-            <strong>{selectedTime && formatTime(selectedTime)}</strong>.
-          </p>
-          <p className="text-sm text-gray-500 mt-4">
-            {isMock
-              ? '(Mock confirmation — this is the demo store, no real booking was saved.)'
-              : 'A confirmation will be sent shortly.'}
-          </p>
-          {isReschedule && (
+      <div className="min-h-screen pb-12" style={{ background: secondary }}>
+        {/* Branded header — same shape as the booking page */}
+        <header className="px-4 pt-8 pb-6 text-white" style={{ background: primary }}>
+          <div className="max-w-md mx-auto flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <h1 className="text-2xl font-bold leading-tight">{store.name}</h1>
+              {(store.owner_phone || store.owner_email) && (
+                <div className="text-sm opacity-90 mt-2 space-y-1 leading-tight">
+                  {store.owner_phone && <div>{store.owner_phone}</div>}
+                  {store.owner_email && <div className="break-all">{store.owner_email}</div>}
+                </div>
+              )}
+            </div>
+            <div className="shrink-0">
+              {store.store_image_url ? (
+                <img
+                  src={store.store_image_url}
+                  alt={`${store.name} logo`}
+                  className="h-20 w-20 rounded-xl object-cover shadow-md ring-1 ring-white/20"
+                />
+              ) : (
+                <div className="h-20 w-20 rounded-xl bg-white/10 flex items-center justify-center ring-1 ring-white/20">
+                  <Diamond className="h-10 w-10" strokeWidth={1.5} />
+                </div>
+              )}
+            </div>
+          </div>
+        </header>
+
+        <main className="max-w-md mx-auto px-4 pt-10">
+          <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+            <h2 className="text-2xl font-bold mb-3" style={{ color: primary }}>
+              {isReschedule ? 'Rescheduled!' : "You're booked!"}
+            </h2>
+            <p className="text-gray-700 mb-2">
+              We'll see you on <strong>{selectedDay && formatDateLong(selectedDay.dateStr)}</strong> at{' '}
+              <strong>{selectedTime && formatTime(selectedTime)}</strong>.
+            </p>
+            <p className="text-sm text-gray-500 mt-4">
+              {isMock
+                ? '(Mock confirmation — this is the demo store, no real booking was saved.)'
+                : 'A confirmation will be sent shortly.'}
+            </p>
             <a
-              href={`/book/manage/${rescheduling!.token}`}
-              className="inline-block mt-4 text-sm underline"
-              style={{ color: primary }}
+              href={`/book/${slug}`}
+              className="block mt-6 w-full rounded-lg p-3 text-white font-semibold"
+              style={{ background: primary }}
             >
-              View your appointment
+              Return to Bookings
             </a>
-          )}
-        </div>
+            {isReschedule && (
+              <a
+                href={`/book/manage/${rescheduling!.token}`}
+                className="block mt-3 text-sm underline"
+                style={{ color: primary }}
+              >
+                View your appointment
+              </a>
+            )}
+            <p className="text-xs text-gray-400 mt-4">
+              Returning to bookings in {secondsLeft} second{secondsLeft === 1 ? '' : 's'}…
+            </p>
+          </div>
+        </main>
       </div>
     )
   }

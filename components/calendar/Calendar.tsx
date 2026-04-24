@@ -110,8 +110,30 @@ export default function Calendar() {
   })
 
   const fetchForStore = async (store: Store) => {
-    if (!store.calendar_feed_url) return
+    // Fetch from BOTH the legacy Google Calendar (iCal) and the new BEB
+    // Portal appointments table in parallel, then merge into one list.
+    // Either source can be empty — we still want to render the other.
     setCalState(prev => ({ ...prev, loading: { ...prev.loading, [store.id]: true } }))
+    try {
+      const [icalAppts, portalAppts] = await Promise.all([
+        fetchIcalAppts(store),
+        fetchPortalAppts(store.id),
+      ])
+      const merged = [...icalAppts, ...portalAppts]
+      setCalState(prev => ({
+        ...prev,
+        appointments: { ...prev.appointments, [store.id]: merged },
+        lastRefresh: new Date(),
+        loading: { ...prev.loading, [store.id]: false },
+      }))
+    } catch (e: any) {
+      console.error('Calendar fetch error:', e)
+      setCalState(prev => ({ ...prev, loading: { ...prev.loading, [store.id]: false } }))
+    }
+  }
+
+  async function fetchIcalAppts(store: Store): Promise<Appointment[]> {
+    if (!store.calendar_feed_url) return []
     try {
       const res = await fetch(`/api/fetch-ical?url=${encodeURIComponent(store.calendar_feed_url)}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -119,22 +141,34 @@ export default function Calendar() {
       const rawAppts = parseIcal(text)
       const latest = storesRef.current.find(s => s.id === store.id) || store
       const offsetMs = (latest.calendar_offset_hours || 0) * 60 * 60 * 1000
-      const appts = offsetMs === 0
+      return offsetMs === 0
         ? rawAppts
         : rawAppts.map(a => ({
             ...a,
             start: new Date(a.start.getTime() + offsetMs),
             end: new Date(a.end.getTime() + offsetMs),
           }))
-      setCalState(prev => ({
-        ...prev,
-        appointments: { ...prev.appointments, [store.id]: appts },
-        lastRefresh: new Date(),
-        loading: { ...prev.loading, [store.id]: false },
-      }))
-    } catch (e: any) {
-      console.error('Calendar fetch error:', e)
-      setCalState(prev => ({ ...prev, loading: { ...prev.loading, [store.id]: false } }))
+    } catch (e) {
+      console.error('iCal fetch failed for store', store.id, e)
+      return []
+    }
+  }
+
+  async function fetchPortalAppts(storeId: string): Promise<Appointment[]> {
+    try {
+      const res = await fetch(`/api/appointments/by-store/${storeId}`)
+      if (!res.ok) return []
+      const json = await res.json()
+      return (json.appointments || []).map((a: any) => ({
+        start: new Date(a.start),
+        end: new Date(a.end),
+        title: a.title,
+        description: a.description,
+        location: a.location || '',
+      })) as Appointment[]
+    } catch (e) {
+      console.error('Portal appts fetch failed for store', storeId, e)
+      return []
     }
   }
 
@@ -159,7 +193,9 @@ export default function Calendar() {
         const twoWeeks = 14 * 24 * 60 * 60 * 1000
         return (end.getTime() - today.getTime()) >= -twoWeeks && (start.getTime() - today.getTime()) <= twoWeeks
       }).map(ev => ev.store_id))
-      const activeStores = stores.filter(s => storeIds.has(s.id) && s.calendar_feed_url)
+      // Don't gate on calendar_feed_url anymore — a store with portal-only
+      // appointments still needs to be fetched.
+      const activeStores = stores.filter(s => storeIds.has(s.id))
       activeStores.forEach(s => fetchForStore(s))
     }
 
@@ -170,7 +206,7 @@ export default function Calendar() {
 
   const refreshAll = () => {
     const storeIds = new Set(activeEvents.map(ev => ev.store_id))
-    stores.filter(s => storeIds.has(s.id) && s.calendar_feed_url).forEach(s => fetchForStore(s))
+    stores.filter(s => storeIds.has(s.id)).forEach(s => fetchForStore(s))
   }
   const openEvent = (ev: Event) => {
     const store = stores.find(s => s.id === ev.store_id)
