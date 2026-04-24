@@ -9,6 +9,8 @@ export interface User {
   active: boolean
   notify: boolean
   notify_sms?: boolean
+  notify_beb?: boolean
+  notify_liberty?: boolean
   phone: string
   is_buyer: boolean
   photo_url?: string

@@ -18,6 +18,7 @@ import Marketing from '@/components/marketing/Marketing'
 import Calendar from '@/components/calendar/Calendar'
 import { RoleGuard } from '@/components/ui/RoleGuard'
 import LibertyAdminPanel from '@/components/admin/LibertyAdminPanel'
+import ReportRecipients from '@/components/admin/ReportRecipients'
 import { useState, useEffect } from 'react'
 import MobileLayout from '@/components/mobile/MobileLayout'
 import MobileDashboard from '@/components/mobile/MobileDashboard'
@@ -26,7 +27,7 @@ import MobileTravel from '@/components/mobile/MobileTravel'
 import MobileStaff from '@/components/mobile/MobileStaff'
 import { shouldUseMobile, setMobilePreference } from '@/lib/mobile'
 
-export type NavPage = 'dashboard' | 'calendar' | 'events' | 'schedule' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'libertyadmin'
+export type NavPage = 'dashboard' | 'calendar' | 'events' | 'schedule' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'libertyadmin' | 'recipients'
 
 export default function Home() {
   const { user, loading, connectionError, reload } = useApp()
@@ -128,6 +129,11 @@ export default function Home() {
         {nav === 'stores' && (
           <RoleGuard roles={['admin', 'superadmin']}>
             <Stores />
+          </RoleGuard>
+        )}
+        {nav === 'recipients' && (
+          <RoleGuard roles={['superadmin']}>
+            <ReportRecipients />
           </RoleGuard>
         )}
       </main>

@@ -190,43 +190,67 @@ function buildHTML(opts: {
 
 /* ───────────────────────── handler ───────────────────────── */
 
+type Brand = 'beb' | 'liberty'
+
+const BRAND_FROM: Record<Brand, { fromName: string; fromEmail: string; notifyColumn: 'notify_beb' | 'notify_liberty' }> = {
+  beb: {
+    fromName: 'BEB Portal',
+    fromEmail: 'noreply@bebllp.com',
+    notifyColumn: 'notify_beb',
+  },
+  liberty: {
+    fromName: 'Liberty Estate Buyers',
+    fromEmail: 'noreply@libertyestatebuyers.com',
+    notifyColumn: 'notify_liberty',
+  },
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}))
-    const { to: requestedTo, dryRun } = body as { to?: string[]; dryRun?: boolean }
+    const { to: requestedTo, dryRun, brand: bodyBrand } = body as { to?: string[]; dryRun?: boolean; brand?: Brand }
+    const brand: Brand = bodyBrand === 'liberty' ? 'liberty' : 'beb'
+    const bcfg = BRAND_FROM[brand]
 
-    // Load email / keys / default recipients from settings.value
+    // Load email / keys from settings.value (apiKey + provider only — from address comes from the brand)
     const { data: cfgData } = await sb.from('settings').select('value').eq('key', 'email').maybeSingle()
     const cfg: any = cfgData?.value || {}
 
     if (cfg.provider !== 'resend' || !cfg.apiKey) {
       return NextResponse.json({ error: 'Resend not configured in Admin → Email Settings' }, { status: 400 })
     }
-    if (!cfg.fromEmail) return NextResponse.json({ error: 'From Email missing' }, { status: 400 })
 
-    // Resolve recipient IDs → emails. Body wins over saved defaults.
-    const recipientIds: string[] = (requestedTo && requestedTo.length > 0)
-      ? requestedTo
-      : (cfg.defaultRecipients || [])
-    if (!recipientIds || recipientIds.length === 0) {
-      return NextResponse.json({ error: 'No recipients selected' }, { status: 400 })
+    // Resolve recipient IDs → emails. Body wins. Otherwise pull active admins
+    // who opted in to this brand's report.
+    let recipientEmails: string[] = []
+    if (requestedTo && requestedTo.length > 0) {
+      const { data: userRows } = await sb.from('users').select('email').in('id', requestedTo)
+      recipientEmails = (userRows || [])
+        .map((r: any) => r.email)
+        .filter((e: any): e is string => typeof e === 'string' && e.includes('@'))
+    } else {
+      const { data: optedIn } = await sb.from('users')
+        .select('email, alternate_emails')
+        .in('role', ['admin', 'superadmin'])
+        .eq('active', true)
+        .eq(bcfg.notifyColumn, true)
+      for (const u of optedIn || []) {
+        if (u.email) recipientEmails.push(u.email)
+        if (u.alternate_emails) recipientEmails.push(...u.alternate_emails)
+      }
     }
-    const { data: userRows } = await sb.from('users').select('email').in('id', recipientIds)
-    const recipientEmails = (userRows || [])
-      .map((r: any) => r.email)
-      .filter((e: any): e is string => typeof e === 'string' && e.includes('@'))
     if (recipientEmails.length === 0) {
-      return NextResponse.json({ error: 'No valid email addresses for selected recipients' }, { status: 400 })
+      return NextResponse.json({ error: `No recipients opted in for ${brand} morning briefing` }, { status: 400 })
     }
 
     // Today / yesterday
     const today = new Date()
     const todayMid = new Date(today); todayMid.setHours(12, 0, 0, 0)
 
-    // Active BEB events: today falls in start_date .. start_date+2
+    // Active events for THIS brand: today falls in start_date .. start_date+2
     const { data: allEvents } = await sb.from('events')
       .select('*, days:event_days(*)')
-      .eq('brand', 'beb')
+      .eq('brand', brand)
     const activeEvents = (allEvents || []).filter((e: any) => {
       if (!e.start_date) return false
       const start = new Date(e.start_date + 'T12:00:00')
@@ -235,7 +259,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (activeEvents.length === 0) {
-      return NextResponse.json({ ok: true, skipped: 'No active BEB events today.' })
+      return NextResponse.json({ ok: true, skipped: `No active ${brand} events today.` })
     }
 
     // Hydrate stores for city/state
@@ -311,18 +335,26 @@ export async function POST(request: NextRequest) {
     })
 
     if (dryRun) {
-      return NextResponse.json({ ok: true, dryRun: true, to: recipientEmails, subject: `Morning briefing — ${fmtDate(today)}`, html })
+      const brandLabel = brand === 'liberty' ? 'Liberty' : 'BEB'
+      return NextResponse.json({
+        ok: true, dryRun: true, brand,
+        to: recipientEmails,
+        subject: `${brandLabel} Morning briefing — ${fmtDate(today)}`,
+        html,
+      })
     }
 
     // Send via Resend, one email per recipient (keeps blind-cc off for clarity).
-    const subject = `Morning briefing — ${fmtDate(today)}`
+    const brandLabel = brand === 'liberty' ? 'Liberty' : 'BEB'
+    const subject = `${brandLabel} Morning briefing — ${fmtDate(today)}`
+    const fromHeader = `${bcfg.fromName} <${bcfg.fromEmail}>`
     const sendErrors: string[] = []
     for (const to of recipientEmails) {
       const r = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          from: `${cfg.fromName || 'BEB Portal'} <${cfg.fromEmail}>`,
+          from: fromHeader,
           to: [to],
           subject,
           html,

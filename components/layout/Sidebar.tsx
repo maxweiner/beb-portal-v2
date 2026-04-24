@@ -26,6 +26,7 @@ interface NavItem {
   iconKey?: string
   section?: boolean
   adminOnly?: boolean
+  superadminOnly?: boolean
 }
 
 const BEB_NAV: NavItem[] = [
@@ -39,6 +40,7 @@ const BEB_NAV: NavItem[] = [
   { label: 'Admin', section: true },
   { id: 'admin',        label: 'Admin Panel',    iconKey: 'admin',      adminOnly: true },
   { id: 'stores',       label: 'Stores',         iconKey: 'stores',     adminOnly: true },
+  { id: 'recipients',   label: 'Report Recipients', iconKey: 'settings', superadminOnly: true },
   { label: 'Tools', section: true },
   { id: 'marketing',    label: 'Marketing',      iconKey: 'marketing' },
   { id: 'shipping',     label: 'Shipping',       iconKey: 'shipping' },
@@ -57,6 +59,7 @@ const LIBERTY_NAV: NavItem[] = [
   { label: 'Admin', section: true },
   { id: 'libertyadmin', label: 'Liberty Admin',  iconKey: 'admin',      adminOnly: true },
   { id: 'stores',       label: 'Stores',         iconKey: 'stores',     adminOnly: true },
+  { id: 'recipients',   label: 'Report Recipients', iconKey: 'settings', superadminOnly: true },
   { label: 'Tools', section: true },
   { id: 'marketing',    label: 'Marketing',      iconKey: 'marketing' },
   { id: 'shipping',     label: 'Shipping',       iconKey: 'shipping' },
@@ -72,6 +75,7 @@ interface SidebarProps {
 export default function Sidebar({ nav, setNav }: SidebarProps) {
   const { user, brand, setBrand } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
+  const isSuperadmin = user?.role === 'superadmin'
   const hasLibertyAccess = user?.liberty_access === true
   const isLiberty = brand === 'liberty'
   const NAV_ITEMS = isLiberty ? LIBERTY_NAV : BEB_NAV
@@ -115,6 +119,7 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
         {NAV_ITEMS.map((item, i) => {
           if (item.section) return <div key={i} className="nav-group-label">{item.label}</div>
           if (item.adminOnly && !isAdmin) return null
+          if (item.superadminOnly && !isSuperadmin) return null
           return (
             <button key={item.id} onClick={() => setNav(item.id!)}
               className={`nav-item${nav === item.id ? ' active' : ''}`}>
