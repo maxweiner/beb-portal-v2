@@ -53,6 +53,11 @@ export async function POST(req: Request) {
     customer_email,
     items_bringing,
     how_heard,
+    // Optional fields used by the store-portal flow
+    appointment_employee_id,
+    is_walkin,
+    booked_by,
+    notes,
   } = body ?? {}
 
   if (!slug || !event_id || !appointment_date || !appointment_time) {
@@ -141,6 +146,8 @@ export async function POST(req: Request) {
   if (slot.available <= 0) return bad('That slot is full', 409)
 
   // Insert the appointment. cancel_token defaults via the schema.
+  const validBookedBy = booked_by === 'store' || booked_by === 'admin' ? booked_by : 'customer'
+
   const { data: inserted, error: insertErr } = await sb
     .from('appointments')
     .insert({
@@ -154,7 +161,10 @@ export async function POST(req: Request) {
       customer_email: customer_email.trim(),
       items_bringing,
       how_heard: how_heard ?? null,
-      booked_by: 'customer',
+      booked_by: validBookedBy,
+      appointment_employee_id: appointment_employee_id || null,
+      is_walkin: !!is_walkin,
+      notes: notes ?? null,
     })
     .select('id, cancel_token')
     .single()

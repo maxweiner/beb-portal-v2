@@ -25,6 +25,12 @@ interface AppointmentEmployee {
   active: boolean
 }
 
+interface StorePortalToken {
+  id: string
+  token: string
+  active: boolean
+}
+
 const DEFAULT_CONFIG: BookingConfigState = {
   slot_interval_minutes: 20,
   max_concurrent_slots: 3,
@@ -89,6 +95,7 @@ export default function BookingConfigCard({
 
   const [config, setConfig] = useState<BookingConfigState | null>(null)
   const [employees, setEmployees] = useState<AppointmentEmployee[]>([])
+  const [portalToken, setPortalToken] = useState<StorePortalToken | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [newEmpName, setNewEmpName] = useState('')
 
@@ -97,7 +104,8 @@ export default function BookingConfigCard({
     Promise.all([
       supabase.from('booking_config').select('*').eq('store_id', storeId).maybeSingle(),
       supabase.from('appointment_employees').select('*').eq('store_id', storeId).order('name'),
-    ]).then(([cfgRes, empRes]) => {
+      supabase.from('store_portal_tokens').select('id, token, active').eq('store_id', storeId).eq('active', true).maybeSingle(),
+    ]).then(([cfgRes, empRes, tokRes]) => {
       if (cancelled) return
       const cfg = cfgRes.data
       if (cfg) {
@@ -120,6 +128,7 @@ export default function BookingConfigCard({
         setConfig(DEFAULT_CONFIG)
       }
       setEmployees(empRes.data || [])
+      setPortalToken(tokRes.data || null)
       setLoaded(true)
     })
     return () => { cancelled = true }
@@ -194,6 +203,30 @@ export default function BookingConfigCard({
     if (error) { alert('Error: ' + error.message); return }
     setEmployees(p => p.map(e => (e.id === id ? { ...e, active } : e)))
   }
+
+  const generatePortalToken = async () => {
+    if (portalToken && !confirm('Generate a new token? The old store-portal link will stop working.')) return
+    // Deactivate existing tokens for this store, then insert a new one.
+    if (portalToken) {
+      await supabase.from('store_portal_tokens').update({ active: false }).eq('store_id', storeId)
+    }
+    const newToken = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+      ? crypto.randomUUID().replace(/-/g, '')
+      : Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
+    const { data, error } = await supabase
+      .from('store_portal_tokens')
+      .insert({ store_id: storeId, token: newToken, active: true })
+      .select('id, token, active')
+      .single()
+    if (error) { alert('Error: ' + error.message); return }
+    setPortalToken(data)
+  }
+
+  const portalUrl = portalToken
+    ? (process.env.NEXT_PUBLIC_BOOKING_BASE_URL
+        || (typeof window !== 'undefined' ? window.location.origin : 'https://beb-portal-v2.vercel.app'))
+      + `/store-portal/${portalToken.token}`
+    : ''
 
   return (
     <div className="card card-accent" style={{ margin: 0 }}>
@@ -344,6 +377,43 @@ export default function BookingConfigCard({
             Email
           </label>
         </div>
+      </div>
+
+      {/* Store-portal access token */}
+      <div style={{ borderTop: '1px solid var(--pearl)', paddingTop: 12, marginBottom: 16 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ash)', marginBottom: 4 }}>
+          Store Portal Access
+        </div>
+        <p style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 10 }}>
+          A shared link store staff can use to view and add appointments. Anyone with the link can use the portal — rotate the token if it leaks.
+        </p>
+        {portalToken ? (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 14,
+            padding: 12, background: 'white', border: '1px solid var(--pearl)',
+            borderRadius: 'var(--r)', marginBottom: 8,
+          }}>
+            <div style={{ background: 'white', padding: 4, borderRadius: 6 }}>
+              <QRCodeSVG value={portalUrl} size={88} includeMargin={false} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ash)', marginBottom: 2 }}>
+                STAFF PORTAL URL
+              </div>
+              <a href={portalUrl} target="_blank" rel="noreferrer"
+                style={{ fontSize: 13, color: 'var(--green)', wordBreak: 'break-all' }}>
+                {portalUrl}
+              </a>
+            </div>
+          </div>
+        ) : (
+          <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 8 }}>
+            No active token. Click below to generate one.
+          </p>
+        )}
+        <button onClick={generatePortalToken} className="btn-primary btn-sm">
+          {portalToken ? 'Rotate token' : 'Generate access token'}
+        </button>
       </div>
 
       {/* Appointment employees (spiff list) */}
