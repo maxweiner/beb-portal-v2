@@ -552,12 +552,19 @@ function QrCard({
             <div style={{ fontSize: 11, color: 'var(--mist)' }}>
               Type, code, and lead source are immutable (changing them would break attribution on already-printed QRs).
             </div>
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div style={{
+              display: 'flex', gap: 6, alignItems: 'center',
+              paddingTop: 8, marginTop: 4, borderTop: '1px solid var(--pearl)',
+            }}>
               <button onClick={save} disabled={saving} className="btn-primary btn-sm">
                 {saving ? 'Saving…' : 'Save'}
               </button>
               <button onClick={cancelEdit} disabled={saving} className="btn-outline btn-sm">
                 Cancel
+              </button>
+              <div style={{ flex: 1 }} />
+              <button onClick={onDelete} disabled={saving} className="btn-danger btn-sm">
+                Delete
               </button>
             </div>
           </div>
@@ -570,7 +577,6 @@ function QrCard({
             <button onClick={startEdit} className="btn-outline btn-sm">Edit</button>
             <button onClick={downloadPng} className="btn-primary btn-sm">PNG</button>
             <button onClick={downloadSvg} className="btn-outline btn-sm">SVG</button>
-            <button onClick={onDelete} className="btn-danger btn-sm">×</button>
           </>
         )}
       </div>
