@@ -47,7 +47,6 @@ export interface Store {
   owner_name?: string
   owner_phone?: string
   owner_email?: string
-  qr_code_url?: string
   calendar_feed_url?: string
   calendar_offset_hours?: number
   store_image_url?: string

@@ -328,8 +328,6 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
   const [details, setDetails] = useState({ ...store })
   const [feedUrl, setFeedUrl] = useState(store.calendar_feed_url || '')
   const [calendarOffset, setCalendarOffset] = useState<number>(store.calendar_offset_hours ?? 0)
-  const [storeImage, setStoreImage] = useState(store.qr_code_url || '')
-  const fileRef = useRef<HTMLInputElement>(null)
   const imgRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -382,12 +380,11 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
     setEmployees(p => p.filter(e => e.id !== id))
   }
 
-  const uploadFile = async (file: File, field: 'qr_code_url' | 'store_image_url') => {
+  const uploadStoreImage = async (file: File) => {
     const reader = new FileReader()
     reader.onload = async (e) => {
       const dataUrl = e.target?.result as string
-      await withTimeout(supabase.from('stores').update({ [field]: dataUrl }).eq('id', store.id))
-      if (field === 'qr_code_url') setStoreImage(dataUrl)
+      await withTimeout(supabase.from('stores').update({ store_image_url: dataUrl }).eq('id', store.id))
       alert('Image uploaded!')
       await refetchStores()
     }
@@ -499,7 +496,7 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
               </div>
             )}
             <input ref={imgRef} type="file" accept="image/*" style={{ display: 'none' }}
-              onChange={e => { if (e.target.files?.[0]) uploadFile(e.target.files[0], 'store_image_url') }} />
+              onChange={e => { if (e.target.files?.[0]) uploadStoreImage(e.target.files[0]) }} />
           </div>
 
           {/* Customer Booking Configuration */}
@@ -600,32 +597,6 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
                 }
               }}>Remove</button>
             )}
-          </div>
-
-          {/* SimplyBook QR Code */}
-          <div className="card card-accent" style={{ margin: 0 }}>
-            <div className="card-title">SimplyBook QR Code</div>
-            {storeImage ? (
-              <div style={{ marginBottom: 14 }}>
-                <img src={storeImage} alt="QR Code" style={{ maxWidth: 180, borderRadius: 'var(--r)', border: '1px solid var(--pearl)', display: 'block', marginBottom: 10 }} />
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn-primary btn-sm" onClick={() => fileRef.current?.click()}>Replace QR Code</button>
-                  <button className="btn-danger btn-sm" onClick={async () => {
-                    if (!confirm('Remove QR code?')) return
-                    await withTimeout(supabase.from('stores').update({ qr_code_url: '' }).eq('id', store.id))
-                    setStoreImage('')
-                    await refetchStores()
-                  }}>Remove</button>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 12 }}>No QR code uploaded yet.</p>
-                <button className="btn-primary btn-sm" onClick={() => fileRef.current?.click()}>Upload QR Code</button>
-              </div>
-            )}
-            <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
-              onChange={e => { if (e.target.files?.[0]) uploadFile(e.target.files[0], 'qr_code_url') }} />
           </div>
 
         </div>
