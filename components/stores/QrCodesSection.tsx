@@ -378,14 +378,54 @@ function QrCard({
     ? employees.find(e => e.id === qr.appointment_employee_id)?.name
     : null
 
+  // ---- helpers ----
+  // Wrap label into lines that fit a given pixel width with a measuring ctx.
+  function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+    const words = text.split(/\s+/)
+    const lines: string[] = []
+    let line = ''
+    for (const w of words) {
+      const candidate = line ? line + ' ' + w : w
+      if (ctx.measureText(candidate).width > maxWidth && line) {
+        lines.push(line)
+        line = w
+      } else {
+        line = candidate
+      }
+    }
+    if (line) lines.push(line)
+    return lines
+  }
+
   function downloadSvg() {
     const svg = document.querySelector(`#qr-svg-${qr.id}`) as SVGSVGElement | null
     if (!svg) return
-    const xml = new XMLSerializer().serializeToString(svg)
-    const blob = new Blob([
-      '<?xml version="1.0" encoding="UTF-8"?>\n',
-      xml,
-    ], { type: 'image/svg+xml' })
+    // Render the QR onto a larger SVG with the label and code printed below
+    // so the printer can verify they have the right asset by eye.
+    const qrSize = 1024
+    const padding = 40
+    const lineHeight = 70
+    const codeHeight = 50
+    // Pre-measure with a temp canvas to know how many lines we need
+    const measureCanvas = document.createElement('canvas')
+    const mctx = measureCanvas.getContext('2d')!
+    mctx.font = 'bold 56px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+    const lines = wrapLines(mctx, qr.label, qrSize - padding * 2)
+    const totalHeight = qrSize + padding + lines.length * lineHeight + codeHeight + padding
+
+    const inner = svg.innerHTML
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${qrSize}" height="${totalHeight}" viewBox="0 0 ${qrSize} ${totalHeight}">
+  <rect width="${qrSize}" height="${totalHeight}" fill="#FFFFFF"/>
+  <svg x="0" y="0" width="${qrSize}" height="${qrSize}" viewBox="${svg.getAttribute('viewBox') || `0 0 ${svg.getAttribute('width')} ${svg.getAttribute('height')}`}">
+    ${inner}
+  </svg>
+  <g font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" text-anchor="middle">
+    ${lines.map((ln, i) => `<text x="${qrSize / 2}" y="${qrSize + padding + (i + 1) * lineHeight - 20}" font-size="56" font-weight="700" fill="#111111">${escapeXml(ln)}</text>`).join('\n    ')}
+    <text x="${qrSize / 2}" y="${qrSize + padding + lines.length * lineHeight + codeHeight - 10}" font-size="36" font-weight="500" fill="#666666" letter-spacing="6">${escapeXml(qr.code)}</text>
+  </g>
+</svg>`
+    const blob = new Blob([xml], { type: 'image/svg+xml' })
     triggerDownload(blob, `${fileSlug(qr.label)}.svg`)
   }
 
@@ -396,17 +436,56 @@ function QrCard({
     const svg64 = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(xml)))
     const img = new Image()
     img.onload = () => {
-      const size = 1024
+      const qrSize = 1024
+      const padding = 40
+      const lineHeight = 70
+      const codeHeight = 50
+
+      // Measure label wrapping
+      const measureCanvas = document.createElement('canvas')
+      const mctx = measureCanvas.getContext('2d')!
+      mctx.font = 'bold 56px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+      const lines = wrapLines(mctx, qr.label, qrSize - padding * 2)
+      const totalHeight = qrSize + padding + lines.length * lineHeight + codeHeight + padding
+
       const canvas = document.createElement('canvas')
-      canvas.width = size
-      canvas.height = size
+      canvas.width = qrSize
+      canvas.height = totalHeight
       const ctx = canvas.getContext('2d')!
       ctx.fillStyle = '#FFFFFF'
-      ctx.fillRect(0, 0, size, size)
-      ctx.drawImage(img, 0, 0, size, size)
+      ctx.fillRect(0, 0, qrSize, totalHeight)
+      ctx.drawImage(img, 0, 0, qrSize, qrSize)
+
+      // Label
+      ctx.fillStyle = '#111111'
+      ctx.font = 'bold 56px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'alphabetic'
+      lines.forEach((ln, i) => {
+        ctx.fillText(ln, qrSize / 2, qrSize + padding + (i + 1) * lineHeight - 20)
+      })
+
+      // Code (smaller, lighter, letter-spaced)
+      ctx.fillStyle = '#666666'
+      ctx.font = '500 36px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+      ctx.fillText(
+        qr.code.split('').join(' '), // visual letter-spacing for readability
+        qrSize / 2,
+        qrSize + padding + lines.length * lineHeight + codeHeight - 10,
+      )
+
       canvas.toBlob(b => { if (b) triggerDownload(b, `${fileSlug(qr.label)}.png`) }, 'image/png')
     }
     img.src = svg64
+  }
+
+  function escapeXml(s: string): string {
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;')
   }
 
   function triggerDownload(blob: Blob, filename: string) {
