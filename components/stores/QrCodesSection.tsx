@@ -173,7 +173,15 @@ export default function QrCodesSection({
       )}
       {qrs.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-          {qrs.map(q => <QrCard key={q.id} qr={q} onDelete={() => deleteQr(q.id)} />)}
+          {qrs.map(q => (
+            <QrCard
+              key={q.id}
+              qr={q}
+              employees={employees}
+              onDelete={() => deleteQr(q.id)}
+              onUpdated={load}
+            />
+          ))}
         </div>
       )}
 
@@ -312,9 +320,63 @@ export default function QrCodesSection({
   )
 }
 
-function QrCard({ qr, onDelete }: { qr: QrRow; onDelete: () => void }) {
+function QrCard({
+  qr,
+  employees,
+  onDelete,
+  onUpdated,
+}: {
+  qr: QrRow
+  employees: AppointmentEmployee[]
+  onDelete: () => void
+  onUpdated: () => void
+}) {
   const url = qrShortUrl(qr.code)
-  const svgRef = useRef<SVGSVGElement | null>(null)
+
+  const [editing, setEditing] = useState(false)
+  const [label, setLabel] = useState(qr.label)
+  const [customLabel, setCustomLabel] = useState(qr.custom_label || '')
+  const [empId, setEmpId] = useState(qr.appointment_employee_id || '')
+  const [saving, setSaving] = useState(false)
+
+  function startEdit() {
+    setLabel(qr.label)
+    setCustomLabel(qr.custom_label || '')
+    setEmpId(qr.appointment_employee_id || '')
+    setEditing(true)
+  }
+
+  function cancelEdit() {
+    setEditing(false)
+  }
+
+  async function save() {
+    if (!label.trim()) { alert('Label cannot be empty.'); return }
+    if (qr.type === 'employee' && !empId) {
+      if (!confirm('No employee selected — this QR will redirect to the store with no spiff attribution. Continue?')) return
+    }
+    const updates: Record<string, any> = { label: label.trim() }
+    if (qr.type === 'custom') updates.custom_label = customLabel.trim()
+    if (qr.type === 'employee') updates.appointment_employee_id = empId || null
+    setSaving(true)
+    const res = await fetch(`/api/qr/${qr.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    })
+    setSaving(false)
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}))
+      alert('Save failed: ' + (json.error || res.status))
+      return
+    }
+    setEditing(false)
+    onUpdated()
+  }
+
+  const employeeName = qr.appointment_employee_id
+    ? employees.find(e => e.id === qr.appointment_employee_id)?.name
+    : null
 
   function downloadSvg() {
     const svg = document.querySelector(`#qr-svg-${qr.id}`) as SVGSVGElement | null
@@ -358,30 +420,80 @@ function QrCard({ qr, onDelete }: { qr: QrRow; onDelete: () => void }) {
 
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 12,
-      padding: 12, background: 'white', border: '1px solid var(--pearl)',
+      display: 'flex', alignItems: 'flex-start', gap: 12,
+      padding: 12, background: 'white',
+      border: editing ? '2px solid var(--green)' : '1px solid var(--pearl)',
       borderRadius: 'var(--r)',
     }}>
       <div style={{ background: 'white', padding: 4, borderRadius: 6, flexShrink: 0 }}>
         <QRCodeSVG id={`qr-svg-${qr.id}`} value={url} size={88} includeMargin={false} />
       </div>
+
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{qr.label}</div>
-        <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>
-          Type: <strong>{qr.type}</strong>
-          {qr.lead_source && ` · Source: ${qr.lead_source}`}
-          {qr.custom_label && ` · Label: ${qr.custom_label}`}
-          {' · Code: '}<code style={{ fontSize: 11 }}>{qr.code}</code>
-        </div>
-        <a href={url} target="_blank" rel="noreferrer"
-           style={{ fontSize: 11, color: 'var(--green)', wordBreak: 'break-all' }}>
-          {url}
-        </a>
+        {!editing ? (
+          <>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{qr.label}</div>
+            <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2, lineHeight: 1.5 }}>
+              Type: <strong>{qr.type}</strong>
+              {qr.lead_source && ` · Source: ${qr.lead_source}`}
+              {qr.custom_label && ` · Label: ${qr.custom_label}`}
+              {qr.type === 'employee' && (
+                <> · Spiff: <strong>{employeeName || '— none —'}</strong></>
+              )}
+              {' · Code: '}<code style={{ fontSize: 11 }}>{qr.code}</code>
+            </div>
+            <a href={url} target="_blank" rel="noreferrer"
+               style={{ fontSize: 11, color: 'var(--green)', wordBreak: 'break-all' }}>
+              {url}
+            </a>
+          </>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label className="fl">Label (display name)</label>
+              <input type="text" value={label} onChange={e => setLabel(e.target.value)} />
+            </div>
+            {qr.type === 'custom' && (
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label className="fl">Custom label (used in attribution)</label>
+                <input type="text" value={customLabel} onChange={e => setCustomLabel(e.target.value)} />
+              </div>
+            )}
+            {qr.type === 'employee' && (
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label className="fl">Spiff employee</label>
+                <select value={empId} onChange={e => setEmpId(e.target.value)} style={{ width: '100%' }}>
+                  <option value="">— none —</option>
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>{emp.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: 'var(--mist)' }}>
+              Type, code, and lead source are immutable (changing them would break attribution on already-printed QRs).
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={save} disabled={saving} className="btn-primary btn-sm">
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+              <button onClick={cancelEdit} disabled={saving} className="btn-outline btn-sm">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
-        <button onClick={downloadPng} className="btn-primary btn-sm">PNG</button>
-        <button onClick={downloadSvg} className="btn-outline btn-sm">SVG</button>
-        <button onClick={onDelete} className="btn-danger btn-sm">×</button>
+        {!editing && (
+          <>
+            <button onClick={startEdit} className="btn-outline btn-sm">Edit</button>
+            <button onClick={downloadPng} className="btn-primary btn-sm">PNG</button>
+            <button onClick={downloadSvg} className="btn-outline btn-sm">SVG</button>
+            <button onClick={onDelete} className="btn-danger btn-sm">×</button>
+          </>
+        )}
       </div>
     </div>
   )
