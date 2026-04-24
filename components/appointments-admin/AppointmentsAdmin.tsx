@@ -355,8 +355,17 @@ export default function AppointmentsAdmin() {
         </div>
       )}
 
-      {byStore.map(([storeId, rows]) => (
-        <StoreGroup key={storeId} rows={rows} isAdmin={isAdmin} onCancel={handleCancel} />
+      {byStore.map(([storeId, rows], index) => (
+        <StoreGroup
+          // Re-mount when the date filter changes so the "expand last" rule
+          // re-applies fresh against the new shape of the list. Within a
+          // single filter, the user's manual toggle still sticks.
+          key={`${storeId}-${dateFilter}`}
+          rows={rows}
+          isAdmin={isAdmin}
+          onCancel={handleCancel}
+          initiallyCollapsed={byStore.length > 1 && index < byStore.length - 1}
+        />
       ))}
     </div>
   )
@@ -364,12 +373,13 @@ export default function AppointmentsAdmin() {
 
 // ---------- store group section ----------
 
-function StoreGroup({ rows, isAdmin, onCancel }: {
+function StoreGroup({ rows, isAdmin, onCancel, initiallyCollapsed }: {
   rows: AppointmentRow[]
   isAdmin: boolean
   onCancel: (row: AppointmentRow) => void
+  initiallyCollapsed: boolean
 }) {
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(initiallyCollapsed)
   const storeName = rows[0]?.store_name || ''
 
   // Group by date within the store
