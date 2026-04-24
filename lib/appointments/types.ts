@@ -66,3 +66,13 @@ export interface Slot {
   available: number
   isPast: boolean
 }
+
+// Aggregated server-side payload consumed by the public /book/[slug] page.
+export interface BookingPayload {
+  store: BookingStore
+  config: BookingConfig
+  events: BookingEvent[]
+  override?: EventBookingOverride | null
+  bookings: AppointmentLite[]
+  blocks: SlotBlockLite[]
+}

@@ -1,8 +1,9 @@
-// Demo data for the public booking page until we wire it to Supabase.
-// Keyed by store slug. The /book/[slug] route reads from here today and will
-// switch to real DB queries in a follow-up.
+// Demo data for the public booking page. The /book/[slug] route prefers
+// real Supabase data; this is the fallback when slug === 'demo-jewelers'
+// so we always have something to show on the marketing/preview URL.
 
 import type {
+  BookingPayload,
   BookingConfig,
   BookingEvent,
   BookingStore,
@@ -11,13 +12,17 @@ import type {
   EventBookingOverride,
 } from './types'
 
-export interface MockBookingPayload {
-  store: BookingStore
-  config: BookingConfig
-  events: BookingEvent[]
-  override?: EventBookingOverride | null
-  bookings: AppointmentLite[]
-  blocks: SlotBlockLite[]
+// Back-compat alias — keep until callers are renamed.
+export type MockBookingPayload = BookingPayload
+// Re-export so the BookingClient stops needing two import paths.
+export type {
+  BookingPayload,
+  BookingConfig,
+  BookingEvent,
+  BookingStore,
+  AppointmentLite,
+  SlotBlockLite,
+  EventBookingOverride,
 }
 
 function isoDateOffset(days: number): string {
@@ -28,7 +33,7 @@ function isoDateOffset(days: number): string {
 
 const DEMO_SLUG = 'demo-jewelers'
 
-const demoPayload: MockBookingPayload = {
+const demoPayload: BookingPayload = {
   store: {
     id: 'demo-store-id',
     name: 'Demo Jewelers',
@@ -88,7 +93,7 @@ const demoPayload: MockBookingPayload = {
   ],
 }
 
-export function getMockBookingPayload(slug: string): MockBookingPayload | null {
+export function getMockBookingPayload(slug: string): BookingPayload | null {
   if (slug === DEMO_SLUG) return demoPayload
   return null
 }

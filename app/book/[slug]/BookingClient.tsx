@@ -167,7 +167,15 @@ function AccordionDayBody({
 
 // ---------- top-level page ----------
 
-export default function BookingClient({ payload }: { payload: MockBookingPayload }) {
+export default function BookingClient({
+  slug,
+  payload,
+  isMock,
+}: {
+  slug: string
+  payload: MockBookingPayload
+  isMock: boolean
+}) {
   const { store, config, events, override, bookings, blocks } = payload
   const primary = store.color_primary || '#1D6B44'
   const secondary = store.color_secondary || '#F5F0E8'
@@ -196,6 +204,7 @@ export default function BookingClient({ payload }: { payload: MockBookingPayload
   const [items, setItems] = useState<string[]>([])
   const [howHeard, setHowHeard] = useState('')
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'done'>('idle')
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   const selectedDay = selectedDayIdx !== null ? dayInfos[selectedDayIdx] : null
   const canSubmit =
@@ -211,11 +220,45 @@ export default function BookingClient({ payload }: { payload: MockBookingPayload
     setItems(prev => (prev.includes(item) ? prev.filter(i => i !== item) : [...prev, item]))
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!canSubmit) return
     setSubmitState('submitting')
-    setTimeout(() => setSubmitState('done'), 600)
+    setSubmitError(null)
+
+    if (isMock) {
+      // Demo slug — never hit the API, just show the mock confirmation.
+      setTimeout(() => setSubmitState('done'), 600)
+      return
+    }
+
+    try {
+      const res = await fetch('/api/appointments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slug,
+          event_id: event.id,
+          appointment_date: selectedDay!.dateStr,
+          appointment_time: selectedTime,
+          customer_name: name,
+          customer_phone: phone,
+          customer_email: email,
+          items_bringing: items,
+          how_heard: howHeard,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setSubmitState('idle')
+        setSubmitError(json.error || `Booking failed (${res.status})`)
+        return
+      }
+      setSubmitState('done')
+    } catch (err: any) {
+      setSubmitState('idle')
+      setSubmitError(err?.message || 'Network error — please try again.')
+    }
   }
 
   if (submitState === 'done') {
@@ -228,7 +271,9 @@ export default function BookingClient({ payload }: { payload: MockBookingPayload
             <strong>{selectedTime && formatTime(selectedTime)}</strong>.
           </p>
           <p className="text-sm text-gray-500 mt-4">
-            (Mock confirmation — no SMS or email is being sent yet.)
+            {isMock
+              ? '(Mock confirmation — this is the demo store, no real booking was saved.)'
+              : 'A confirmation will be sent shortly.'}
           </p>
         </div>
       </div>
@@ -426,6 +471,11 @@ export default function BookingClient({ payload }: { payload: MockBookingPayload
               </select>
             </div>
 
+            {submitError && (
+              <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
+                {submitError}
+              </div>
+            )}
             <button
               type="submit"
               disabled={!canSubmit || submitState === 'submitting'}
