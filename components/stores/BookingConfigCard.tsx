@@ -51,13 +51,6 @@ function normalizeSlug(raw: string): string {
     .replace(/^-|-$/g, '')
 }
 
-function bookingUrlFor(slug: string): string {
-  if (!slug) return ''
-  const base = process.env.NEXT_PUBLIC_BOOKING_BASE_URL
-    || (typeof window !== 'undefined' ? window.location.origin : 'https://beb-portal-v2.vercel.app')
-  return `${base}/book/${slug}`
-}
-
 function timeToHHMM(t: string | null | undefined): string {
   if (!t) return ''
   return t.length >= 5 ? t.slice(0, 5) : t
@@ -178,7 +171,6 @@ export default function BookingConfigCard({
   }
 
   const cleanSlug = normalizeSlug(slug)
-  const url = bookingUrlFor(cleanSlug)
 
   const addEmployee = async () => {
     const name = newEmpName.trim()
@@ -248,27 +240,6 @@ export default function BookingConfigCard({
           Lowercase letters, numbers, and hyphens. Saved as <code>{cleanSlug || '—'}</code>.
         </p>
       </div>
-
-      {url && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 14,
-          padding: 12, background: 'white', border: '1px solid var(--pearl)',
-          borderRadius: 'var(--r)', marginBottom: 16,
-        }}>
-          <div style={{ background: 'white', padding: 4, borderRadius: 6 }}>
-            <QRCodeSVG value={url} size={88} includeMargin={false} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ash)', marginBottom: 2 }}>
-              CUSTOMER BOOKING URL
-            </div>
-            <a href={url} target="_blank" rel="noreferrer"
-              style={{ fontSize: 13, color: 'var(--green)', wordBreak: 'break-all' }}>
-              {url}
-            </a>
-          </div>
-        </div>
-      )}
 
       {/* Brand colors */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
