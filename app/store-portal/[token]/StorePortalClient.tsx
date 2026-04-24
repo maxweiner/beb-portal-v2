@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { Diamond, Plus, X } from 'lucide-react'
 import { buildSlotsForDay, hoursForEventDay } from '@/lib/appointments/slots'
 import type { BookingPayload } from '@/lib/appointments/types'
+import PhoneInput from '@/components/ui/PhoneInput'
+import { formatPhoneDisplay } from '@/lib/phone'
 
 interface FullAppt {
   id: string
@@ -243,7 +245,7 @@ export default function StorePortalClient({
                         )}
                       </div>
                       <div className="text-xs text-gray-500 mt-0.5">
-                        {a.customer_phone}
+                        {formatPhoneDisplay(a.customer_phone)}
                         {a.customer_email ? ` · ${a.customer_email}` : ''}
                       </div>
                       <div className="text-xs text-gray-500 mt-0.5">
@@ -341,7 +343,7 @@ export default function StorePortalClient({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Phone *</label>
-                  <input type="tel" required value={phone} onChange={e => setPhone(e.target.value)}
+                  <PhoneInput required value={phone} onChange={v => setPhone(v)}
                     className="w-full rounded-lg border border-gray-300 p-2 text-sm" />
                 </div>
                 <div>

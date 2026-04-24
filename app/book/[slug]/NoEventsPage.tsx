@@ -1,5 +1,6 @@
 import { Diamond } from 'lucide-react'
 import type { BookingStore } from '@/lib/appointments/types'
+import { formatPhoneDisplay } from '@/lib/phone'
 
 export default function NoEventsPage({ store }: { store: BookingStore }) {
   const primary = store.color_primary || '#1D6B44'
@@ -13,7 +14,7 @@ export default function NoEventsPage({ store }: { store: BookingStore }) {
             <h1 className="text-2xl font-bold leading-tight">{store.name}</h1>
             {(store.owner_phone || store.owner_email) && (
               <div className="text-sm opacity-90 mt-2 space-y-1 leading-tight">
-                {store.owner_phone && <div>{store.owner_phone}</div>}
+                {store.owner_phone && <div>{formatPhoneDisplay(store.owner_phone)}</div>}
                 {store.owner_email && <div className="break-all">{store.owner_email}</div>}
               </div>
             )}

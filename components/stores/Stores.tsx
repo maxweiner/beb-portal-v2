@@ -7,6 +7,8 @@ import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import type { Store } from '@/types'
 import BookingConfigCard from './BookingConfigCard'
 import QrCodesSection from './QrCodesSection'
+import PhoneInput from '@/components/ui/PhoneInput'
+import { formatPhoneDisplay, rawDigits } from '@/lib/phone'
 
 interface Employee { id: string; store_id: string; name: string; phone: string; email: string }
 
@@ -151,7 +153,7 @@ export default function Stores() {
       lat: data.lat,
       lng: data.lng,
       website: data.website || '',
-      owner_phone: data.phone || '',
+      owner_phone: rawDigits(data.phone || ''),
     }))
     setPlacePicked(true)
   }
@@ -251,7 +253,7 @@ export default function Stores() {
                 <div style={{ fontWeight: 700, marginBottom: 4 }}>✓ {newStore.name}</div>
                 <div style={{ fontSize: 13 }}>{newStore.address}, {newStore.city}, {newStore.state} {newStore.zip}</div>
                 {newStore.website && <div style={{ fontSize: 12, marginTop: 2 }}>🌐 {newStore.website}</div>}
-                {newStore.owner_phone && <div style={{ fontSize: 12 }}>📞 {newStore.owner_phone}</div>}
+                {newStore.owner_phone && <div style={{ fontSize: 12 }}>📞 {formatPhoneDisplay(newStore.owner_phone)}</div>}
               </div>
             )}
 
@@ -627,7 +629,7 @@ function EmpRow({ emp, onSave, onDelete }: {
     <div style={{ padding: '10px 0', borderBottom: '1px solid var(--cream2)' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
         <input value={vals.name} onChange={e => setVals(p => ({ ...p, name: e.target.value }))} placeholder="Name" required style={{ fontSize: 13 }} />
-        <input type="tel" value={vals.phone} onChange={e => setVals(p => ({ ...p, phone: e.target.value }))} placeholder="Phone" style={{ fontSize: 13 }} />
+        <PhoneInput value={vals.phone} onChange={v => setVals(p => ({ ...p, phone: v }))} style={{ fontSize: 13 }} />
         <input type="email" value={vals.email} onChange={e => setVals(p => ({ ...p, email: e.target.value }))} placeholder="Email" style={{ fontSize: 13 }} />
       </div>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -641,7 +643,7 @@ function EmpRow({ emp, onSave, onDelete }: {
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--cream2)' }}>
       <div style={{ flex: 1 }}>
         <div style={{ fontWeight: 700 }}>{emp.name}</div>
-        <div style={{ fontSize: 12, color: 'var(--mist)' }}>{emp.phone}{emp.phone && emp.email ? ' · ' : ''}{emp.email}</div>
+        <div style={{ fontSize: 12, color: 'var(--mist)' }}>{formatPhoneDisplay(emp.phone)}{emp.phone && emp.email ? ' · ' : ''}{emp.email}</div>
       </div>
       <button className="btn-outline btn-xs" onClick={() => setEditing(true)}>✎ Edit</button>
       <button className="btn-danger btn-xs" onClick={onDelete}>Remove</button>
@@ -673,8 +675,8 @@ function NewEmpRows({ onAdd }: { onAdd: (emp: { name: string; phone: string; ema
         <div key={row.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 8, marginBottom: 8, alignItems: 'center' }}>
           <input value={row.name} onChange={e => update(row.id, 'name', e.target.value)}
             placeholder="Name *" style={{ fontSize: 13 }} />
-          <input type="tel" value={row.phone} onChange={e => update(row.id, 'phone', e.target.value)}
-            placeholder="Phone" style={{ fontSize: 13 }} />
+          <PhoneInput value={row.phone} onChange={v => update(row.id, 'phone', v)}
+            style={{ fontSize: 13 }} />
           <input type="email" value={row.email} onChange={e => update(row.id, 'email', e.target.value)}
             placeholder="Email" style={{ fontSize: 13 }} />
           {rows.length > 1
@@ -768,7 +770,7 @@ function ContactRow({ contact, onSave, onDelete }: {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
         <input value={vals.name} onChange={e => setVals(p => ({ ...p, name: e.target.value }))} placeholder="Name *" style={{ fontSize: 13 }} />
         <input value={vals.title} onChange={e => setVals(p => ({ ...p, title: e.target.value }))} placeholder="Title (e.g. Owner)" style={{ fontSize: 13 }} />
-        <input type="tel" value={vals.phone} onChange={e => setVals(p => ({ ...p, phone: e.target.value }))} placeholder="Phone" style={{ fontSize: 13 }} />
+        <PhoneInput value={vals.phone} onChange={v => setVals(p => ({ ...p, phone: v }))} style={{ fontSize: 13 }} />
         <input type="email" value={vals.email} onChange={e => setVals(p => ({ ...p, email: e.target.value }))} placeholder="Email" style={{ fontSize: 13 }} />
       </div>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -810,7 +812,7 @@ function NewContactRows({ onAdd }: { onAdd: (c: { name: string; phone: string; e
         <div key={row.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: 8, marginBottom: 8, alignItems: 'center' }}>
           <input value={row.name} onChange={e => update(row.id, 'name', e.target.value)} placeholder="Name *" style={{ fontSize: 13 }} />
           <input value={row.title} onChange={e => update(row.id, 'title', e.target.value)} placeholder="Title" style={{ fontSize: 13 }} />
-          <input type="tel" value={row.phone} onChange={e => update(row.id, 'phone', e.target.value)} placeholder="Phone" style={{ fontSize: 13 }} />
+          <PhoneInput value={row.phone} onChange={v => update(row.id, 'phone', v)} style={{ fontSize: 13 }} />
           <input type="email" value={row.email} onChange={e => update(row.id, 'email', e.target.value)} placeholder="Email" style={{ fontSize: 13 }} />
           {rows.length > 1
             ? <button className="btn-danger btn-xs" onClick={() => setRows(p => p.filter(r => r.id !== row.id))}>✕</button>

@@ -41,7 +41,7 @@ const demoPayload: BookingPayload = {
     store_image_url: '/beb-logo.png',
     color_primary: '#1D6B44',
     color_secondary: '#F5F0E8',
-    owner_phone: '(555) 123-4567',
+    owner_phone: '5551234567',
     owner_email: 'hello@demojewelers.example',
   },
   config: {

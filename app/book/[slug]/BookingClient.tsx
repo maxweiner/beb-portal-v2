@@ -5,6 +5,8 @@ import { ChevronDown, ChevronRight, Diamond } from 'lucide-react'
 import { buildSlotsForDay, hoursForEventDay } from '@/lib/appointments/slots'
 import type { MockBookingPayload } from '@/lib/appointments/mockData'
 import type { Slot } from '@/lib/appointments/types'
+import PhoneInput from '@/components/ui/PhoneInput'
+import { formatPhoneDisplay } from '@/lib/phone'
 
 // ---------- helpers ----------
 
@@ -341,7 +343,7 @@ export default function BookingClient({
               <h1 className="text-2xl font-bold leading-tight">{store.name}</h1>
               {(store.owner_phone || store.owner_email) && (
                 <div className="text-sm opacity-90 mt-2 space-y-1 leading-tight">
-                  {store.owner_phone && <div>{store.owner_phone}</div>}
+                  {store.owner_phone && <div>{formatPhoneDisplay(store.owner_phone)}</div>}
                   {store.owner_email && <div className="break-all">{store.owner_email}</div>}
                 </div>
               )}
@@ -418,7 +420,7 @@ export default function BookingClient({
             <h1 className="text-2xl font-bold leading-tight">{store.name}</h1>
             {(store.owner_phone || store.owner_email) && (
               <div className="text-sm opacity-90 mt-2 space-y-1 leading-tight">
-                {store.owner_phone && <div>{store.owner_phone}</div>}
+                {store.owner_phone && <div>{formatPhoneDisplay(store.owner_phone)}</div>}
                 {store.owner_email && <div className="break-all">{store.owner_email}</div>}
               </div>
             )}
@@ -562,12 +564,11 @@ export default function BookingClient({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-              <input
-                type="tel"
+              <PhoneInput
                 required
                 className="w-full rounded-lg border border-gray-300 p-3"
                 value={phone}
-                onChange={e => setPhone(e.target.value)}
+                onChange={v => setPhone(v)}
               />
             </div>
 
