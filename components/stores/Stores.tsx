@@ -5,6 +5,7 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import type { Store } from '@/types'
+import BookingConfigCard from './BookingConfigCard'
 
 interface Employee { id: string; store_id: string; name: string; phone: string; email: string }
 
@@ -499,6 +500,15 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
             <input ref={imgRef} type="file" accept="image/*" style={{ display: 'none' }}
               onChange={e => { if (e.target.files?.[0]) uploadFile(e.target.files[0], 'store_image_url') }} />
           </div>
+
+          {/* Customer Booking Configuration */}
+          <BookingConfigCard
+            storeId={store.id}
+            initialSlug={store.slug ?? null}
+            initialPrimary={store.color_primary ?? null}
+            initialSecondary={store.color_secondary ?? null}
+            refetchStores={refetchStores}
+          />
 
           {/* Employees */}
           <div className="card card-accent" style={{ margin: 0 }}>

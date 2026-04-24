@@ -52,6 +52,9 @@ export interface Store {
   active?: boolean
   lat?: number
   lng?: number
+  slug?: string | null
+  color_primary?: string | null
+  color_secondary?: string | null
 }
 
 export interface EventDay {
