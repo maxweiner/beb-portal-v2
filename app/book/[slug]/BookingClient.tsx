@@ -337,12 +337,12 @@ export default function BookingClient({
     return (
       <div className="min-h-screen pb-12" style={{ background: secondary }}>
         {/* Branded header — same shape as the booking page */}
-        <header className="px-4 pt-8 pb-6 text-white" style={{ background: primary }}>
+        <header className="px-4 pt-8 pb-6 bg-white" style={{ borderBottom: `4px solid ${primary}` }}>
           <div className="max-w-md mx-auto flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
-              <h1 className="text-2xl font-bold leading-tight">{store.name}</h1>
+              <h1 className="text-2xl font-bold leading-tight" style={{ color: primary }}>{store.name}</h1>
               {(store.owner_phone || store.owner_email) && (
-                <div className="text-sm opacity-90 mt-2 space-y-1 leading-tight">
+                <div className="text-sm text-gray-700 mt-2 space-y-1 leading-tight">
                   {store.owner_phone && <div>{formatPhoneDisplay(store.owner_phone)}</div>}
                   {store.owner_email && <div className="break-all">{store.owner_email}</div>}
                 </div>
@@ -353,10 +353,14 @@ export default function BookingClient({
                 <img
                   src={store.store_image_url}
                   alt={`${store.name} logo`}
-                  className="h-20 w-20 rounded-xl object-cover shadow-md ring-1 ring-white/20"
+                  className="h-20 w-20 rounded-xl object-cover shadow-sm"
+                  style={{ border: `2px solid ${primary}` }}
                 />
               ) : (
-                <div className="h-20 w-20 rounded-xl bg-white/10 flex items-center justify-center ring-1 ring-white/20">
+                <div
+                  className="h-20 w-20 rounded-xl flex items-center justify-center"
+                  style={{ border: `2px solid ${primary}`, color: primary }}
+                >
                   <Diamond className="h-10 w-10" strokeWidth={1.5} />
                 </div>
               )}

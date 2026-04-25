@@ -202,17 +202,17 @@ export default function StorePortalClient({
 
   return (
     <div className="min-h-screen pb-24" style={{ background: secondary }}>
-      <header className="px-4 pt-8 pb-6 text-white" style={{ background: primary }}>
+      <header className="px-4 pt-8 pb-6 bg-white" style={{ borderBottom: `4px solid ${primary}` }}>
         <div className="max-w-2xl mx-auto flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <h1 className="text-2xl font-bold leading-tight">{store.name}</h1>
-            <p className="text-base mt-3">Store Portal — {appointments.length} upcoming appointment{appointments.length === 1 ? '' : 's'}</p>
+            <h1 className="text-2xl font-bold leading-tight" style={{ color: primary }}>{store.name}</h1>
+            <p className="text-base mt-3 text-gray-700">Store Portal — {appointments.length} upcoming appointment{appointments.length === 1 ? '' : 's'}</p>
           </div>
           <div className="shrink-0">
             {store.store_image_url ? (
-              <img src={store.store_image_url} alt="" className="h-20 w-20 rounded-xl object-cover shadow-md ring-1 ring-white/20" />
+              <img src={store.store_image_url} alt="" className="h-20 w-20 rounded-xl object-cover shadow-sm" style={{ border: `2px solid ${primary}` }} />
             ) : (
-              <div className="h-20 w-20 rounded-xl bg-white/10 flex items-center justify-center ring-1 ring-white/20">
+              <div className="h-20 w-20 rounded-xl flex items-center justify-center" style={{ border: `2px solid ${primary}`, color: primary }}>
                 <Diamond className="h-10 w-10" strokeWidth={1.5} />
               </div>
             )}
