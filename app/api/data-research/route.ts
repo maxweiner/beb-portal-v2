@@ -53,16 +53,27 @@ export async function GET(req: Request) {
 
   // 1. Resolve the QR codes that "belong" to this store. Include both
   //    direct store QRs and group QRs whose group has this store.
-  const [groupRes, qrRes] = await Promise.all([
-    sb.from('store_group_members').select('store_group_id').eq('store_id', storeId),
-    sb.from('qr_codes').select('id, code, type, lead_source, custom_label, label, created_at, store_id, store_group_id, deleted_at')
+  //    Filter at the SQL level so we don't hit Supabase's default 1000-row
+  //    limit when the system has lots of QRs across stores.
+  const groupRes = await sb.from('store_group_members')
+    .select('store_group_id').eq('store_id', storeId)
+  const groupIds = (groupRes.data || []).map((r: any) => r.store_group_id)
+
+  const [storeQrRes, groupQrRes] = await Promise.all([
+    sb.from('qr_codes')
+      .select('id, code, type, lead_source, custom_label, label, created_at, store_id, store_group_id')
+      .eq('store_id', storeId)
       .is('deleted_at', null)
       .eq('active', true),
+    groupIds.length > 0
+      ? sb.from('qr_codes')
+          .select('id, code, type, lead_source, custom_label, label, created_at, store_id, store_group_id')
+          .in('store_group_id', groupIds)
+          .is('deleted_at', null)
+          .eq('active', true)
+      : Promise.resolve({ data: [] as any[] }),
   ])
-  const groupIds = new Set((groupRes.data || []).map((r: any) => r.store_group_id))
-  const qrs = (qrRes.data || []).filter((q: any) =>
-    q.store_id === storeId || (q.store_group_id && groupIds.has(q.store_group_id))
-  )
+  const qrs = [...(storeQrRes.data || []), ...((groupQrRes as any).data || [])]
   if (qrs.length === 0) {
     return NextResponse.json({ rows: [], totals: { scans: 0, unique_scans: 0, appointments: 0, total_sent: 0, conversion_pct: null } })
   }
