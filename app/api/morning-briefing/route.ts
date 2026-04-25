@@ -27,10 +27,12 @@ async function fetchWeather(apiKey: string, city: string): Promise<{ city: strin
   } catch { return null }
 }
 
-async function generateShoutout(apiKey: string, firstNames: string[], totalPurchases: number, totalDollars: number): Promise<string> {
-  const fallback = firstNames.length > 0
-    ? `Great work yesterday — ${firstNames.join(', ')}. Let's make today count.`
-    : `Morning team — let's make today count.`
+async function generateShoutout(apiKey: string, firstNames: string[], totalPurchases: number, totalDollars: number, editorFallback?: string): Promise<string> {
+  const fallback = editorFallback
+    ? editorFallback
+    : firstNames.length > 0
+      ? `Great work yesterday — ${firstNames.join(', ')}. Let's make today count.`
+      : `Morning team — let's make today count.`
   if (!apiKey) return fallback
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -99,6 +101,9 @@ function buildHTML(opts: {
   totalPurchases: number
   totalDollars: number
   events: EventSummary[]
+  greeting: string
+  headerSubtitle: string
+  footer: string
 }): string {
   const coloredShoutout = colorNames(opts.shoutout, opts.firstNames)
 
@@ -158,8 +163,8 @@ function buildHTML(opts: {
     <div style="background: linear-gradient(135deg, #2D3B2D, #1D6B44); padding: 24px 28px;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start;">
         <div>
-          <div style="font-size: 20px; font-weight: 900; color: #fff;">Good morning!</div>
-          <div style="font-size: 13px; color: rgba(255,255,255,.5); margin-top: 2px;">${fmtDate(opts.today)} · Daily recap</div>
+          <div style="font-size: 20px; font-weight: 900; color: #fff;">${opts.greeting}</div>
+          <div style="font-size: 13px; color: rgba(255,255,255,.5); margin-top: 2px;">${opts.headerSubtitle}</div>
         </div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">${weatherCards}</div>
       </div>
@@ -182,7 +187,7 @@ function buildHTML(opts: {
       ${eventCards}
     </div>
     <div style="padding: 14px 28px; border-top: 1px solid #D8D3CA; text-align: center; font-size: 12px; color: #A8A89A;">
-      BEB Portal · Have a great day!
+      ${opts.footer}
     </div>
   </div>
 </div>`
@@ -320,33 +325,48 @@ export async function POST(request: NextRequest) {
     const weatherResults = await Promise.all(uniqueCities.map(c => fetchWeather(cfg.weatherApiKey, c)))
     const weather = weatherResults.filter((w): w is { city: string; temp: number } => w != null)
 
-    // Shoutout via Claude
-    const shoutout = await generateShoutout(cfg.anthropicApiKey, firstNames, totalPurchases, totalDollars)
+    // Editable template fields (subject + greeting + footer + shoutout
+    // fallback). Fall back to hardcoded defaults if the row was deleted.
+    const { data: tpl } = await sb
+      .from('report_templates')
+      .select('subject, greeting, header_subtitle, footer, shoutout_fallback')
+      .eq('id', 'morning-briefing')
+      .maybeSingle()
+    const dateStr = fmtDate(today)
+    const tplVars: Record<string, string> = { date: dateStr }
+    const subPlaceholders = (s: string) =>
+      (s || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => tplVars[k] ?? '')
+    const greeting       = subPlaceholders(tpl?.greeting          || 'Good morning!')
+    const headerSubtitle = subPlaceholders(tpl?.header_subtitle   || `${dateStr} · Daily recap`)
+    const footer         = subPlaceholders(tpl?.footer            || 'BEB Portal · Have a great day!')
+    const shoutoutFallback = subPlaceholders(tpl?.shoutout_fallback || '')
+
+    // Shoutout via Claude (uses the editable fallback when AI is off / fails)
+    const shoutout = await generateShoutout(
+      cfg.anthropicApiKey, firstNames, totalPurchases, totalDollars,
+      shoutoutFallback || undefined,
+    )
 
     // Final HTML
     const html = buildHTML({
-      today,
-      weather,
-      shoutout,
-      firstNames,
-      totalPurchases,
-      totalDollars,
-      events: eventSummaries,
+      today, weather, shoutout, firstNames,
+      totalPurchases, totalDollars, events: eventSummaries,
+      greeting, headerSubtitle, footer,
     })
 
+    const brandLabel = brand === 'liberty' ? 'Liberty' : 'BEB'
+    const subject = subPlaceholders(tpl?.subject || `${brandLabel} Morning briefing — ${dateStr}`)
+
     if (dryRun) {
-      const brandLabel = brand === 'liberty' ? 'Liberty' : 'BEB'
       return NextResponse.json({
         ok: true, dryRun: true, brand,
         to: recipientEmails,
-        subject: `${brandLabel} Morning briefing — ${fmtDate(today)}`,
+        subject,
         html,
       })
     }
 
     // Send via Resend, one email per recipient (keeps blind-cc off for clarity).
-    const brandLabel = brand === 'liberty' ? 'Liberty' : 'BEB'
-    const subject = `${brandLabel} Morning briefing — ${fmtDate(today)}`
     const fromHeader = `${bcfg.fromName} <${bcfg.fromEmail}>`
     const sendErrors: string[] = []
     for (const to of recipientEmails) {
