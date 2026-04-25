@@ -154,36 +154,16 @@ export default function NotificationTemplatesAdmin() {
           {triggerDefs.map(def => {
             const row = v2ForBrand.find(t => t.trigger_type === def.type)
             return (
-              <button key={def.type}
-                onClick={() => row && setActiveId(row.id)}
+              <TriggerRow key={def.type}
+                title={def.name}
+                description={def.description}
+                enabled={!!row?.enabled}
+                scaffold={!def.implemented}
+                channels={(row?.channels || []) as string[]}
+                delayMinutes={row?.delay_minutes ?? def.defaultDelayMinutes}
                 disabled={!row}
-                style={{
-                  background: 'white', border: '1px solid var(--pearl)',
-                  borderRadius: 10, padding: '12px 14px', textAlign: 'left',
-                  cursor: row ? 'pointer' : 'not-allowed', fontFamily: 'inherit',
-                  opacity: row ? 1 : 0.5,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink)' }}>{def.name}</div>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    {row?.enabled ? (
-                      <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--green-dark)', background: 'var(--green-pale)', padding: '2px 6px', borderRadius: 4 }}>ENABLED</span>
-                    ) : (
-                      <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--mist)', background: 'var(--cream2)', padding: '2px 6px', borderRadius: 4 }}>DISABLED</span>
-                    )}
-                    {!def.implemented && (
-                      <span style={{ fontSize: 10, fontWeight: 800, color: '#92400E', background: '#FEF3C7', padding: '2px 6px', borderRadius: 4 }}>SCAFFOLD</span>
-                    )}
-                    {row && (
-                      <span style={{ fontSize: 10, color: 'var(--mist)' }}>
-                        {(row.channels || []).join('+').toUpperCase()} · {row.delay_minutes ?? def.defaultDelayMinutes}m
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>{def.description}</div>
-              </button>
+                onClick={() => row && setActiveId(row.id)}
+              />
             )
           })}
         </div>
@@ -216,6 +196,80 @@ export default function NotificationTemplatesAdmin() {
 
 function prettyName(id: string): string {
   return id.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
+function TriggerRow({
+  title,
+  description,
+  enabled,
+  scaffold,
+  channels,
+  delayMinutes,
+  disabled,
+  onClick,
+}: {
+  title: string
+  description: string
+  enabled: boolean
+  scaffold: boolean
+  channels: string[]
+  delayMinutes: number
+  disabled: boolean
+  onClick: () => void
+}) {
+  const [hover, setHover] = useState(false)
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onFocus={() => setHover(true)}
+      onBlur={() => setHover(false)}
+      style={{
+        background: 'white',
+        border: `1px solid ${hover ? 'var(--green3)' : 'var(--pearl)'}`,
+        borderRadius: 10, padding: '12px 14px', textAlign: 'left',
+        cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+        opacity: disabled ? 0.5 : 1,
+        transition: 'border-color .15s ease',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink)' }}>{title}</div>
+        <div style={{
+          fontSize: 11, color: 'var(--mist)',
+          opacity: hover ? 1 : 0, transition: 'opacity .15s ease',
+        }}>
+          hover for details
+        </div>
+      </div>
+
+      {hover && (
+        <div style={{
+          marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--cream2)',
+          display: 'flex', flexDirection: 'column', gap: 6,
+        }}>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            {enabled ? (
+              <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--green-dark)', background: 'var(--green-pale)', padding: '2px 6px', borderRadius: 4 }}>ENABLED</span>
+            ) : (
+              <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--mist)', background: 'var(--cream2)', padding: '2px 6px', borderRadius: 4 }}>DISABLED</span>
+            )}
+            {scaffold && (
+              <span style={{ fontSize: 10, fontWeight: 800, color: '#92400E', background: '#FEF3C7', padding: '2px 6px', borderRadius: 4 }}>SCAFFOLD</span>
+            )}
+            {channels.length > 0 && (
+              <span style={{ fontSize: 10, color: 'var(--mist)' }}>
+                {channels.join('+').toUpperCase()} · {delayMinutes}m delay
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--mist)' }}>{description}</div>
+        </div>
+      )}
+    </button>
+  )
 }
 
 function NotificationTemplateEditor({
