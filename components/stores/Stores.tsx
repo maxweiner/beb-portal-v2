@@ -7,6 +7,7 @@ import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import type { Store } from '@/types'
 import BookingConfigCard from './BookingConfigCard'
 import QrCodesSection from './QrCodesSection'
+import StorePortalAccessCard from './StorePortalAccessCard'
 import WelcomeEmailSender from './WelcomeEmailSender'
 import PhoneInput from '@/components/ui/PhoneInput'
 import { formatPhoneDisplay, rawDigits } from '@/lib/phone'
@@ -501,6 +502,9 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
             <input ref={imgRef} type="file" accept="image/*" style={{ display: 'none' }}
               onChange={e => { if (e.target.files?.[0]) uploadStoreImage(e.target.files[0]) }} />
           </div>
+
+          {/* Store Portal Access (staff portal token + URL + QR) */}
+          <StorePortalAccessCard storeId={store.id} />
 
           {/* Customer Booking URL & QR Codes (slug + channel/custom/employee QRs) */}
           <QrCodesSection
