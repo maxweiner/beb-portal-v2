@@ -41,6 +41,30 @@ function fmtDateLong(iso: string): string {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
+function CheckboxRow({ label, checked, onToggle }: {
+  label: string; checked: boolean; onToggle: () => void
+}) {
+  return (
+    <label style={{
+      display: 'flex', alignItems: 'center', gap: 8, fontSize: 13,
+      padding: '4px 0', cursor: 'pointer', color: 'var(--ink)',
+      opacity: checked ? 1 : 0.95,
+    }}>
+      <input type="checkbox" checked={checked} onChange={onToggle}
+        style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
+      <span aria-hidden="true" style={{
+        width: 20, height: 20, flexShrink: 0, borderRadius: 5,
+        border: `2px solid ${checked ? 'var(--green)' : 'var(--pearl)'}`,
+        background: checked ? 'var(--green)' : '#FFFFFF',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: '#FFFFFF', fontSize: 13, fontWeight: 900, lineHeight: 1,
+        transition: 'all .15s ease',
+      }}>{checked ? '✓' : ''}</span>
+      <span>{label}</span>
+    </label>
+  )
+}
+
 export default function AddAppointmentModal({
   stores,
   events,
@@ -303,48 +327,22 @@ export default function AddAppointmentModal({
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-2">Bringing</label>
                 <div className="grid grid-cols-2 gap-2">
-                  {itemsOptions.map(opt => {
-                    const checked = items.includes(opt)
-                    return (
-                      <label key={opt} className="flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition-colors"
-                        style={checked ? { borderColor: 'var(--green)', background: 'var(--green-pale)' } : { borderColor: '#d1d5db' }}>
-                        <input type="checkbox" checked={checked} onChange={() => toggle(items, opt, setItems)}
-                          style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
-                        <span aria-hidden="true" style={{
-                          width: 18, height: 18, flexShrink: 0, borderRadius: 4,
-                          border: `2px solid ${checked ? 'var(--green)' : '#d1d5db'}`,
-                          background: checked ? 'var(--green)' : '#FFFFFF',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          color: '#fff', fontSize: 12, fontWeight: 900, lineHeight: 1,
-                        }}>{checked ? '✓' : ''}</span>
-                        <span>{opt}</span>
-                      </label>
-                    )
-                  })}
+                  {itemsOptions.map(opt => (
+                    <CheckboxRow key={opt} label={opt}
+                      checked={items.includes(opt)}
+                      onToggle={() => toggle(items, opt, setItems)} />
+                  ))}
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-2">How heard (pick any)</label>
                 <div className="grid grid-cols-2 gap-2">
-                  {hearOptions.map(opt => {
-                    const checked = howHeard.includes(opt)
-                    return (
-                      <label key={opt} className="flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition-colors"
-                        style={checked ? { borderColor: 'var(--green)', background: 'var(--green-pale)' } : { borderColor: '#d1d5db' }}>
-                        <input type="checkbox" checked={checked} onChange={() => toggle(howHeard, opt, setHowHeard)}
-                          style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
-                        <span aria-hidden="true" style={{
-                          width: 18, height: 18, flexShrink: 0, borderRadius: 4,
-                          border: `2px solid ${checked ? 'var(--green)' : '#d1d5db'}`,
-                          background: checked ? 'var(--green)' : '#FFFFFF',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          color: '#fff', fontSize: 12, fontWeight: 900, lineHeight: 1,
-                        }}>{checked ? '✓' : ''}</span>
-                        <span>{opt}</span>
-                      </label>
-                    )
-                  })}
+                  {hearOptions.map(opt => (
+                    <CheckboxRow key={opt} label={opt}
+                      checked={howHeard.includes(opt)}
+                      onToggle={() => toggle(howHeard, opt, setHowHeard)} />
+                  ))}
                 </div>
               </div>
 
@@ -359,8 +357,21 @@ export default function AddAppointmentModal({
                 </div>
               )}
 
-              <label className="flex items-center gap-2 text-sm pt-1">
-                <input type="checkbox" checked={isWalkin} onChange={e => setIsWalkin(e.target.checked)} />
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: 8, fontSize: 13,
+                paddingTop: 4, cursor: 'pointer', color: 'var(--ink)',
+              }}>
+                <input type="checkbox" checked={isWalkin}
+                  onChange={e => setIsWalkin(e.target.checked)}
+                  style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
+                <span aria-hidden="true" style={{
+                  width: 20, height: 20, flexShrink: 0, borderRadius: 5,
+                  border: `2px solid ${isWalkin ? 'var(--green)' : 'var(--pearl)'}`,
+                  background: isWalkin ? 'var(--green)' : '#FFFFFF',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#FFFFFF', fontSize: 13, fontWeight: 900, lineHeight: 1,
+                  transition: 'all .15s ease',
+                }}>{isWalkin ? '✓' : ''}</span>
                 Walk-in (customer is here in person now)
               </label>
 
