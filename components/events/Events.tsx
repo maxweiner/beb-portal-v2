@@ -267,9 +267,19 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
     }
     const updated = exists ? workers.filter(w => w.id !== uid) : [...workers, { id: uid, name }]
     try {
-      await withTimeout(
-        supabase.from('events').update({ workers: updated }).eq('id', ev.id)
-      )
+      // Route through the chokepoint so the buyer_added_to_event /
+      // buyer_removed notification side-effects fire reliably.
+      const res = await withTimeout(
+        fetch(`/api/events/${ev.id}/workers`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workers: updated }),
+        })
+      ) as Response
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.error || `HTTP ${res.status}`)
+      }
     } catch (err: any) {
       alert('Failed to update workers: ' + (err?.message || 'timeout'))
       return
