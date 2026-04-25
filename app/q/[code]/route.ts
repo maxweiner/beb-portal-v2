@@ -16,6 +16,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
+import { maybeFireVdpDropped } from '@/lib/notifications/vdpDropped'
 
 export const dynamic = 'force-dynamic'
 
@@ -113,7 +114,19 @@ export async function GET(req: Request, { params }: { params: { code: string } }
     ip_hash: ipHash,
     is_repeat: isRepeat,
   }).then(({ error }) => {
-    if (error) console.error('[qr-scan log] insert failed', error)
+    if (error) {
+      console.error('[qr-scan log] insert failed', error)
+      return
+    }
+    // After-insert: see if this is the 2nd scan that triggers the
+    // VDP-dropped alert. Best-effort and chained off the insert so the
+    // count includes this row.
+    maybeFireVdpDropped({
+      id: qr.id,
+      type: qr.type,
+      store_id: qr.store_id,
+      lead_source: qr.lead_source,
+    }).catch(e => console.error('[vdp_dropped] check failed', e))
   })
 
   // ---- Resolve destination ----

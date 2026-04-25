@@ -11,6 +11,7 @@ export type TriggerType =
   | 'event_reminder_day_before'
   | 'event_cancelled'
   | 'event_follow_up'
+  | 'vdp_dropped'
 
 export type Channel = 'email' | 'sms'
 
@@ -84,6 +85,23 @@ export const TRIGGER_REGISTRY: Record<TriggerType, TriggerDefinition> = {
     supportedChannels: ['email', 'sms'],
     variables: COMMON_VARS,
     implemented: false,
+  },
+  vdp_dropped: {
+    type: 'vdp_dropped',
+    name: 'VDP Dropped (2 scans)',
+    description: 'Fires when a Channel QR (VDP / Postcard / etc.) records its second scan within an event campaign window. One alert per (event, source).',
+    defaultDelayMinutes: 0,
+    supportedChannels: ['email', 'sms'],
+    variables: [
+      { key: 'event_name', description: 'Event display name' },
+      { key: 'event_dates', description: 'Formatted date range' },
+      { key: 'event_city', description: 'City the event is held in' },
+      { key: 'store_name', description: 'Host store' },
+      { key: 'channel_source', description: 'The source / channel that just dropped (e.g. VDP, Postcard)' },
+      { key: 'first_scan_at', description: 'When the first scan happened' },
+      { key: 'portal_url', description: 'Root URL of the portal' },
+    ],
+    implemented: true,
   },
 }
 
