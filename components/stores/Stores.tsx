@@ -7,6 +7,7 @@ import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import type { Store } from '@/types'
 import BookingConfigCard from './BookingConfigCard'
 import QrCodesSection from './QrCodesSection'
+import WelcomeEmailSender from './WelcomeEmailSender'
 import PhoneInput from '@/components/ui/PhoneInput'
 import { formatPhoneDisplay, rawDigits } from '@/lib/phone'
 
@@ -545,6 +546,14 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
                 }).catch(err => alert('Error: ' + err.message))
               }} />
             </div>
+
+            <WelcomeEmailSender
+              storeId={store.id}
+              storeName={store.name}
+              ownerEmail={store.owner_email}
+              ownerName={store.owner_name}
+              employees={employees}
+            />
           </div>
 
           {/* Google Calendar Feed */}
