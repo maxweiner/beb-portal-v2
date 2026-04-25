@@ -342,7 +342,7 @@ export default function BookingClient({
             <div className="flex-1 min-w-0">
               <h1 className="text-2xl font-extrabold leading-tight" style={{ color: primary }}>{store.name}</h1>
               {(store.owner_phone || store.owner_email) && (
-                <div className="text-sm text-gray-700 mt-2 space-y-1 leading-tight">
+                <div className="text-sm text-gray-700 mt-1 leading-snug">
                   {store.owner_phone && <div>{formatPhoneDisplay(store.owner_phone)}</div>}
                   {store.owner_email && <div className="break-all">{store.owner_email}</div>}
                 </div>
@@ -427,7 +427,7 @@ export default function BookingClient({
                 {store.owner_email && <div className="break-all">{store.owner_email}</div>}
               </div>
             )}
-            <p className="text-base mt-4">
+            <p className="text-sm mt-2 text-gray-500">
               {isReschedule ? 'Reschedule your appointment' : 'Book your appointment'}
             </p>
           </div>
