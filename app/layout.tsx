@@ -1,6 +1,15 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { AppProvider } from '@/lib/context'
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  // viewport-fit=cover lets env(safe-area-inset-*) report real values on
+  // notched iPhones in Safari + standalone PWA. Pages then opt-in via
+  // padding: env(safe-area-inset-top) etc.
+  viewportFit: 'cover',
+}
 
 export const metadata: Metadata = {
   title: 'BEB Buyer Portal',

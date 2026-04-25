@@ -337,7 +337,10 @@ export default function BookingClient({
     return (
       <div className="min-h-screen pb-12" style={{ background: secondary }}>
         {/* Branded header — same shape as the booking page */}
-        <header className="px-4 pt-8 pb-6 bg-white" style={{ borderBottom: `4px solid ${primary}` }}>
+        <header className="px-4 pb-6 bg-white" style={{
+          borderBottom: `4px solid ${primary}`,
+          paddingTop: 'max(env(safe-area-inset-top), 32px)',
+        }}>
           <div className="max-w-md mx-auto flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
               <h1 className="text-2xl font-extrabold leading-tight" style={{ color: primary }}>{store.name}</h1>

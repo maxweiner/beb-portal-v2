@@ -202,7 +202,10 @@ export default function StorePortalClient({
 
   return (
     <div className="min-h-screen pb-24" style={{ background: secondary }}>
-      <header className="px-4 pt-8 pb-6 bg-white" style={{ borderBottom: `4px solid ${primary}` }}>
+      <header className="px-4 pb-6 bg-white" style={{
+        borderBottom: `4px solid ${primary}`,
+        paddingTop: 'max(env(safe-area-inset-top), 32px)',
+      }}>
         <div className="max-w-2xl mx-auto flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <h1 className="text-2xl font-extrabold leading-tight" style={{ color: primary }}>{store.name}</h1>
@@ -212,7 +215,13 @@ export default function StorePortalClient({
                 {store.owner_email && <div className="break-all">{store.owner_email}</div>}
               </div>
             )}
-            <p className="text-sm mt-2 text-gray-500">Store Portal — {appointments.length} upcoming appointment{appointments.length === 1 ? '' : 's'}</p>
+            <p className="text-sm mt-2 text-gray-500">
+              Store Portal — {appointments.length} upcoming appointment{appointments.length === 1 ? '' : 's'}
+              {' · '}
+              <a href="/install" target="_blank" rel="noreferrer" className="underline" style={{ color: primary }}>
+                Install on iPhone
+              </a>
+            </p>
           </div>
           <div className="shrink-0">
             {store.store_image_url ? (
