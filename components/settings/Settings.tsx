@@ -53,6 +53,13 @@ export default function Settings() {
     async (p) => {
       if (!user || !p.name.trim()) return
       await supabase.from('users').update({ name: p.name.trim(), phone: p.phone.trim() }).eq('id', user.id)
+      // Refresh any in-flight notifications for this buyer so the
+      // updated name/phone shows up when they actually send.
+      void fetch('/api/notifications/reenqueue-for-buyer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ buyer_id: user.id, reason: 'profile_edited' }),
+      }).catch(() => {})
       reload()
     },
     { enabled: !!user, delay: 1000 }
