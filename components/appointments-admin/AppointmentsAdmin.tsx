@@ -41,6 +41,18 @@ interface AppointmentRow {
 
 type DateFilter = 'today' | 'this-week' | 'next-week' | 'all-upcoming' | 'past'
 
+// On weekends (Sat/Sun) default the page to next week — by then this
+// week's appointments are mostly past. Mon-Fri stay on this week. Day
+// of week is anchored to America/New_York so the default doesn't drift
+// by user timezone.
+function defaultDateFilter(): DateFilter {
+  const day = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short',
+  }).format(new Date())
+  return day === 'Sat' || day === 'Sun' ? 'next-week' : 'this-week'
+}
+
 // ---------- date helpers (all local-time, no tz library) ----------
 
 function todayIso(): string {
@@ -186,7 +198,7 @@ export default function AppointmentsAdmin() {
   const [refreshTick, setRefreshTick] = useState(0)
   const [showAddModal, setShowAddModal] = useState(false)
 
-  const [dateFilter, setDateFilter] = useState<DateFilter>('this-week')
+  const [dateFilter, setDateFilter] = useState<DateFilter>(defaultDateFilter)
   const [sourceFilter, setSourceFilter] = useState<Source | 'all'>('all')
   const [storeFilter, setStoreFilter] = useState<string>('all')
   const [search, setSearch] = useState('')
