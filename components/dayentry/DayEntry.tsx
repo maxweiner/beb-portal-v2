@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import { canEditEvent } from '@/lib/permissions'
 import EventNotesNudge from '@/components/events/EventNotesNudge'
+import Checkbox from '@/components/ui/Checkbox'
 
 /* ── Lead sources — day-level aggregates on event_days ── */
 const LEAD_SOURCES = [
@@ -575,9 +576,13 @@ export default function DayEntry() {
                                 placeholder="—" style={{ width: 90, fontSize: 13, padding: '4px 8px' }} />
                             </td>
                             <td style={{ padding: '4px 8px', textAlign: 'center' }}>
-                              <input type="checkbox" checked={c.commission_rate === 5}
-                                onChange={e => updateCheck(i, 'commission_rate', e.target.checked ? 5 : 10)}
-                                className="w-4 h-4 cursor-pointer" style={{ accentColor: 'var(--green)' }} aria-label="5% commission rate" />
+                              <div style={{ display: 'inline-flex' }}>
+                                <Checkbox
+                                  size={18}
+                                  checked={c.commission_rate === 5}
+                                  onChange={(next) => updateCheck(i, 'commission_rate', next ? 5 : 10)}
+                                />
+                              </div>
                             </td>
                             <td style={{ padding: '4px 8px' }}>
                               <button onClick={() => removeCheck(i)} style={{ background: 'none', border: 'none', color: 'var(--mist)', cursor: 'pointer', fontSize: 16, padding: '0 4px' }}>×</button>
@@ -615,17 +620,18 @@ export default function DayEntry() {
                           <label className="fl">Buy Form #</label>
                           <input type="text" value={c.buy_form_number} onChange={e => updateCheck(i, 'buy_form_number', e.target.value)} placeholder="—" style={{ width: 100 }} />
                         </div>
-                        <label style={{
-                          display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
-                          padding: '6px 10px', borderRadius: 'var(--r)',
-                          background: c.commission_rate === 5 ? 'var(--green-pale)' : 'transparent',
-                          border: `1px solid ${c.commission_rate === 5 ? 'var(--green3)' : 'var(--pearl)'}`, marginBottom: 2,
-                        }}>
-                          <input type="checkbox" checked={c.commission_rate === 5}
-                            onChange={e => updateCheck(i, 'commission_rate', e.target.checked ? 5 : 10)}
-                            className="w-4 h-4 cursor-pointer" style={{ accentColor: 'var(--green)' }} />
-                          <span style={{ fontSize: 12, fontWeight: 700, color: c.commission_rate === 5 ? 'var(--green-dark)' : 'var(--mist)' }}>5%</span>
-                        </label>
+                        <Checkbox
+                          checked={c.commission_rate === 5}
+                          onChange={(next) => updateCheck(i, 'commission_rate', next ? 5 : 10)}
+                          labelStyle={{
+                            padding: '6px 10px', borderRadius: 'var(--r)',
+                            background: c.commission_rate === 5 ? 'var(--green-pale)' : 'transparent',
+                            border: `1px solid ${c.commission_rate === 5 ? 'var(--green3)' : 'var(--pearl)'}`, marginBottom: 2,
+                          }}
+                          label={
+                            <span style={{ fontSize: 12, fontWeight: 700, color: c.commission_rate === 5 ? 'var(--green-dark)' : 'var(--mist)' }}>5%</span>
+                          }
+                        />
                         <button onClick={() => removeCheck(i)} style={{ background: 'none', border: 'none', color: 'var(--mist)', cursor: 'pointer', fontSize: 18, padding: '0 4px', marginBottom: 2 }}>×</button>
                       </div>
                     ))}

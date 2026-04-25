@@ -11,6 +11,7 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { TRIGGER_REGISTRY, type TriggerType } from '@/lib/notifications/triggers'
 import { buildMergeVars, substitute } from '@/lib/notifications/mergeVars'
+import Checkbox from '@/components/ui/Checkbox'
 
 export interface V2TemplateRow {
   id: string
@@ -211,12 +212,15 @@ export default function NotificationTemplateV2Editor({
             <span style={{ color: 'var(--mist)' }}>{def?.description}</span>
           </div>
         </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-          <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} style={{ width: 18, height: 18 }} />
-          <span style={{ fontWeight: 700, color: enabled ? 'var(--green-dark)' : 'var(--mist)' }}>
-            {enabled ? 'Enabled' : 'Disabled'}
-          </span>
-        </label>
+        <Checkbox
+          checked={enabled}
+          onChange={setEnabled}
+          label={
+            <span style={{ fontWeight: 700, color: enabled ? 'var(--green-dark)' : 'var(--mist)' }}>
+              {enabled ? 'Enabled' : 'Disabled'}
+            </span>
+          }
+        />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 0.8fr)', gap: 14 }}>
@@ -239,23 +243,21 @@ export default function NotificationTemplateV2Editor({
           <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', marginBottom: 14, flexWrap: 'wrap' }}>
             <div className="field" style={{ marginBottom: 0 }}>
               <label className="fl">Channels</label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {(['email', 'sms'] as const).map(c => {
-                  const active = channelsSet.has(c)
-                  return (
-                    <label key={c} style={{
-                      display: 'flex', alignItems: 'center', gap: 6,
-                      padding: '6px 12px', borderRadius: 6,
-                      border: `1.5px solid ${active ? 'var(--green)' : 'var(--pearl)'}`,
-                      background: active ? 'var(--green-pale)' : 'white',
-                      color: active ? 'var(--green-dark)' : 'var(--mist)',
-                      fontWeight: 700, fontSize: 12, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '.04em',
-                    }}>
-                      <input type="checkbox" checked={active} onChange={() => toggleChannel(c)} style={{ display: 'none' }} />
-                      {active ? '✓' : ''} {c}
-                    </label>
-                  )
-                })}
+              <div style={{ display: 'flex', gap: 16 }}>
+                {(['email', 'sms'] as const).map(c => (
+                  <Checkbox
+                    key={c}
+                    checked={channelsSet.has(c)}
+                    onChange={() => toggleChannel(c)}
+                    label={
+                      <span style={{
+                        fontWeight: 700, fontSize: 12,
+                        textTransform: 'uppercase', letterSpacing: '.04em',
+                        color: channelsSet.has(c) ? 'var(--green-dark)' : 'var(--mist)',
+                      }}>{c}</span>
+                    }
+                  />
+                ))}
               </div>
             </div>
 
@@ -298,10 +300,12 @@ export default function NotificationTemplateV2Editor({
                   style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12, resize: 'vertical' }}
                 />
               </div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--mist)', marginBottom: 12 }}>
-                <input type="checkbox" checked={respectQHEmail} onChange={e => setRespectQHEmail(e.target.checked)} />
-                Respect quiet hours for email
-              </label>
+              <Checkbox
+                checked={respectQHEmail}
+                onChange={setRespectQHEmail}
+                label={<span style={{ fontSize: 12, color: 'var(--mist)' }}>Respect quiet hours for email</span>}
+                labelStyle={{ marginBottom: 12 }}
+              />
             </>
           )}
 
@@ -321,10 +325,12 @@ export default function NotificationTemplateV2Editor({
                   Preview: {smsCharCount} chars · {smsSegments} segment{smsSegments === 1 ? '' : 's'}
                 </div>
               </div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--mist)', marginBottom: 12 }}>
-                <input type="checkbox" checked={respectQHSms} onChange={e => setRespectQHSms(e.target.checked)} />
-                Respect quiet hours for SMS (default on)
-              </label>
+              <Checkbox
+                checked={respectQHSms}
+                onChange={setRespectQHSms}
+                label={<span style={{ fontSize: 12, color: 'var(--mist)' }}>Respect quiet hours for SMS (default on)</span>}
+                labelStyle={{ marginBottom: 12 }}
+              />
             </>
           )}
 
