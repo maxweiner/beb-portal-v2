@@ -87,14 +87,14 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
       {/* Brand Switcher — only for liberty-enabled users */}
       {hasLibertyAccess && (
         <div style={{ margin: '10px 12px 0', background: 'rgba(0,0,0,.25)', borderRadius: 10, padding: 3, display: 'flex', gap: 2 }}>
-          <button onClick={() => { setBrand('beb'); setNav('dashboard') }} style={{
+          <button onClick={() => setBrand('beb')} style={{
             flex: 1, padding: '5px 0', border: 'none', borderRadius: 7, cursor: 'pointer',
             fontWeight: 900, fontSize: 11, letterSpacing: '.05em',
             background: !isLiberty ? '#7EC8A0' : 'transparent',
             color: !isLiberty ? '#0F2D1F' : 'rgba(255,255,255,.45)',
             transition: 'all .15s',
           }}>BEB</button>
-          <button onClick={() => { setBrand('liberty'); setNav('dashboard') }} style={{
+          <button onClick={() => setBrand('liberty')} style={{
             flex: 1, padding: '5px 0', border: 'none', borderRadius: 7, cursor: 'pointer',
             fontWeight: 900, fontSize: 11, letterSpacing: '.05em',
             background: isLiberty ? '#93C5FD' : 'transparent',
