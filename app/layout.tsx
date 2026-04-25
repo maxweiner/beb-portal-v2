@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   description: 'Estate jewelry buying event management',
   icons: {
     icon: '/favicon.svg',
-    apple: '/apple-touch-icon.png',
+    apple: '/icons/beb-180.png',
   },
   manifest: '/manifest.json',
   appleWebApp: {
