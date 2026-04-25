@@ -1,15 +1,17 @@
 {
   "name": "BEB Buyer Portal",
   "short_name": "BEB Portal",
+  "description": "Beneficial Estate Buyers — staff and customer booking portal.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#FFFFFF",
+  "orientation": "portrait",
+  "background_color": "#F5F0E8",
   "theme_color": "#1D6B44",
   "icons": [
-    {
-      "src": "/apple-touch-icon.png",
-      "sizes": "180x180",
-      "type": "image/png"
-    }
+    { "src": "/icons/beb-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/icons/beb-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/beb-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/beb-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
