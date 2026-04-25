@@ -9,6 +9,7 @@ import { canEditEvent } from '@/lib/permissions'
 import type { Event, BuyerVacation } from '@/types'
 import type { NavPage } from '@/app/page'
 import EventNotesPanel from './EventNotesPanel'
+import NotificationStatusBadge from '@/components/notifications/NotificationStatusBadge'
 
 type Filter = 'thisweek' | 'active' | 'all' | 'current' | 'past' | 'future' | 'days30' | 'days60'
 type Sort = 'date-desc' | 'date-asc' | 'name-asc'
@@ -957,9 +958,14 @@ function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
           {(ev.workers || []).length > 0 && (
             <div className="card card-accent" style={{ margin: 0 }}>
               <div className="card-title">Who Worked</div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {(ev.workers || []).map((w: any) => (
-                  <span key={w.id} className="badge badge-jade">{w.name}</span>
+                  <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span className="badge badge-jade">{w.name}</span>
+                    {!w.id?.startsWith('deleted_') && (
+                      <NotificationStatusBadge eventId={ev.id} buyerId={w.id} compact />
+                    )}
+                  </div>
                 ))}
               </div>
             </div>
