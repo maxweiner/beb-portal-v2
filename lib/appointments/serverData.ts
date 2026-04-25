@@ -35,7 +35,7 @@ export async function getStoreBranding(slug: string): Promise<BookingStore | nul
   const sb = admin()
   const { data } = await sb
     .from('stores')
-    .select('id, name, slug, store_image_url, color_primary, color_secondary, owner_phone, owner_email')
+    .select('id, name, slug, store_image_url, color_primary, color_secondary, owner_phone, owner_email, city, state')
     .eq('slug', slug)
     .maybeSingle()
   return data ?? null
@@ -51,7 +51,7 @@ export async function getBookingPayload(slug: string): Promise<BookingPayload | 
   // 1. Store row
   const { data: storeRow, error: storeErr } = await sb
     .from('stores')
-    .select('id, name, slug, store_image_url, color_primary, color_secondary, owner_phone, owner_email')
+    .select('id, name, slug, store_image_url, color_primary, color_secondary, owner_phone, owner_email, city, state')
     .eq('slug', slug)
     .maybeSingle()
 

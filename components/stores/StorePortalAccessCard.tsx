@@ -52,10 +52,13 @@ export default function StorePortalAccessCard({ storeId }: { storeId: string }) 
     setPortalToken(data)
   }
 
+  // Append ?add=1 so the QR / link lands directly on the Add Appointment
+  // modal — staff can still get to the appointments list by removing the
+  // query string or by closing the modal once it loads.
   const portalUrl = portalToken
     ? (process.env.NEXT_PUBLIC_BOOKING_BASE_URL
         || (typeof window !== 'undefined' ? window.location.origin : 'https://beb-portal-v2.vercel.app'))
-      + `/store-portal/${portalToken.token}`
+      + `/store-portal/${portalToken.token}?add=1`
     : ''
 
   return (
