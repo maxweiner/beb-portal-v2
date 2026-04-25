@@ -268,8 +268,13 @@ export default function AddAppointmentModal({
     >
       <form
         onSubmit={submit}
-        className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl max-w-lg w-full max-h-[92vh] overflow-y-auto"
-        style={{ fontSize: `${basePx}px` }}
+        className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl max-w-lg w-full overflow-y-auto"
+        style={{
+          fontSize: `${basePx}px`,
+          // dvh tracks the *visible* viewport, so the modal won't extend behind
+          // mobile browser chrome (URL bar) or the iPhone home indicator.
+          maxHeight: 'calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom))',
+        }}
       >
         <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
           <h2 className="font-bold" style={{ color: 'var(--ink)', fontSize: titleSize }}>Add appointment</h2>
