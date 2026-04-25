@@ -90,6 +90,11 @@ function UsersTab() {
   const saveName = async (uid: string) => {
     if (!nameVal.trim()) return
     await supabase.from('users').update({ name: nameVal.trim() }).eq('id', uid)
+    void fetch('/api/notifications/reenqueue-for-buyer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ buyer_id: uid, reason: 'name_edited' }),
+    }).catch(() => {})
     setEditingName(null)
     reload()
   }
@@ -102,6 +107,11 @@ function UsersTab() {
       alternate_emails: cleanEmails
     }).eq('id', editingUser.id)
     if (error) { alert('Failed to save: ' + error.message); return }
+    void fetch('/api/notifications/reenqueue-for-buyer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ buyer_id: editingUser.id, reason: 'profile_edited' }),
+    }).catch(() => {})
     setEditingUser(null)
     reload()
   }
