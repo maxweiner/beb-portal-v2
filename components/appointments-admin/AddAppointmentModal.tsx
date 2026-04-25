@@ -23,6 +23,11 @@ interface EmployeeRow { id: string; name: string }
 const DEFAULT_ITEMS = ['Gold', 'Diamonds', 'Watches', 'Coins', 'Jewelry', "I'm Not Sure"]
 const DEFAULT_HEAR = ['Large Postcard', 'Small Postcard', 'Newspaper', 'Email', 'Text', 'The Store Told Me']
 
+type FontScale = 'sm' | 'md' | 'lg'
+const FONT_SCALE_KEY = 'addApptFontScale'
+const SCALE_MULTIPLIER: Record<FontScale, number> = { sm: 1, md: 1.15, lg: 1.3 }
+const SCALE_LABEL: Record<FontScale, string> = { sm: 'Small', md: 'Medium', lg: 'Large' }
+
 function todayIso(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -40,6 +45,24 @@ function fmtTime(hhmm: string): string {
 function fmtDateLong(iso: string): string {
   const d = new Date(iso + 'T12:00:00')
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+}
+function ordinal(n: number): string {
+  const v = n % 100
+  if (v >= 11 && v <= 13) return `${n}th`
+  switch (n % 10) {
+    case 1: return `${n}st`
+    case 2: return `${n}nd`
+    case 3: return `${n}rd`
+    default: return `${n}th`
+  }
+}
+function fmtDayButton(iso: string): string {
+  const d = new Date(iso + 'T12:00:00')
+  const wRaw = d.toLocaleDateString('en-US', { weekday: 'short' }) // "Mon" "Tue" "Wed" "Thu" ...
+  const wMap: Record<string, string> = { Tue: 'Tues', Thu: 'Thurs' }
+  const weekday = wMap[wRaw] || wRaw
+  const month = d.toLocaleDateString('en-US', { month: 'short' })
+  return `${weekday} ${month} ${ordinal(d.getDate())}`
 }
 
 export default function AddAppointmentModal({
@@ -87,18 +110,18 @@ export default function AddAppointmentModal({
     return () => { cancelled = true }
   }, [storeId])
 
-  // Day picker derived from event
+  // Day picker derived from event. Always render all three slots; a day is
+  // "enabled" only when it has configured hours and isn't in the past.
   const dayInfos = useMemo(() => {
     if (!event || !config) return []
     return [1, 2, 3].map(d => {
       const dayNum = d as 1 | 2 | 3
       const dateStr = addDays(event.start_date, dayNum - 1)
       const hours = hoursForEventDay(dayNum, config as any, null)
-      return { dayNumber: dayNum, dateStr, hours }
-    }).filter(di => di.hours && di.dateStr >= today)
+      const enabled = !!hours && dateStr >= today
+      return { dayNumber: dayNum, dateStr, hours, enabled }
+    })
   }, [event, config, today])
-  const [dateStr, setDateStr] = useState<string>('')
-  useEffect(() => { setDateStr(dayInfos[0]?.dateStr || '') }, [dayInfos])
 
   // Pull bookings + blocks for the selected event/date so the slot picker
   // reflects real availability. Declared BEFORE the slots useMemo so the
@@ -106,9 +129,13 @@ export default function AddAppointmentModal({
   const [existingForDay, setExistingForDay] = useState<any[]>([])
   const [blocksForDay, setBlocksForDay] = useState<any[]>([])
 
+  const [dateStr, setDateStr] = useState<string>('')
+  // Reset day + time whenever the event changes — no day pre-selected.
+  useEffect(() => { setDateStr(''); }, [eventId])
+
   // Slot dropdown for the selected day (real availability via existing logic)
   const slots = useMemo(() => {
-    if (!config || !event) return []
+    if (!config || !event || !dateStr) return []
     const day = dayInfos.find(di => di.dateStr === dateStr)
     if (!day || !day.hours) return []
     return buildSlotsForDay({
@@ -155,6 +182,20 @@ export default function AddAppointmentModal({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Font scale switcher — defaults to Medium so the modal opens 2pt larger
+  // than the historical "small" baseline. Persisted across sessions.
+  const [fontScale, setFontScale] = useState<FontScale>('md')
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const saved = window.localStorage.getItem(FONT_SCALE_KEY)
+    if (saved === 'sm' || saved === 'md' || saved === 'lg') setFontScale(saved)
+  }, [])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(FONT_SCALE_KEY, fontScale)
+  }, [fontScale])
+  const basePx = Math.round(14 * SCALE_MULTIPLIER[fontScale]) // 14 / 16 / 18
+
   function toggle(arr: string[], val: string, setter: (v: string[]) => void) {
     setter(arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val])
   }
@@ -164,8 +205,16 @@ export default function AddAppointmentModal({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
-    if (!store?.slug || !event || !dateStr || !time) {
-      setError('Pick a store, event, day, and time.')
+    if (!store?.slug || !event) {
+      setError('Pick a store and event.')
+      return
+    }
+    if (!dateStr) {
+      setError('Please select a day.')
+      return
+    }
+    if (!time) {
+      setError('Please select a time.')
       return
     }
     if (!name.trim() || !phone.trim()) {
@@ -206,6 +255,12 @@ export default function AddAppointmentModal({
     setSubmitting(false)
   }
 
+  // Sizes are em-based so the entire modal scales from `basePx` on the form root.
+  const labelSize = '0.857em'   // ≈ 12px at 14 base
+  const inputSize = '1em'       // tracks base
+  const titleSize = '1.286em'   // ≈ 18px at 14 base
+  const checkboxLabelSize = '0.929em' // ≈ 13px at 14 base
+
   return (
     <div
       className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
@@ -214,30 +269,78 @@ export default function AddAppointmentModal({
       <form
         onSubmit={submit}
         className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl max-w-lg w-full max-h-[92vh] overflow-y-auto"
+        style={{ fontSize: `${basePx}px` }}
       >
         <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>Add appointment</h2>
-          <button type="button" onClick={onClose} className="p-1"><X className="w-5 h-5" /></button>
+          <h2 className="font-bold" style={{ color: 'var(--ink)', fontSize: titleSize }}>Add appointment</h2>
+          <button type="button" onClick={onClose} className="p-1" aria-label="Close">
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         <div className="p-5 space-y-3">
           {slugStores.length === 0 ? (
-            <div className="text-sm text-gray-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <div className="text-gray-700 bg-amber-50 border border-amber-200 rounded-lg p-3" style={{ fontSize: inputSize }}>
               No store has a slug set yet. Set one under <strong>Stores → store → Customer Booking URL & QR Codes</strong> first.
             </div>
           ) : (
             <>
+              {/* Font size switcher */}
+              <div
+                role="radiogroup"
+                aria-label="Modal text size"
+                style={{
+                  display: 'flex',
+                  gap: 4,
+                  padding: 3,
+                  borderRadius: 8,
+                  background: '#f3f4f6',
+                  width: '100%',
+                  margin: '0 auto',
+                }}
+              >
+                {(['sm', 'md', 'lg'] as const).map(s => {
+                  const sel = fontScale === s
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      role="radio"
+                      aria-checked={sel}
+                      onClick={() => setFontScale(s)}
+                      style={{
+                        flex: 1,
+                        padding: '0.4em 0.5em',
+                        borderRadius: 6,
+                        border: 'none',
+                        background: sel ? '#FFFFFF' : 'transparent',
+                        boxShadow: sel ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        color: sel ? 'var(--ink)' : '#6b7280',
+                        fontSize: '0.857em',
+                        transition: 'background .15s ease, color .15s ease',
+                      }}
+                    >
+                      {SCALE_LABEL[s]}
+                    </button>
+                  )
+                })}
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Store</label>
-                  <select className="w-full rounded-lg border border-gray-300 p-2 text-sm bg-white"
+                  <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Store</label>
+                  <select className="w-full rounded-lg border border-gray-300 p-2 bg-white"
+                    style={{ fontSize: inputSize }}
                     value={storeId} onChange={e => setStoreId(e.target.value)}>
                     {slugStores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Event</label>
-                  <select className="w-full rounded-lg border border-gray-300 p-2 text-sm bg-white"
+                  <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Event</label>
+                  <select className="w-full rounded-lg border border-gray-300 p-2 bg-white"
+                    style={{ fontSize: inputSize }}
                     value={eventId} onChange={e => setEventId(e.target.value)}
                     disabled={storeEvents.length === 0}>
                     {storeEvents.length === 0 && <option value="">No upcoming events</option>}
@@ -250,63 +353,90 @@ export default function AddAppointmentModal({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Day</label>
-                  <select className="w-full rounded-lg border border-gray-300 p-2 text-sm bg-white"
-                    value={dateStr} onChange={e => { setDateStr(e.target.value); setTime('') }}
-                    disabled={dayInfos.length === 0}>
-                    {dayInfos.length === 0 && <option value="">No bookable days</option>}
-                    {dayInfos.map(di => (
-                      <option key={di.dateStr} value={di.dateStr}>
-                        Day {di.dayNumber} ({fmtDateLong(di.dateStr)})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Time</label>
-                  <select className="w-full rounded-lg border border-gray-300 p-2 text-sm bg-white"
-                    value={time} onChange={e => setTime(e.target.value)} disabled={slots.length === 0}>
-                    <option value="">— select —</option>
-                    {slots.map(s => {
-                      const unavail = s.isPast || s.blocked || s.available === 0
-                      return (
-                        <option key={s.time} value={s.time} disabled={unavail}>
-                          {fmtTime(s.time)} {unavail ? '(full)' : `(${s.available} left)`}
-                        </option>
-                      )
-                    })}
-                  </select>
+              {/* Day picker — three buttons, no default. Past / unconfigured days
+                  are rendered disabled rather than hidden. */}
+              <div>
+                <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Day *</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {dayInfos.length === 0 ? (
+                    <div className="col-span-3 text-gray-500" style={{ fontSize: inputSize }}>No bookable days</div>
+                  ) : dayInfos.map(di => {
+                    const sel = di.dateStr === dateStr
+                    return (
+                      <button
+                        key={di.dayNumber}
+                        type="button"
+                        disabled={!di.enabled}
+                        aria-pressed={sel}
+                        onClick={() => { setDateStr(di.dateStr); setTime('') }}
+                        style={{
+                          padding: '0.6em 0.4em',
+                          borderRadius: 8,
+                          border: '1.5px solid var(--green)',
+                          background: sel ? 'var(--green)' : '#FFFFFF',
+                          color: sel ? '#FFFFFF' : 'var(--green)',
+                          fontWeight: 700,
+                          fontSize: '0.929em',
+                          opacity: di.enabled ? 1 : 0.4,
+                          cursor: di.enabled ? 'pointer' : 'not-allowed',
+                          transition: 'background .15s ease, color .15s ease',
+                          fontFamily: 'inherit',
+                          lineHeight: 1.2,
+                        }}
+                      >
+                        {fmtDayButton(di.dateStr)}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Customer name *</label>
+                <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Time</label>
+                <select className="w-full rounded-lg border border-gray-300 p-2 bg-white"
+                  style={{ fontSize: inputSize }}
+                  value={time} onChange={e => setTime(e.target.value)} disabled={slots.length === 0}>
+                  <option value="">— select —</option>
+                  {slots.map(s => {
+                    const unavail = s.isPast || s.blocked || s.available === 0
+                    return (
+                      <option key={s.time} value={s.time} disabled={unavail}>
+                        {fmtTime(s.time)} {unavail ? '(full)' : `(${s.available} left)`}
+                      </option>
+                    )
+                  })}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Customer name *</label>
                 <input type="text" required value={name} onChange={e => setName(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 p-2 text-sm" />
+                  style={{ fontSize: inputSize }}
+                  className="w-full rounded-lg border border-gray-300 p-2" />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Phone *</label>
+                  <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Phone *</label>
                   <PhoneInput required value={phone} onChange={v => setPhone(v)}
-                    className="w-full rounded-lg border border-gray-300 p-2 text-sm" />
+                    style={{ fontSize: inputSize }}
+                    className="w-full rounded-lg border border-gray-300 p-2" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Email</label>
+                  <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Email</label>
                   <input type="email" value={email} onChange={e => setEmail(e.target.value)}
                     placeholder="(optional)"
-                    className="w-full rounded-lg border border-gray-300 p-2 text-sm" />
+                    style={{ fontSize: inputSize }}
+                    className="w-full rounded-lg border border-gray-300 p-2" />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-2">Bringing</label>
+                <label className="block font-semibold text-gray-700 mb-2" style={{ fontSize: labelSize }}>Bringing</label>
                 <div className="grid grid-cols-2 gap-2">
                   {itemsOptions.map(opt => (
                     <Checkbox key={opt} label={opt}
-                      labelStyle={{ fontSize: 13, padding: '4px 0' }}
+                      labelStyle={{ fontSize: checkboxLabelSize, padding: '4px 0' }}
                       checked={items.includes(opt)}
                       onChange={() => toggle(items, opt, setItems)} />
                   ))}
@@ -314,11 +444,11 @@ export default function AddAppointmentModal({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-2">How heard (pick any)</label>
+                <label className="block font-semibold text-gray-700 mb-2" style={{ fontSize: labelSize }}>How heard (pick any)</label>
                 <div className="grid grid-cols-2 gap-2">
                   {hearOptions.map(opt => (
                     <Checkbox key={opt} label={opt}
-                      labelStyle={{ fontSize: 13, padding: '4px 0' }}
+                      labelStyle={{ fontSize: checkboxLabelSize, padding: '4px 0' }}
                       checked={howHeard.includes(opt)}
                       onChange={() => toggle(howHeard, opt, setHowHeard)} />
                   ))}
@@ -327,9 +457,10 @@ export default function AddAppointmentModal({
 
               {employees.length > 0 && (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Spiff to</label>
+                  <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Spiff to</label>
                   <select value={empId} onChange={e => setEmpId(e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 p-2 text-sm bg-white">
+                    style={{ fontSize: inputSize }}
+                    className="w-full rounded-lg border border-gray-300 p-2 bg-white">
                     <option value="">— none —</option>
                     {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
                   </select>
@@ -340,18 +471,19 @@ export default function AddAppointmentModal({
                 checked={isWalkin}
                 onChange={setIsWalkin}
                 label="Walk-in (customer is here in person now)"
-                labelStyle={{ fontSize: 13, paddingTop: 4 }}
+                labelStyle={{ fontSize: checkboxLabelSize, paddingTop: 4 }}
               />
 
               {error && (
-                <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2">
+                <div className="text-red-700 bg-red-50 border border-red-200 rounded-lg p-2"
+                  style={{ fontSize: inputSize }}>
                   {error}
                 </div>
               )}
 
               <button type="submit" disabled={submitting}
                 className="w-full rounded-lg p-3 text-white font-semibold disabled:opacity-50"
-                style={{ background: 'var(--green)' }}>
+                style={{ background: 'var(--green)', fontSize: inputSize }}>
                 {submitting ? 'Saving…' : 'Add appointment'}
               </button>
             </>
