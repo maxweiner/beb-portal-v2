@@ -449,14 +449,14 @@ export default function DayEntry() {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
                   <div>
-                    <label className="fl">Customers Seen</label>
-                    <input type="number" min="0" value={customers}
-                      onChange={e => setCustomers(e.target.value)} placeholder="0" />
-                  </div>
-                  <div>
                     <label className="fl">Purchases Made</label>
                     <input type="number" min="0" value={purchases}
                       onChange={e => setPurchases(e.target.value)} placeholder="0" />
+                  </div>
+                  <div>
+                    <label className="fl">Customers Seen</label>
+                    <input type="number" min="0" value={customers}
+                      onChange={e => setCustomers(e.target.value)} placeholder="0" />
                   </div>
                   <div>
                     <label className="fl">$ @ 10% Commission</label>
