@@ -11,6 +11,10 @@
     {
       "path": "/api/notification-queue/process?secret=bebportal2024",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/process-scheduled-notifications?secret=bebportal2024",
+      "schedule": "* * * * *"
     }
   ]
 }
