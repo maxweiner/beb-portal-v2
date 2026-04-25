@@ -58,6 +58,37 @@ function formatDatePretty(iso: string): string {
   return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
 }
 
+// ---------- template loading + substitution ----------
+
+interface LoadedTemplate { subject: string | null; body: string }
+
+async function loadTemplate(id: string, fallback: LoadedTemplate): Promise<LoadedTemplate> {
+  try {
+    const { data } = await sb.from('notification_templates')
+      .select('subject, body').eq('id', id).maybeSingle()
+    if (!data) return fallback
+    return { subject: data.subject ?? fallback.subject, body: data.body ?? fallback.body }
+  } catch (err) {
+    console.warn('[notifications] template fetch failed for', id, err)
+    return fallback
+  }
+}
+
+function sub(text: string, vars: Record<string, string>): string {
+  return text.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => vars[k] ?? '')
+}
+
+function shellHtml(inner: string): string {
+  return `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1f2937;">
+      ${inner}
+      <p style="font-size:12px;color:#6b7280;margin-top:32px;border-top:1px solid #e5e7eb;padding-top:16px;">
+        Beneficial Estate Buyers
+      </p>
+    </div>
+  `
+}
+
 async function logNotification(args: {
   appointment_id: string
   type: NotificationType
@@ -89,14 +120,19 @@ export async function sendConfirmation({ appt, store }: SendArgs) {
   const date = formatDatePretty(appt.appointment_date)
   const time = formatTimePretty(appt.appointment_time)
   const link = manageUrl(appt.cancel_token)
+  const vars: Record<string, string> = {
+    customer_name: appt.customer_name,
+    store_name: store.name,
+    store_phone: store.owner_phone || '',
+    store_email: store.owner_email || '',
+    date, time, manage_link: link,
+  }
 
-  // SMS
   if (appt.customer_phone) {
-    const body =
-      `Hi ${appt.customer_name}, you're booked at ${store.name} on ${date} at ${time}. ` +
-      `Need to change or cancel? ${link}`
+    const tpl = await loadTemplate('sms_confirmation', { subject: null,
+      body: `Hi {{customer_name}}, you're booked at {{store_name}} on {{date}} at {{time}}. Need to change or cancel? {{manage_link}}` })
     try {
-      await sendSMS(appt.customer_phone, body)
+      await sendSMS(appt.customer_phone, sub(tpl.body, vars))
       await logNotification({
         appointment_id: appt.id, type: 'sms_confirmation', channel: 'sms',
         recipient: formatPhone(appt.customer_phone) || appt.customer_phone, status: 'sent',
@@ -110,14 +146,16 @@ export async function sendConfirmation({ appt, store }: SendArgs) {
     }
   }
 
-  // Email
   if (appt.customer_email) {
-    const html = confirmationEmailHtml({ appt, store, date, time, link })
+    const tpl = await loadTemplate('email_confirmation', {
+      subject: `Your appointment at {{store_name}} is confirmed`,
+      body: confirmationEmailHtml({ appt, store, date, time, link }),
+    })
     try {
       const id = await sendEmail({
         to: appt.customer_email,
-        subject: `Your appointment at ${store.name} is confirmed`,
-        html,
+        subject: sub(tpl.subject || 'Appointment confirmed', vars),
+        html: shellHtml(sub(tpl.body, vars)),
       })
       await logNotification({
         appointment_id: appt.id, type: 'email_confirmation', channel: 'email',
@@ -138,14 +176,20 @@ export async function sendConfirmation({ appt, store }: SendArgs) {
 export async function sendCancellation({ appt, store, skipSms = false }: SendArgs & { skipSms?: boolean }) {
   const date = formatDatePretty(appt.appointment_date)
   const time = formatTimePretty(appt.appointment_time)
-  const rebookLink = store.slug ? `${bookingBaseUrl()}/book/${store.slug}` : null
+  const rebookLink = store.slug ? `${bookingBaseUrl()}/book/${store.slug}` : ''
+  const vars: Record<string, string> = {
+    customer_name: appt.customer_name,
+    store_name: store.name,
+    store_phone: store.owner_phone || '',
+    store_email: store.owner_email || '',
+    date, time, rebook_link: rebookLink,
+  }
 
   if (!skipSms && appt.customer_phone) {
-    const body =
-      `Your appointment at ${store.name} on ${date} at ${time} has been cancelled.` +
-      (rebookLink ? ` To rebook: ${rebookLink}` : '')
+    const tpl = await loadTemplate('sms_cancellation', { subject: null,
+      body: `Your appointment at {{store_name}} on {{date}} at {{time}} has been cancelled.${rebookLink ? ' To rebook: {{rebook_link}}' : ''}` })
     try {
-      await sendSMS(appt.customer_phone, body)
+      await sendSMS(appt.customer_phone, sub(tpl.body, vars))
       await logNotification({
         appointment_id: appt.id, type: 'sms_cancellation', channel: 'sms',
         recipient: formatPhone(appt.customer_phone) || appt.customer_phone, status: 'sent',
@@ -160,12 +204,15 @@ export async function sendCancellation({ appt, store, skipSms = false }: SendArg
   }
 
   if (appt.customer_email) {
-    const html = cancellationEmailHtml({ appt, store, date, time, rebookLink })
+    const tpl = await loadTemplate('email_cancellation', {
+      subject: `Your appointment at {{store_name}} has been cancelled`,
+      body: cancellationEmailHtml({ appt, store, date, time, rebookLink: rebookLink || null }),
+    })
     try {
       const id = await sendEmail({
         to: appt.customer_email,
-        subject: `Your appointment at ${store.name} has been cancelled`,
-        html,
+        subject: sub(tpl.subject || 'Appointment cancelled', vars),
+        html: shellHtml(sub(tpl.body, vars)),
       })
       await logNotification({
         appointment_id: appt.id, type: 'email_cancellation', channel: 'email',
@@ -188,16 +235,22 @@ export async function sendReminder({ appt, store, hours }: SendArgs & { hours: 2
   const time = formatTimePretty(appt.appointment_time)
   const link = manageUrl(appt.cancel_token)
   const phrase = hours === 24 ? 'tomorrow' : 'in 2 hours'
+  const vars: Record<string, string> = {
+    customer_name: appt.customer_name,
+    store_name: store.name,
+    store_phone: store.owner_phone || '',
+    store_email: store.owner_email || '',
+    date, time, manage_link: link,
+  }
 
   const smsType = hours === 24 ? 'sms_reminder_24h' : 'sms_reminder_2h'
   const emailType = hours === 24 ? 'email_reminder_24h' : 'email_reminder_2h'
 
   if (appt.customer_phone) {
-    const body =
-      `Reminder: your appointment at ${store.name} is ${phrase} (${date} at ${time}). ` +
-      `Manage or cancel: ${link}`
+    const tpl = await loadTemplate(smsType, { subject: null,
+      body: `Reminder: your appointment at {{store_name}} is ${phrase} ({{date}} at {{time}}). Manage or cancel: {{manage_link}}` })
     try {
-      await sendSMS(appt.customer_phone, body)
+      await sendSMS(appt.customer_phone, sub(tpl.body, vars))
       await logNotification({
         appointment_id: appt.id, type: smsType, channel: 'sms',
         recipient: formatPhone(appt.customer_phone) || appt.customer_phone, status: 'sent',
@@ -212,12 +265,15 @@ export async function sendReminder({ appt, store, hours }: SendArgs & { hours: 2
   }
 
   if (appt.customer_email) {
-    const html = reminderEmailHtml({ appt, store, date, time, link, phrase })
+    const tpl = await loadTemplate(emailType, {
+      subject: `Reminder: your appointment at {{store_name}} is ${phrase}`,
+      body: reminderEmailHtml({ appt, store, date, time, link, phrase }),
+    })
     try {
       const id = await sendEmail({
         to: appt.customer_email,
-        subject: `Reminder: your appointment at ${store.name} is ${phrase}`,
-        html,
+        subject: sub(tpl.subject || 'Reminder', vars),
+        html: shellHtml(sub(tpl.body, vars)),
       })
       await logNotification({
         appointment_id: appt.id, type: emailType, channel: 'email',
