@@ -205,15 +205,21 @@ export default function StorePortalClient({
       <header className="px-4 pt-8 pb-6 bg-white" style={{ borderBottom: `4px solid ${primary}` }}>
         <div className="max-w-2xl mx-auto flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <h1 className="text-2xl font-bold leading-tight" style={{ color: primary }}>{store.name}</h1>
+            <h1 className="text-2xl font-extrabold leading-tight" style={{ color: primary }}>{store.name}</h1>
+            {(store.owner_phone || store.owner_email) && (
+              <div className="text-sm text-gray-700 mt-2 space-y-1 leading-tight">
+                {store.owner_phone && <div>{formatPhoneDisplay(store.owner_phone)}</div>}
+                {store.owner_email && <div className="break-all">{store.owner_email}</div>}
+              </div>
+            )}
             <p className="text-base mt-3 text-gray-700">Store Portal — {appointments.length} upcoming appointment{appointments.length === 1 ? '' : 's'}</p>
           </div>
           <div className="shrink-0">
             {store.store_image_url ? (
-              <img src={store.store_image_url} alt="" className="h-20 w-20 rounded-xl object-cover shadow-sm" style={{ border: `2px solid ${primary}` }} />
+              <img src={store.store_image_url} alt="" className="h-28 w-28 rounded-xl object-cover" />
             ) : (
-              <div className="h-20 w-20 rounded-xl flex items-center justify-center" style={{ border: `2px solid ${primary}`, color: primary }}>
-                <Diamond className="h-10 w-10" strokeWidth={1.5} />
+              <div className="h-28 w-28 rounded-xl flex items-center justify-center" style={{ background: '#f3f4f6', color: primary }}>
+                <Diamond className="h-12 w-12" strokeWidth={1.5} />
               </div>
             )}
           </div>
