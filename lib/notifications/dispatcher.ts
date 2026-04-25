@@ -106,7 +106,7 @@ export async function dispatchOne(
   const tpl = tplRes.data as any
   const settings = (settingsRes.data as any) || {
     admin_alert_email: null,
-    default_from_email: 'noreply@bebllp.com',
+    default_from_email: 'noreply@updates.bebllp.com',
     quiet_hours_enabled: true,
     quiet_hours_start: '21:00',
     quiet_hours_end: '08:00',

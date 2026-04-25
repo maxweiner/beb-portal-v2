@@ -21,7 +21,7 @@ const BRANDS: Record<Brand, BrandConfig> = {
   beb: {
     label: 'Beneficial Estate Buyers',
     fromName: 'BEB Portal',
-    fromEmail: 'noreply@bebllp.com',
+    fromEmail: 'noreply@updates.bebllp.com',
     notifyColumn: 'notify_beb',
     emoji: '🌅',
     footer: 'BEB Buyer Portal · Daily Morning Report',

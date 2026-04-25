@@ -172,7 +172,7 @@ Return this exact JSON structure:
         method: 'POST',
         headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          from: 'BEB Travel <travel@bebllp.com>',
+          from: 'BEB Travel <travel@updates.bebllp.com>',
           to: buyer.email,
           subject: `✅ ${parsed.vendor || parsed.type} confirmation saved`,
           html: `<p>Hi ${buyer.name},</p><p>Your <strong>${parsed.vendor || parsed.type}</strong> confirmation <strong>${parsed.confirmation_number}</strong> has been saved to <strong>${eventName}</strong> in the BEB portal.</p><p>View it at <a href="${process.env.NEXT_PUBLIC_APP_URL}/travel">Travel Share</a>.</p>`
