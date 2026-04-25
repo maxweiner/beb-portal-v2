@@ -333,6 +333,7 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
   const [feedUrl, setFeedUrl] = useState(store.calendar_feed_url || '')
   const [calendarOffset, setCalendarOffset] = useState<number>(store.calendar_offset_hours ?? 0)
   const imgRef = useRef<HTMLInputElement>(null)
+  const [imageOpen, setImageOpen] = useState(false)
 
   useEffect(() => {
     supabase.from('store_employees').select('*').eq('store_id', store.id).order('name')
@@ -470,37 +471,55 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
                 onChange={e => setDetails((p: any) => ({ ...p, notes: e.target.value }))}
                 style={{ resize: 'none' }} />
             </div>
+
+            {/* Store image — collapsed by default since it's set once and rarely changed. */}
+            <div style={{ borderTop: '1px solid var(--pearl)', marginTop: 6, paddingTop: 10 }}>
+              <button
+                type="button"
+                onClick={() => setImageOpen(o => !o)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                  fontSize: 12, fontWeight: 700, color: 'var(--ash)', fontFamily: 'inherit',
+                }}
+              >
+                <span style={{
+                  display: 'inline-block', width: 10, transition: 'transform .15s ease',
+                  transform: imageOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                }}>▶</span>
+                Store image{store.store_image_url ? '' : ' (none)'}
+              </button>
+              {imageOpen && (
+                <div style={{ marginTop: 10 }}>
+                  {store.store_image_url ? (
+                    <>
+                      <img src={store.store_image_url} alt="Store" style={{ maxWidth: 200, borderRadius: 'var(--r)', border: '1px solid var(--pearl)', display: 'block', marginBottom: 10 }} />
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button className="btn-primary btn-sm" onClick={() => imgRef.current?.click()}>Replace Image</button>
+                        <button className="btn-danger btn-sm" onClick={async () => {
+                          if (!confirm('Remove store image?')) return
+                          await withTimeout(supabase.from('stores').update({ store_image_url: '' }).eq('id', store.id))
+                          await refetchStores()
+                        }}>Remove</button>
+                      </div>
+                    </>
+                  ) : (
+                    <div>
+                      <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 10 }}>No store image uploaded yet.</p>
+                      <button className="btn-primary btn-sm" onClick={() => imgRef.current?.click()}>Upload Image</button>
+                    </div>
+                  )}
+                  <input ref={imgRef} type="file" accept="image/*" style={{ display: 'none' }}
+                    onChange={e => { if (e.target.files?.[0]) uploadStoreImage(e.target.files[0]) }} />
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Store Contacts */}
           <div className="card card-accent" style={{ margin: 0 }}>
             <div className="card-title">Store Owners / Contacts</div>
             <StoreContacts storeId={store.id} />
-          </div>
-
-          {/* Store Image */}
-          <div className="card card-accent" style={{ margin: 0 }}>
-            <div className="card-title">Store Image</div>
-            {store.store_image_url ? (
-              <div style={{ marginBottom: 14 }}>
-                <img src={store.store_image_url} alt="Store" style={{ maxWidth: 200, borderRadius: 'var(--r)', border: '1px solid var(--pearl)', display: 'block', marginBottom: 10 }} />
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn-primary btn-sm" onClick={() => imgRef.current?.click()}>Replace Image</button>
-                  <button className="btn-danger btn-sm" onClick={async () => {
-                    if (!confirm('Remove store image?')) return
-                    await withTimeout(supabase.from('stores').update({ store_image_url: '' }).eq('id', store.id))
-                    await refetchStores()
-                  }}>Remove</button>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 12 }}>No store image uploaded yet.</p>
-                <button className="btn-primary btn-sm" onClick={() => imgRef.current?.click()}>Upload Image</button>
-              </div>
-            )}
-            <input ref={imgRef} type="file" accept="image/*" style={{ display: 'none' }}
-              onChange={e => { if (e.target.files?.[0]) uploadStoreImage(e.target.files[0]) }} />
           </div>
 
           {/* Store Portal Access (staff portal token + URL + QR) */}
