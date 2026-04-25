@@ -317,11 +317,15 @@ export default function DayEntry() {
     setChecks(p => p.map((c, idx) => idx === i ? { ...c, [field]: value } : c))
   }
   const addCheck = () => setChecks(p => p.length >= MAX_CHECKS ? p : [...p, { ...emptyCheck(), check_number: nextCheckNumber(p) }])
-  const addRows = () => {
-    const next = [...checks]
-    for (let i = 0; i < 5 && next.length < MAX_CHECKS; i++) next.push({ ...emptyCheck(), check_number: nextCheckNumber(next) })
-    setChecks(next)
-  }
+  const addRows = () => setChecks(p => {
+    if (p.length >= MAX_CHECKS) return p
+    const next = [...p]
+    const slots = Math.min(5, MAX_CHECKS - next.length)
+    for (let i = 0; i < slots; i++) {
+      next.push({ ...emptyCheck(), check_number: nextCheckNumber(next) })
+    }
+    return next
+  })
   const removeCheck = (i: number) => setChecks(p => p.filter((_, idx) => idx !== i))
 
   /* ── Render ── */
@@ -539,7 +543,7 @@ export default function DayEntry() {
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                       <thead>
                         <tr style={{ borderBottom: '2px solid var(--pearl)' }}>
-                          {['#', 'Type', 'Check #', 'Buy Form #', 'Amount', '5%', ''].map(h => (
+                          {['#', 'Type', 'Check #', 'Amount', 'Buy Form #', '5%', ''].map(h => (
                             <th key={h} style={{ padding: '6px 8px', textAlign: 'left', fontWeight: 700, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--mist)', whiteSpace: 'nowrap' }}>{h}</th>
                           ))}
                         </tr>
@@ -560,15 +564,15 @@ export default function DayEntry() {
                                 placeholder="—" style={{ width: 90, fontSize: 13, padding: '4px 8px' }} />
                             </td>
                             <td style={{ padding: '4px 8px' }}>
-                              <input type="text" value={c.buy_form_number} onChange={e => updateCheck(i, 'buy_form_number', e.target.value)}
-                                placeholder="—" style={{ width: 90, fontSize: 13, padding: '4px 8px' }} />
-                            </td>
-                            <td style={{ padding: '4px 8px' }}>
                               <div style={{ position: 'relative', width: 110 }}>
                                 <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)', fontSize: 13 }}>$</span>
                                 <input type="number" min="0" step="0.01" value={c.amount || ''} onChange={e => updateCheck(i, 'amount', e.target.value)}
                                   placeholder="0.00" style={{ paddingLeft: 20, width: '100%', fontSize: 13, padding: '4px 8px 4px 20px' }} />
                               </div>
+                            </td>
+                            <td style={{ padding: '4px 8px' }}>
+                              <input type="text" value={c.buy_form_number} onChange={e => updateCheck(i, 'buy_form_number', e.target.value)}
+                                placeholder="—" style={{ width: 90, fontSize: 13, padding: '4px 8px' }} />
                             </td>
                             <td style={{ padding: '4px 8px', textAlign: 'center' }}>
                               <input type="checkbox" checked={c.commission_rate === 5}
@@ -600,16 +604,16 @@ export default function DayEntry() {
                           <input type="text" value={c.check_number} onChange={e => updateCheck(i, 'check_number', e.target.value)} placeholder="—" style={{ width: 100 }} />
                         </div>
                         <div>
-                          <label className="fl">Buy Form #</label>
-                          <input type="text" value={c.buy_form_number} onChange={e => updateCheck(i, 'buy_form_number', e.target.value)} placeholder="—" style={{ width: 100 }} />
-                        </div>
-                        <div>
                           <label className="fl">Amount</label>
                           <div style={{ position: 'relative' }}>
                             <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)' }}>$</span>
                             <input type="number" min="0" step="0.01" value={c.amount || ''} onChange={e => updateCheck(i, 'amount', e.target.value)}
                               placeholder="0.00" style={{ paddingLeft: 20, width: 110 }} />
                           </div>
+                        </div>
+                        <div>
+                          <label className="fl">Buy Form #</label>
+                          <input type="text" value={c.buy_form_number} onChange={e => updateCheck(i, 'buy_form_number', e.target.value)} placeholder="—" style={{ width: 100 }} />
                         </div>
                         <label style={{
                           display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
