@@ -37,6 +37,8 @@ export interface BookingStore {
   color_secondary: string | null
   owner_phone: string | null
   owner_email: string | null
+  city: string | null
+  state: string | null
 }
 
 export interface BookingEvent {

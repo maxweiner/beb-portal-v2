@@ -112,7 +112,13 @@ export default function StorePortalClient({
   const employeeName = (id: string | null) =>
     id ? employees.find(e => e.id === id)?.name || '—' : '—'
 
-  const [showAdd, setShowAdd] = useState(false)
+  // Default to OPEN if the URL says ?add=1 — the QR/link in Store Portal
+  // Access lands here so the customer skips the appointments list and goes
+  // straight to booking.
+  const [showAdd, setShowAdd] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return new URLSearchParams(window.location.search).get('add') === '1'
+  })
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<'upcoming' | 'cancelled'>('upcoming')
@@ -411,13 +417,34 @@ export default function StorePortalClient({
         >
           <form
             onSubmit={handleAdd}
-            className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl max-w-md w-full overflow-y-auto"
+            className="bg-white sm:rounded-2xl shadow-xl max-w-md w-full overflow-y-auto"
             style={{
               fontSize: `${basePx}px`,
               maxHeight: 'calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom))',
             }}
           >
-            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between gap-2">
+            {/* Brand band — store name + logo so the customer always knows
+                which store they're booking with, even when the modal covers
+                the page header. */}
+            <div className="px-5 pt-4 pb-3 flex items-center gap-3" style={{ borderTop: `4px solid ${primary}` }}>
+              {store.store_image_url ? (
+                <img src={store.store_image_url} alt="" className="h-10 w-10 rounded-lg object-cover" />
+              ) : (
+                <div className="h-10 w-10 rounded-lg flex items-center justify-center" style={{ background: '#f3f4f6', color: primary }}>
+                  <Diamond className="h-5 w-5" strokeWidth={1.5} />
+                </div>
+              )}
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="font-extrabold leading-tight" style={{ color: primary, fontSize: '1em' }}>{store.name}</div>
+                {store.city && (
+                  <div className="text-gray-500 leading-tight" style={{ fontSize: '0.857em' }}>
+                    {store.city}{store.state ? `, ${store.state}` : ''}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="px-5 py-3 border-y border-gray-200 flex items-center justify-between gap-2">
               <h2 className="font-bold" style={{ color: primary, fontSize: titleSize }}>Add appointment</h2>
               <div className="flex items-center gap-2">
                 {/* Font size switcher — three "A" glyphs at small/medium/large sizes */}

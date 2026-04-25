@@ -43,6 +43,8 @@ const demoPayload: BookingPayload = {
     color_secondary: '#F5F0E8',
     owner_phone: '5551234567',
     owner_email: 'hello@demojewelers.example',
+    city: 'Demo City',
+    state: 'CA',
   },
   config: {
     store_id: 'demo-store-id',
