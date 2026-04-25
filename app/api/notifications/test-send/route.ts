@@ -112,8 +112,14 @@ export async function POST(req: Request) {
       try {
         const subject = '[TEST] ' + substitute(tpl.email_subject || '(no subject)', vars)
         const html = substitute(tpl.email_body_html || tpl.email_body_text || '(no body)', vars)
-        await sendEmail({ to: recipient_email, subject, html })
-        results.push({ channel: 'email', ok: true })
+        // sendEmail returns null when no Resend key is configured. That's a
+        // silent no-op in production paths but here we want to surface it.
+        const id = await sendEmail({ to: recipient_email, subject, html })
+        if (id === null) {
+          results.push({ channel: 'email', ok: false, error: 'Resend not configured (missing settings.resend_api_key)' })
+        } else {
+          results.push({ channel: 'email', ok: true })
+        }
       } catch (e: any) {
         results.push({ channel: 'email', ok: false, error: e?.message || 'send_failed' })
       }
@@ -125,12 +131,20 @@ export async function POST(req: Request) {
     if (!gate.allowed) {
       results.push({ channel: 'sms', ok: false, skipped: 'rate_limited' })
     } else {
-      try {
-        const body = '[TEST] ' + substitute(tpl.sms_body || '(no body)', vars)
-        await sendSMS(recipient_phone, body)
-        results.push({ channel: 'sms', ok: true })
-      } catch (e: any) {
-        results.push({ channel: 'sms', ok: false, error: e?.message || 'send_failed' })
+      // Pre-flight: sendSMS silently no-ops if Twilio creds missing — check
+      // directly so we can report it instead of pretending we sent.
+      const cfgRes = await sb.from('settings').select('value').eq('key', 'sms').maybeSingle()
+      const cfg = (cfgRes.data?.value || {}) as { accountSid?: string; authToken?: string; fromNumber?: string }
+      if (!cfg.accountSid || !cfg.authToken || !cfg.fromNumber) {
+        results.push({ channel: 'sms', ok: false, error: 'Twilio not configured (missing settings.sms accountSid/authToken/fromNumber)' })
+      } else {
+        try {
+          const body = '[TEST] ' + substitute(tpl.sms_body || '(no body)', vars)
+          await sendSMS(recipient_phone, body)
+          results.push({ channel: 'sms', ok: true })
+        } catch (e: any) {
+          results.push({ channel: 'sms', ok: false, error: e?.message || 'send_failed' })
+        }
       }
     }
   }

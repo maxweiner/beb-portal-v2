@@ -159,7 +159,7 @@ export async function dispatchOne(
         try {
           const subject = substitute(tpl.email_subject || '', mergeData)
           const html = substitute(tpl.email_body_html || tpl.email_body_text || '', mergeData)
-          await sendEmail({
+          const id = await sendEmail({
             to: row.recipient_email,
             subject,
             html,
@@ -167,7 +167,15 @@ export async function dispatchOne(
               ? `Beneficial Estate Buyers <${settings.default_from_email}>`
               : undefined,
           })
-          emailOutcome = 'sent'
+          if (id === null) {
+            // sendEmail silently returns null when no Resend key is in the
+            // settings table. Treat that as a failure so the row doesn't get
+            // falsely marked sent.
+            emailOutcome = 'failed'
+            errors.push('email: Resend not configured (missing settings.resend_api_key)')
+          } else {
+            emailOutcome = 'sent'
+          }
         } catch (e: any) {
           emailOutcome = 'failed'
           errors.push(`email: ${e?.message || 'send_failed'}`)
@@ -190,13 +198,22 @@ export async function dispatchOne(
       if (!gate.allowed) {
         smsOutcome = 'rate_limited'
       } else {
-        try {
-          const body = substitute(tpl.sms_body || '', mergeData)
-          await sendSMS(row.recipient_phone, body)
-          smsOutcome = 'sent'
-        } catch (e: any) {
+        // Pre-flight check for Twilio config so a silent no-op doesn't get
+        // marked as sent.
+        const cfgRes = await sb.from('settings').select('value').eq('key', 'sms').maybeSingle()
+        const cfg = (cfgRes.data?.value || {}) as { accountSid?: string; authToken?: string; fromNumber?: string }
+        if (!cfg.accountSid || !cfg.authToken || !cfg.fromNumber) {
           smsOutcome = 'failed'
-          errors.push(`sms: ${e?.message || 'send_failed'}`)
+          errors.push('sms: Twilio not configured (missing settings.sms accountSid/authToken/fromNumber)')
+        } else {
+          try {
+            const body = substitute(tpl.sms_body || '', mergeData)
+            await sendSMS(row.recipient_phone, body)
+            smsOutcome = 'sent'
+          } catch (e: any) {
+            smsOutcome = 'failed'
+            errors.push(`sms: ${e?.message || 'send_failed'}`)
+          }
         }
       }
     }
