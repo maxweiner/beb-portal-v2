@@ -27,6 +27,7 @@ import MobileDashboard from '@/components/mobile/MobileDashboard'
 import MobileDayEntry from '@/components/mobile/MobileDayEntry'
 import MobileTravel from '@/components/mobile/MobileTravel'
 import MobileStaff from '@/components/mobile/MobileStaff'
+import BrandSwitchOverlay from '@/components/layout/BrandSwitchOverlay'
 import { shouldUseMobile, setMobilePreference } from '@/lib/mobile'
 
 export type NavPage = 'dashboard' | 'calendar' | 'events' | 'schedule' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'libertyadmin' | 'recipients' | 'notification-templates'
@@ -40,6 +41,16 @@ export default function Home() {
 
   useEffect(() => {
     setIsMobile(shouldUseMobile())
+  }, [])
+
+  // When the brand switch commits in context, jump back to dashboard. Listening
+  // for the event (instead of putting setNav inside the Sidebar handler) keeps
+  // the brand commit and the nav reset in the same render — no flash of the
+  // new brand on the previous page.
+  useEffect(() => {
+    const onSwitched = () => rawSetNav('dashboard')
+    window.addEventListener('beb:brand-switched', onSwitched)
+    return () => window.removeEventListener('beb:brand-switched', onSwitched)
   }, [])
 
   const ConnectionBanner = () => connectionError ? (
@@ -76,6 +87,7 @@ export default function Home() {
     return (
       <>
         <ConnectionBanner />
+        <BrandSwitchOverlay />
         <MobileLayout nav={nav} setNav={setNav}>
           {nav === 'dashboard' && <MobileDashboard setNav={setNav} />}
           {nav === 'dayentry'  && <MobileDayEntry />}
@@ -99,6 +111,7 @@ export default function Home() {
   return (
     <>
     <ConnectionBanner />
+    <BrandSwitchOverlay />
     <div className="flex h-screen overflow-hidden" style={{ background: 'var(--page-bg)' }}>
       {/* Switch to mobile button */}
       <button onClick={() => { setMobilePreference(true); window.location.reload() }}

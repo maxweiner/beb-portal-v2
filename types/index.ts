@@ -121,6 +121,10 @@ export interface AppState {
   loading: boolean
   connectionError?: boolean
   brand: Brand
+  /** True while a brand switch is in flight (data refetch + min spinner duration). */
+  isSwitching: boolean
+  /** The brand we're switching TO during a switch — for the overlay label. */
+  pendingBrand: Brand | null
 }
 
 export interface Appointment {

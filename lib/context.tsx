@@ -57,6 +57,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [brand, setBrandState] = useState<Brand>(() => readLocal('beb-brand', 'beb'))
   const [dayEntryIntent, setDayEntryIntent] = useState<DayEntryIntent>(null)
 
+  // Brand-switch coordination. While a switch is in flight, the committed
+  // brand/theme stay on the OLD store so colors don't change until the new
+  // store's data is loaded. The overlay reads pendingBrand for its label.
+  const [isSwitching, setIsSwitching] = useState(false)
+  const [pendingBrand, setPendingBrand] = useState<Brand | null>(null)
+  const switchIdRef = useRef(0)
+
   const brandRef = useRef(brand); brandRef.current = brand
   const themeRef = useRef(theme); themeRef.current = theme
 
@@ -239,24 +246,52 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   const setBrand = (b: Brand) => {
-    localStorage.setItem('beb-brand', b)
+    // No-op if already on this brand (and not currently switching to it).
+    if (b === brandRef.current && !isSwitching) return
+
+    // Compute the next theme up front so the commit is atomic, but DON'T
+    // apply it yet — the new theme/brand only commit after data lands.
     const currentTheme = themeRef.current
     let newTheme = currentTheme
-
     if (b === 'liberty' && !currentTheme.startsWith('liberty')) {
       newTheme = (localStorage.getItem('beb-liberty-theme') as Theme) || LIBERTY_DEFAULT_THEME
-      localStorage.setItem('beb-theme', newTheme)
     } else if (b === 'beb' && currentTheme.startsWith('liberty')) {
       newTheme = (localStorage.getItem('beb-beb-theme') as Theme) || 'original'
-      localStorage.setItem('beb-theme', newTheme)
     }
-
     if (b === 'liberty') localStorage.setItem('beb-beb-theme', currentTheme)
     if (b === 'beb') localStorage.setItem('beb-liberty-theme', currentTheme)
 
-    setBrandState(b)
-    setThemeState(newTheme)
-    reloadRef.current(b)
+    // Begin a switch. switchId guards against rapid back-and-forth — only
+    // the latest switch is allowed to commit.
+    switchIdRef.current += 1
+    const myId = switchIdRef.current
+    setIsSwitching(true)
+    setPendingBrand(b)
+
+    const dataPromise = reloadRef.current(b)
+    const minSpinnerPromise = new Promise<void>(r => setTimeout(r, 1500))
+    // Safety net: if the data fetch hangs > 10s, bail out anyway so we
+    // don't trap the user in the spinner forever.
+    const timeoutPromise = new Promise<void>(r => setTimeout(r, 10000))
+
+    Promise.race([
+      Promise.all([dataPromise, minSpinnerPromise]).then(() => 'ok' as const),
+      timeoutPromise.then(() => 'timeout' as const),
+    ]).then(() => {
+      // A newer switch superseded us — drop this commit silently.
+      if (myId !== switchIdRef.current) return
+      localStorage.setItem('beb-brand', b)
+      localStorage.setItem('beb-theme', newTheme)
+      // Atomic commit (React 18 batches). The custom event lets app/page.tsx
+      // reset its local nav state in the same render cycle.
+      setBrandState(b)
+      setThemeState(newTheme)
+      setIsSwitching(false)
+      setPendingBrand(null)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('beb:brand-switched', { detail: { brand: b } }))
+      }
+    })
   }
 
   const setYear = (y: string) => setYearState(y)
@@ -271,12 +306,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const ctxValue = useMemo<AppContextType>(() => ({
     user, users, stores, events, shipments, permissions,
     theme, year, loading, brand, connectionError,
+    isSwitching, pendingBrand,
     setTheme, setYear, setBrand, reload, setUser,
     setStores, setEvents,
     dayEntryIntent, setDayEntryIntent,
   }), [
     user, users, stores, events, shipments, permissions,
     theme, year, loading, brand, connectionError,
+    isSwitching, pendingBrand,
     reload, dayEntryIntent,
   ])
 
