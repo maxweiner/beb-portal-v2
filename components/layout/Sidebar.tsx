@@ -1,8 +1,11 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { NavPage } from '@/app/page'
+
+const COLLAPSE_KEY = 'beb-sidebar-collapsed'
 
 const ICONS: Record<string, JSX.Element> = {
   dashboard: <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="1" width="6" height="6" rx="1" fill="currentColor" opacity=".9"/><rect x="9" y="1" width="6" height="6" rx="1" fill="currentColor" opacity=".9"/><rect x="1" y="9" width="6" height="6" rx="1" fill="currentColor" opacity=".9"/><rect x="9" y="9" width="6" height="6" rx="1" fill="currentColor" opacity=".9"/></svg>,
@@ -30,6 +33,7 @@ interface NavItem {
 }
 
 const BEB_NAV: NavItem[] = [
+  { label: 'Daily', section: true },
   { id: 'dashboard',    label: 'Dashboard',      iconKey: 'dashboard' },
   { id: 'calendar',     label: 'Appointments',   iconKey: 'calendar' },
   { id: 'events',       label: 'Events',         iconKey: 'events' },
@@ -50,6 +54,7 @@ const BEB_NAV: NavItem[] = [
 ]
 
 const LIBERTY_NAV: NavItem[] = [
+  { label: 'Daily', section: true },
   { id: 'dashboard',    label: 'Dashboard',      iconKey: 'dashboard' },
   { id: 'calendar',     label: 'Appointments',   iconKey: 'calendar' },
   { id: 'events',       label: 'Events',         iconKey: 'events' },
@@ -81,6 +86,26 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
   const hasLibertyAccess = user?.liberty_access === true
   const isLiberty = brand === 'liberty'
   const NAV_ITEMS = isLiberty ? LIBERTY_NAV : BEB_NAV
+
+  // Per-section collapse state, persisted to localStorage. Default = all open.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const raw = window.localStorage.getItem(COLLAPSE_KEY)
+      if (raw) setCollapsed(new Set(JSON.parse(raw)))
+    } catch { /* ignore */ }
+  }, [])
+  const toggleSection = (label: string) => {
+    setCollapsed(prev => {
+      const next = new Set(prev)
+      if (next.has(label)) next.delete(label); else next.add(label)
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...next]))
+      }
+      return next
+    })
+  }
 
   return (
     <aside className="sidebar">
@@ -118,18 +143,49 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
 
       {/* Nav */}
       <nav className="sidebar-nav">
-        {NAV_ITEMS.map((item, i) => {
-          if (item.section) return <div key={i} className="nav-group-label">{item.label}</div>
-          if (item.adminOnly && !isAdmin) return null
-          if (item.superadminOnly && !isSuperadmin) return null
-          return (
-            <button key={item.id} onClick={() => setNav(item.id!)}
-              className={`nav-item${nav === item.id ? ' active' : ''}`}>
-              <span className="ni-icon">{ICONS[item.iconKey!]}</span>
-              {item.label}
-            </button>
-          )
-        })}
+        {(() => {
+          // Walk the flat list, tracking the current section. Items only
+          // render when their section is open. Section headers are buttons
+          // that toggle the open/closed state.
+          let currentSection: string | null = null
+          let currentOpen = true
+          return NAV_ITEMS.map((item, i) => {
+            if (item.section) {
+              currentSection = item.label
+              currentOpen = !collapsed.has(item.label)
+              return (
+                <button
+                  key={`section-${i}`}
+                  type="button"
+                  onClick={() => toggleSection(item.label)}
+                  className="nav-group-label"
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    width: '100%', textAlign: 'left', font: 'inherit',
+                    display: 'flex', alignItems: 'center', gap: 6,
+                  }}
+                >
+                  <span style={{
+                    display: 'inline-block', width: 8, fontSize: 9,
+                    transition: 'transform .15s ease',
+                    transform: currentOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                  }}>▶</span>
+                  {item.label}
+                </button>
+              )
+            }
+            if (item.adminOnly && !isAdmin) return null
+            if (item.superadminOnly && !isSuperadmin) return null
+            if (currentSection && !currentOpen) return null
+            return (
+              <button key={item.id} onClick={() => setNav(item.id!)}
+                className={`nav-item${nav === item.id ? ' active' : ''}`}>
+                <span className="ni-icon">{ICONS[item.iconKey!]}</span>
+                {item.label}
+              </button>
+            )
+          })
+        })()}
       </nav>
 
       {/* Footer */}
