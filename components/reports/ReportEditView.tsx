@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
+import type { Event } from '@/types'
 
 export interface ReportDef {
   id: string                 // matches report_templates.id
@@ -65,7 +66,8 @@ function buildPreviewHtml(template: TemplateRow, vars: Record<string, string>): 
 }
 
 export default function ReportEditView({ report, onBack }: { report: ReportDef; onBack: () => void }) {
-  const { user } = useApp()
+  const { user, events, stores } = useApp()
+  const isEventRecap = report.id === 'event-recap'
   const [template, setTemplate] = useState<TemplateRow | null>(null)
   const [users, setUsers] = useState<UserOpt[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -153,10 +155,55 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
     setSending(false)
   }
 
+  // For event-recap: pick a specific event so the preview/send uses real data.
+  const recapEvents = useMemo(() => {
+    if (!isEventRecap) return []
+    // Most recent first; cap to last ~50 to keep the dropdown usable.
+    return [...events]
+      .filter(e => !!e.start_date)
+      .sort((a, b) => (a.start_date < b.start_date ? 1 : -1))
+      .slice(0, 50)
+  }, [events, isEventRecap])
+  const [recapEventId, setRecapEventId] = useState<string>('')
+  useEffect(() => {
+    if (isEventRecap && !recapEventId && recapEvents[0]) setRecapEventId(recapEvents[0].id)
+  }, [isEventRecap, recapEventId, recapEvents])
+
   const previewHtml = useMemo(() => {
     if (!template) return ''
     return buildPreviewHtml(template, report.sampleVars)
   }, [template, report.sampleVars])
+
+  // Live PDF-ish preview URL for event-recap (server-rendered standalone page)
+  const recapPreviewUrl = isEventRecap && recapEventId
+    ? `/api/event-recap/preview?event_id=${encodeURIComponent(recapEventId)}`
+    : ''
+  function downloadRecapPdf() {
+    if (!recapEventId) return
+    window.open(`/api/event-recap/preview?event_id=${encodeURIComponent(recapEventId)}&print=1`, '_blank')
+  }
+  async function sendRecap() {
+    if (!recapEventId || selected.size === 0) return
+    setSending(true); setSendResult(null)
+    try {
+      const res = await fetch('/api/event-recap/send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_id: recapEventId, to: [...selected] }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) setSendResult(`✗ ${json.error || res.status}`)
+      else setSendResult(`✓ Sent recap to ${json.sent ?? selected.size} recipient${(json.sent ?? selected.size) === 1 ? '' : 's'}`)
+    } catch (e: any) {
+      setSendResult(`✗ ${e?.message || 'Network error'}`)
+    }
+    setSending(false)
+  }
+
+  function eventLabel(ev: Event): string {
+    const store = stores.find(s => s.id === ev.store_id)
+    const name = store?.name || (ev as any).store_name || '(unknown store)'
+    return `${name} · ${ev.start_date}`
+  }
 
   function toggleUser(id: string) {
     setSelected(p => {
@@ -237,6 +284,34 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
             </button>
           </div>
 
+          {isEventRecap && (
+            <div className="card" style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)', marginBottom: 8 }}>Event</div>
+              {recapEvents.length === 0 ? (
+                <p style={{ fontSize: 13, color: 'var(--mist)' }}>No events found.</p>
+              ) : (
+                <select value={recapEventId} onChange={e => setRecapEventId(e.target.value)} style={{ width: '100%' }}>
+                  {recapEvents.map(ev => (
+                    <option key={ev.id} value={ev.id}>{eventLabel(ev)}</option>
+                  ))}
+                </select>
+              )}
+              <p style={{ fontSize: 11, color: 'var(--mist)', marginTop: 6 }}>
+                Pick the event to recap. The preview, PDF, and email all use this event's real data (per-day totals + per-buyer breakdown).
+              </p>
+              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                <button onClick={downloadRecapPdf} disabled={!recapEventId} className="btn-outline btn-sm">
+                  Download PDF
+                </button>
+                <a href={recapPreviewUrl || '#'} target="_blank" rel="noreferrer"
+                   className="btn-outline btn-sm"
+                   style={!recapEventId ? { pointerEvents: 'none', opacity: 0.5 } : undefined}>
+                  Open standalone preview
+                </a>
+              </div>
+            </div>
+          )}
+
           <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <div>
@@ -282,7 +357,16 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
             </div>
 
             <div style={{ display: 'flex', gap: 8, marginTop: 14, alignItems: 'center' }}>
-              {report.sendEndpoint && template.send_implemented ? (
+              {isEventRecap ? (
+                <button
+                  onClick={sendRecap}
+                  disabled={sending || selected.size === 0 || !recapEventId}
+                  className="btn-primary"
+                  style={{ flex: 1 }}
+                >
+                  {sending ? 'Sending…' : `Send recap (${selected.size})`}
+                </button>
+              ) : report.sendEndpoint && template.send_implemented ? (
                 <button
                   onClick={send}
                   disabled={sending || selected.size === 0}
@@ -314,11 +398,19 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
           }}>
             Live preview
           </div>
-          <iframe
-            title="report preview"
-            srcDoc={previewHtml}
-            style={{ width: '100%', height: 600, border: 'none', display: 'block', background: '#f5f0e8' }}
-          />
+          {isEventRecap && recapPreviewUrl ? (
+            <iframe
+              title="event recap preview"
+              src={recapPreviewUrl}
+              style={{ width: '100%', height: 600, border: 'none', display: 'block', background: '#f5f0e8' }}
+            />
+          ) : (
+            <iframe
+              title="report preview"
+              srcDoc={previewHtml}
+              style={{ width: '100%', height: 600, border: 'none', display: 'block', background: '#f5f0e8' }}
+            />
+          )}
         </div>
       </div>
     </div>
