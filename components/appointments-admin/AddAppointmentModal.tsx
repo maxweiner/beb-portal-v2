@@ -99,14 +99,17 @@ export default function AddAppointmentModal({
   const [dateStr, setDateStr] = useState<string>('')
   useEffect(() => { setDateStr(dayInfos[0]?.dateStr || '') }, [dayInfos])
 
+  // Pull bookings + blocks for the selected event/date so the slot picker
+  // reflects real availability. Declared BEFORE the slots useMemo so the
+  // hoisted-but-not-initialized TDZ trap doesn't bite.
+  const [existingForDay, setExistingForDay] = useState<any[]>([])
+  const [blocksForDay, setBlocksForDay] = useState<any[]>([])
+
   // Slot dropdown for the selected day (real availability via existing logic)
   const slots = useMemo(() => {
     if (!config || !event) return []
     const day = dayInfos.find(di => di.dateStr === dateStr)
     if (!day || !day.hours) return []
-    // Pull current confirmed bookings + blocks just for the picked event so
-    // availability counts are real. Fire-and-forget is OK because we re-fetch
-    // every time dateStr changes.
     return buildSlotsForDay({
       date: day.dateStr,
       startTime: day.hours.start,
@@ -116,13 +119,8 @@ export default function AddAppointmentModal({
       bookings: existingForDay,
       blocks: blocksForDay,
     })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config, event, dateStr])
+  }, [config, event, dateStr, dayInfos, existingForDay, blocksForDay])
 
-  // Pull bookings + blocks for the selected event/date so the slot picker
-  // reflects real availability.
-  const [existingForDay, setExistingForDay] = useState<any[]>([])
-  const [blocksForDay, setBlocksForDay] = useState<any[]>([])
   useEffect(() => {
     if (!event || !dateStr) return
     let cancelled = false
