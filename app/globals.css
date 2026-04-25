@@ -242,9 +242,10 @@ input:focus, select:focus, textarea:focus { border-color: var(--green); }
 .sidebar-logo-row { display: flex; align-items: center; gap: 8px; }
 .app-name { font-size: 15px; font-weight: 900; color: #fff; letter-spacing: -.2px; line-height: 1.2; }
 .app-sub { font-size: 10px; color: var(--sidebar-muted); letter-spacing: .10em; text-transform: uppercase; margin-top: 5px; display: block; }
-.sidebar-nav { flex: 1; padding: 10px 8px; overflow-y: auto; }
-.nav-group-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; color: var(--sidebar-muted); padding: 14px 12px 4px; }
-.nav-item { display: flex; align-items: center; gap: 0; padding: 9px 12px; border-radius: 7px; color: var(--sidebar-text); font-size: 13px; font-weight: 700; cursor: pointer; transition: all .13s; margin-bottom: 2px; background: none; border: none; width: 100%; text-align: left; justify-content: flex-start; }
+.sidebar-nav { flex: 1; padding: 6px 8px; overflow-y: auto; }
+.nav-group-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; color: var(--sidebar-muted); padding: 12px 12px 4px; }
+.nav-group-label:first-child { padding-top: 6px; }
+.nav-item { display: flex; align-items: center; gap: 0; padding: 6px 12px; border-radius: 7px; color: var(--sidebar-text); font-size: 13px; font-weight: 700; cursor: pointer; transition: all .13s; margin-bottom: 1px; background: none; border: none; width: 100%; text-align: left; justify-content: flex-start; }
 .nav-item:hover { background: rgba(255,255,255,.08); color: #fff; }
 .nav-item.active { background: var(--sidebar-active); color: #fff; }
 .ni-icon { width: 36px; display: flex; align-items: center; justify-content: flex-start; flex-shrink: 0; opacity: .8; }
