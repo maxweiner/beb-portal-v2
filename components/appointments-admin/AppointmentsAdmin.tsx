@@ -5,6 +5,7 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { Store, Event } from '@/types'
 import { formatPhoneDisplay } from '@/lib/phone'
+import AddAppointmentModal from './AddAppointmentModal'
 
 // ---------- types ----------
 
@@ -183,6 +184,7 @@ export default function AppointmentsAdmin() {
   const [appts, setAppts] = useState<AppointmentRow[]>([])
   const [loaded, setLoaded] = useState(false)
   const [refreshTick, setRefreshTick] = useState(0)
+  const [showAddModal, setShowAddModal] = useState(false)
 
   const [dateFilter, setDateFilter] = useState<DateFilter>('this-week')
   const [sourceFilter, setSourceFilter] = useState<Source | 'all'>('all')
@@ -258,9 +260,19 @@ export default function AppointmentsAdmin() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <h2 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)' }}>Appointments</h2>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn-primary btn-sm" onClick={() => setShowAddModal(true)}>+ Add Appointment</button>
           <button className="btn-outline btn-sm" onClick={() => setRefreshTick(t => t + 1)}>↻ Refresh</button>
         </div>
       </div>
+
+      {showAddModal && (
+        <AddAppointmentModal
+          stores={stores}
+          events={events}
+          onClose={() => setShowAddModal(false)}
+          onCreated={() => setRefreshTick(t => t + 1)}
+        />
+      )}
 
       {/* Filter bar */}
       <div style={{
