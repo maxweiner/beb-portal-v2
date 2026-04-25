@@ -161,12 +161,12 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
                   className="nav-group-label"
                   style={{
                     background: 'none', border: 'none', cursor: 'pointer',
-                    width: '100%', textAlign: 'left', font: 'inherit',
-                    display: 'flex', alignItems: 'center', gap: 6,
+                    width: '100%', textAlign: 'left', display: 'block',
                   }}
                 >
                   <span style={{
-                    display: 'inline-block', width: 8, fontSize: 9,
+                    display: 'inline-block', width: 10, marginRight: 4,
+                    fontSize: 9,
                     transition: 'transform .15s ease',
                     transform: currentOpen ? 'rotate(90deg)' : 'rotate(0deg)',
                   }}>▶</span>
