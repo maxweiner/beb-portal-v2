@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useApp, DEFAULT_PERMS } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { User, Role } from '@/types'
+import Checkbox from '@/components/ui/Checkbox'
 
 type Tab = 'users' | 'invite' | 'merge' | 'email' | 'sms' | 'permissions'
 
@@ -731,12 +732,10 @@ function PermissionsTab() {
                         {isLocked ? (
                           <span className="text-xl" style={{ color: 'var(--green)' }}>✓</span>
                         ) : isSuperAdmin ? (
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={checked}
                             onChange={() => toggle(f.key, r)}
-                            className="w-5 h-5 cursor-pointer rounded"
-                            style={{ accentColor: 'var(--green)' }}
+                            size={20}
                           />
                         ) : (
                           <span className="text-xl" style={{ color: checked ? 'var(--green)' : 'var(--fog)' }}>

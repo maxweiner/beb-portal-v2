@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
+import Checkbox from '@/components/ui/Checkbox'
 
 interface BookingConfigState {
   slot_interval_minutes: number
@@ -275,16 +276,18 @@ export default function BookingConfigCard({
             <input type="number" min={1} max={100} value={config.hot_show_threshold}
               onChange={e => setConfig(p => p && ({ ...p, hot_show_threshold: Number(e.target.value) || 80 }))} />
           </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, paddingBottom: 8 }}>
-            <input type="checkbox" checked={config.hot_show_notify_sms}
-              onChange={e => setConfig(p => p && ({ ...p, hot_show_notify_sms: e.target.checked }))} />
-            SMS
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, paddingBottom: 8 }}>
-            <input type="checkbox" checked={config.hot_show_notify_email}
-              onChange={e => setConfig(p => p && ({ ...p, hot_show_notify_email: e.target.checked }))} />
-            Email
-          </label>
+          <Checkbox
+            checked={!!config.hot_show_notify_sms}
+            onChange={v => setConfig(p => p && ({ ...p, hot_show_notify_sms: v }))}
+            label="SMS"
+            labelStyle={{ fontSize: 13, paddingBottom: 8 }}
+          />
+          <Checkbox
+            checked={!!config.hot_show_notify_email}
+            onChange={v => setConfig(p => p && ({ ...p, hot_show_notify_email: v }))}
+            label="Email"
+            labelStyle={{ fontSize: 13, paddingBottom: 8 }}
+          />
         </div>
       </div>
 

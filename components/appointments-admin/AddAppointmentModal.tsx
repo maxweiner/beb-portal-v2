@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import type { Store, Event } from '@/types'
 import { buildSlotsForDay, hoursForEventDay } from '@/lib/appointments/slots'
 import PhoneInput from '@/components/ui/PhoneInput'
+import Checkbox from '@/components/ui/Checkbox'
 
 interface BookingConfig {
   slot_interval_minutes: number
@@ -39,30 +40,6 @@ function fmtTime(hhmm: string): string {
 function fmtDateLong(iso: string): string {
   const d = new Date(iso + 'T12:00:00')
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-}
-
-function CheckboxRow({ label, checked, onToggle }: {
-  label: string; checked: boolean; onToggle: () => void
-}) {
-  return (
-    <label style={{
-      display: 'flex', alignItems: 'center', gap: 8, fontSize: 13,
-      padding: '4px 0', cursor: 'pointer', color: 'var(--ink)',
-      opacity: checked ? 1 : 0.95,
-    }}>
-      <input type="checkbox" checked={checked} onChange={onToggle}
-        style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
-      <span aria-hidden="true" style={{
-        width: 20, height: 20, flexShrink: 0, borderRadius: 5,
-        border: `2px solid ${checked ? 'var(--green)' : 'var(--pearl)'}`,
-        background: checked ? 'var(--green)' : '#FFFFFF',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: '#FFFFFF', fontSize: 13, fontWeight: 900, lineHeight: 1,
-        transition: 'all .15s ease',
-      }}>{checked ? '✓' : ''}</span>
-      <span>{label}</span>
-    </label>
-  )
 }
 
 export default function AddAppointmentModal({
@@ -328,9 +305,10 @@ export default function AddAppointmentModal({
                 <label className="block text-xs font-semibold text-gray-700 mb-2">Bringing</label>
                 <div className="grid grid-cols-2 gap-2">
                   {itemsOptions.map(opt => (
-                    <CheckboxRow key={opt} label={opt}
+                    <Checkbox key={opt} label={opt}
+                      labelStyle={{ fontSize: 13, padding: '4px 0' }}
                       checked={items.includes(opt)}
-                      onToggle={() => toggle(items, opt, setItems)} />
+                      onChange={() => toggle(items, opt, setItems)} />
                   ))}
                 </div>
               </div>
@@ -339,9 +317,10 @@ export default function AddAppointmentModal({
                 <label className="block text-xs font-semibold text-gray-700 mb-2">How heard (pick any)</label>
                 <div className="grid grid-cols-2 gap-2">
                   {hearOptions.map(opt => (
-                    <CheckboxRow key={opt} label={opt}
+                    <Checkbox key={opt} label={opt}
+                      labelStyle={{ fontSize: 13, padding: '4px 0' }}
                       checked={howHeard.includes(opt)}
-                      onToggle={() => toggle(howHeard, opt, setHowHeard)} />
+                      onChange={() => toggle(howHeard, opt, setHowHeard)} />
                   ))}
                 </div>
               </div>
@@ -357,23 +336,12 @@ export default function AddAppointmentModal({
                 </div>
               )}
 
-              <label style={{
-                display: 'flex', alignItems: 'center', gap: 8, fontSize: 13,
-                paddingTop: 4, cursor: 'pointer', color: 'var(--ink)',
-              }}>
-                <input type="checkbox" checked={isWalkin}
-                  onChange={e => setIsWalkin(e.target.checked)}
-                  style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
-                <span aria-hidden="true" style={{
-                  width: 20, height: 20, flexShrink: 0, borderRadius: 5,
-                  border: `2px solid ${isWalkin ? 'var(--green)' : 'var(--pearl)'}`,
-                  background: isWalkin ? 'var(--green)' : '#FFFFFF',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#FFFFFF', fontSize: 13, fontWeight: 900, lineHeight: 1,
-                  transition: 'all .15s ease',
-                }}>{isWalkin ? '✓' : ''}</span>
-                Walk-in (customer is here in person now)
-              </label>
+              <Checkbox
+                checked={isWalkin}
+                onChange={setIsWalkin}
+                label="Walk-in (customer is here in person now)"
+                labelStyle={{ fontSize: 13, paddingTop: 4 }}
+              />
 
               {error && (
                 <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2">

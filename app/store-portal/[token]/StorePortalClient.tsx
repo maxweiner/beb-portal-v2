@@ -6,6 +6,7 @@ import { Diamond, Plus, X } from 'lucide-react'
 import { buildSlotsForDay, hoursForEventDay } from '@/lib/appointments/slots'
 import type { BookingPayload } from '@/lib/appointments/types'
 import PhoneInput from '@/components/ui/PhoneInput'
+import Checkbox from '@/components/ui/Checkbox'
 import { formatPhoneDisplay } from '@/lib/phone'
 
 interface FullAppt {
@@ -412,10 +413,12 @@ export default function StorePortalClient({
                 </select>
               </div>
 
-              <label className="flex items-center gap-2 text-sm pt-1">
-                <input type="checkbox" checked={isWalkin} onChange={e => setIsWalkin(e.target.checked)} />
-                Walk-in (customer is here in person now)
-              </label>
+              <Checkbox
+                checked={isWalkin}
+                onChange={setIsWalkin}
+                label="Walk-in (customer is here in person now)"
+                labelStyle={{ fontSize: 13, paddingTop: 4 }}
+              />
 
               {error && (
                 <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2">
