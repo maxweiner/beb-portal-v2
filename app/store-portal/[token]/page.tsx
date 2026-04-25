@@ -37,12 +37,18 @@ export default async function Page({ params }: { params: { token: string } }) {
 
   const eventIds = payload.events.map(e => e.id)
 
-  const [apptsRes, employeesRes] = await Promise.all([
+  const [apptsRes, cancelledRes, employeesRes] = await Promise.all([
     sb.from('appointments')
       .select('id, cancel_token, status, appointment_date, appointment_time, customer_name, customer_phone, customer_email, items_bringing, how_heard, is_walkin, appointment_employee_id, booked_by')
       .in('event_id', eventIds)
       .neq('status', 'cancelled')
       .order('appointment_date', { ascending: true })
+      .order('appointment_time', { ascending: true }),
+    sb.from('appointments')
+      .select('id, cancel_token, status, appointment_date, appointment_time, customer_name, customer_phone, customer_email, items_bringing, how_heard, is_walkin, appointment_employee_id, booked_by')
+      .in('event_id', eventIds)
+      .eq('status', 'cancelled')
+      .order('appointment_date', { ascending: false })
       .order('appointment_time', { ascending: true }),
     sb.from('store_employees')
       .select('id, name')
@@ -56,6 +62,7 @@ export default async function Page({ params }: { params: { token: string } }) {
       slug={store.slug}
       payload={payload}
       appointments={apptsRes.data ?? []}
+      cancelledAppointments={cancelledRes.data ?? []}
       employees={employeesRes.data ?? []}
     />
   )

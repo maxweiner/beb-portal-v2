@@ -44,7 +44,19 @@ export async function PUT(req: Request, { params }: { params: { token: string } 
   const sb = admin()
   let body: any
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
-  const { appointment_date, appointment_time } = body ?? {}
+
+  const {
+    appointment_date,
+    appointment_time,
+    customer_name,
+    customer_phone,
+    customer_email,
+    items_bringing,
+    how_heard,
+    appointment_employee_id,
+    is_walkin,
+    notes,
+  } = body ?? {}
   if (!appointment_date || !appointment_time) {
     return NextResponse.json({ error: 'Missing appointment_date or appointment_time' }, { status: 400 })
   }
@@ -121,11 +133,34 @@ export async function PUT(req: Request, { params }: { params: { token: string } 
   if (slot.blocked) return NextResponse.json({ error: 'That slot is blocked' }, { status: 409 })
   if (slot.available <= 0) return NextResponse.json({ error: 'That slot is full' }, { status: 409 })
 
+  // Build the update payload — only include keys that were sent. This lets
+  // a callsite send just date/time (the legacy reschedule path) or every
+  // editable field (the new edit modal).
+  const updates: Record<string, any> = {
+    appointment_date,
+    appointment_time: wantTime,
+  }
+  const has = (k: string) => Object.prototype.hasOwnProperty.call(body, k)
+  if (has('customer_name'))  updates.customer_name  = String(customer_name || '').trim()
+  if (has('customer_phone')) updates.customer_phone = String(customer_phone || '').trim()
+  if (has('customer_email')) updates.customer_email = String(customer_email || '').trim()
+  if (has('items_bringing') && Array.isArray(items_bringing)) updates.items_bringing = items_bringing
+  if (has('how_heard')       && Array.isArray(how_heard))       updates.how_heard       = how_heard
+  if (has('appointment_employee_id')) updates.appointment_employee_id = appointment_employee_id || null
+  if (has('is_walkin'))  updates.is_walkin = !!is_walkin
+  if (has('notes'))      updates.notes     = notes ?? null
+
   const { error: updErr } = await sb
     .from('appointments')
-    .update({ appointment_date, appointment_time: wantTime })
+    .update(updates)
     .eq('id', appt.id)
   if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 })
+
+  // Detect whether anything notification-worthy actually changed
+  const dateChanged = appointment_date !== (appt as any).appointment_date
+  const timeChanged = wantTime !== ((appt as any).appointment_time || '').slice(0, 5)
+  const phoneChanged = has('customer_phone') && updates.customer_phone !== (appt.customer_phone || '')
+  const emailChanged = has('customer_email') && updates.customer_email !== (appt.customer_email || '')
 
   const { data: store } = await sb
     .from('stores')
@@ -133,14 +168,20 @@ export async function PUT(req: Request, { params }: { params: { token: string } 
     .eq('id', appt.store_id)
     .maybeSingle()
 
-  if (store) {
+  // Notification rules:
+  //   - date or time changed → send the reschedule confirmation immediately
+  //   - phone or email changed (without a date/time change) → enqueue a
+  //     30-minute debounced "contact info updated" notification via the
+  //     notification_queue table. The queue cron processes it.
+  //   - only items / how_heard / employee / walkin / notes changed → no notification
+  if (store && (dateChanged || timeChanged)) {
     sendConfirmation({
       appt: {
         id: appt.id,
         cancel_token: appt.cancel_token,
-        customer_name: appt.customer_name,
-        customer_phone: appt.customer_phone,
-        customer_email: appt.customer_email,
+        customer_name: updates.customer_name ?? appt.customer_name,
+        customer_phone: updates.customer_phone ?? appt.customer_phone,
+        customer_email: updates.customer_email ?? appt.customer_email,
         appointment_date,
         appointment_time: wantTime,
       },
@@ -149,6 +190,33 @@ export async function PUT(req: Request, { params }: { params: { token: string } 
         owner_phone: store.owner_phone, owner_email: store.owner_email,
       },
     }).catch(err => console.error('reschedule confirmation failed', err))
+  } else if (store && (phoneChanged || emailChanged)) {
+    // Debounced — upsert by (appointment_id, template_key). If a row already
+    // exists for this appointment, push scheduled_for back to now + 30 min
+    // and refresh the recipient. The cron picks it up after the window.
+    const scheduledFor = new Date(Date.now() + 30 * 60 * 1000).toISOString()
+    if (phoneChanged && updates.customer_phone) {
+      await sb.from('notification_queue').upsert({
+        appointment_id: appt.id,
+        template_key: 'contact_info_updated_sms',
+        channel: 'sms',
+        recipient: updates.customer_phone,
+        scheduled_for: scheduledFor,
+        status: 'pending',
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'appointment_id,template_key' })
+    }
+    if (emailChanged && updates.customer_email) {
+      await sb.from('notification_queue').upsert({
+        appointment_id: appt.id,
+        template_key: 'contact_info_updated_email',
+        channel: 'email',
+        recipient: updates.customer_email,
+        scheduled_for: scheduledFor,
+        status: 'pending',
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'appointment_id,template_key' })
+    }
   }
 
   return NextResponse.json({ ok: true })

@@ -7,6 +7,10 @@
     {
       "path": "/api/appointments/reminders?secret=bebportal2024",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/notification-queue/process?secret=bebportal2024",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

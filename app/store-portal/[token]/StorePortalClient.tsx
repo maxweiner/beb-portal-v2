@@ -8,6 +8,7 @@ import type { BookingPayload } from '@/lib/appointments/types'
 import PhoneInput from '@/components/ui/PhoneInput'
 import Checkbox from '@/components/ui/Checkbox'
 import { formatPhoneDisplay } from '@/lib/phone'
+import EditAppointmentModal from './EditAppointmentModal'
 
 interface FullAppt {
   id: string
@@ -19,7 +20,7 @@ interface FullAppt {
   customer_phone: string
   customer_email: string
   items_bringing: string[] | null
-  how_heard: string | null
+  how_heard: string[] | null
   is_walkin: boolean
   appointment_employee_id: string | null
   booked_by: string
@@ -55,11 +56,13 @@ export default function StorePortalClient({
   slug,
   payload,
   appointments,
+  cancelledAppointments,
   employees,
 }: {
   slug: string
   payload: BookingPayload
   appointments: FullAppt[]
+  cancelledAppointments: FullAppt[]
   employees: Employee[]
 }) {
   const router = useRouter()
@@ -87,6 +90,20 @@ export default function StorePortalClient({
   const [showAdd, setShowAdd] = useState(false)
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [tab, setTab] = useState<'upcoming' | 'cancelled'>('upcoming')
+  const [editingAppt, setEditingAppt] = useState<FullAppt | null>(null)
+
+  // Group cancelled by date for the Cancelled tab
+  const cancelledByDate = useMemo(() => {
+    const m = new Map<string, FullAppt[]>()
+    for (const a of cancelledAppointments) {
+      if (!m.has(a.appointment_date)) m.set(a.appointment_date, [])
+      m.get(a.appointment_date)!.push(a)
+    }
+    return [...m.entries()]
+      .sort(([a], [b]) => b.localeCompare(a))   // most recent date first
+      .map(([date, list]) => ({ date, list }))
+  }, [cancelledAppointments])
 
   // Add-form state
   const dayInfos = useMemo(() => {
@@ -236,19 +253,50 @@ export default function StorePortalClient({
       </header>
 
       <main className="max-w-2xl mx-auto px-4 pt-6 space-y-5">
-        {byDate.length === 0 ? (
+        {/* Tab toggle: Upcoming vs Cancelled */}
+        <div className="flex gap-1 p-1 rounded-xl" style={{ background: '#e5e7eb' }}>
+          {(['upcoming', 'cancelled'] as const).map(t => {
+            const active = tab === t
+            const count = t === 'upcoming' ? appointments.length : cancelledAppointments.length
+            return (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className="flex-1 py-2 px-3 rounded-lg text-sm font-bold transition-colors"
+                style={
+                  active
+                    ? { background: 'white', color: primary, boxShadow: '0 1px 2px rgba(0,0,0,.06)' }
+                    : { background: 'transparent', color: '#6b7280' }
+                }
+              >
+                {t === 'upcoming' ? 'Upcoming' : 'Cancelled'}
+                {count > 0 && (
+                  <span className="ml-1.5 text-xs opacity-70">({count})</span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+
+        {tab === 'upcoming' && byDate.length === 0 && (
           <div className="bg-white rounded-2xl shadow p-8 text-center text-gray-500">
             No upcoming appointments.
           </div>
-        ) : (
-          byDate.map(({ date, list }) => (
+        )}
+        {tab === 'cancelled' && cancelledByDate.length === 0 && (
+          <div className="bg-white rounded-2xl shadow p-8 text-center text-gray-500">
+            No cancelled appointments.
+          </div>
+        )}
+
+        {(tab === 'upcoming' ? byDate : cancelledByDate).map(({ date, list }) => (
             <section key={date} className="bg-white rounded-2xl shadow overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-200 font-bold" style={{ background: primary + '14', color: primary }}>
                 {formatDateLong(date)}
               </div>
               <div className="divide-y divide-gray-100">
                 {list.map(a => (
-                  <div key={a.id} className="p-4 flex items-start gap-3">
+                  <div key={a.id} className="p-4 flex items-start gap-3" style={{ opacity: tab === 'cancelled' ? 0.7 : 1 }}>
                     <div className="text-lg font-bold w-24 shrink-0">{formatTime(a.appointment_time)}</div>
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold">
@@ -257,6 +305,12 @@ export default function StorePortalClient({
                           <span className="ml-2 text-[10px] uppercase tracking-wide font-bold px-2 py-0.5 rounded-full"
                             style={{ background: '#FEF3C7', color: '#92400E' }}>
                             walk-in
+                          </span>
+                        )}
+                        {tab === 'cancelled' && (
+                          <span className="ml-2 text-[10px] uppercase tracking-wide font-bold px-2 py-0.5 rounded-full"
+                            style={{ background: '#fee2e2', color: '#991b1b' }}>
+                            cancelled
                           </span>
                         )}
                       </div>
@@ -274,18 +328,20 @@ export default function StorePortalClient({
                         </div>
                       )}
                     </div>
-                    <button
-                      onClick={() => handleCancel(a.cancel_token)}
-                      className="text-xs text-red-700 hover:underline shrink-0"
-                    >
-                      Cancel
-                    </button>
+                    {tab === 'upcoming' && (
+                      <button
+                        onClick={() => setEditingAppt(a)}
+                        className="text-xs font-semibold shrink-0 px-2.5 py-1 rounded-md border"
+                        style={{ borderColor: primary, color: primary }}
+                      >
+                        Edit
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
             </section>
-          ))
-        )}
+          ))}
       </main>
 
       {/* Floating "+" button */}
@@ -452,6 +508,16 @@ export default function StorePortalClient({
             </div>
           </form>
         </div>
+      )}
+
+      {editingAppt && (
+        <EditAppointmentModal
+          appt={editingAppt}
+          payload={payload}
+          employees={employees}
+          onClose={() => setEditingAppt(null)}
+          onSaved={() => router.refresh()}
+        />
       )}
     </div>
   )
