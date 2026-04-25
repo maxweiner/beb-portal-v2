@@ -200,7 +200,7 @@ type Brand = 'beb' | 'liberty'
 const BRAND_FROM: Record<Brand, { fromName: string; fromEmail: string; notifyColumn: 'notify_beb' | 'notify_liberty' }> = {
   beb: {
     fromName: 'BEB Portal',
-    fromEmail: 'noreply@bebllp.com',
+    fromEmail: 'noreply@updates.bebllp.com',
     notifyColumn: 'notify_beb',
   },
   liberty: {

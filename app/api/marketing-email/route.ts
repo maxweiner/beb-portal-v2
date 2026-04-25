@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          from: 'BEB Marketing <marketing@bebllp.com>',
+          from: 'BEB Marketing <marketing@updates.bebllp.com>',
           to: vendor.email,
           subject: `Proof Request — ${ev.store_name} (${eventDate})`,
           html: emailBody,

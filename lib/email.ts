@@ -9,7 +9,7 @@ const sb = createClient(
  * Resend API key lives in the settings table at key='resend_api_key'.
  * From-address default mirrors the existing marketing-email/daily-report routes.
  */
-const DEFAULT_FROM = 'Beneficial Estate Buyers <noreply@bebllp.com>'
+const DEFAULT_FROM = 'Beneficial Estate Buyers <noreply@updates.bebllp.com>'
 
 async function loadKey(): Promise<string | null> {
   const { data } = await sb.from('settings').select('value').eq('key', 'resend_api_key').maybeSingle()
