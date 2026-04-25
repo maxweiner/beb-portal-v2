@@ -559,8 +559,8 @@ export default function MobileDayEntry() {
       <div style={{ padding: '14px 14px 0' }}>
         <div style={cardStyle}>
           <SectionLabel>Today's Numbers</SectionLabel>
-          <FieldRow label="Customers Seen" value={customers} onChange={setCustomers} />
           <FieldRow label="Purchases Made" value={purchases} onChange={setPurchases} required />
+          <FieldRow label="Customers Seen" value={customers} onChange={setCustomers} />
           <FieldRow label="$ @ 10% Commission" value={tenPct} onChange={setTenPct} money required />
           <FieldRow label="$ @ 5% Commission" value={fivePct} onChange={setFivePct} money last />
         </div>
