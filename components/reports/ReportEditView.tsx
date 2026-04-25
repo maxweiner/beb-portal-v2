@@ -83,7 +83,24 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
       supabase.from('users').select('id, name, email').eq('active', true).order('name'),
     ]).then(([tplRes, usrRes]) => {
       if (cancelled) return
-      if (tplRes.data) setTemplate(tplRes.data as TemplateRow)
+      // If the row (or even the table) is missing, fall back to a synthesized
+      // default so the editor still loads. Save attempts will surface the
+      // real error from Supabase if the table truly doesn't exist.
+      if (tplRes.data) {
+        setTemplate(tplRes.data as TemplateRow)
+      } else {
+        setTemplate({
+          id: report.id,
+          subject: '',
+          greeting: '',
+          header_subtitle: '',
+          footer: '',
+          shoutout_fallback: '',
+          enabled: true,
+          send_implemented: report.id === 'morning-briefing',
+          updated_at: new Date().toISOString(),
+        })
+      }
       setUsers((usrRes.data || []) as UserOpt[])
       setLoading(false)
     })
