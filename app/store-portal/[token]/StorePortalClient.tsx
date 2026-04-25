@@ -144,13 +144,14 @@ export default function StorePortalClient({
       .map(([date, list]) => ({ date, list }))
   }, [cancelledAppointments])
 
-  // Add-form state. dayInfos keeps all 3 day slots so the picker can render
-  // past / unconfigured days as disabled buttons rather than hiding them.
+  // Add-form state. Always emit all 3 day slots so the picker stays a
+  // consistent 3-button row; days the event doesn't include (or already
+  // past) render disabled. event.days might be a subset for shorter events.
   const dayInfos = useMemo(() => {
     if (!event) return []
     const today = todayIso()
-    return event.days.map(d => {
-      const dayNumber = d.day_number as 1 | 2 | 3
+    return [1, 2, 3].map(d => {
+      const dayNumber = d as 1 | 2 | 3
       const dateStr = addDays(event.start_date, dayNumber - 1)
       const hours = hoursForEventDay(dayNumber, config, override)
       const enabled = !!hours && dateStr >= today
@@ -416,56 +417,57 @@ export default function StorePortalClient({
               maxHeight: 'calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom))',
             }}
           >
-            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between gap-2">
               <h2 className="font-bold" style={{ color: primary, fontSize: titleSize }}>Add appointment</h2>
-              <button type="button" onClick={() => setShowAdd(false)} className="p-1" aria-label="Close">
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Font size switcher — three "A" glyphs at small/medium/large sizes */}
+                <div
+                  role="radiogroup"
+                  aria-label="Modal text size"
+                  style={{ display: 'flex', alignItems: 'center', gap: 2 }}
+                >
+                  {([
+                    { v: 'sm' as const, size: 11 },
+                    { v: 'md' as const, size: 14 },
+                    { v: 'lg' as const, size: 17 },
+                  ]).map(({ v, size }) => {
+                    const sel = fontScale === v
+                    return (
+                      <button
+                        key={v}
+                        type="button"
+                        role="radio"
+                        aria-checked={sel}
+                        aria-label={SCALE_LABEL[v]}
+                        title={SCALE_LABEL[v]}
+                        onClick={() => setFontScale(v)}
+                        style={{
+                          width: 28, height: 28,
+                          borderRadius: 6,
+                          border: 'none',
+                          background: sel ? '#e5e7eb' : 'transparent',
+                          color: sel ? '#111827' : '#6b7280',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                          fontSize: size,
+                          fontFamily: 'inherit',
+                          padding: 0, lineHeight: 1,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          transition: 'background .15s ease, color .15s ease',
+                        }}
+                      >
+                        A
+                      </button>
+                    )
+                  })}
+                </div>
+                <button type="button" onClick={() => setShowAdd(false)} className="p-1" aria-label="Close">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             <div className="p-5 space-y-3">
-              {/* Font size switcher */}
-              <div
-                role="radiogroup"
-                aria-label="Modal text size"
-                style={{
-                  display: 'flex',
-                  gap: 4,
-                  padding: 3,
-                  borderRadius: 8,
-                  background: '#f3f4f6',
-                  width: '100%',
-                }}
-              >
-                {(['sm', 'md', 'lg'] as const).map(s => {
-                  const sel = fontScale === s
-                  return (
-                    <button
-                      key={s}
-                      type="button"
-                      role="radio"
-                      aria-checked={sel}
-                      onClick={() => setFontScale(s)}
-                      style={{
-                        flex: 1,
-                        padding: '0.4em 0.5em',
-                        borderRadius: 6,
-                        border: 'none',
-                        background: sel ? '#FFFFFF' : 'transparent',
-                        boxShadow: sel ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
-                        cursor: 'pointer',
-                        fontWeight: 600,
-                        color: sel ? '#111827' : '#6b7280',
-                        fontSize: '0.857em',
-                        transition: 'background .15s ease, color .15s ease',
-                      }}
-                    >
-                      {SCALE_LABEL[s]}
-                    </button>
-                  )
-                })}
-              </div>
-
               {/* Day picker — three buttons, no default */}
               <div>
                 <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Day *</label>
