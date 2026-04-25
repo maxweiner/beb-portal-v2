@@ -34,6 +34,9 @@ interface EnqueueArgs {
   trigger_type: TriggerType
   buyer_id: string
   event_id: string
+  /** Extra merge vars merged on top of the standard set — e.g. trigger-specific
+   *  fields like `channel_source` for vdp_dropped that aren't in the common set. */
+  extraMergeVars?: Record<string, string>
 }
 
 export interface EnqueueResult {
@@ -115,7 +118,7 @@ export async function enqueueNotification(args: EnqueueArgs): Promise<EnqueueRes
     otherBuyers: others,
     portalUrl: portalUrl(),
   }
-  const mergeData = buildMergeVars(ctx)
+  const mergeData = { ...buildMergeVars(ctx), ...(args.extraMergeVars || {}) }
 
   // Cap channels to ones the buyer can actually receive
   const usableChannels: Channel[] = channels.filter(c => {

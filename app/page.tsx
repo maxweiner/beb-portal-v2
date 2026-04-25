@@ -21,6 +21,7 @@ import { RoleGuard } from '@/components/ui/RoleGuard'
 import LibertyAdminPanel from '@/components/admin/LibertyAdminPanel'
 import ReportRecipients from '@/components/admin/ReportRecipients'
 import NotificationTemplatesAdmin from '@/components/admin/NotificationTemplatesAdmin'
+import DataResearch from '@/components/admin/DataResearch'
 import { useState, useEffect } from 'react'
 import MobileLayout from '@/components/mobile/MobileLayout'
 import MobileDashboard from '@/components/mobile/MobileDashboard'
@@ -30,7 +31,7 @@ import MobileStaff from '@/components/mobile/MobileStaff'
 import BrandSwitchOverlay from '@/components/layout/BrandSwitchOverlay'
 import { shouldUseMobile, setMobilePreference } from '@/lib/mobile'
 
-export type NavPage = 'dashboard' | 'calendar' | 'events' | 'schedule' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'libertyadmin' | 'recipients' | 'notification-templates'
+export type NavPage = 'dashboard' | 'calendar' | 'events' | 'schedule' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'libertyadmin' | 'recipients' | 'notification-templates' | 'data-research'
 
 export default function Home() {
   const { user, loading, connectionError, reload } = useApp()
@@ -154,6 +155,11 @@ export default function Home() {
         {nav === 'notification-templates' && (
           <RoleGuard roles={['superadmin']}>
             <NotificationTemplatesAdmin />
+          </RoleGuard>
+        )}
+        {nav === 'data-research' && (
+          <RoleGuard roles={['admin', 'superadmin']}>
+            <DataResearch />
           </RoleGuard>
         )}
       </main>
