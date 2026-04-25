@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
+import { listTriggers, type TriggerType } from '@/lib/notifications/triggers'
+import NotificationTemplateV2Editor, { type V2TemplateRow } from './NotificationTemplateV2Editor'
 
 interface TemplateRow {
   id: string
@@ -11,6 +13,19 @@ interface TemplateRow {
   body: string
   description: string
   updated_at: string
+  // v2 fields — present on per-brand rows, null on legacy rows
+  brand: 'beb' | 'liberty' | null
+  trigger_type: string | null
+  name: string | null
+  enabled: boolean
+  channels: string[] | null
+  delay_minutes: number | null
+  email_subject: string | null
+  email_body_html: string | null
+  email_body_text: string | null
+  sms_body: string | null
+  respect_quiet_hours_email: boolean
+  respect_quiet_hours_sms: boolean
 }
 
 // Variables documented per template id (mirrors what the send code injects).
@@ -59,7 +74,7 @@ function shellHtml(inner: string): string {
 }
 
 export default function NotificationTemplatesAdmin() {
-  const { user } = useApp()
+  const { user, brand } = useApp()
   const isSuperAdmin = user?.role === 'superadmin'
   const [templates, setTemplates] = useState<TemplateRow[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -88,60 +103,113 @@ export default function NotificationTemplatesAdmin() {
 
   if (activeId) {
     const tpl = templates.find(t => t.id === activeId)
-    if (tpl) return (
-      <NotificationTemplateEditor
-        template={tpl}
-        onBack={() => setActiveId(null)}
-        onSaved={(updated) => {
-          setTemplates(p => p.map(t => t.id === updated.id ? updated : t))
-        }}
-      />
-    )
+    if (tpl) {
+      // v2 brand-scoped templates open the new editor; legacy rows
+      // (brand IS NULL) keep the old editor.
+      if (tpl.brand && tpl.trigger_type) {
+        return (
+          <NotificationTemplateV2Editor
+            template={tpl as unknown as V2TemplateRow}
+            onBack={() => setActiveId(null)}
+            onSaved={(updated) => setTemplates(p => p.map(t => t.id === updated.id ? { ...t, ...updated } : t))}
+          />
+        )
+      }
+      return (
+        <NotificationTemplateEditor
+          template={tpl}
+          onBack={() => setActiveId(null)}
+          onSaved={(updated) => {
+            setTemplates(p => p.map(t => t.id === updated.id ? { ...t, ...updated } : t))
+          }}
+        />
+      )
+    }
   }
 
   if (!loaded) {
     return <div className="p-6"><p style={{ color: 'var(--mist)' }}>Loading…</p></div>
   }
 
-  // Group by channel for the list
-  const groups = [
-    { label: 'SMS templates',   filter: (t: TemplateRow) => t.channel === 'sms' },
-    { label: 'Email templates', filter: (t: TemplateRow) => t.channel === 'email' },
-  ]
+  const triggerDefs = listTriggers()
+  const v2ForBrand = templates.filter(t => t.brand === brand && t.trigger_type)
+  const legacy = templates.filter(t => !t.brand)
 
   return (
     <div className="p-6" style={{ maxWidth: 880, margin: '0 auto' }}>
       <div style={{ marginBottom: 20 }}>
         <h1 className="text-2xl font-black" style={{ color: 'var(--ink)' }}>Notification Templates</h1>
         <p style={{ fontSize: 13, color: 'var(--mist)', marginTop: 4 }}>
-          Edit the text the system sends customers and staff. Use <code>{`{{variable}}`}</code> placeholders — full list is shown in each editor.
+          Editing templates for <strong style={{ textTransform: 'uppercase' }}>{brand}</strong>.
+          Switch brand in the sidebar to edit the other set.
         </p>
       </div>
-      {groups.map(g => {
-        const list = templates.filter(g.filter)
-        return (
-          <div key={g.label} style={{ marginBottom: 22 }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
-              {g.label}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {list.map(t => (
-                <button key={t.id}
-                  onClick={() => setActiveId(t.id)}
-                  style={{
-                    background: 'white', border: '1px solid var(--pearl)',
-                    borderRadius: 10, padding: '12px 14px', textAlign: 'left',
-                    cursor: 'pointer', fontFamily: 'inherit',
-                  }}
-                >
-                  <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink)' }}>{prettyName(t.id)}</div>
-                  <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>{t.description}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )
-      })}
+
+      {/* v2 per-brand triggers */}
+      <div style={{ marginBottom: 26 }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
+          Per-brand triggers
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {triggerDefs.map(def => {
+            const row = v2ForBrand.find(t => t.trigger_type === def.type)
+            return (
+              <button key={def.type}
+                onClick={() => row && setActiveId(row.id)}
+                disabled={!row}
+                style={{
+                  background: 'white', border: '1px solid var(--pearl)',
+                  borderRadius: 10, padding: '12px 14px', textAlign: 'left',
+                  cursor: row ? 'pointer' : 'not-allowed', fontFamily: 'inherit',
+                  opacity: row ? 1 : 0.5,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink)' }}>{def.name}</div>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    {row?.enabled ? (
+                      <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--green-dark)', background: 'var(--green-pale)', padding: '2px 6px', borderRadius: 4 }}>ENABLED</span>
+                    ) : (
+                      <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--mist)', background: 'var(--cream2)', padding: '2px 6px', borderRadius: 4 }}>DISABLED</span>
+                    )}
+                    {!def.implemented && (
+                      <span style={{ fontSize: 10, fontWeight: 800, color: '#92400E', background: '#FEF3C7', padding: '2px 6px', borderRadius: 4 }}>SCAFFOLD</span>
+                    )}
+                    {row && (
+                      <span style={{ fontSize: 10, color: 'var(--mist)' }}>
+                        {(row.channels || []).join('+').toUpperCase()} · {row.delay_minutes ?? def.defaultDelayMinutes}m
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>{def.description}</div>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* legacy templates */}
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
+          Legacy appointment templates (global)
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {legacy.map(t => (
+            <button key={t.id}
+              onClick={() => setActiveId(t.id)}
+              style={{
+                background: 'white', border: '1px solid var(--pearl)',
+                borderRadius: 10, padding: '12px 14px', textAlign: 'left',
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink)' }}>{prettyName(t.id)}</div>
+              <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>{t.description}</div>
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
