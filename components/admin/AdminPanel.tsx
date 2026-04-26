@@ -767,7 +767,123 @@ function PermissionsTab() {
         </div>
       )}
 
+      <EditEventSection />
       <DeleteEventSection />
+    </div>
+  )
+}
+
+function EditEventSection() {
+  const { user: me, events, stores, reload } = useApp()
+  const isSuperAdmin = me?.role === 'superadmin'
+  const [selectedId, setSelectedId] = useState('')
+  const [startDate, setStartDate] = useState('')
+  const [storeId, setStoreId] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [toast, setToast] = useState('')
+
+  const sortedEvents = [...events].sort((a, b) => b.start_date.localeCompare(a.start_date))
+  const selected = sortedEvents.find(e => e.id === selectedId)
+  const sortedStores = [...stores].sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+
+  // Sync the inputs whenever the selected event changes.
+  useEffect(() => {
+    if (selected) {
+      setStartDate(selected.start_date || '')
+      setStoreId(selected.store_id || '')
+    } else {
+      setStartDate(''); setStoreId('')
+    }
+  }, [selectedId])
+
+  const fmtRange = (ds: string) => {
+    if (!ds) return ''
+    const s = new Date(ds + 'T12:00:00')
+    const e = new Date(ds + 'T12:00:00'); e.setDate(e.getDate() + 2)
+    const sm = s.toLocaleDateString('en-US', { month: 'short' })
+    const em = e.toLocaleDateString('en-US', { month: 'short' })
+    const year = s.getFullYear()
+    return sm !== em
+      ? `${sm} ${s.getDate()} – ${em} ${e.getDate()}, ${year}`
+      : `${sm} ${s.getDate()}–${e.getDate()}, ${year}`
+  }
+
+  const dirty = !!selected && (startDate !== selected.start_date || storeId !== selected.store_id)
+  const canSave = isSuperAdmin && !!selected && dirty && !!startDate && !!storeId && !saving
+
+  const handleSave = async () => {
+    if (!canSave || !selected) return
+    setSaving(true)
+    try {
+      const store = sortedStores.find(s => s.id === storeId)
+      const { error } = await supabase.from('events').update({
+        start_date: startDate,
+        store_id: storeId,
+        store_name: store?.name || selected.store_name,
+      }).eq('id', selected.id)
+      if (error) throw error
+      setToast(`Event updated — ${store?.name || selected.store_name} ${fmtRange(startDate)}`)
+      await reload()
+      setTimeout(() => setToast(''), 4000)
+    } catch (err: any) {
+      alert('Save failed: ' + (err?.message || 'unknown'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!isSuperAdmin) return null
+
+  return (
+    <div className="card mt-6" style={{ padding: 0, overflow: 'hidden', borderTop: '3px solid var(--green)' }}>
+      <div className="px-6 py-4" style={{ borderBottom: '1px solid var(--pearl)' }}>
+        <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)' }}>✎ Edit Event</div>
+        <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 2 }}>
+          Move an event to a different date or reassign it to another store. Workers, day data, and ad spend are preserved.
+        </div>
+      </div>
+
+      <div className="px-6 py-5" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div>
+          <label className="fl">Event</label>
+          <select value={selectedId} onChange={e => setSelectedId(e.target.value)} style={{ width: '100%', maxWidth: 480 }}>
+            <option value="">— pick an event —</option>
+            {sortedEvents.map(ev => (
+              <option key={ev.id} value={ev.id}>
+                {ev.store_name} · {fmtRange(ev.start_date)}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {selected && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, maxWidth: 600 }}>
+              <div>
+                <label className="fl">Start date (Day 1)</label>
+                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+                <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
+                  Event runs 3 days. New range: <strong>{fmtRange(startDate)}</strong>
+                </div>
+              </div>
+              <div>
+                <label className="fl">Store</label>
+                <select value={storeId} onChange={e => setStoreId(e.target.value)} style={{ width: '100%' }}>
+                  {sortedStores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button onClick={handleSave} disabled={!canSave} className="btn-primary btn-sm">
+                {saving ? 'Saving…' : 'Save changes'}
+              </button>
+              {!dirty && <span style={{ fontSize: 12, color: 'var(--mist)' }}>No changes yet.</span>}
+              {toast && <span style={{ fontSize: 12, color: 'var(--green-dark)', fontWeight: 700 }}>✓ {toast}</span>}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }
