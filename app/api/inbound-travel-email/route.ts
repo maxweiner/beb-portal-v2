@@ -26,6 +26,18 @@ export async function POST(req: NextRequest) {
     const subject = body.Subject || ''
     const textBody = body.TextBody || ''
     const htmlBody = body.HtmlBody || ''
+    // Postmark surfaces forwarded-from / reply-to in the Headers array. When
+    // someone forwards an itinerary from inside the travel@ inbox the From
+    // gets rewritten to travel@bebllp.com — these headers usually still
+    // hold the real sender we can match against a user.
+    const headersArr: { Name: string; Value: string }[] = body.Headers || []
+    const headerEmail = (name: string): string | null => {
+      const h = headersArr.find(x => x?.Name?.toLowerCase() === name.toLowerCase())
+      if (!h?.Value) return null
+      const m = h.Value.match(/[\w.+-]+@[\w-]+\.[\w.-]+/)
+      return m ? m[0].toLowerCase() : null
+    }
+    const replyTo = headerEmail('Reply-To') || headerEmail('X-Original-From') || headerEmail('X-Forwarded-For')
     // Strip tracking URLs and compress whitespace from text body
     const cleanText = textBody
       .replace(/https?:\/\/[^\s>]+/g, '')  // remove URLs
@@ -44,13 +56,18 @@ export async function POST(req: NextRequest) {
     // Use whichever is cleaner and longer
     const emailContent = cleanText.length > 200 ? cleanText : cleanHtml
 
-    // Find buyer by email (including alternate emails)
+    // Find buyer by email (sender, then header fallbacks like Reply-To /
+    // X-Forwarded-For — useful when the user forwards from inside
+    // travel@bebllp.com and the From: gets rewritten).
     const { data: allUsers } = await sb.from('users').select('id, name, email, alternate_emails')
-    const buyer = allUsers?.find(u => {
-      if (u.email?.toLowerCase() === fromEmail) return true
-      const alts = u.alternate_emails || []
-      return alts.some((a: string) => a.toLowerCase() === fromEmail)
-    })
+    const findByEmail = (e: string | null): typeof allUsers extends Array<infer U> | null ? U | undefined : never =>
+      (allUsers as any)?.find((u: any) => {
+        if (!e) return false
+        if (u.email?.toLowerCase() === e) return true
+        const alts = u.alternate_emails || []
+        return alts.some((a: string) => a.toLowerCase() === e)
+      })
+    let buyer: any = findByEmail(fromEmail) || findByEmail(replyTo)
 
     // Use Claude to parse the email
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -85,7 +102,9 @@ Return this exact JSON structure:
   "check_in": "YYYY-MM-DD if hotel or rental",
   "check_out": "YYYY-MM-DD if hotel or rental",
   "city": "destination city",
-  "travel_dates": ["YYYY-MM-DD", "YYYY-MM-DD"]
+  "travel_dates": ["YYYY-MM-DD", "YYYY-MM-DD"],
+  "traveler_name": "name of the traveler/passenger if mentioned (full name, e.g., 'Max Weiner')",
+  "traveler_email": "the traveler's personal email if mentioned anywhere in the body"
 }`
       }]
     })
@@ -93,6 +112,28 @@ Return this exact JSON structure:
     const parsed = JSON.parse(parseResponse.content[0].type === 'text' ? parseResponse.content[0].text : '{}')
     if (parsed.type === 'unknown') {
       return NextResponse.json({ message: 'Could not identify reservation type' })
+    }
+
+    // Smarter buyer match: if email-based lookup didn't find anyone, try
+    // matching against the traveler name + email Claude extracted from
+    // the body. Name match is normalized + token-based so "Max Weiner",
+    // "WEINER, MAX", "Max  S Weiner" all align.
+    if (!buyer) {
+      const travelerEmail: string = (parsed.traveler_email || '').toLowerCase().trim()
+      if (travelerEmail) buyer = findByEmail(travelerEmail) || buyer
+    }
+    if (!buyer && parsed.traveler_name) {
+      const tokens = (s: string) => String(s || '')
+        .toLowerCase()
+        .replace(/[^a-z\s]/g, ' ')
+        .split(/\s+/).filter(Boolean)
+      const targetTokens = new Set(tokens(parsed.traveler_name))
+      // Need at least 2 matching name tokens to count — avoids single-name collisions.
+      buyer = (allUsers as any)?.find((u: any) => {
+        const userTokens = tokens(u.name || '')
+        const overlap = userTokens.filter(t => targetTokens.has(t)).length
+        return overlap >= 2 || (userTokens.length === 1 && targetTokens.has(userTokens[0]))
+      }) || buyer
     }
 
     // Match to event by date range first, then city/state
