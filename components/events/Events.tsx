@@ -290,9 +290,11 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
     setContextEvents(updatedEvents)
   }
 
-  const copyLink = (ev: Event) => {
-    navigator.clipboard.writeText(`${window.location.origin}/event/${ev.id}`)
-    alert('Event summary link copied to clipboard!')
+  // Open the print-styled event recap in a new tab. The ?print=1 flag
+  // injects a window.print() call so the browser's PDF dialog fires
+  // automatically — same flow used by Reports → Event Recap.
+  const downloadPdf = (ev: Event) => {
+    window.open(`/api/event-recap/preview?event_id=${ev.id}&print=1`, '_blank', 'noopener')
   }
 
   const isCurrent = (ev: Event) => {
@@ -581,7 +583,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                         { id: 'workers', icon: '👤', label: 'Who worked', onTap: () => setWorkersOpen(wOpen ? null : ev.id) },
                         ...(isAdmin ? [{ id: 'spend', icon: '💰', label: 'Ad spend', onTap: () => setSpendOpen(spendOpen === ev.id ? null : ev.id) }] : []),
                         { id: 'notes',   icon: '📝', label: 'Notes',      onTap: () => setNotesEvent(ev) },
-                        { id: 'link',    icon: '🔗', label: 'Copy link',  onTap: () => copyLink(ev) },
+                        { id: 'pdf',     icon: '⤓',  label: 'Download PDF', onTap: () => downloadPdf(ev) },
                       ].map((btn, i, arr) => (
                         <button key={btn.id} onClick={e => { e.stopPropagation(); btn.onTap() }} style={{
                           flex: 1, background: 'none', border: 'none',
@@ -808,7 +810,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                       { id: 'workers', icon: '👤', label: 'Who worked', onTap: () => setWorkersOpen(wOpen ? null : ev.id) },
                       ...(isAdmin ? [{ id: 'spend', icon: '💰', label: 'Ad spend', onTap: () => setSpendOpen(spendOpen === ev.id ? null : ev.id) }] : []),
                       { id: 'notes',   icon: '📝', label: 'Notes',      onTap: () => setNotesEvent(ev) },
-                      { id: 'link',    icon: '🔗', label: 'Copy link',  onTap: () => copyLink(ev) },
+                      { id: 'pdf',     icon: '⤓',  label: 'Download PDF', onTap: () => downloadPdf(ev) },
                     ].map(btn => (
                       <button key={btn.id} onClick={e => { e.stopPropagation(); btn.onTap() }} style={{
                         flex: 1, background: 'transparent', border: 'none',
