@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/process-scheduled-notifications?secret=bebportal2024",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/process-gcal-sync?secret=bebportal2024",
+      "schedule": "* * * * *"
     }
   ]
 }
