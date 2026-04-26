@@ -160,16 +160,6 @@ function recapBody(opts: {
       <td style="padding:8px 10px;text-align:right;font-weight:700;color:#1D6B44">${money(d.dollars)}</td>
     </tr>`).join('')
 
-  const buyerRows = opts.buyerRows.length === 0
-    ? `<tr><td colspan="4" style="padding:14px;text-align:center;color:#a8a89a">No buyer entries recorded.</td></tr>`
-    : opts.buyerRows.map(b => `
-        <tr>
-          <td style="padding:8px 10px;font-weight:600">${escapeHtml(b.name)}</td>
-          <td style="padding:8px 10px;text-align:right">${b.purchases}</td>
-          <td style="padding:8px 10px;text-align:right">${b.days}</td>
-          <td style="padding:8px 10px;text-align:right;font-weight:700;color:#1D6B44">${money(b.dollars)}</td>
-        </tr>`).join('')
-
   return `
     <header style="margin-bottom:20px">
       <div style="font-size:11px;font-weight:800;color:#737368;text-transform:uppercase;letter-spacing:.06em">Event recap</div>
@@ -197,21 +187,6 @@ function recapBody(opts: {
             <td style="padding:10px;text-align:right;font-weight:900;color:#1D6B44">${money(opts.grand.dollars)}</td>
           </tr>
         </tbody>
-      </table>
-    </section>
-
-    <section style="background:#fff;border:1px solid #d8d3ca;border-radius:12px;padding:16px;margin-bottom:14px">
-      <div style="font-size:11px;font-weight:800;color:#737368;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Per buyer</div>
-      <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;border-collapse:collapse">
-        <thead>
-          <tr style="border-bottom:2px solid #d8d3ca">
-            <th style="text-align:left;padding:6px 10px;color:#737368">Buyer</th>
-            <th style="text-align:right;padding:6px 10px;color:#737368">Purchases</th>
-            <th style="text-align:right;padding:6px 10px;color:#737368">Days worked</th>
-            <th style="text-align:right;padding:6px 10px;color:#737368">Spend</th>
-          </tr>
-        </thead>
-        <tbody>${buyerRows}</tbody>
       </table>
     </section>
 

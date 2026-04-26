@@ -148,6 +148,8 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
   const [pickerOpen, setPickerOpen] = useState(false)
+  // Mobile-only: which day in the grid is the user expanding right now.
+  const [selectedDay, setSelectedDay] = useState<number | null>(today.getDate())
 
   const prev = () => month === 0 ? (setMonth(11), setYear(y => y-1)) : setMonth(m => m-1)
   const next = () => month === 11 ? (setMonth(0), setYear(y => y+1)) : setMonth(m => m+1)
@@ -206,17 +208,70 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
           const dayVacs = day ? vacationsOnDay(day) : []
           const visibleCount = isNarrow ? 2 : 5
           const overflow = dayEvs.length - visibleCount
+          const isSelected = isNarrow && day === selectedDay
+          // ── MOBILE: mini calendar with dots, tap to expand below ──
+          if (isNarrow && day) {
+            const visibleDots = dayEvs.slice(0, 3)
+            const moreDots = Math.max(0, dayEvs.length - 3)
+            return (
+              <button
+                key={i}
+                onClick={() => setSelectedDay(day)}
+                style={{
+                  appearance: 'none', border: 'none',
+                  fontFamily: 'inherit', cursor: 'pointer', padding: 0,
+                  minHeight: 56,
+                  borderRight: '1px solid var(--cream2)', borderBottom: '1px solid var(--cream2)',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  justifyContent: 'center', gap: 4,
+                  background: isSelected
+                    ? 'var(--green-pale)'
+                    : isToday ? 'rgba(45,106,79,.05)' : 'var(--cream)',
+                }}
+              >
+                <div style={{
+                  width: 28, height: 28, borderRadius: '50%',
+                  fontSize: 13, fontWeight: isToday ? 900 : 600,
+                  color: isToday ? '#fff' : isSelected ? 'var(--green-dark)' : 'var(--ash)',
+                  background: isToday ? 'var(--green)' : 'transparent',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  border: isSelected && !isToday ? '1.5px solid var(--green)' : 'none',
+                }}>{day}</div>
+                <div style={{ display: 'flex', gap: 3, alignItems: 'center', minHeight: 6 }}>
+                  {visibleDots.map(ev => (
+                    <span key={ev.id} style={{
+                      width: 6, height: 6, borderRadius: '50%',
+                      background: storeColor(ev.store_id, stores),
+                    }} />
+                  ))}
+                  {moreDots > 0 && (
+                    <span style={{ fontSize: 8, fontWeight: 800, color: 'var(--mist)', marginLeft: 2 }}>
+                      +{moreDots}
+                    </span>
+                  )}
+                </div>
+              </button>
+            )
+          }
+          if (isNarrow && !day) {
+            return (
+              <div key={i} style={{
+                minHeight: 56, background: 'rgba(0,0,0,.02)',
+                borderRight: '1px solid var(--cream2)', borderBottom: '1px solid var(--cream2)',
+              }} />
+            )
+          }
           return (
             <div key={i} style={{
-              minHeight: isNarrow ? 80 : 140, padding: isNarrow ? '4px 4px' : '8px 8px',
+              minHeight: 140, padding: '8px 8px',
               borderRight: '1px solid var(--cream2)', borderBottom: '1px solid var(--cream2)',
               background: !day ? 'rgba(0,0,0,.02)' : isToday ? 'rgba(45,106,79,.05)' : 'var(--cream)',
             }}>
               {day && (
                 <>
                   <div style={{
-                    width: isNarrow ? 22 : 26, height: isNarrow ? 22 : 26, borderRadius: '50%',
-                    fontSize: isNarrow ? 12 : 13, fontWeight: isToday ? 900 : 600,
+                    width: 26, height: 26, borderRadius: '50%',
+                    fontSize: 13, fontWeight: isToday ? 900 : 600,
                     color: isToday ? '#fff' : 'var(--ash)', background: isToday ? 'var(--green)' : 'transparent',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4,
                   }}>{day}</div>
@@ -227,18 +282,18 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
                       title={`${ev.store_name} — ${ev.start_date}`}
                       style={{
                         background: storeColor(ev.store_id, stores), color: '#fff',
-                        fontSize: isNarrow ? 10 : 12, fontWeight: 700,
-                        padding: isNarrow ? '3px 5px' : '4px 7px', borderRadius: 4,
+                        fontSize: 12, fontWeight: 700,
+                        padding: '4px 7px', borderRadius: 4,
                         marginBottom: 3, cursor: 'pointer', overflow: 'hidden',
                         whiteSpace: 'nowrap', textOverflow: 'ellipsis', lineHeight: 1.2,
-                      }}>{isNarrow ? ev.store_name : `◆ ${ev.store_name}`}</div>
+                      }}>◆ {ev.store_name}</div>
                   ))}
                   {overflow > 0 && (
                     <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mist)', padding: '2px 4px' }}>
                       +{overflow} more
                     </div>
                   )}
-                  {!isNarrow && dayVacs.map(v => (
+                  {dayVacs.map(v => (
                     <div key={v.id} title={v.note || 'Vacation'} style={{
                       fontSize: 9, padding: '1px 5px', borderRadius: 99, marginTop: 2,
                       background: v.isMe ? 'var(--green-pale)' : 'var(--cream2)',
@@ -247,18 +302,80 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
                       border: v.isMe ? '1px solid var(--green3)' : '1px solid var(--pearl)',
                     }}>☀ {v.userName}</div>
                   ))}
-                  {isNarrow && dayVacs.length > 0 && (
-                    <div style={{
-                      fontSize: 9, fontWeight: 700, color: 'var(--mist)',
-                      padding: '0 3px', marginTop: 1,
-                    }}>☀ {dayVacs.length}</div>
-                  )}
                 </>
               )}
             </div>
           )
         })}
       </div>
+
+      {/* Mobile-only: expanded events for the selected day */}
+      {isNarrow && selectedDay && (
+        <SelectedDayPanel
+          dateStr={ds(selectedDay)}
+          events={eventsOnDay(selectedDay)}
+          stores={stores}
+          vacations={vacationsOnDay(selectedDay)}
+          onSelect={onSelect}
+        />
+      )}
+    </div>
+  )
+}
+
+function SelectedDayPanel({ dateStr, events, stores, vacations, onSelect }: {
+  dateStr: string
+  events: Event[]
+  stores: any[]
+  vacations: any[]
+  onSelect: (e: Event) => void
+}) {
+  const d = new Date(dateStr + 'T12:00:00')
+  const heading = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+  return (
+    <div style={{ borderTop: '1px solid var(--pearl)', background: '#fff', padding: 14 }}>
+      <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink)', marginBottom: 10 }}>{heading}</div>
+      {events.length === 0 ? (
+        <div style={{ fontSize: 13, color: 'var(--mist)', padding: '10px 0' }}>No events.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {events.map(ev => (
+            <button
+              key={ev.id}
+              onClick={() => onSelect(ev)}
+              style={{
+                appearance: 'none', textAlign: 'left',
+                background: '#fff', border: '1px solid var(--pearl)',
+                borderLeft: `5px solid ${storeColor(ev.store_id, stores)}`,
+                borderRadius: 8, padding: '10px 12px', cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              <div style={{ fontWeight: 800, color: 'var(--ink)', fontSize: 14 }}>{ev.store_name}</div>
+              <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>
+                {(() => {
+                  const idx = evDays(ev).indexOf(dateStr) + 1
+                  return idx > 0 ? `Day ${idx} of 3` : ''
+                })()}
+                {(ev.workers || []).length > 0 && (
+                  <span> · Lead: <strong style={{ color: 'var(--ash)' }}>{(ev.workers as any[])[0].name}</strong></span>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+      {vacations.length > 0 && (
+        <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {vacations.map((v: any) => (
+            <span key={v.id} style={{
+              fontSize: 11, padding: '3px 8px', borderRadius: 99,
+              background: v.isMe ? 'var(--green-pale)' : 'var(--cream2)',
+              color: v.isMe ? 'var(--green-dark)' : 'var(--mist)', fontWeight: 700,
+            }}>☀ {v.userName}</span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
