@@ -5,7 +5,9 @@ import { useApp } from '@/lib/context'
 import type { Event, BuyerVacation } from '@/types'
 import { supabase } from '@/lib/supabase'
 
-type ViewMode = 'month' | 'timeline' | 'agenda' | 'kanban'
+type ViewMode = 'month' | 'week' | 'day' | 'timeline' | 'agenda' | 'kanban'
+
+const VIEW_KEY = 'beb-calendar-view'
 
 function useIsNarrow(breakpoint = 768) {
   const [narrow, setNarrow] = useState(
@@ -41,6 +43,18 @@ function evDays(ev: Event): string[] {
 export default function Schedule() {
   const { events, stores, users, user } = useApp()
   const [view, setView] = useState<ViewMode>('month')
+  // Restore last-used view per user.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const saved = window.localStorage.getItem(VIEW_KEY) as ViewMode | null
+    if (saved && ['month','week','day','timeline','agenda','kanban'].includes(saved)) {
+      setView(saved)
+    }
+  }, [])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(VIEW_KEY, view)
+  }, [view])
   const [detail, setDetail] = useState<Event | null>(null)
   const [vacations, setVacations] = useState<BuyerVacation[]>([])
   const [showVacations, setShowVacations] = useState(() => {
@@ -61,6 +75,8 @@ export default function Schedule() {
 
   const views: { id: ViewMode; label: string }[] = [
     { id: 'month',    label: '▦  Month'    },
+    { id: 'week',     label: '▤  Week'     },
+    { id: 'day',      label: '▏ Day'       },
     { id: 'timeline', label: '▬  Timeline' },
     { id: 'agenda',   label: '☰  Agenda'   },
     { id: 'kanban',   label: '⊞  Kanban'   },
@@ -113,6 +129,8 @@ export default function Schedule() {
       </div>
 
       {view === 'month'    && <MonthView    events={events} stores={stores} users={users} vacations={showVacations ? vacations : []} currentUserId={user?.id} onSelect={setDetail} isNarrow={isNarrow} />}
+      {view === 'week'     && <WeekView     events={events} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
+      {view === 'day'      && <DayView      events={events} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
       {view === 'timeline' && <TimelineView events={events} stores={stores} onSelect={setDetail} isNarrow={isNarrow} onSwitchView={setView} />}
       {view === 'agenda'   && <AgendaView   events={events} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
       {view === 'kanban'   && <KanbanView   events={events} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
@@ -793,5 +811,227 @@ function MiniDatePicker({ year, month, onPick, onClose }: {
         </div>
       </div>
     </>
+  )
+}
+
+/* ══════════════════════════════════════════
+   WEEK VIEW (Sun-start, multi-day continuous bars)
+══════════════════════════════════════════ */
+function WeekView({ events, stores, onSelect, isNarrow }: { events: Event[]; stores: any[]; onSelect: (e: Event) => void; isNarrow: boolean }) {
+  const today = new Date()
+  // Anchor = Sunday of the displayed week.
+  const sundayOf = (d: Date) => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - x.getDay()); return x }
+  const [anchor, setAnchor] = useState<Date>(sundayOf(today))
+
+  const goPrev = () => setAnchor(d => { const x = new Date(d); x.setDate(x.getDate() - 7); return x })
+  const goNext = () => setAnchor(d => { const x = new Date(d); x.setDate(x.getDate() + 7); return x })
+  const goToday = () => setAnchor(sundayOf(today))
+
+  const weekDates = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(anchor); d.setDate(anchor.getDate() + i); return d
+  })
+  const weekStart = weekDates[0]
+  const weekEnd = weekDates[6]
+  const todayStr = today.toISOString().slice(0, 10)
+  const weekStartStr = weekStart.toISOString().slice(0, 10)
+  const weekEndStr = weekEnd.toISOString().slice(0, 10)
+
+  // For each event, compute which segment of the week it covers (start col, end col).
+  // Events span 3 days from start_date.
+  type Lane = { ev: Event; startCol: number; endCol: number }[]
+  const lanes: Lane[] = []
+  // Sort events by start so layout is stable.
+  const weekEvents = events
+    .map(ev => {
+      const evStart = ev.start_date
+      const endDate = new Date(ev.start_date + 'T12:00:00'); endDate.setDate(endDate.getDate() + 2)
+      const evEndStr = endDate.toISOString().slice(0, 10)
+      // Skip events not overlapping this week.
+      if (evEndStr < weekStartStr || evStart > weekEndStr) return null
+      const startCol = Math.max(0, weekDates.findIndex(d => d.toISOString().slice(0, 10) >= evStart))
+      const endCol = Math.min(6, (() => {
+        // Find last day of event still within the week
+        const n = weekDates.findIndex(d => d.toISOString().slice(0, 10) > evEndStr)
+        return n === -1 ? 6 : n - 1
+      })())
+      // findIndex can return -1 when evStart < weekStart; clamp to 0.
+      const sCol = startCol === -1 ? 0 : startCol
+      return { ev, startCol: sCol, endCol: Math.max(sCol, endCol) }
+    })
+    .filter((x): x is { ev: Event; startCol: number; endCol: number } => x !== null)
+    .sort((a, b) => a.startCol - b.startCol || b.endCol - a.endCol)
+
+  // Stack into lanes — first lane that has no overlap gets the bar.
+  for (const item of weekEvents) {
+    let placed = false
+    for (const lane of lanes) {
+      const conflict = lane.some(x => !(item.endCol < x.startCol || item.startCol > x.endCol))
+      if (!conflict) { lane.push(item); placed = true; break }
+    }
+    if (!placed) lanes.push([item])
+  }
+
+  const dayHeader = (d: Date, i: number) => {
+    const isToday = d.toISOString().slice(0, 10) === todayStr
+    return (
+      <div key={i} style={{
+        padding: '12px 8px', textAlign: 'center', borderRight: '1px solid var(--cream2)',
+        background: isToday ? 'rgba(45,106,79,.05)' : 'var(--cream2)',
+      }}>
+        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--mist)' }}>
+          {d.toLocaleDateString('en-US', { weekday: 'short' })}
+        </div>
+        <div style={{
+          marginTop: 4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          width: 30, height: 30, borderRadius: '50%',
+          background: isToday ? 'var(--green)' : 'transparent',
+          color: isToday ? '#fff' : 'var(--ash)',
+          fontWeight: 800, fontSize: 14,
+        }}>{d.getDate()}</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', background: 'var(--sidebar-bg)' }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={goPrev} aria-label="Previous week" style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 38, height: 38, borderRadius: '50%', cursor: 'pointer', fontSize: 20 }}>‹</button>
+          <button onClick={goToday} style={{ background: 'rgba(255,255,255,.18)', border: '1px solid rgba(255,255,255,.25)', color: '#fff', padding: '7px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Today</button>
+        </div>
+        <div style={{ fontWeight: 900, fontSize: 16, color: '#fff' }}>
+          {weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+        </div>
+        <button onClick={goNext} aria-label="Next week" style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 38, height: 38, borderRadius: '50%', cursor: 'pointer', fontSize: 20 }}>›</button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)' }}>
+        {weekDates.map((d, i) => dayHeader(d, i))}
+      </div>
+
+      {/* Bar lanes */}
+      <div style={{ padding: '12px 0', minHeight: 200, position: 'relative', background: 'var(--cream)' }}>
+        {lanes.length === 0 ? (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--mist)', fontSize: 13 }}>No events this week.</div>
+        ) : lanes.map((lane, laneIdx) => (
+          <div key={laneIdx} style={{
+            display: 'grid', gridTemplateColumns: 'repeat(7,1fr)',
+            position: 'relative', minHeight: 36, marginBottom: 6,
+          }}>
+            {/* Empty cells just for grid spacing */}
+            {Array.from({ length: 7 }, (_, i) => (
+              <div key={i} style={{ borderRight: '1px solid var(--cream2)' }} />
+            ))}
+            {/* Absolutely positioned bars on top of the grid */}
+            {lane.map(({ ev, startCol, endCol }) => {
+              const left = (startCol / 7) * 100
+              const width = ((endCol - startCol + 1) / 7) * 100
+              return (
+                <div
+                  key={ev.id}
+                  onClick={() => onSelect(ev)}
+                  title={`${ev.store_name} — ${ev.start_date}`}
+                  style={{
+                    position: 'absolute', top: 0, height: 32,
+                    left: `calc(${left}% + 4px)`, width: `calc(${width}% - 8px)`,
+                    background: storeColor(ev.store_id, stores), color: '#fff',
+                    borderRadius: 6, padding: '6px 10px',
+                    fontSize: 13, fontWeight: 700, lineHeight: 1.4,
+                    cursor: 'pointer', overflow: 'hidden', whiteSpace: 'nowrap',
+                    textOverflow: 'ellipsis', boxShadow: '0 1px 2px rgba(0,0,0,.08)',
+                  }}>
+                  ◆ {ev.store_name}
+                </div>
+              )
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════════
+   DAY VIEW (single column, deep detail)
+══════════════════════════════════════════ */
+function DayView({ events, stores, onSelect, isNarrow }: { events: Event[]; stores: any[]; onSelect: (e: Event) => void; isNarrow: boolean }) {
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const [date, setDate] = useState<Date>(today)
+
+  const goPrev = () => setDate(d => { const x = new Date(d); x.setDate(x.getDate() - 1); return x })
+  const goNext = () => setDate(d => { const x = new Date(d); x.setDate(x.getDate() + 1); return x })
+  const goToday = () => setDate(today)
+
+  const dateStr = date.toISOString().slice(0, 10)
+  const dayEvents = events.filter(ev => evDays(ev).includes(dateStr))
+  const isToday = dateStr === new Date().toISOString().slice(0, 10)
+
+  return (
+    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', background: 'var(--sidebar-bg)' }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={goPrev} aria-label="Previous day" style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 38, height: 38, borderRadius: '50%', cursor: 'pointer', fontSize: 20 }}>‹</button>
+          <button onClick={goToday} style={{ background: 'rgba(255,255,255,.18)', border: '1px solid rgba(255,255,255,.25)', color: '#fff', padding: '7px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Today</button>
+        </div>
+        <div style={{ fontWeight: 900, fontSize: 16, color: '#fff', display: 'flex', alignItems: 'center', gap: 8 }}>
+          {date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+          {isToday && <span style={{ background: 'var(--green)', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 800 }}>TODAY</span>}
+        </div>
+        <button onClick={goNext} aria-label="Next day" style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 38, height: 38, borderRadius: '50%', cursor: 'pointer', fontSize: 20 }}>›</button>
+      </div>
+
+      <div style={{ padding: 24, background: 'var(--cream)' }}>
+        {dayEvents.length === 0 ? (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--mist)', fontSize: 14 }}>
+            No events on {date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {dayEvents.map(ev => {
+              const store = stores.find((s: any) => s.id === ev.store_id)
+              const days = ev.days || []
+              const totalCustomers = days.reduce((s: number, d: any) => s + (d.customers || 0), 0)
+              const totalPurchases = days.reduce((s: number, d: any) => s + (d.purchases || 0), 0)
+              const which = evDays(ev).indexOf(dateStr) + 1
+              return (
+                <div
+                  key={ev.id}
+                  onClick={() => onSelect(ev)}
+                  style={{
+                    background: '#fff', borderRadius: 10, padding: 16,
+                    borderLeft: `6px solid ${storeColor(ev.store_id, stores)}`,
+                    cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,.06)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    gap: 12,
+                  }}
+                >
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)' }}>{ev.store_name}</div>
+                      <span style={{
+                        fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 4,
+                        background: 'var(--cream2)', color: 'var(--mist)',
+                      }}>DAY {which} OF 3</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--mist)' }}>
+                      {store?.city ? `${store.city}, ${store.state || ''}` : '—'}
+                      {(ev.workers || []).length > 0 && (
+                        <span> · Lead: <strong style={{ color: 'var(--ash)' }}>{(ev.workers as any[])[0].name}</strong></span>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>Customers · Purchases</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--ink)' }}>
+                      {totalCustomers.toLocaleString()} · {totalPurchases.toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
