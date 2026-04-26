@@ -26,9 +26,23 @@ export default function Travel() {
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState<'reservations' | 'folders'>('reservations')
+  // Default to "my events" — what most users want to see; persists across sessions.
+  const [scope, setScope] = useState<'mine' | 'all'>('mine')
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const saved = window.localStorage.getItem('beb-travel-scope')
+    if (saved === 'mine' || saved === 'all') setScope(saved)
+  }, [])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem('beb-travel-scope', scope)
+  }, [scope])
 
   const sorted = [...events].sort((a, b) => b.start_date.localeCompare(a.start_date))
-  const filtered = sorted.filter(ev => ev.store_name?.toLowerCase().includes(search.toLowerCase()))
+  const scoped = scope === 'mine'
+    ? sorted.filter(ev => (ev.workers || []).some((w: any) => w.id === user?.id))
+    : sorted
+  const filtered = scoped.filter(ev => ev.store_name?.toLowerCase().includes(search.toLowerCase()))
   const fmt = (ds: string) => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
   return (
@@ -37,6 +51,20 @@ export default function Travel() {
       <div style={{ width: 260, flexShrink: 0, borderRight: '1px solid var(--pearl)', display: 'flex', flexDirection: 'column', background: 'var(--cream)' }}>
         <div style={{ padding: '16px 16px 8px', borderBottom: '1px solid var(--pearl)' }}>
           <div style={{ fontWeight: 900, fontSize: 16, color: 'var(--ink)', marginBottom: 10 }}>✈️ Travel Share</div>
+          <div style={{ display: 'flex', gap: 4, marginBottom: 8, background: 'var(--cream2)', borderRadius: 8, padding: 3 }}>
+            {([['mine', 'My events'], ['all', 'All events']] as const).map(([id, label]) => {
+              const sel = scope === id
+              return (
+                <button key={id} onClick={() => setScope(id)} style={{
+                  flex: 1, padding: '5px 8px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                  background: sel ? '#fff' : 'transparent',
+                  color: sel ? 'var(--green-dark)' : 'var(--mist)',
+                  fontSize: 11, fontWeight: 700, fontFamily: 'inherit',
+                  boxShadow: sel ? '0 1px 2px rgba(0,0,0,.06)' : 'none',
+                }}>{label}</button>
+              )
+            })}
+          </div>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search events…" style={{ width: '100%', fontSize: 13 }} />
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
