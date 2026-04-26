@@ -37,6 +37,19 @@ function CameraIcon({ size = 34 }: { size?: number }) {
   )
 }
 
+function AirplaneIcon({ size = 34 }: { size?: number }) {
+  // Solid black airplane glyph, similar weight to CameraIcon so the
+  // prominent center button reads consistently when the two swap.
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden>
+      <path
+        d="M28 16c0-.6-.4-1.1-.9-1.3l-9.6-3.5V4.6c0-.9-.7-1.6-1.5-1.6s-1.5.7-1.5 1.6v6.6L4.9 14.7c-.5.2-.9.7-.9 1.3 0 .8.7 1.4 1.5 1.3l9.0-1.6v6.5l-2.7 1.5c-.3.2-.5.5-.5.9v1.3c0 .6.6 1 1.2.8l3-1 3 1c.6.2 1.2-.2 1.2-.8v-1.3c0-.4-.2-.7-.5-.9l-2.7-1.5v-6.5l9.0 1.6c.8.1 1.5-.5 1.5-1.3z"
+        fill="#111"
+      />
+    </svg>
+  )
+}
+
 /* ── BOTTOM-NAV ICON SET — thick outline in each tab's brand color.
    Selection is shown by a colored halo + lift behind the active icon,
    not by graying the others out. */
@@ -139,8 +152,20 @@ function TabBtn({ tab, active, onClick }: { tab: TabDef; active: boolean; onClic
   )
 }
 
-/* ── BOTTOM NAV ── */
-function BottomNav({ nav, setNav, onScan }: { nav: NavPage; setNav: (n: NavPage) => void; onScan: () => void }) {
+/* ── BOTTOM NAV ──
+   Two layouts driven by `onActiveEvent`:
+   - On active event:  Home | Events | 📷 (center) | Enter | Appts
+   - Off active event: Home | Events | ✈️ (center) | 📷 | Appts
+     (Enter slot is replaced by Camera since Enter requires an event.) */
+function BottomNav({ nav, setNav, onScan, onActiveEvent }: {
+  nav: NavPage
+  setNav: (n: NavPage) => void
+  onScan: () => void
+  onActiveEvent: boolean
+}) {
+  // Right-side tabs depend on whether we're on an active event.
+  const rightTabs = onActiveEvent ? RIGHT_TABS : RIGHT_TABS.filter(t => t.id !== 'dayentry')
+  const rightExtraScanSlot = !onActiveEvent  // off-event: render Camera in the freed slot
   return (
     <div style={{
       position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 999,
@@ -153,10 +178,13 @@ function BottomNav({ nav, setNav, onScan }: { nav: NavPage; setNav: (n: NavPage)
       boxShadow: '0 -4px 18px rgba(0,0,0,.10)', minHeight: 64,
     }}>
       {LEFT_TABS.map(tab => <TabBtn key={tab.id} tab={tab} active={nav === tab.id} onClick={() => setNav(tab.id)} />)}
-      <button onClick={onScan} aria-label="Scan" style={{
-        background: 'none', border: 'none', cursor: 'pointer',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0 0 8px',
-      }}>
+      <button
+        onClick={onActiveEvent ? onScan : () => setNav('travel')}
+        aria-label={onActiveEvent ? 'Scan' : 'Travel Share'}
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0 0 8px',
+        }}>
         <div style={{
           width: 58, height: 58, borderRadius: '50%',
           background: '#fff', border: '3px solid var(--green)',
@@ -164,11 +192,30 @@ function BottomNav({ nav, setNav, onScan }: { nav: NavPage; setNav: (n: NavPage)
           marginTop: -18,
           boxShadow: '0 0 0 4px rgba(255,255,255,.9), 0 6px 16px rgba(29,107,68,.28)',
         }}>
-          <CameraIcon size={34} />
+          {onActiveEvent ? <CameraIcon size={34} /> : <AirplaneIcon size={34} />}
         </div>
         <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--green-dark)', marginTop: 4, letterSpacing: '.04em' }}>SCAN</div>
       </button>
-      {RIGHT_TABS.map(tab => <TabBtn key={tab.id} tab={tab} active={nav === tab.id} onClick={() => setNav(tab.id)} />)}
+      {rightExtraScanSlot && (
+        <button
+          onClick={onScan}
+          aria-label="Scan"
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            padding: '6px 4px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+          }}
+        >
+          <div style={{
+            width: 44, height: 44, borderRadius: 14,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'transparent',
+          }}>
+            <CameraIcon size={26} />
+          </div>
+          <div style={{ fontSize: 10, fontWeight: 600, color: '#374151', letterSpacing: '.02em' }}>Scan</div>
+        </button>
+      )}
+      {rightTabs.map(tab => <TabBtn key={tab.id} tab={tab} active={nav === tab.id} onClick={() => setNav(tab.id)} />)}
     </div>
   )
 }
@@ -222,6 +269,21 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
     if (upcoming) return upcoming.id
     return myEvents[0]?.id || null
   }
+
+  // True only when the user is assigned to an event whose work-day window
+  // contains today. Drives the bottom-nav layout swap (Scan center vs Travel
+  // Share center).
+  const onActiveEvent = (() => {
+    if (!user) return false
+    const today = new Date().toISOString().split('T')[0]
+    return events.some(ev => {
+      const isAssigned = (ev.workers || []).some((w: any) => w.id === user.id)
+      if (!isAssigned) return false
+      const last = new Date(ev.start_date + 'T12:00:00')
+      last.setDate(last.getDate() + 2)
+      return ev.start_date <= today && today <= last.toISOString().split('T')[0]
+    })
+  })()
 
   const handleScanPress = () => {
     const myEvents = getMyEvents()
@@ -324,7 +386,7 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
 
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 110 }}>{children}</div>
 
-      <BottomNav nav={nav} setNav={setNav} onScan={handleScanPress} />
+      <BottomNav nav={nav} setNav={setNav} onScan={handleScanPress} onActiveEvent={onActiveEvent} />
 
       {/* Event picker modal */}
       {eventPickerOpen && (
