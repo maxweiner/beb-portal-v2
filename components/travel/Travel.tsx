@@ -359,10 +359,37 @@ function ReservationCard({ res, user, workers, onDelete, onReload }: {
 }) {
   const [expanded, setExpanded] = useState(false)
   const [assigning, setAssigning] = useState(false)
+  const [editingAmount, setEditingAmount] = useState(false)
+  const [amountDraft, setAmountDraft] = useState(String(res.amount || ''))
+  const [savingAmount, setSavingAmount] = useState(false)
   const meta = TYPE_LABELS[res.type] || { label: res.type, icon: '📋', color: '#666' }
   const isOwn = res.buyer_id === user?.id
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
+  const canEdit = isOwn || isAdmin
   const isOrphan = !res.buyer_id || !workers.some(w => w.id === res.buyer_id)
+
+  const saveAmount = async () => {
+    const n = Math.max(0, Number(amountDraft) || 0)
+    if (n === res.amount) { setEditingAmount(false); return }
+    setSavingAmount(true)
+    try {
+      const r = await fetch(`/api/travel-reservations/${res.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: n }),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        alert('Save failed: ' + (j.error || r.status))
+      } else {
+        onReload()
+      }
+    } catch (e: any) {
+      alert('Network error: ' + (e?.message || 'unknown'))
+    }
+    setSavingAmount(false)
+    setEditingAmount(false)
+  }
 
   const reassign = async (buyerId: string) => {
     setAssigning(true)
@@ -416,8 +443,46 @@ function ReservationCard({ res, user, workers, onDelete, onReload }: {
             {res.type === 'rental_car' && res.check_in && ` · Pick up ${fmtDate(res.check_in)}`}
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {res.amount > 0 && <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--green)' }}>${res.amount.toLocaleString()}</div>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }} onClick={e => editingAmount && e.stopPropagation()}>
+          {editingAmount ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }} onClick={e => e.stopPropagation()}>
+              <span style={{ color: 'var(--mist)', fontWeight: 700 }}>$</span>
+              <input
+                type="number" min={0} step="0.01"
+                autoFocus
+                value={amountDraft}
+                onChange={e => setAmountDraft(e.target.value)}
+                onBlur={saveAmount}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') saveAmount()
+                  if (e.key === 'Escape') { setAmountDraft(String(res.amount || '')); setEditingAmount(false) }
+                }}
+                disabled={savingAmount}
+                style={{ width: 90, padding: '4px 6px', fontSize: 14, fontWeight: 700, textAlign: 'right' }}
+              />
+            </div>
+          ) : res.amount > 0 ? (
+            <button
+              onClick={canEdit ? (e) => { e.stopPropagation(); setEditingAmount(true) } : undefined}
+              disabled={!canEdit}
+              title={canEdit ? 'Click to edit cost' : undefined}
+              style={{
+                background: 'none', border: 'none', padding: 0, fontFamily: 'inherit',
+                fontWeight: 700, fontSize: 14, color: 'var(--green)',
+                cursor: canEdit ? 'pointer' : 'default',
+              }}
+            >${res.amount.toLocaleString()}</button>
+          ) : canEdit ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); setEditingAmount(true) }}
+              title="Add cost"
+              style={{
+                background: 'none', border: '1px dashed var(--pearl)', padding: '3px 8px',
+                borderRadius: 6, fontFamily: 'inherit', fontWeight: 600, fontSize: 11,
+                color: 'var(--mist)', cursor: 'pointer',
+              }}
+            >+ cost</button>
+          ) : null}
           <div style={{ color: 'var(--mist)', fontSize: 14 }}>{expanded ? '▲' : '▼'}</div>
         </div>
       </div>
