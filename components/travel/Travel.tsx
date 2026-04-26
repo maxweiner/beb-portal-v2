@@ -28,6 +28,7 @@ export default function Travel() {
   const [tab, setTab] = useState<'reservations' | 'folders'>('reservations')
   // Default to "my events" — what most users want to see; persists across sessions.
   const [scope, setScope] = useState<'mine' | 'all'>('mine')
+  const [showPast, setShowPast] = useState(false)
   useEffect(() => {
     if (typeof window === 'undefined') return
     const saved = window.localStorage.getItem('beb-travel-scope')
@@ -38,11 +39,22 @@ export default function Travel() {
     window.localStorage.setItem('beb-travel-scope', scope)
   }, [scope])
 
+  const todayStr = new Date().toISOString().slice(0, 10)
+  // An event has fully passed if today is after its last day. Events run
+  // 3 days from start_date (matches the convention used elsewhere).
+  const isPast = (ev: Event) => {
+    const last = new Date(ev.start_date + 'T12:00:00')
+    last.setDate(last.getDate() + 2)
+    return last.toISOString().slice(0, 10) < todayStr
+  }
+
   const sorted = [...events].sort((a, b) => b.start_date.localeCompare(a.start_date))
   const scoped = scope === 'mine'
     ? sorted.filter(ev => (ev.workers || []).some((w: any) => w.id === user?.id))
     : sorted
-  const filtered = scoped.filter(ev => ev.store_name?.toLowerCase().includes(search.toLowerCase()))
+  const pastCount = scoped.filter(isPast).length
+  const visible = showPast ? scoped : scoped.filter(ev => !isPast(ev))
+  const filtered = visible.filter(ev => ev.store_name?.toLowerCase().includes(search.toLowerCase()))
   const fmt = (ds: string) => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
   return (
@@ -66,6 +78,17 @@ export default function Travel() {
             })}
           </div>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search events…" style={{ width: '100%', fontSize: 13 }} />
+          {pastCount > 0 && (
+            <button onClick={() => setShowPast(p => !p)} style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 8,
+              color: 'var(--mist)', fontSize: 11, fontWeight: 600, textDecoration: 'underline',
+              fontFamily: 'inherit', textAlign: 'left',
+            }}>
+              {showPast
+                ? `Hide ${pastCount} past event${pastCount === 1 ? '' : 's'}`
+                : `Show ${pastCount} past event${pastCount === 1 ? '' : 's'}`}
+            </button>
+          )}
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {filtered.map(ev => {
