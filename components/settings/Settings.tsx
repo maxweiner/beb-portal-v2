@@ -7,6 +7,7 @@ import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import type { Theme, BuyerVacation } from '@/types'
 import AvatarPicker from './AvatarPicker'
 import Checkbox from '@/components/ui/Checkbox'
+import { getCenterModeOverride, setCenterModeOverride, type CenterModeOverride } from '@/lib/centerButtonMode'
 
 const BEB_THEMES: { id: Theme; label: string; color: string }[] = [
   { id: 'original',   label: 'Original',        color: '#1D6B44' },
@@ -321,6 +322,9 @@ export default function Settings() {
         </div>
       </div>
 
+      {/* Mobile center button — visible to everyone since it's a per-user UI pref */}
+      <CenterButtonSetting />
+
       {/* Google Calendar Sync (superadmin only) */}
       {user?.role === 'superadmin' && (
         <GCalSyncSettings brand="beb" />
@@ -604,6 +608,57 @@ function GCalSyncSettings({ brand }: { brand: 'beb' | 'liberty' }) {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+/* ── CENTER BUTTON SETTING (mobile bottom nav) ── */
+function CenterButtonSetting() {
+  const [mode, setMode] = useState<CenterModeOverride>('auto')
+  useEffect(() => { setMode(getCenterModeOverride()) }, [])
+
+  const update = (next: CenterModeOverride) => {
+    setMode(next)
+    setCenterModeOverride(next)
+  }
+
+  const options: { v: CenterModeOverride; label: string; hint: string }[] = [
+    { v: 'auto', label: 'Auto', hint: "Switches to Scan during events you're working" },
+    { v: 'always-travel', label: 'Always Travel', hint: 'Center button is always Travel Share' },
+    { v: 'always-scan', label: 'Always Scan', hint: 'Center button is always Scan ID' },
+  ]
+
+  return (
+    <div className="card" style={{ marginTop: 18 }}>
+      <div className="card-title">📱 Mobile center button</div>
+      <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 14 }}>
+        Choose what the center button does. Auto switches to Scan during events you're working.
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {options.map(opt => {
+          const sel = mode === opt.v
+          return (
+            <label key={opt.v} style={{
+              display: 'flex', alignItems: 'flex-start', gap: 10,
+              padding: '10px 12px', borderRadius: 8,
+              border: `1.5px solid ${sel ? 'var(--green)' : 'var(--pearl)'}`,
+              background: sel ? 'var(--green-pale)' : 'white',
+              cursor: 'pointer',
+            }}>
+              <input
+                type="radio" name="center-mode"
+                checked={sel}
+                onChange={() => update(opt.v)}
+                style={{ marginTop: 4 }}
+              />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: sel ? 'var(--green-dark)' : 'var(--ink)' }}>{opt.label}</div>
+                <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>{opt.hint}</div>
+              </div>
+            </label>
+          )
+        })}
       </div>
     </div>
   )
