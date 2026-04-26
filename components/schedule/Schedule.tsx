@@ -9,6 +9,47 @@ type ViewMode = 'month' | 'week' | 'day' | 'timeline' | 'agenda' | 'kanban'
 
 const VIEW_KEY = 'beb-calendar-view'
 
+type ColorBy = 'store' | 'status' | 'lead' | 'state'
+const COLOR_BY_KEY = 'beb-calendar-color-by'
+
+const COLOR_BY_LABEL: Record<ColorBy, string> = {
+  store: 'Store',
+  status: 'Status',
+  lead: 'Lead Buyer',
+  state: 'State',
+}
+
+const STATUS_COLORS: Record<'past' | 'current' | 'future', string> = {
+  past: '#6B7280',
+  current: '#2D6A4F',
+  future: '#457B9D',
+}
+
+function statusOf(ev: Event, todayStr: string): 'past' | 'current' | 'future' {
+  const start = ev.start_date
+  const end = (() => { const d = new Date(start + 'T12:00:00'); d.setDate(d.getDate() + 2); return d.toISOString().slice(0,10) })()
+  if (todayStr > end) return 'past'
+  if (todayStr >= start && todayStr <= end) return 'current'
+  return 'future'
+}
+
+function eventColor(ev: Event, mode: ColorBy, stores: any[], todayStr: string): string {
+  switch (mode) {
+    case 'status': return STATUS_COLORS[statusOf(ev, todayStr)]
+    case 'lead': {
+      const leadId = (ev.workers || [])[0]?.id || 'unknown'
+      let h = 0; for (let i = 0; i < leadId.length; i++) h = (h * 31 + leadId.charCodeAt(i)) | 0
+      return COLORS[Math.abs(h) % COLORS.length]
+    }
+    case 'state': {
+      const st = stores.find(s => s.id === ev.store_id)?.state || ''
+      let h = 0; for (let i = 0; i < st.length; i++) h = (h * 31 + st.charCodeAt(i)) | 0
+      return COLORS[Math.abs(h) % COLORS.length]
+    }
+    default: return storeColor(ev.store_id, stores)
+  }
+}
+
 function useIsNarrow(breakpoint = 768) {
   const [narrow, setNarrow] = useState(
     () => typeof window !== 'undefined' && window.innerWidth <= breakpoint
@@ -55,6 +96,18 @@ export default function Schedule() {
     if (typeof window === 'undefined') return
     window.localStorage.setItem(VIEW_KEY, view)
   }, [view])
+
+  // Color-by dimension, persisted.
+  const [colorBy, setColorBy] = useState<ColorBy>('store')
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const saved = window.localStorage.getItem(COLOR_BY_KEY) as ColorBy | null
+    if (saved && ['store','status','lead','state'].includes(saved)) setColorBy(saved)
+  }, [])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(COLOR_BY_KEY, colorBy)
+  }, [colorBy])
   const [detail, setDetail] = useState<Event | null>(null)
   const [vacations, setVacations] = useState<BuyerVacation[]>([])
   const [showVacations, setShowVacations] = useState(() => {
@@ -128,9 +181,11 @@ export default function Schedule() {
         </div>
       </div>
 
-      {view === 'month'    && <MonthView    events={events} stores={stores} users={users} vacations={showVacations ? vacations : []} currentUserId={user?.id} onSelect={setDetail} isNarrow={isNarrow} />}
-      {view === 'week'     && <WeekView     events={events} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
-      {view === 'day'      && <DayView      events={events} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
+      <ColorLegend events={events} stores={stores} users={users} colorBy={colorBy} setColorBy={setColorBy} isNarrow={isNarrow} />
+
+      {view === 'month'    && <MonthView    events={events} stores={stores} users={users} vacations={showVacations ? vacations : []} currentUserId={user?.id} onSelect={setDetail} isNarrow={isNarrow} colorBy={colorBy} />}
+      {view === 'week'     && <WeekView     events={events} stores={stores} onSelect={setDetail} isNarrow={isNarrow} colorBy={colorBy} />}
+      {view === 'day'      && <DayView      events={events} stores={stores} onSelect={setDetail} isNarrow={isNarrow} colorBy={colorBy} />}
       {view === 'timeline' && <TimelineView events={events} stores={stores} onSelect={setDetail} isNarrow={isNarrow} onSwitchView={setView} />}
       {view === 'agenda'   && <AgendaView   events={events} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
       {view === 'kanban'   && <KanbanView   events={events} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
@@ -143,7 +198,7 @@ export default function Schedule() {
 /* ══════════════════════════════════════════
    MONTH VIEW
 ══════════════════════════════════════════ */
-function MonthView({ events, stores, users, vacations, currentUserId, onSelect, isNarrow }: { events: Event[]; stores: any[]; users: any[]; vacations: BuyerVacation[]; currentUserId?: string; onSelect: (e: Event) => void; isNarrow: boolean }) {
+function MonthView({ events, stores, users, vacations, currentUserId, onSelect, isNarrow, colorBy }: { events: Event[]; stores: any[]; users: any[]; vacations: BuyerVacation[]; currentUserId?: string; onSelect: (e: Event) => void; isNarrow: boolean; colorBy: ColorBy }) {
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
@@ -226,7 +281,7 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
                       onClick={() => onSelect(ev)}
                       title={`${ev.store_name} — ${ev.start_date}`}
                       style={{
-                        background: storeColor(ev.store_id, stores), color: '#fff',
+                        background: eventColor(ev, colorBy, stores, todayStr), color: '#fff',
                         fontSize: isNarrow ? 10 : 12, fontWeight: 700,
                         padding: isNarrow ? '3px 5px' : '4px 7px', borderRadius: 4,
                         marginBottom: 3, cursor: 'pointer', overflow: 'hidden',
@@ -817,7 +872,7 @@ function MiniDatePicker({ year, month, onPick, onClose }: {
 /* ══════════════════════════════════════════
    WEEK VIEW (Sun-start, multi-day continuous bars)
 ══════════════════════════════════════════ */
-function WeekView({ events, stores, onSelect, isNarrow }: { events: Event[]; stores: any[]; onSelect: (e: Event) => void; isNarrow: boolean }) {
+function WeekView({ events, stores, onSelect, isNarrow, colorBy }: { events: Event[]; stores: any[]; onSelect: (e: Event) => void; isNarrow: boolean; colorBy: ColorBy }) {
   const today = new Date()
   // Anchor = Sunday of the displayed week.
   const sundayOf = (d: Date) => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - x.getDay()); return x }
@@ -934,7 +989,7 @@ function WeekView({ events, stores, onSelect, isNarrow }: { events: Event[]; sto
                   style={{
                     position: 'absolute', top: 0, height: 32,
                     left: `calc(${left}% + 4px)`, width: `calc(${width}% - 8px)`,
-                    background: storeColor(ev.store_id, stores), color: '#fff',
+                    background: eventColor(ev, colorBy, stores, todayStr), color: '#fff',
                     borderRadius: 6, padding: '6px 10px',
                     fontSize: 13, fontWeight: 700, lineHeight: 1.4,
                     cursor: 'pointer', overflow: 'hidden', whiteSpace: 'nowrap',
@@ -954,7 +1009,7 @@ function WeekView({ events, stores, onSelect, isNarrow }: { events: Event[]; sto
 /* ══════════════════════════════════════════
    DAY VIEW (single column, deep detail)
 ══════════════════════════════════════════ */
-function DayView({ events, stores, onSelect, isNarrow }: { events: Event[]; stores: any[]; onSelect: (e: Event) => void; isNarrow: boolean }) {
+function DayView({ events, stores, onSelect, isNarrow, colorBy }: { events: Event[]; stores: any[]; onSelect: (e: Event) => void; isNarrow: boolean; colorBy: ColorBy }) {
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const [date, setDate] = useState<Date>(today)
 
@@ -999,7 +1054,7 @@ function DayView({ events, stores, onSelect, isNarrow }: { events: Event[]; stor
                   onClick={() => onSelect(ev)}
                   style={{
                     background: '#fff', borderRadius: 10, padding: 16,
-                    borderLeft: `6px solid ${storeColor(ev.store_id, stores)}`,
+                    borderLeft: `6px solid ${eventColor(ev, colorBy, stores, dateStr)}`,
                     cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,.06)',
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     gap: 12,
@@ -1031,6 +1086,91 @@ function DayView({ events, stores, onSelect, isNarrow }: { events: Event[]; stor
             })}
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════════
+   COLOR LEGEND (with "Color by" picker)
+══════════════════════════════════════════ */
+function ColorLegend({ events, stores, users, colorBy, setColorBy, isNarrow }: {
+  events: Event[]
+  stores: any[]
+  users: any[]
+  colorBy: ColorBy
+  setColorBy: (m: ColorBy) => void
+  isNarrow: boolean
+}) {
+  const todayStr = new Date().toISOString().slice(0, 10)
+
+  // Build legend items: each unique color → label, derived per dimension.
+  const items: { color: string; label: string }[] = (() => {
+    if (colorBy === 'status') {
+      return [
+        { color: STATUS_COLORS.past, label: 'Past' },
+        { color: STATUS_COLORS.current, label: 'Current' },
+        { color: STATUS_COLORS.future, label: 'Future' },
+      ]
+    }
+    if (colorBy === 'lead') {
+      const seen = new Map<string, string>()
+      for (const ev of events) {
+        const lead = (ev.workers || [])[0]
+        if (!lead) continue
+        if (!seen.has(lead.id)) seen.set(lead.id, lead.name)
+      }
+      return Array.from(seen.entries()).slice(0, 12).map(([id, name]) => ({
+        color: eventColor({ workers: [{ id, name }] } as any, 'lead', stores, todayStr),
+        label: name,
+      }))
+    }
+    if (colorBy === 'state') {
+      const seen = new Set<string>()
+      for (const ev of events) {
+        const st = stores.find((s: any) => s.id === ev.store_id)?.state
+        if (st) seen.add(st)
+      }
+      return Array.from(seen).slice(0, 12).map(st => ({
+        color: eventColor({ store_id: '__hash__', start_date: '' } as any, 'state', stores.concat([{ id: '__hash__', state: st }]), todayStr),
+        label: st,
+      }))
+    }
+    // store (default)
+    const seen = new Set<string>()
+    const labels: { color: string; label: string }[] = []
+    for (const ev of events) {
+      if (seen.has(ev.store_id)) continue
+      seen.add(ev.store_id)
+      labels.push({
+        color: storeColor(ev.store_id, stores),
+        label: ev.store_name,
+      })
+      if (labels.length >= 12) break
+    }
+    return labels
+  })()
+
+  return (
+    <div className="card" style={{ padding: '10px 14px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Color by</span>
+        <select value={colorBy} onChange={e => setColorBy(e.target.value as ColorBy)}
+          style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6 }}>
+          {(Object.keys(COLOR_BY_LABEL) as ColorBy[]).map(k => (
+            <option key={k} value={k}>{COLOR_BY_LABEL[k]}</option>
+          ))}
+        </select>
+      </div>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        {items.length === 0 ? (
+          <span style={{ fontSize: 11, color: 'var(--mist)' }}>No data for this dimension yet.</span>
+        ) : items.map(it => (
+          <span key={it.label + it.color} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--ash)' }}>
+            <span style={{ width: 12, height: 12, borderRadius: 3, background: it.color, display: 'inline-block' }} />
+            {it.label}
+          </span>
+        ))}
       </div>
     </div>
   )
