@@ -6,6 +6,7 @@ import { setMobilePreference } from '@/lib/mobile'
 import { supabase } from '@/lib/supabase'
 import type { NavPage } from '@/app/page'
 import LicenseScanner from '@/components/scan/LicenseScanner'
+import { useCenterButtonMode } from '@/lib/centerButtonMode'
 
 /* ── ICONS ── */
 
@@ -16,6 +17,19 @@ function MenuIcon({ size = 18 }: { size?: number }) {
       <line x1="3" y1="6" x2="21" y2="6" />
       <line x1="3" y1="12" x2="21" y2="12" />
       <line x1="3" y1="18" x2="21" y2="18" />
+    </svg>
+  )
+}
+
+function AirplaneIcon({ size = 34 }: { size?: number }) {
+  // Solid black airplane glyph, similar weight to CameraIcon so the
+  // prominent center button reads consistently when the two swap.
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden>
+      <path
+        d="M28 16c0-.6-.4-1.1-.9-1.3l-9.6-3.5V4.6c0-.9-.7-1.6-1.5-1.6s-1.5.7-1.5 1.6v6.6L4.9 14.7c-.5.2-.9.7-.9 1.3 0 .8.7 1.4 1.5 1.3l9.0-1.6v6.5l-2.7 1.5c-.3.2-.5.5-.5.9v1.3c0 .6.6 1 1.2.8l3-1 3 1c.6.2 1.2-.2 1.2-.8v-1.3c0-.4-.2-.7-.5-.9l-2.7-1.5v-6.5l9.0 1.6c.8.1 1.5-.5 1.5-1.3z"
+        fill="#111"
+      />
     </svg>
   )
 }
@@ -140,7 +154,13 @@ function TabBtn({ tab, active, onClick }: { tab: TabDef; active: boolean; onClic
 }
 
 /* ── BOTTOM NAV ── */
-function BottomNav({ nav, setNav, onScan }: { nav: NavPage; setNav: (n: NavPage) => void; onScan: () => void }) {
+function BottomNav({ nav, setNav, onScan, centerMode }: {
+  nav: NavPage
+  setNav: (n: NavPage) => void
+  onScan: () => void
+  centerMode: 'travel' | 'scan'
+}) {
+  const isScan = centerMode === 'scan'
   return (
     <div style={{
       position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 999,
@@ -153,10 +173,13 @@ function BottomNav({ nav, setNav, onScan }: { nav: NavPage; setNav: (n: NavPage)
       boxShadow: '0 -4px 18px rgba(0,0,0,.10)', minHeight: 64,
     }}>
       {LEFT_TABS.map(tab => <TabBtn key={tab.id} tab={tab} active={nav === tab.id} onClick={() => setNav(tab.id)} />)}
-      <button onClick={onScan} aria-label="Scan" style={{
-        background: 'none', border: 'none', cursor: 'pointer',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0 0 8px',
-      }}>
+      <button
+        onClick={isScan ? onScan : () => setNav('travel')}
+        aria-label={isScan ? 'Scan' : 'Travel'}
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0 0 8px',
+        }}>
         <div style={{
           width: 58, height: 58, borderRadius: '50%',
           background: '#fff', border: '3px solid var(--green)',
@@ -164,9 +187,11 @@ function BottomNav({ nav, setNav, onScan }: { nav: NavPage; setNav: (n: NavPage)
           marginTop: -18,
           boxShadow: '0 0 0 4px rgba(255,255,255,.9), 0 6px 16px rgba(29,107,68,.28)',
         }}>
-          <CameraIcon size={34} />
+          {isScan ? <CameraIcon size={34} /> : <AirplaneIcon size={34} />}
         </div>
-        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--green-dark)', marginTop: 4, letterSpacing: '.04em' }}>SCAN</div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--green-dark)', marginTop: 4, letterSpacing: '.04em' }}>
+          {isScan ? 'SCAN' : 'TRAVEL'}
+        </div>
       </button>
       {RIGHT_TABS.map(tab => <TabBtn key={tab.id} tab={tab} active={nav === tab.id} onClick={() => setNav(tab.id)} />)}
     </div>
@@ -181,6 +206,7 @@ interface Props {
 
 export default function MobileLayout({ nav, setNav, children }: Props) {
   const { user, brand, setBrand, events, stores } = useApp()
+  const centerMode = useCenterButtonMode(events, user?.id)
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
   const hasLibertyAccess = user?.liberty_access === true
   const isLiberty = brand === 'liberty'
@@ -253,13 +279,22 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
 
   const fmtDate = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
-  const ALL_PAGES: { id: NavPage; label: string; icon: string; adminOnly?: boolean }[] = [
+  // Slide-out menu mirrors the center-button swap: whichever isn't in
+  // the prominent center button shows up in the menu in the OTHER's
+  // slot, so both are always reachable without ever appearing in both
+  // places at once. Camera/Scan has no real route — tapping it from the
+  // menu just runs the scan handler (handled below in onClick).
+  const swapItem: { id: NavPage; label: string; icon: string; isScan?: boolean } = centerMode === 'scan'
+    ? { id: 'travel', label: 'Travel Share', icon: '✈️' }
+    : { id: 'dashboard' as NavPage, label: 'Scan ID', icon: '📷', isScan: true }
+
+  const ALL_PAGES: { id: NavPage; label: string; icon: string; adminOnly?: boolean; isScan?: boolean }[] = [
     { id: 'dashboard',    label: 'Dashboard',      icon: '⌂' },
     { id: 'events',       label: 'Events',         icon: '◆' },
     { id: 'dayentry',     label: 'Enter Day Data', icon: '📝' },
     { id: 'calendar',     label: 'Appointments',   icon: '📅' },
     { id: 'schedule',     label: 'Calendar',       icon: '🗓' },
-    { id: 'travel',       label: 'Travel Share',   icon: '✈️' },
+    swapItem,
     { id: 'staff',        label: 'Staff',          icon: '👥' },
     { id: 'shipping',     label: 'Shipping',       icon: '📦' },
     { id: 'reports',      label: 'Reports',        icon: '📊' },
@@ -309,7 +344,15 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
             </div>
             <div style={{ padding: '12px 0' }}>
               {visiblePages.map(p => (
-                <button key={p.id} onClick={() => { setNav(p.id); setMenuOpen(false) }} style={{ width: '100%', padding: '14px 20px', background: nav === p.id ? 'rgba(255,255,255,.1)' : 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 12, color: nav === p.id ? '#fff' : 'rgba(255,255,255,.6)', fontWeight: nav === p.id ? 700 : 400, fontSize: 14, textAlign: 'left', borderLeft: nav === p.id ? '3px solid var(--green3)' : '3px solid transparent', minHeight: 44 }}>
+                <button
+                  key={`${p.id}-${p.label}`}
+                  onClick={() => {
+                    setMenuOpen(false)
+                    if (p.isScan) handleScanPress()
+                    else setNav(p.id)
+                  }}
+                  style={{ width: '100%', padding: '14px 20px', background: !p.isScan && nav === p.id ? 'rgba(255,255,255,.1)' : 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 12, color: !p.isScan && nav === p.id ? '#fff' : 'rgba(255,255,255,.6)', fontWeight: !p.isScan && nav === p.id ? 700 : 400, fontSize: 14, textAlign: 'left', borderLeft: !p.isScan && nav === p.id ? '3px solid var(--green3)' : '3px solid transparent', minHeight: 44 }}
+                >
                   <span style={{ fontSize: 16, width: 20, textAlign: 'center', flexShrink: 0 }}>{p.icon}</span>{p.label}
                 </button>
               ))}
@@ -324,7 +367,7 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
 
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 110 }}>{children}</div>
 
-      <BottomNav nav={nav} setNav={setNav} onScan={handleScanPress} />
+      <BottomNav nav={nav} setNav={setNav} onScan={handleScanPress} centerMode={centerMode} />
 
       {/* Event picker modal */}
       {eventPickerOpen && (
