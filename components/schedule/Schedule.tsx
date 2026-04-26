@@ -67,7 +67,7 @@ export default function Schedule() {
   ]
 
   return (
-    <div style={{ padding: isNarrow ? 14 : 24, maxWidth: 1100, margin: '0 auto' }}>
+    <div style={{ padding: isNarrow ? 14 : 24 }}>
       <div style={{
         display: 'flex',
         flexDirection: isNarrow ? 'column' : 'row',
@@ -129,9 +129,11 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   const prev = () => month === 0 ? (setMonth(11), setYear(y => y-1)) : setMonth(m => m-1)
   const next = () => month === 11 ? (setMonth(0), setYear(y => y+1)) : setMonth(m => m+1)
+  const goToToday = () => { setYear(today.getFullYear()); setMonth(today.getMonth()) }
 
   const firstDow = new Date(year, month, 1).getDay()
   const daysInMonth = new Date(year, month+1, 0).getDate()
@@ -153,12 +155,24 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
 
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', background: 'var(--sidebar-bg)' }}>
-        <button onClick={prev} style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 44, height: 44, borderRadius: '50%', cursor: 'pointer', fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
-        <div style={{ fontWeight: 900, fontSize: 16, color: '#fff' }}>
-          {new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', background: 'var(--sidebar-bg)', position: 'relative' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={prev} aria-label="Previous month" style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 38, height: 38, borderRadius: '50%', cursor: 'pointer', fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
+          <button onClick={goToToday} style={{ background: 'rgba(255,255,255,.18)', border: '1px solid rgba(255,255,255,.25)', color: '#fff', padding: '7px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700, letterSpacing: '.04em' }}>Today</button>
         </div>
-        <button onClick={next} style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 44, height: 44, borderRadius: '50%', cursor: 'pointer', fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
+        <button onClick={() => setPickerOpen(o => !o)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: 900, fontSize: 16, color: '#fff', padding: '6px 12px', borderRadius: 8 }} onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,.1)')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+          {new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} ▾
+        </button>
+        <button onClick={next} aria-label="Next month" style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 38, height: 38, borderRadius: '50%', cursor: 'pointer', fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
+
+        {pickerOpen && (
+          <MiniDatePicker
+            year={year}
+            month={month}
+            onPick={(y, m) => { setYear(y); setMonth(m); setPickerOpen(false) }}
+            onClose={() => setPickerOpen(false)}
+          />
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', background: 'var(--cream2)', borderBottom: '1px solid var(--pearl)' }}>
@@ -172,32 +186,38 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
           const dayEvs = day ? eventsOnDay(day) : []
           const isToday = day ? ds(day) === todayStr : false
           const dayVacs = day ? vacationsOnDay(day) : []
+          const visibleCount = isNarrow ? 2 : 5
+          const overflow = dayEvs.length - visibleCount
           return (
             <div key={i} style={{
-              minHeight: isNarrow ? 64 : 90, padding: isNarrow ? '3px 3px' : '6px 6px',
+              minHeight: isNarrow ? 80 : 140, padding: isNarrow ? '4px 4px' : '8px 8px',
               borderRight: '1px solid var(--cream2)', borderBottom: '1px solid var(--cream2)',
               background: !day ? 'rgba(0,0,0,.02)' : isToday ? 'rgba(45,106,79,.05)' : 'var(--cream)',
             }}>
               {day && (
                 <>
                   <div style={{
-                    width: isNarrow ? 20 : 24, height: isNarrow ? 20 : 24, borderRadius: '50%',
-                    fontSize: isNarrow ? 11 : 12, fontWeight: isToday ? 900 : 400,
+                    width: isNarrow ? 22 : 26, height: isNarrow ? 22 : 26, borderRadius: '50%',
+                    fontSize: isNarrow ? 12 : 13, fontWeight: isToday ? 900 : 600,
                     color: isToday ? '#fff' : 'var(--ash)', background: isToday ? 'var(--green)' : 'transparent',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 3,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4,
                   }}>{day}</div>
-                  {dayEvs.slice(0, isNarrow ? 2 : 99).map(ev => (
-                    <div key={ev.id} onClick={() => onSelect(ev)} style={{
-                      background: storeColor(ev.store_id, stores), color: '#fff',
-                      fontSize: isNarrow ? 9 : 10, fontWeight: 700,
-                      padding: isNarrow ? '1px 3px' : '2px 5px', borderRadius: 3,
-                      marginBottom: 2, cursor: 'pointer', overflow: 'hidden',
-                      whiteSpace: 'nowrap', textOverflow: 'ellipsis',
-                    }}>{isNarrow ? ev.store_name : `◆ ${ev.store_name}`}</div>
+                  {dayEvs.slice(0, visibleCount).map(ev => (
+                    <div
+                      key={ev.id}
+                      onClick={() => onSelect(ev)}
+                      title={`${ev.store_name} — ${ev.start_date}`}
+                      style={{
+                        background: storeColor(ev.store_id, stores), color: '#fff',
+                        fontSize: isNarrow ? 10 : 12, fontWeight: 700,
+                        padding: isNarrow ? '3px 5px' : '4px 7px', borderRadius: 4,
+                        marginBottom: 3, cursor: 'pointer', overflow: 'hidden',
+                        whiteSpace: 'nowrap', textOverflow: 'ellipsis', lineHeight: 1.2,
+                      }}>{isNarrow ? ev.store_name : `◆ ${ev.store_name}`}</div>
                   ))}
-                  {isNarrow && dayEvs.length > 2 && (
-                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--mist)', padding: '0 3px' }}>
-                      +{dayEvs.length - 2}
+                  {overflow > 0 && (
+                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mist)', padding: '2px 4px' }}>
+                      +{overflow} more
                     </div>
                   )}
                   {!isNarrow && dayVacs.map(v => (
@@ -594,7 +614,7 @@ function KanbanView({ events, stores, onSelect, isNarrow }: { events: Event[]; s
 }
 
 /* ══════════════════════════════════════════
-   DETAIL MODAL
+   DETAIL DRAWER (right-side slide-in)
 ══════════════════════════════════════════ */
 function DetailModal({ ev, stores, onClose, isNarrow }: { ev: Event; stores: any[]; onClose: () => void; isNarrow: boolean }) {
   const store = stores.find(s => s.id === ev.store_id)
@@ -608,9 +628,23 @@ function DetailModal({ ev, stores, onClose, isNarrow }: { ev: Event; stores: any
   const fmt = (ds: string) => new Date(ds+'T12:00:00').toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'})
   const fmtDollars = (n: number) => `$${Math.round(n).toLocaleString()}`
 
+  // Esc closes the drawer
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1000, overflowY: 'auto', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px' }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--cream)', borderRadius: 'var(--r2)', maxWidth: 580, width: '100%', boxShadow: 'var(--shadow-lg)' }}>
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end' }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: 'var(--cream)', height: '100%',
+        width: isNarrow ? '100%' : 460, maxWidth: '100%',
+        boxShadow: '-12px 0 32px rgba(0,0,0,.18)',
+        overflowY: 'auto',
+        animation: 'beb-drawer-in .22s cubic-bezier(.2,.8,.2,1)',
+      }}>
+        <style>{`@keyframes beb-drawer-in { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
         {/* Header */}
         <div style={{ background: color, padding: '20px 24px', borderRadius: 'var(--r2) var(--r2) 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
@@ -700,5 +734,64 @@ function DetailModal({ ev, stores, onClose, isNarrow }: { ev: Event; stores: any
         </div>
       </div>
     </div>
+  )
+}
+
+/* ══════════════════════════════════════════
+   MINI DATE PICKER (popover from header)
+══════════════════════════════════════════ */
+function MiniDatePicker({ year, month, onPick, onClose }: {
+  year: number
+  month: number
+  onPick: (year: number, month: number) => void
+  onClose: () => void
+}) {
+  const [pickYear, setPickYear] = useState(year)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+  return (
+    <>
+      {/* Click-outside backdrop */}
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 998, background: 'transparent' }} />
+      <div style={{
+        position: 'absolute', top: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)',
+        zIndex: 999, background: '#fff', borderRadius: 10,
+        boxShadow: '0 12px 30px rgba(0,0,0,.18)',
+        padding: 14, width: 260,
+        color: 'var(--ink)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <button onClick={() => setPickYear(y => y - 1)} aria-label="Previous year"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--ash)' }}>‹</button>
+          <div style={{ fontWeight: 800, fontSize: 14 }}>{pickYear}</div>
+          <button onClick={() => setPickYear(y => y + 1)} aria-label="Next year"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--ash)' }}>›</button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
+          {months.map((m, i) => {
+            const sel = pickYear === year && i === month
+            return (
+              <button key={m} onClick={() => onPick(pickYear, i)} style={{
+                padding: '8px 0', borderRadius: 6, border: 'none',
+                background: sel ? 'var(--green)' : 'transparent',
+                color: sel ? '#fff' : 'var(--ash)',
+                fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
+                transition: 'background .12s',
+              }}
+              onMouseEnter={e => { if (!sel) (e.currentTarget.style.background = 'var(--cream2)') }}
+              onMouseLeave={e => { if (!sel) (e.currentTarget.style.background = 'transparent') }}
+              >{m}</button>
+            )
+          })}
+        </div>
+      </div>
+    </>
   )
 }
