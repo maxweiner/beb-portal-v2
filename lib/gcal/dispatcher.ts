@@ -14,6 +14,7 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { createGcalEvent, deleteGcalEvent, patchGcalEvent, type GcalEventInput } from './client'
+import { sendEmail } from '@/lib/email'
 
 const RETRY_BACKOFF_MINUTES = [1, 5, 15]
 
@@ -183,7 +184,42 @@ export async function dispatchOneSync(row: QueueRow): Promise<DispatchResult> {
         last_error: message,
         updated_at: new Date().toISOString(),
       }).eq('id', row.id)
+      // Best-effort admin alert. Reuses notification_settings.admin_alert_email
+      // — the same address the notifications system uses on final failure.
+      void notifyAdminOfGcalFailure(row, message)
       return { rowId: row.id, outcome: 'failed', error: message }
     }
   }
+}
+
+async function notifyAdminOfGcalFailure(row: QueueRow, error: string): Promise<void> {
+  try {
+    const sb = admin()
+    const { data: settings } = await sb.from('notification_settings')
+      .select('admin_alert_email').eq('brand', row.brand).maybeSingle()
+    const to = (settings as any)?.admin_alert_email
+    if (!to) return
+    const portal = portalUrl()
+    await sendEmail({
+      to,
+      subject: `[BEB Portal] Google Calendar sync failed (${row.brand})`,
+      html: `
+        <p>A Google Calendar sync row permanently failed after 3 attempts.</p>
+        <ul>
+          <li><strong>Brand:</strong> ${row.brand}</li>
+          <li><strong>Action:</strong> ${row.action}</li>
+          <li><strong>Event ID:</strong> ${row.event_id || '-'}</li>
+          <li><strong>Google Event ID:</strong> ${row.google_calendar_event_id || '-'}</li>
+          <li><strong>Last error:</strong> ${escapeHtml(error)}</li>
+        </ul>
+        <p>Open Settings → Google Calendar Sync to inspect and retry: <a href="${portal}/?nav=settings">${portal}/?nav=settings</a></p>
+      `,
+    })
+  } catch (e) {
+    console.error('[gcal] admin alert failed', e)
+  }
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c] || c))
 }

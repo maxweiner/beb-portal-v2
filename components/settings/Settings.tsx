@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import type { Theme, BuyerVacation } from '@/types'
 import AvatarPicker from './AvatarPicker'
+import Checkbox from '@/components/ui/Checkbox'
 
 const BEB_THEMES: { id: Theme; label: string; color: string }[] = [
   { id: 'original',   label: 'Original',        color: '#1D6B44' },
@@ -320,6 +321,14 @@ export default function Settings() {
         </div>
       </div>
 
+      {/* Google Calendar Sync (superadmin only) */}
+      {user?.role === 'superadmin' && (
+        <GCalSyncSettings brand="beb" />
+      )}
+      {user?.role === 'superadmin' && (
+        <GCalSyncSettings brand="liberty" />
+      )}
+
       {/* Travel Email Integration */}
       {(user?.role === 'admin' || user?.role === 'superadmin') && (
         <PostmarkSettings />
@@ -408,6 +417,194 @@ function PostmarkSettings() {
         </ol>
       </div>
 
+    </div>
+  )
+}
+
+/* ── GOOGLE CALENDAR SYNC SETTINGS (per brand) ── */
+function GCalSyncSettings({ brand }: { brand: 'beb' | 'liberty' }) {
+  const brandLabel = brand === 'liberty' ? 'Liberty' : 'Beneficial'
+  const [enabled, setEnabled] = useState(false)
+  const [calendarId, setCalendarId] = useState('')
+  const [includeBuyers, setIncludeBuyers] = useState(true)
+  const [lastSync, setLastSync] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<string | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState<string | null>(null)
+  const [activity, setActivity] = useState<any[]>([])
+  const [failedCount, setFailedCount] = useState(0)
+
+  const reload = async () => {
+    const [{ data: settings }, { data: recent }, { count: failed }] = await Promise.all([
+      supabase.from('gcal_integration_settings').select('*').eq('brand', brand).maybeSingle(),
+      supabase.from('gcal_sync_queue').select('id, action, status, last_error, created_at, processed_at, attempts')
+        .eq('brand', brand).order('created_at', { ascending: false }).limit(20),
+      supabase.from('gcal_sync_queue').select('id', { count: 'exact', head: true })
+        .eq('brand', brand).eq('status', 'failed'),
+    ])
+    if (settings) {
+      setEnabled(!!settings.enabled)
+      setCalendarId(settings.calendar_id || '')
+      setIncludeBuyers(settings.include_buyer_names !== false)
+      setLastSync(settings.last_full_sync_at || null)
+    }
+    setActivity((recent || []) as any[])
+    setFailedCount(failed || 0)
+    setLoaded(true)
+  }
+  useEffect(() => { reload() /* eslint-disable-next-line */ }, [brand])
+
+  const save = async () => {
+    setSaving(true)
+    setTestResult(null)
+    const { error } = await supabase.from('gcal_integration_settings').update({
+      enabled, calendar_id: calendarId.trim() || null,
+      include_buyer_names: includeBuyers,
+      updated_at: new Date().toISOString(),
+    }).eq('brand', brand)
+    setSaving(false)
+    if (error) { alert('Save failed: ' + error.message); return }
+    reload()
+  }
+
+  const test = async () => {
+    setTesting(true); setTestResult(null)
+    try {
+      const res = await fetch('/api/gcal-sync/test', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brand }),
+      })
+      const json = await res.json().catch(() => ({}))
+      setTestResult(json.ok ? '✓ Connected' : `✗ ${json.error || 'Failed'}`)
+    } catch (e: any) {
+      setTestResult('✗ Network error: ' + (e?.message || 'unknown'))
+    }
+    setTesting(false)
+  }
+
+  const fullSync = async () => {
+    if (!confirm(`Re-push every ${brandLabel} event to Google Calendar? This may take a few minutes for the cron to drain.`)) return
+    setSyncing(true); setSyncResult(null)
+    try {
+      const res = await fetch('/api/gcal-sync/full', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brand }),
+      })
+      const json = await res.json().catch(() => ({}))
+      setSyncResult(res.ok ? `Enqueued ${json.enqueued} events` : `Failed: ${json.error}`)
+      reload()
+    } catch (e: any) {
+      setSyncResult('Network error: ' + (e?.message || 'unknown'))
+    }
+    setSyncing(false)
+  }
+
+  const retryRow = async (id: string) => {
+    const res = await fetch(`/api/gcal-sync/${id}/retry`, { method: 'POST' })
+    if (!res.ok) { alert('Retry failed'); return }
+    reload()
+  }
+
+  if (!loaded) return null
+
+  const accent = brand === 'liberty' ? '#3B82F6' : '#1D6B44'
+  const fmtRel = (iso: string | null) => iso ? new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'
+  const STATUS_BG: Record<string, string> = { done: 'var(--green-pale)', pending: '#FEF3C7', processing: '#E0E7FF', failed: '#FEE2E2' }
+  const STATUS_FG: Record<string, string> = { done: 'var(--green-dark)', pending: '#92400E', processing: '#3730A3', failed: '#991B1B' }
+
+  return (
+    <div className="card" style={{ marginTop: 18, borderTop: `4px solid ${accent}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+        <div>
+          <div className="card-title" style={{ margin: 0 }}>📅 Google Calendar Sync — {brandLabel}</div>
+          <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 2 }}>
+            Pushes every {brandLabel} event into a single Google Calendar (one-way).
+          </div>
+        </div>
+        <Checkbox
+          checked={enabled}
+          onChange={setEnabled}
+          label={<span style={{ fontWeight: 700, color: enabled ? 'var(--green-dark)' : 'var(--mist)' }}>{enabled ? 'Enabled' : 'Disabled'}</span>}
+        />
+      </div>
+
+      <div className="field" style={{ marginTop: 12 }}>
+        <label className="fl">Calendar ID</label>
+        <input value={calendarId} onChange={e => setCalendarId(e.target.value)}
+          placeholder="c_xxxxxxxxxx@group.calendar.google.com"
+          style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }} />
+        <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
+          From Google Calendar → Settings → Integrate calendar → Calendar ID. See GOOGLE_CALENDAR_SETUP.md.
+        </div>
+      </div>
+
+      <Checkbox
+        checked={includeBuyers}
+        onChange={setIncludeBuyers}
+        label={<span style={{ fontSize: 12, color: 'var(--mist)' }}>Include buyer names in event description</span>}
+        labelStyle={{ marginBottom: 12 }}
+      />
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+        <button onClick={save} disabled={saving} className="btn-primary btn-sm">
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+        <button onClick={test} disabled={testing || !calendarId} className="btn-outline btn-sm">
+          {testing ? 'Testing…' : 'Test connection'}
+        </button>
+        <button onClick={fullSync} disabled={syncing || !enabled} className="btn-outline btn-sm">
+          {syncing ? 'Enqueuing…' : 'Sync all events now'}
+        </button>
+        {testResult && (
+          <span style={{ fontSize: 12, color: testResult.startsWith('✓') ? 'var(--green-dark)' : '#991B1B', fontWeight: 700 }}>
+            {testResult}
+          </span>
+        )}
+        {syncResult && (
+          <span style={{ fontSize: 12, color: 'var(--ash)' }}>{syncResult}</span>
+        )}
+      </div>
+
+      <div style={{ fontSize: 11, color: 'var(--mist)', marginBottom: 6 }}>
+        Last full sync: {fmtRel(lastSync)} · Failed in queue: <strong style={{ color: failedCount > 0 ? '#991B1B' : 'var(--mist)' }}>{failedCount}</strong>
+      </div>
+
+      <div style={{ borderTop: '1px solid var(--cream2)', paddingTop: 10, marginTop: 10 }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
+          Recent activity
+        </div>
+        {activity.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--mist)' }}>No syncs yet.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {activity.map(r => (
+              <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '4px 0' }}>
+                <span style={{
+                  display: 'inline-block', minWidth: 64, textAlign: 'center',
+                  padding: '1px 6px', borderRadius: 4, fontSize: 10, fontWeight: 800,
+                  background: STATUS_BG[r.status] || 'var(--cream2)',
+                  color: STATUS_FG[r.status] || 'var(--mist)',
+                  textTransform: 'uppercase',
+                }}>{r.status}</span>
+                <span style={{ minWidth: 60, color: 'var(--mist)', textTransform: 'uppercase', fontSize: 10, fontWeight: 700 }}>{r.action}</span>
+                <span style={{ flex: 1, minWidth: 0, color: 'var(--ash)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {r.last_error || ''}
+                </span>
+                <span style={{ color: 'var(--mist)', fontSize: 10 }}>{fmtRel(r.processed_at || r.created_at)}</span>
+                {r.status === 'failed' && (
+                  <button onClick={() => retryRow(r.id)} style={{
+                    background: 'transparent', border: 'none', color: 'var(--green-dark)',
+                    cursor: 'pointer', fontSize: 11, fontWeight: 700, textDecoration: 'underline',
+                  }}>Retry</button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
