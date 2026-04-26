@@ -326,7 +326,14 @@ function ReservationsView({ ev, user }: { ev: Event; user: any }) {
       )}
 
       {filtered.map(res => (
-        <ReservationCard key={res.id} res={res} user={user} onDelete={deleteReservation} />
+        <ReservationCard
+          key={res.id}
+          res={res}
+          user={user}
+          workers={workers}
+          onDelete={deleteReservation}
+          onReload={loadData}
+        />
       ))}
 
       {/* Add modal */}
@@ -343,11 +350,39 @@ function ReservationsView({ ev, user }: { ev: Event; user: any }) {
 }
 
 /* ── RESERVATION CARD ── */
-function ReservationCard({ res, user, onDelete }: { res: Reservation; user: any; onDelete: (id: string) => void }) {
+function ReservationCard({ res, user, workers, onDelete, onReload }: {
+  res: Reservation
+  user: any
+  workers: { id: string; name: string }[]
+  onDelete: (id: string) => void
+  onReload: () => void
+}) {
   const [expanded, setExpanded] = useState(false)
+  const [assigning, setAssigning] = useState(false)
   const meta = TYPE_LABELS[res.type] || { label: res.type, icon: '📋', color: '#666' }
   const isOwn = res.buyer_id === user?.id
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
+  const isOrphan = !res.buyer_id || !workers.some(w => w.id === res.buyer_id)
+
+  const reassign = async (buyerId: string) => {
+    setAssigning(true)
+    try {
+      const res2 = await fetch(`/api/travel-reservations/${res.id}/assign`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ buyer_id: buyerId || null }),
+      })
+      if (!res2.ok) {
+        const j = await res2.json().catch(() => ({}))
+        alert('Reassign failed: ' + (j.error || res2.status))
+      } else {
+        onReload()
+      }
+    } catch (e: any) {
+      alert('Network error: ' + (e?.message || 'unknown'))
+    }
+    setAssigning(false)
+  }
 
   const fmtDate = (d: string) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'
   const fmtDateTime = (d: string) => d ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'
@@ -370,6 +405,12 @@ function ReservationCard({ res, user, onDelete }: { res: Reservation; user: any;
           </div>
           <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 2 }}>
             👤 {res.buyer_name}
+            {isOrphan && (
+              <span style={{
+                marginLeft: 6, fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 4,
+                background: '#FEF3C7', color: '#92400E', textTransform: 'uppercase', letterSpacing: '.04em',
+              }}>Unassigned</span>
+            )}
             {res.type === 'flight' && res.departure_at && ` · ${fmtDateTime(res.departure_at)}`}
             {res.type === 'hotel' && res.check_in && ` · ${fmtDate(res.check_in)} – ${fmtDate(res.check_out)}`}
             {res.type === 'rental_car' && res.check_in && ` · Pick up ${fmtDate(res.check_in)}`}
@@ -407,8 +448,26 @@ function ReservationCard({ res, user, onDelete }: { res: Reservation; user: any;
             </>}
           </div>
           {(isOwn || isAdmin) && (
-            <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
-              <button onClick={() => onDelete(res.id)} className="btn-danger btn-sm">Delete</button>
+            <div style={{ marginTop: 14, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              {isAdmin && workers.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                    Assigned to
+                  </span>
+                  <select
+                    value={res.buyer_id || ''}
+                    onChange={e => reassign(e.target.value)}
+                    disabled={assigning}
+                    style={{ fontSize: 12, padding: '4px 6px' }}
+                  >
+                    <option value="">— unassigned —</option>
+                    {workers.map(w => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <button onClick={() => onDelete(res.id)} className="btn-danger btn-sm" style={{ marginLeft: 'auto' }}>Delete</button>
             </div>
           )}
         </div>
