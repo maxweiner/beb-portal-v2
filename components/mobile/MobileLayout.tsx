@@ -154,9 +154,10 @@ function TabBtn({ tab, active, onClick }: { tab: TabDef; active: boolean; onClic
 
 /* ── BOTTOM NAV ──
    Two layouts driven by `onActiveEvent`:
-   - On active event:  Home | Events | 📷 (center) | Enter | Appts
-   - Off active event: Home | Events | ✈️ (center) | 📷 | Appts
-     (Enter slot is replaced by Camera since Enter requires an event.) */
+   - Off active event (default): Home | Events | 📷 (center) | Enter | Appts
+   - On active event:             Home | Events | ✈️ (center) | 📷 | Appts
+     (Enter slot is replaced by Camera so the user can still scan IDs from
+     the bottom row while the prominent button is Travel Share.) */
 function BottomNav({ nav, setNav, onScan, onActiveEvent }: {
   nav: NavPage
   setNav: (n: NavPage) => void
@@ -164,8 +165,8 @@ function BottomNav({ nav, setNav, onScan, onActiveEvent }: {
   onActiveEvent: boolean
 }) {
   // Right-side tabs depend on whether we're on an active event.
-  const rightTabs = onActiveEvent ? RIGHT_TABS : RIGHT_TABS.filter(t => t.id !== 'dayentry')
-  const rightExtraScanSlot = !onActiveEvent  // off-event: render Camera in the freed slot
+  const rightTabs = onActiveEvent ? RIGHT_TABS.filter(t => t.id !== 'dayentry') : RIGHT_TABS
+  const rightExtraScanSlot = onActiveEvent  // on-event: render small Camera in the freed Enter slot
   return (
     <div style={{
       position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 999,
@@ -179,8 +180,8 @@ function BottomNav({ nav, setNav, onScan, onActiveEvent }: {
     }}>
       {LEFT_TABS.map(tab => <TabBtn key={tab.id} tab={tab} active={nav === tab.id} onClick={() => setNav(tab.id)} />)}
       <button
-        onClick={onActiveEvent ? onScan : () => setNav('travel')}
-        aria-label={onActiveEvent ? 'Scan' : 'Travel Share'}
+        onClick={onActiveEvent ? () => setNav('travel') : onScan}
+        aria-label={onActiveEvent ? 'Travel Share' : 'Scan'}
         style={{
           background: 'none', border: 'none', cursor: 'pointer',
           display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0 0 8px',
@@ -192,7 +193,7 @@ function BottomNav({ nav, setNav, onScan, onActiveEvent }: {
           marginTop: -18,
           boxShadow: '0 0 0 4px rgba(255,255,255,.9), 0 6px 16px rgba(29,107,68,.28)',
         }}>
-          {onActiveEvent ? <CameraIcon size={34} /> : <AirplaneIcon size={34} />}
+          {onActiveEvent ? <AirplaneIcon size={34} /> : <CameraIcon size={34} />}
         </div>
         <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--green-dark)', marginTop: 4, letterSpacing: '.04em' }}>SCAN</div>
       </button>
