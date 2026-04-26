@@ -31,6 +31,7 @@ export default function MobileTravel() {
 
   // Default to "my events" — events the user is an assigned buyer on. Persisted.
   const [scope, setScope] = useState<'mine' | 'all'>('mine')
+  const [showPast, setShowPast] = useState(false)
   useEffect(() => {
     if (typeof window === 'undefined') return
     const saved = window.localStorage.getItem('beb-travel-scope')
@@ -41,10 +42,19 @@ export default function MobileTravel() {
     window.localStorage.setItem('beb-travel-scope', scope)
   }, [scope])
 
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const isPast = (ev: Event) => {
+    const last = new Date(ev.start_date + 'T12:00:00')
+    last.setDate(last.getDate() + 2)
+    return last.toISOString().slice(0, 10) < todayStr
+  }
+
   const sortedAll = [...events].sort((a, b) => b.start_date.localeCompare(a.start_date))
-  const sorted = scope === 'mine'
+  const scoped = scope === 'mine'
     ? sortedAll.filter(ev => (ev.workers || []).some((w: any) => w.id === user?.id))
     : sortedAll
+  const pastCount = scoped.filter(isPast).length
+  const sorted = showPast ? scoped : scoped.filter(ev => !isPast(ev))
   const fmt = (ds: string) => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   const fmtShort = (ds: string) => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   const fmtDT = (d: string) => d ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'
@@ -127,11 +137,22 @@ export default function MobileTravel() {
             )
           })}
         </div>
+        {pastCount > 0 && (
+          <button onClick={() => setShowPast(p => !p)} style={{
+            background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', marginBottom: 10,
+            color: 'var(--mist)', fontSize: 13, fontWeight: 600, textDecoration: 'underline',
+            fontFamily: 'inherit', textAlign: 'left',
+          }}>
+            {showPast
+              ? `Hide ${pastCount} past event${pastCount === 1 ? '' : 's'}`
+              : `Show ${pastCount} past event${pastCount === 1 ? '' : 's'}`}
+          </button>
+        )}
         {sorted.length === 0 && (
           <div style={{ padding: 30, textAlign: 'center', color: 'var(--mist)', fontSize: 14 }}>
             {scope === 'mine'
-              ? "You're not assigned to any events yet. Switch to All events to see everything."
-              : 'No events.'}
+              ? "You're not assigned to any current or upcoming events."
+              : 'No current or upcoming events.'}
           </div>
         )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
