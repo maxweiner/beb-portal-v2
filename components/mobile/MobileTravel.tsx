@@ -29,7 +29,22 @@ export default function MobileTravel() {
   const [showAdd, setShowAdd] = useState(false)
   const [expandedRes, setExpandedRes] = useState<string | null>(null)
 
-  const sorted = [...events].sort((a, b) => b.start_date.localeCompare(a.start_date))
+  // Default to "my events" — events the user is an assigned buyer on. Persisted.
+  const [scope, setScope] = useState<'mine' | 'all'>('mine')
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const saved = window.localStorage.getItem('beb-travel-scope')
+    if (saved === 'mine' || saved === 'all') setScope(saved)
+  }, [])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem('beb-travel-scope', scope)
+  }, [scope])
+
+  const sortedAll = [...events].sort((a, b) => b.start_date.localeCompare(a.start_date))
+  const sorted = scope === 'mine'
+    ? sortedAll.filter(ev => (ev.workers || []).some((w: any) => w.id === user?.id))
+    : sortedAll
   const fmt = (ds: string) => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   const fmtShort = (ds: string) => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   const fmtDT = (d: string) => d ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'
@@ -97,7 +112,28 @@ export default function MobileTravel() {
   if (!selectedEvent) {
     return (
       <div style={{ padding: 16 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 900, color: 'var(--ink)', marginBottom: 16 }}>✈️ Travel Share</h2>
+        <h2 style={{ fontSize: 20, fontWeight: 900, color: 'var(--ink)', marginBottom: 12 }}>✈️ Travel Share</h2>
+        <div style={{ display: 'flex', gap: 4, marginBottom: 14, background: 'var(--cream2)', borderRadius: 10, padding: 4 }}>
+          {([['mine', 'My events'], ['all', 'All events']] as const).map(([id, label]) => {
+            const sel = scope === id
+            return (
+              <button key={id} onClick={() => setScope(id)} style={{
+                flex: 1, padding: '10px 8px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                background: sel ? '#fff' : 'transparent',
+                color: sel ? 'var(--green-dark)' : 'var(--mist)',
+                fontSize: 13, fontWeight: 700, fontFamily: 'inherit', minHeight: 40,
+                boxShadow: sel ? '0 1px 2px rgba(0,0,0,.06)' : 'none',
+              }}>{label}</button>
+            )
+          })}
+        </div>
+        {sorted.length === 0 && (
+          <div style={{ padding: 30, textAlign: 'center', color: 'var(--mist)', fontSize: 14 }}>
+            {scope === 'mine'
+              ? "You're not assigned to any events yet. Switch to All events to see everything."
+              : 'No events.'}
+          </div>
+        )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {sorted.map(ev => {
             const store = stores.find(s => s.id === ev.store_id)
