@@ -180,8 +180,7 @@ export const SOURCES: Record<string, SourceDef> = {
     // need brand isolation should add a Store filter.
     columns: [
       { key: 'id', label: 'ID', type: 'text' },
-      { key: 'incurred_at', label: 'Incurred at', type: 'date' },
-      { key: 'paid_at', label: 'Paid at (empty = unpaid)', type: 'date' },
+      { key: 'paid_at', label: 'Paid at', type: 'date' },
       { key: 'vendor', label: 'Vendor', type: 'text' },
       { key: 'amount', label: 'Amount', type: 'number' },
       { key: 'quantity', label: 'Quantity', type: 'number' },

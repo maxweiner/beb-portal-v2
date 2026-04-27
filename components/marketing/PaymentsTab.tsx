@@ -9,7 +9,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
-import Checkbox from '@/components/ui/Checkbox'
 
 interface PaymentRow {
   id: string
@@ -18,8 +17,7 @@ interface PaymentRow {
   type_id: string | null
   vendor: string | null
   amount: number
-  incurred_at: string
-  paid_at: string | null
+  paid_at: string
   payment_method_id: string | null
   quantity: number | null
   invoice_number: string | null
@@ -37,7 +35,6 @@ interface PaymentRow {
 interface LookupRow { id: string; label: string; active: boolean; sort_order: number }
 
 type DatePreset = 'this_year' | 'last_30' | 'last_90' | 'this_event' | 'all'
-type PaidStatusFilter = 'all' | 'paid' | 'unpaid'
 
 export default function PaymentsTab() {
   const { user, brand, stores, events } = useApp()
@@ -57,10 +54,9 @@ export default function PaymentsTab() {
   const [methodFilter, setMethodFilter] = useState<Set<string>>(new Set())
   const [vendorSearch, setVendorSearch] = useState('')
   const [dateFilter, setDateFilter] = useState<DatePreset>('this_year')
-  const [paidFilter, setPaidFilter] = useState<PaidStatusFilter>('all')
 
   // Sort
-  const [sortKey, setSortKey] = useState<string>('incurred_at')
+  const [sortKey, setSortKey] = useState<string>('paid_at')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
   // Edit / new modal
@@ -81,7 +77,7 @@ export default function PaymentsTab() {
           qr_codes(label)
         `)
         .in('store_id', Array.from(brandStoreIds))
-        .order('incurred_at', { ascending: false })
+        .order('paid_at', { ascending: false })
         .limit(5000),
       supabase.from('marketing_payment_methods').select('id, label, active, sort_order').order('sort_order'),
       supabase.from('marketing_payment_types').select('id, label, active, sort_order').order('sort_order'),
@@ -97,7 +93,7 @@ export default function PaymentsTab() {
   const inDateRange = (p: PaymentRow): boolean => {
     if (dateFilter === 'all') return true
     const today = new Date(); today.setHours(0,0,0,0)
-    const d = new Date(p.incurred_at + 'T00:00:00')
+    const d = new Date(p.paid_at + 'T00:00:00')
     if (dateFilter === 'this_year') return d.getFullYear() === today.getFullYear()
     if (dateFilter === 'last_30') {
       const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - 30)
@@ -125,19 +121,16 @@ export default function PaymentsTab() {
       if (typeFilter.size > 0 && !typeFilter.has(p.type_id || '')) return false
       if (methodFilter.size > 0 && !methodFilter.has(p.payment_method_id || '')) return false
       if (q && !(p.vendor || '').toLowerCase().includes(q)) return false
-      if (paidFilter === 'paid' && !p.paid_at) return false
-      if (paidFilter === 'unpaid' && p.paid_at) return false
       if (!inDateRange(p)) return false
       return true
     })
-  }, [rows, eventFilter, typeFilter, methodFilter, vendorSearch, dateFilter, paidFilter, brandEvents])
+  }, [rows, eventFilter, typeFilter, methodFilter, vendorSearch, dateFilter, brandEvents])
 
   // Sort
   const sorted = useMemo(() => {
     const getCell = (p: PaymentRow, k: string) => {
       switch (k) {
-        case 'incurred_at': return p.incurred_at
-        case 'paid_at': return p.paid_at || '' // unpaid sort to the bottom on desc
+        case 'paid_at': return p.paid_at
         case 'event': return p.events?.store_name || ''
         case 'type': return p.marketing_payment_types?.label || ''
         case 'vendor': return p.vendor || ''
@@ -164,13 +157,11 @@ export default function PaymentsTab() {
   const totals = useMemo(() => ({
     count: sorted.length,
     sum: sorted.reduce((s, p) => s + (p.amount || 0), 0),
-    unpaidSum: sorted.reduce((s, p) => s + (p.paid_at ? 0 : (p.amount || 0)), 0),
-    unpaidCount: sorted.reduce((s, p) => s + (p.paid_at ? 0 : 1), 0),
   }), [sorted])
 
   function toggleSort(k: string) {
     if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortKey(k); setSortDir(k === 'amount' || k === 'incurred_at' || k === 'paid_at' ? 'desc' : 'asc') }
+    else { setSortKey(k); setSortDir(k === 'amount' || k === 'paid_at' ? 'desc' : 'asc') }
   }
   function toggleSet(set: Set<string>, val: string, setter: (s: Set<string>) => void) {
     const n = new Set(set)
@@ -182,15 +173,13 @@ export default function PaymentsTab() {
   const fmtDate = (iso: string) => iso ? new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
 
   function exportCsv() {
-    const headers = ['Date incurred','Date paid','Status','Event','Type','Vendor','Amount','Payment method','Quantity','Cost per piece','Linked QR','Invoice #','Notes']
+    const headers = ['Date paid','Event','Type','Vendor','Amount','Payment method','Quantity','Cost per piece','Linked QR','Invoice #','Notes']
     const escape = (s: string) => `"${(s || '').replace(/"/g, '""')}"`
     const lines = [headers.map(escape).join(',')]
     for (const p of sorted) {
       const cpp = p.quantity && p.quantity > 0 ? (p.amount / p.quantity).toFixed(2) : ''
       lines.push([
-        p.incurred_at,
-        p.paid_at || '',
-        p.paid_at ? 'Paid' : 'Unpaid',
+        p.paid_at,
         p.events?.store_name || '',
         p.marketing_payment_types?.label || '',
         p.vendor || '',
@@ -236,8 +225,7 @@ export default function PaymentsTab() {
   }
 
   const headers: { key: string; label: string; align?: 'right' }[] = [
-    { key: 'incurred_at', label: 'Incurred' },
-    { key: 'paid_at', label: 'Paid' },
+    { key: 'paid_at', label: 'Date' },
     { key: 'event', label: 'Event' },
     { key: 'type', label: 'Type' },
     { key: 'vendor', label: 'Vendor' },
@@ -294,21 +282,6 @@ export default function PaymentsTab() {
             </select>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 6, marginTop: 10, alignItems: 'center' }}>
-          <span className="fl" style={{ marginBottom: 0 }}>Status</span>
-          {(['all', 'paid', 'unpaid'] as PaidStatusFilter[]).map(s => {
-            const sel = paidFilter === s
-            return (
-              <button key={s} onClick={() => setPaidFilter(s)}
-                style={{
-                  padding: '4px 10px', borderRadius: 6, border: '1px solid var(--pearl)',
-                  background: sel ? 'var(--green-pale)' : 'white',
-                  color: sel ? 'var(--green-dark)' : 'var(--mist)',
-                  fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize',
-                }}>{s}</button>
-            )
-          })}
-        </div>
       </div>
 
       {/* Table */}
@@ -330,29 +303,23 @@ export default function PaymentsTab() {
             </thead>
             <tbody>
               {!loaded ? (
-                <tr><td colSpan={12} style={{ padding: 30, textAlign: 'center', color: 'var(--mist)' }}>Loading…</td></tr>
+                <tr><td colSpan={11} style={{ padding: 30, textAlign: 'center', color: 'var(--mist)' }}>Loading…</td></tr>
               ) : sorted.length === 0 ? (
-                <tr><td colSpan={12} style={{ padding: 30, textAlign: 'center', color: 'var(--mist)' }}>
+                <tr><td colSpan={11} style={{ padding: 30, textAlign: 'center', color: 'var(--mist)' }}>
                   {rows.length === 0 ? 'No payments yet. Click + Add payment to record one.' : 'No payments match the current filters.'}
                 </td></tr>
               ) : sorted.map(p => {
                 const cpp = p.quantity && p.quantity > 0 ? p.amount / p.quantity : null
                 const archivedMethod = p.marketing_payment_methods && p.marketing_payment_methods.active === false
-                const unpaid = !p.paid_at
                 return (
-                  <tr key={p.id} style={{ borderBottom: '1px solid var(--cream2)', background: unpaid ? 'var(--cream)' : undefined }}>
-                    <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>{fmtDate(p.incurred_at)}</td>
-                    <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
-                      {p.paid_at ? fmtDate(p.paid_at) : (
-                        <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--red)', background: 'var(--red-pale)', padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '.04em' }}>Unpaid</span>
-                      )}
-                    </td>
+                  <tr key={p.id} style={{ borderBottom: '1px solid var(--cream2)' }}>
+                    <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>{fmtDate(p.paid_at)}</td>
                     <td style={{ padding: '8px 12px' }}>{p.events?.store_name || '—'}</td>
                     <td style={{ padding: '8px 12px' }}>{p.marketing_payment_types?.label || '—'}</td>
                     <td style={{ padding: '8px 12px' }}>{p.vendor || '—'}</td>
                     <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700 }}>{fmt$(p.amount)}</td>
                     <td style={{ padding: '8px 12px' }}>
-                      {p.marketing_payment_methods?.label || (unpaid ? <span style={{ color: 'var(--mist)', fontStyle: 'italic' }}>—</span> : '—')}
+                      {p.marketing_payment_methods?.label || '—'}
                       {archivedMethod && <span style={{ marginLeft: 6, fontSize: 9, color: 'var(--mist)', background: 'var(--cream2)', padding: '1px 5px', borderRadius: 3 }}>archived</span>}
                     </td>
                     <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--mist)' }}>{p.quantity ?? '—'}</td>
@@ -360,7 +327,7 @@ export default function PaymentsTab() {
                     <td style={{ padding: '8px 12px', color: 'var(--mist)' }}>{p.qr_codes?.label || '—'}</td>
                     <td style={{ padding: '8px 12px', color: 'var(--mist)', fontFamily: 'monospace', fontSize: 12 }}>{p.invoice_number || '—'}</td>
                     <td style={{ padding: '8px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      <button onClick={() => setEditing(p)} className="btn-outline btn-sm">{unpaid ? 'Mark paid / Edit' : 'Edit'}</button>
+                      <button onClick={() => setEditing(p)} className="btn-outline btn-sm">Edit</button>
                     </td>
                   </tr>
                 )
@@ -369,14 +336,7 @@ export default function PaymentsTab() {
             {sorted.length > 0 && (
               <tfoot>
                 <tr style={{ background: 'var(--cream)', fontWeight: 800 }}>
-                  <td colSpan={5} style={{ padding: '10px 12px' }}>
-                    {totals.count} cost{totals.count === 1 ? '' : 's'}
-                    {totals.unpaidCount > 0 && (
-                      <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--red)', fontWeight: 700 }}>
-                        ({totals.unpaidCount} unpaid · {fmt$(totals.unpaidSum)})
-                      </span>
-                    )}
-                  </td>
+                  <td colSpan={4} style={{ padding: '10px 12px' }}>{totals.count} payment{totals.count === 1 ? '' : 's'}</td>
                   <td style={{ padding: '10px 12px', textAlign: 'right' }}>{fmt$(totals.sum)}</td>
                   <td colSpan={6} />
                 </tr>
@@ -429,14 +389,11 @@ function PaymentForm({ existing, events, types, methods, userId, onCancel, onSav
   onCancel: () => void
   onSaved: () => void
 }) {
-  const today = new Date().toISOString().slice(0, 10)
   const [eventId, setEventId] = useState(existing?.event_id || (events[0]?.id || ''))
   const [typeId, setTypeId] = useState(existing?.type_id || (types[0]?.id || ''))
   const [vendor, setVendor] = useState(existing?.vendor || '')
   const [amount, setAmount] = useState(existing ? String(existing.amount) : '')
-  const [incurredAt, setIncurredAt] = useState(existing?.incurred_at || today)
-  const [markPaid, setMarkPaid] = useState(!!existing?.paid_at)
-  const [paidAt, setPaidAt] = useState(existing?.paid_at || today)
+  const [paidAt, setPaidAt] = useState(existing?.paid_at || new Date().toISOString().slice(0, 10))
   const [methodId, setMethodId] = useState(existing?.payment_method_id || (methods.find(m => m.label !== 'Legacy / Unknown')?.id || methods[0]?.id || ''))
   const [quantity, setQuantity] = useState(existing?.quantity != null ? String(existing.quantity) : '')
   const [invoice, setInvoice] = useState(existing?.invoice_number || '')
@@ -464,8 +421,7 @@ function PaymentForm({ existing, events, types, methods, userId, onCancel, onSav
   const cpp = qtyNum && qtyNum > 0 ? amountNum / qtyNum : null
   const fmt$ = (n: number) => `$${n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`
 
-  const canSave = !!eventId && !!typeId && !!vendor.trim() && amountNum > 0 && !!incurredAt && !saving
-    && (!markPaid || (!!paidAt && !!methodId))
+  const canSave = !!eventId && !!typeId && !!vendor.trim() && amountNum > 0 && !!paidAt && !!methodId && !saving
 
   async function save() {
     if (!canSave) return
@@ -477,9 +433,8 @@ function PaymentForm({ existing, events, types, methods, userId, onCancel, onSav
       type_id: typeId,
       vendor: vendor.trim(),
       amount: amountNum,
-      incurred_at: incurredAt,
-      paid_at: markPaid ? paidAt : null,
-      payment_method_id: markPaid ? methodId : null,
+      paid_at: paidAt,
+      payment_method_id: methodId,
       quantity: qtyNum,
       invoice_number: invoice.trim() || null,
       notes: notes.trim() || null,
@@ -528,11 +483,19 @@ function PaymentForm({ existing, events, types, methods, userId, onCancel, onSav
             ))}
           </select>
         </div>
-        <div className="field">
-          <label className="fl">Type *</label>
-          <select value={typeId} onChange={e => setTypeId(e.target.value)}>
-            {types.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-          </select>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="field">
+            <label className="fl">Type *</label>
+            <select value={typeId} onChange={e => setTypeId(e.target.value)}>
+              {types.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label className="fl">Payment method *</label>
+            <select value={methodId} onChange={e => setMethodId(e.target.value)}>
+              {methods.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+            </select>
+          </div>
         </div>
         <div className="field">
           <label className="fl">Vendor *</label>
@@ -548,8 +511,8 @@ function PaymentForm({ existing, events, types, methods, userId, onCancel, onSav
             </div>
           </div>
           <div className="field">
-            <label className="fl">Date incurred *</label>
-            <input type="date" value={incurredAt} onChange={e => setIncurredAt(e.target.value)} />
+            <label className="fl">Date paid *</label>
+            <input type="date" value={paidAt} onChange={e => setPaidAt(e.target.value)} />
           </div>
           <div className="field">
             <label className="fl">Quantity</label>
@@ -577,33 +540,7 @@ function PaymentForm({ existing, events, types, methods, userId, onCancel, onSav
           <textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} style={{ resize: 'vertical' }} />
         </div>
 
-        <div style={{ borderTop: '1px solid var(--pearl)', paddingTop: 14, marginTop: 4 }}>
-          <Checkbox
-            checked={markPaid}
-            onChange={setMarkPaid}
-            label={<span style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>Mark as paid</span>}
-          />
-          {markPaid ? (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 10 }}>
-              <div className="field">
-                <label className="fl">Date paid *</label>
-                <input type="date" value={paidAt} onChange={e => setPaidAt(e.target.value)} />
-              </div>
-              <div className="field">
-                <label className="fl">Payment method *</label>
-                <select value={methodId} onChange={e => setMethodId(e.target.value)}>
-                  {methods.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-                </select>
-              </div>
-            </div>
-          ) : (
-            <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 6 }}>
-              Unchecked = unpaid. Check this box (now or later) to record when the cost is paid.
-            </div>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
           <div>
             {existing && (
               <button onClick={remove} disabled={deleting} className="btn-danger btn-sm">
