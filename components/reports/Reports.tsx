@@ -28,6 +28,15 @@ const REPORTS: (ReportDef & { Icon: React.FC<{ size?: number; color?: string }>;
     sampleVars: { date: fmtToday },
   },
   {
+    id: 'daily-briefing',
+    title: 'Daily Briefing',
+    description: "Plain-table morning email — active & upcoming events with totals. Cron-driven, fires daily at the time you set per brand.",
+    Icon: SunIcon, accent: '#0EA5E9',
+    sendEndpoint: '/api/daily-report',
+    varHint: '{{date}}, {{brandLabel}}, {{emoji}}',
+    sampleVars: { date: fmtToday, brandLabel: 'Beneficial Estate Buyers', emoji: '🌅' },
+  },
+  {
     id: 'end-of-day',
     title: 'End-of-Day Roundup',
     description: "Mirror of Morning Briefing fired at event close — today's final numbers per event.",

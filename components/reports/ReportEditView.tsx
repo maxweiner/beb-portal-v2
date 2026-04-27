@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import type { Event } from '@/types'
+import Checkbox from '@/components/ui/Checkbox'
 
 export interface ReportDef {
   id: string                 // matches report_templates.id
@@ -28,6 +29,20 @@ interface TemplateRow {
 }
 
 interface UserOpt { id: string; name: string; email: string }
+
+interface ScheduleRow {
+  template_id: string
+  brand: 'beb' | 'liberty'
+  enabled: boolean
+  frequency: 'daily' | 'weekly' | 'monthly'
+  time_of_day: string         // 'HH:MM:SS'
+  weekly_day: number | null
+  monthly_day: number | null
+  last_sent_at: string | null
+}
+
+const WEEKDAY_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+const BRAND_LABELS: Record<'beb'|'liberty', string> = { beb: 'Beneficial', liberty: 'Liberty' }
 
 function substitute(str: string, vars: Record<string, string>): string {
   return str.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => vars[k] ?? '')
@@ -66,18 +81,22 @@ function buildPreviewHtml(template: TemplateRow, vars: Record<string, string>): 
 }
 
 export default function ReportEditView({ report, onBack }: { report: ReportDef; onBack: () => void }) {
-  const { user, events, stores } = useApp()
+  const { user, events, stores, brand } = useApp()
   const isEventRecap = report.id === 'event-recap'
   const [template, setTemplate] = useState<TemplateRow | null>(null)
   const [users, setUsers] = useState<UserOpt[]>([])
+  // Persistent per-(template, brand) recipients. Toggling autosaves.
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [schedule, setSchedule] = useState<ScheduleRow | null>(null)
+  const [savingSchedule, setSavingSchedule] = useState(false)
+  const [scheduleSavedAt, setScheduleSavedAt] = useState<Date | null>(null)
   const [loading, setLoading] = useState(true)
   const [savingTemplate, setSavingTemplate] = useState(false)
   const [savedAt, setSavedAt] = useState<Date | null>(null)
   const [sending, setSending] = useState(false)
   const [sendResult, setSendResult] = useState<string | null>(null)
 
-  // Load template + active users
+  // Load template + active users (template is shared across brands)
   useEffect(() => {
     let cancelled = false
     Promise.all([
@@ -85,9 +104,6 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
       supabase.from('users').select('id, name, email').eq('active', true).order('name'),
     ]).then(([tplRes, usrRes]) => {
       if (cancelled) return
-      // If the row (or even the table) is missing, fall back to a synthesized
-      // default so the editor still loads. Save attempts will surface the
-      // real error from Supabase if the table truly doesn't exist.
       if (tplRes.data) {
         setTemplate(tplRes.data as TemplateRow)
       } else {
@@ -99,7 +115,7 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
           footer: '',
           shoutout_fallback: '',
           enabled: true,
-          send_implemented: report.id === 'morning-briefing',
+          send_implemented: report.id === 'morning-briefing' || report.id === 'daily-briefing',
           updated_at: new Date().toISOString(),
         })
       }
@@ -108,6 +124,35 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
     })
     return () => { cancelled = true }
   }, [report.id])
+
+  // Load schedule + recipients for active brand. Re-runs on brand switch.
+  useEffect(() => {
+    let cancelled = false
+    setScheduleSavedAt(null)
+    Promise.all([
+      supabase.from('report_template_schedules')
+        .select('*')
+        .eq('template_id', report.id).eq('brand', brand)
+        .maybeSingle(),
+      supabase.from('report_template_recipients')
+        .select('user_id')
+        .eq('template_id', report.id).eq('brand', brand),
+    ]).then(([schedRes, recipRes]) => {
+      if (cancelled) return
+      setSchedule((schedRes.data as ScheduleRow | null) ?? {
+        template_id: report.id,
+        brand: brand as 'beb' | 'liberty',
+        enabled: false,
+        frequency: 'daily',
+        time_of_day: '12:00:00',
+        weekly_day: 0,
+        monthly_day: 1,
+        last_sent_at: null,
+      })
+      setSelected(new Set(((recipRes.data || []) as { user_id: string }[]).map(r => r.user_id)))
+    })
+    return () => { cancelled = true }
+  }, [report.id, brand])
 
   function setField(field: keyof TemplateRow, value: string) {
     setTemplate(prev => prev ? ({ ...prev, [field]: value }) : prev)
@@ -205,13 +250,64 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
     return `${name} · ${ev.start_date}`
   }
 
-  function toggleUser(id: string) {
+  // Toggling a recipient autosaves to report_template_recipients for the
+  // active brand. Optimistic update with rollback on error.
+  async function toggleUser(id: string) {
+    const isAdding = !selected.has(id)
     setSelected(p => {
-      const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n
+      const n = new Set(p); isAdding ? n.add(id) : n.delete(id); return n
     })
+    const res = isAdding
+      ? await supabase.from('report_template_recipients').insert({ template_id: report.id, brand, user_id: id })
+      : await supabase.from('report_template_recipients').delete()
+          .eq('template_id', report.id).eq('brand', brand).eq('user_id', id)
+    if (res.error) {
+      alert('Failed to update recipient: ' + res.error.message)
+      setSelected(p => {
+        const n = new Set(p); isAdding ? n.delete(id) : n.add(id); return n
+      })
+    }
   }
-  function selectAll() { setSelected(new Set(users.map(u => u.id))) }
-  function clearAll()  { setSelected(new Set()) }
+  async function selectAll() {
+    const toAdd = users.map(u => u.id).filter(id => !selected.has(id))
+    if (toAdd.length === 0) return
+    setSelected(new Set(users.map(u => u.id)))
+    const { error } = await supabase.from('report_template_recipients')
+      .insert(toAdd.map(uid => ({ template_id: report.id, brand, user_id: uid })))
+    if (error) alert('Failed to add all recipients: ' + error.message)
+  }
+  async function clearAll() {
+    if (selected.size === 0) return
+    setSelected(new Set())
+    const { error } = await supabase.from('report_template_recipients').delete()
+      .eq('template_id', report.id).eq('brand', brand)
+    if (error) alert('Failed to clear recipients: ' + error.message)
+  }
+
+  function setScheduleField<K extends keyof ScheduleRow>(field: K, value: ScheduleRow[K]) {
+    setSchedule(prev => prev ? ({ ...prev, [field]: value }) : prev)
+    setScheduleSavedAt(null)
+  }
+
+  async function saveSchedule() {
+    if (!schedule) return
+    setSavingSchedule(true)
+    const payload = {
+      template_id: report.id,
+      brand,
+      enabled: schedule.enabled,
+      frequency: schedule.frequency,
+      time_of_day: schedule.time_of_day,
+      weekly_day: schedule.frequency === 'weekly' ? schedule.weekly_day : null,
+      monthly_day: schedule.frequency === 'monthly' ? schedule.monthly_day : null,
+      updated_at: new Date().toISOString(),
+    }
+    const { error } = await supabase.from('report_template_schedules')
+      .upsert(payload, { onConflict: 'template_id,brand' })
+    setSavingSchedule(false)
+    if (error) { alert('Save failed: ' + error.message); return }
+    setScheduleSavedAt(new Date())
+  }
 
   if (loading || !template) {
     return (
@@ -235,8 +331,19 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
       }}>← Back to Reports</button>
 
       <div style={{ marginBottom: 18 }}>
-        <h1 className="text-2xl font-black" style={{ color: 'var(--ink)' }}>{report.title}</h1>
-        <div style={{ fontSize: 13, color: 'var(--mist)', marginTop: 4 }}>{report.description}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+          <h1 className="text-2xl font-black" style={{ color: 'var(--ink)', margin: 0 }}>{report.title}</h1>
+          <span style={{
+            fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em',
+            padding: '3px 10px', borderRadius: 12,
+            background: brand === 'beb' ? 'rgba(29,107,68,.12)' : 'rgba(124,58,237,.12)',
+            color: brand === 'beb' ? '#1D6B44' : '#7C3AED',
+          }}>{BRAND_LABELS[brand as 'beb' | 'liberty']}</span>
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--mist)' }}>{report.description}</div>
+        <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4, fontStyle: 'italic' }}>
+          Template body is shared across brands. Schedule + recipients below are per-brand — switch the brand toggle to manage the other side.
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14 }}>
@@ -312,12 +419,92 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
             </div>
           )}
 
+          {/* Schedule (per-brand) */}
+          {schedule && !isEventRecap && (
+            <div className="card" style={{ marginBottom: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)' }}>
+                  Schedule <span style={{ color: 'var(--mist)', fontWeight: 600 }}>· {BRAND_LABELS[brand as 'beb' | 'liberty']}</span>
+                </div>
+                {scheduleSavedAt && (
+                  <span style={{ fontSize: 11, color: 'var(--green)', fontWeight: 700 }}>
+                    ✓ Saved {scheduleSavedAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                  </span>
+                )}
+              </div>
+
+              <div style={{ marginBottom: 12 }}>
+                <Checkbox
+                  checked={schedule.enabled}
+                  onChange={v => setScheduleField('enabled', v)}
+                  label={<span style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>Send on a schedule</span>}
+                />
+              </div>
+
+              <div style={{ opacity: schedule.enabled ? 1 : 0.5, pointerEvents: schedule.enabled ? 'auto' : 'none' }}>
+                <div className="field">
+                  <label className="fl">Frequency</label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {(['daily','weekly','monthly'] as const).map(f => {
+                      const sel = schedule.frequency === f
+                      return (
+                        <button key={f} onClick={() => setScheduleField('frequency', f)} style={{
+                          padding: '6px 14px', borderRadius: 6, border: '1px solid var(--pearl)', cursor: 'pointer',
+                          background: sel ? 'var(--green-pale)' : 'white', color: sel ? 'var(--green-dark)' : 'var(--ash)',
+                          fontSize: 13, fontWeight: 700, textTransform: 'capitalize', fontFamily: 'inherit',
+                        }}>{f}</button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: schedule.frequency === 'daily' ? '1fr' : '1fr 1fr', gap: 12 }}>
+                  <div className="field">
+                    <label className="fl">Time of day (UTC)</label>
+                    <input type="time" value={schedule.time_of_day.slice(0, 5)}
+                      onChange={e => setScheduleField('time_of_day', e.target.value + ':00')} />
+                  </div>
+                  {schedule.frequency === 'weekly' && (
+                    <div className="field">
+                      <label className="fl">Day of week</label>
+                      <select value={schedule.weekly_day ?? 0}
+                        onChange={e => setScheduleField('weekly_day', Number(e.target.value))}>
+                        {WEEKDAY_LABELS.map((l, i) => <option key={i} value={i}>{l}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {schedule.frequency === 'monthly' && (
+                    <div className="field">
+                      <label className="fl">Day of month</label>
+                      <select value={schedule.monthly_day ?? 1}
+                        onChange={e => setScheduleField('monthly_day', Number(e.target.value))}>
+                        {Array.from({ length: 31 }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {schedule.last_sent_at && (
+                  <p style={{ fontSize: 11, color: 'var(--mist)', margin: '4px 0 0' }}>
+                    Last sent: {new Date(schedule.last_sent_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
+                  </p>
+                )}
+              </div>
+
+              <button onClick={saveSchedule} disabled={savingSchedule} className="btn-primary btn-sm" style={{ marginTop: 10 }}>
+                {savingSchedule ? 'Saving…' : 'Save schedule'}
+              </button>
+            </div>
+          )}
+
           <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)' }}>Recipients</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)' }}>
+                  Recipients <span style={{ color: 'var(--mist)', fontWeight: 600 }}>· {BRAND_LABELS[brand as 'beb' | 'liberty']}</span>
+                </div>
                 <div style={{ fontSize: 12, color: 'var(--mist)' }}>
-                  {selected.size} of {users.length} selected
+                  {selected.size} of {users.length} selected · saved as you toggle
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
