@@ -155,21 +155,15 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
     // Just-created event is always shown so the user can immediately
     // add buyers — even if the active filter would otherwise hide it.
     if (justCreatedEventId && ev.id === justCreatedEventId) return true
+    // Search OVERRIDES the date filter — typing into the search box
+    // returns all matching stores regardless of date so the user
+    // doesn't have to also remember to widen the filter.
     if (search) {
       const s = search.toLowerCase()
       const store = stores.find(st => st.id === ev.store_id)
-      const match = (ev.store_name || '').toLowerCase().includes(s) ||
+      return (ev.store_name || '').toLowerCase().includes(s) ||
         (store?.city || '').toLowerCase().includes(s) ||
         (store?.state || '').toLowerCase().includes(s)
-      if (!match) return false
-    }
-    if (search) {
-      const s = search.toLowerCase()
-      const store = stores.find(st => st.id === ev.store_id)
-      const match = (ev.store_name || '').toLowerCase().includes(s) ||
-        (store?.city || '').toLowerCase().includes(s) ||
-        (store?.state || '').toLowerCase().includes(s)
-      if (!match) return false
     }
     const start = new Date(ev.start_date + 'T12:00:00')
     const end = new Date(ev.start_date + 'T12:00:00')
