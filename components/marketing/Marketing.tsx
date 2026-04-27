@@ -4,6 +4,32 @@ import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { Event } from '@/types'
+import PaymentsTab from './PaymentsTab'
+
+type MarketingTab = 'payments' | 'campaigns'
+
+export default function Marketing() {
+  const [tab, setTab] = useState<MarketingTab>('payments')
+  return (
+    <div>
+      <div style={{ borderBottom: '1px solid var(--pearl)', padding: '12px 24px 0', display: 'flex', alignItems: 'center', gap: 4 }}>
+        {([['payments', '💳 Payments'], ['campaigns', '📣 Campaigns']] as const).map(([id, label]) => {
+          const sel = tab === id
+          return (
+            <button key={id} onClick={() => setTab(id)} style={{
+              background: sel ? '#fff' : 'transparent',
+              border: 'none', borderBottom: sel ? '2px solid var(--green)' : '2px solid transparent',
+              padding: '10px 16px', cursor: 'pointer', fontWeight: 800, fontSize: 13,
+              color: sel ? 'var(--green-dark)' : 'var(--mist)', fontFamily: 'inherit',
+              borderRadius: '6px 6px 0 0', marginBottom: -1,
+            }}>{label}</button>
+          )
+        })}
+      </div>
+      {tab === 'payments' ? <PaymentsTab /> : <CampaignsTab />}
+    </div>
+  )
+}
 
 type Channel = 'vdp' | 'postcard' | 'newspaper'
 
@@ -32,7 +58,7 @@ interface Zip { id: string; campaign_id: string; zip_code: string; city: string;
 interface Proof { id: string; campaign_id: string; version: number; file_url: string; file_name: string; status: string; notes: string; created_at: string }
 interface Vendor { id: string; name: string; email: string; type: string; active: boolean }
 
-export default function Marketing() {
+function CampaignsTab() {
   const { events, stores, user } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
