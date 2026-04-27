@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useApp } from '@/lib/context'
 import ReportEditView, { type ReportDef } from './ReportEditView'
+import CustomReportsListLazy from './CustomReportsList'
 
 const TODAY = new Date()
 const fmtToday = TODAY.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
@@ -68,6 +69,7 @@ export default function Reports() {
   const { user } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [tab, setTab] = useState<'templates' | 'custom'>('templates')
 
   if (!isAdmin) {
     return (
@@ -90,12 +92,28 @@ export default function Reports() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <div style={{ marginBottom: 20 }}>
+      <div style={{ marginBottom: 16 }}>
         <h1 className="text-2xl font-black" style={{ color: 'var(--ink)' }}>Reports</h1>
         <div style={{ fontSize: 13, color: 'var(--mist)', marginTop: 4 }}>
           Edit, preview, and send any report. Click a tile to open its editor.
         </div>
       </div>
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 4, padding: 4, marginBottom: 16, background: 'var(--cream2)', borderRadius: 'var(--r)', border: '1px solid var(--pearl)', width: 'fit-content' }}>
+        {([['templates', 'Templates'], ['custom', 'Custom']] as const).map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} style={{
+            padding: '6px 14px', borderRadius: 'calc(var(--r) - 2px)', border: 'none', cursor: 'pointer',
+            fontSize: 12, fontWeight: 700,
+            background: tab === id ? 'var(--sidebar-bg)' : 'transparent',
+            color: tab === id ? '#fff' : 'var(--ash)',
+            fontFamily: 'inherit',
+          }}>{label}</button>
+        ))}
+      </div>
+
+      {tab === 'custom' && <CustomReportsListLazy />}
+      {tab === 'templates' && (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
         {REPORTS.map(t => (
           <button key={t.id}
@@ -136,6 +154,7 @@ export default function Reports() {
           </button>
         ))}
       </div>
+      )}
     </div>
   )
 }
