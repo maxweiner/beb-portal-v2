@@ -233,6 +233,9 @@ export default function AppointmentsAdmin() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return appts.filter(a => {
+      // Cancelled appointments are hidden from the schedule (display-only;
+      // the rows still exist in the DB and are accessible to reports).
+      if (a.status === 'cancelled') return false
       if (storeFilter !== 'all' && a.store_id !== storeFilter) return false
       if (sourceFilter !== 'all' && a.source !== sourceFilter) return false
       if (!dateInRange(a.appointment_date, dateFilter)) return false
