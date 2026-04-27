@@ -410,6 +410,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
           const store = stores.find(s => s.id === ev.store_id)
           const evWorkers = ev.workers || []
           const wOpen = workersOpen === ev.id
+          const totalSpend = (ev.spend_vdp||0)+(ev.spend_newspaper||0)+(ev.spend_postcard||0)+(ev.spend_spiffs||0)
 
           const stale = isStale(ev)
           const upcoming = !cur && !stale && new Date(ev.start_date + 'T12:00:00') > today
@@ -580,7 +581,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                     }} onClick={e => e.stopPropagation()}>
                       {[
                         { id: 'workers', icon: '👤', label: 'Who worked', onTap: () => setWorkersOpen(wOpen ? null : ev.id) },
-                        ...(isAdmin ? [{ id: 'spend', icon: '💰', label: 'Spiffs', onTap: () => setSpendOpen(spendOpen === ev.id ? null : ev.id) }] : []),
+                        ...(isAdmin ? [{ id: 'spend', icon: '💰', label: 'Ad spend', onTap: () => setSpendOpen(spendOpen === ev.id ? null : ev.id) }] : []),
                         { id: 'notes',   icon: '📝', label: 'Notes',      onTap: () => setNotesEvent(ev) },
                         { id: 'pdf',     icon: '⤓',  label: 'Download PDF', onTap: () => downloadPdf(ev) },
                       ].map((btn, i, arr) => (
@@ -807,7 +808,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                   }} onClick={e => e.stopPropagation()}>
                     {[
                       { id: 'workers', icon: '👤', label: 'Who worked', onTap: () => setWorkersOpen(wOpen ? null : ev.id) },
-                      ...(isAdmin ? [{ id: 'spend', icon: '💰', label: 'Spiffs', onTap: () => setSpendOpen(spendOpen === ev.id ? null : ev.id) }] : []),
+                      ...(isAdmin ? [{ id: 'spend', icon: '💰', label: 'Ad spend', onTap: () => setSpendOpen(spendOpen === ev.id ? null : ev.id) }] : []),
                       { id: 'notes',   icon: '📝', label: 'Notes',      onTap: () => setNotesEvent(ev) },
                       { id: 'pdf',     icon: '⤓',  label: 'Download PDF', onTap: () => downloadPdf(ev) },
                     ].map(btn => (
@@ -938,10 +939,21 @@ function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
             </div>
           )}
 
-          {ev.spend_spiffs ? (
+          {(ev.spend_vdp || ev.spend_newspaper || ev.spend_postcard || ev.spend_spiffs) ? (
             <div className="card card-accent" style={{ margin: 0 }}>
-              <div className="card-title">Spiffs Paid</div>
-              <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--ink)' }}>${Math.round(ev.spend_spiffs).toLocaleString()}</div>
+              <div className="card-title">Ad Spend & Spiffs</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                {[['VDP Spend', ev.spend_vdp], ['Newspaper Spend', ev.spend_newspaper], ['Postcard Spend', ev.spend_postcard], ['Spiffs Paid', ev.spend_spiffs]].map(([label, value]) => value ? (
+                  <div key={label as string}>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', marginBottom: 2 }}>{label}</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--ink)' }}>${Math.round(Number(value)).toLocaleString()}</div>
+                  </div>
+                ) : null)}
+              </div>
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--cream2)' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', marginBottom: 2 }}>Total Spend</div>
+                <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--ink)' }}>${Math.round((ev.spend_vdp || 0) + (ev.spend_newspaper || 0) + (ev.spend_postcard || 0) + (ev.spend_spiffs || 0)).toLocaleString()}</div>
+              </div>
             </div>
           ) : null}
 
@@ -969,7 +981,10 @@ function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
 /* ══ SPEND PANEL ══ */
 function SpendPanel({ ev, onClose, refetchEvents }: { ev: Event; onClose: () => void; refetchEvents: () => Promise<void> }) {
   const [spend, setSpend] = useState({
-    spend_spiffs: String(ev.spend_spiffs || ''),
+    spend_vdp:       String(ev.spend_vdp       || ''),
+    spend_newspaper: String(ev.spend_newspaper || ''),
+    spend_postcard:  String(ev.spend_postcard  || ''),
+    spend_spiffs:    String(ev.spend_spiffs    || ''),
   })
 
   const status = useAutosave(
@@ -977,7 +992,10 @@ function SpendPanel({ ev, onClose, refetchEvents }: { ev: Event; onClose: () => 
     async (s) => {
       const { error } = await withTimeout(
         supabase.from('events').update({
-          spend_spiffs: parseFloat(s.spend_spiffs) || 0,
+          spend_vdp:       parseFloat(s.spend_vdp)       || 0,
+          spend_newspaper: parseFloat(s.spend_newspaper) || 0,
+          spend_postcard:  parseFloat(s.spend_postcard)  || 0,
+          spend_spiffs:    parseFloat(s.spend_spiffs)    || 0,
         }).eq('id', ev.id)
       )
       if (error) throw error
@@ -986,24 +1004,42 @@ function SpendPanel({ ev, onClose, refetchEvents }: { ev: Event; onClose: () => 
     { delay: 1000 }
   )
 
+  const totalSpend = (parseFloat(spend.spend_vdp) || 0) +
+    (parseFloat(spend.spend_newspaper) || 0) +
+    (parseFloat(spend.spend_postcard) || 0) +
+    (parseFloat(spend.spend_spiffs) || 0)
+
+  const inp = (label: string, key: keyof typeof spend) => (
+    <div key={key}>
+      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', marginBottom: 4 }}>{label}</label>
+      <div style={{ position: 'relative' }}>
+        <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)', fontSize: 14 }}>$</span>
+        <input type="number" min="0" step="0.01" value={spend[key]}
+          onChange={e => setSpend(p => ({ ...p, [key]: e.target.value }))}
+          placeholder="0.00"
+          style={{ paddingLeft: 24, fontSize: 14 }} />
+      </div>
+    </div>
+  )
+
   return (
     <div className="mt-4 p-4 rounded-xl" style={{ background: 'var(--cream2)', border: '1px solid var(--pearl)' }} onClick={e => e.stopPropagation()}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div className="fl" style={{ margin: 0, display: 'flex', alignItems: 'center' }}>
-          Spiffs Paid
+          Ad Spend & Spiffs
           <AutosaveIndicator status={status} />
         </div>
-        <div style={{ fontSize: 12, color: 'var(--mist)' }}>Ad spend → Marketing panel</div>
+        {totalSpend > 0 && (
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>
+            Total: ${Math.round(totalSpend).toLocaleString()}
+          </div>
+        )}
       </div>
-      <div style={{ marginBottom: 14 }}>
-        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', marginBottom: 4 }}>Spiffs Paid</label>
-        <div style={{ position: 'relative' }}>
-          <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)', fontSize: 14 }}>$</span>
-          <input type="number" min="0" step="0.01" value={spend.spend_spiffs}
-            onChange={e => setSpend({ spend_spiffs: e.target.value })}
-            placeholder="0.00"
-            style={{ paddingLeft: 24, fontSize: 14 }} />
-        </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+        {inp('VDP Spend', 'spend_vdp')}
+        {inp('Newspaper Spend', 'spend_newspaper')}
+        {inp('Postcard Spend', 'spend_postcard')}
+        {inp('Spiffs Paid', 'spend_spiffs')}
       </div>
       <div style={{ display: 'flex', gap: 8 }}>
         <button className="btn-outline btn-sm" onClick={onClose}>Done</button>

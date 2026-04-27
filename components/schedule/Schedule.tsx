@@ -852,11 +852,18 @@ function DetailModal({ ev, stores, onClose, isNarrow }: { ev: Event; stores: any
             </div>
           )}
 
-          {/* Spiffs (ad spend now lives in marketing_payments — see the Marketing panel on the Events tab) */}
-          {ev.spend_spiffs ? (
+          {/* Ad Spend */}
+          {(ev.spend_vdp||ev.spend_newspaper||ev.spend_postcard||ev.spend_spiffs) ? (
             <div className="card card-accent" style={{ margin: 0 }}>
-              <div className="card-title">Spiffs Paid</div>
-              <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--ink)' }}>{fmtDollars(Number(ev.spend_spiffs))}</div>
+              <div className="card-title">Ad Spend & Spiffs</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                {[['VDP', ev.spend_vdp], ['Newspaper', ev.spend_newspaper], ['Postcard', ev.spend_postcard], ['Spiffs', ev.spend_spiffs]].map(([l,v]) => v ? (
+                  <div key={l as string}>
+                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--mist)', marginBottom: 2 }}>{l}</div>
+                    <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--ink)' }}>{fmtDollars(Number(v))}</div>
+                  </div>
+                ) : null)}
+              </div>
             </div>
           ) : null}
         </div>

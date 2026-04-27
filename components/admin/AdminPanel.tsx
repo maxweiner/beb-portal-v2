@@ -941,7 +941,9 @@ function DeleteEventSection() {
   const daysWithData = (selected?.days || []).filter((d: any) =>
     (d.customers ?? 0) + (d.purchases ?? 0) + (d.dollars10 ?? 0) + (d.dollars5 ?? 0) > 0
   ).length
-  const spiffsPaid = selected ? (selected.spend_spiffs || 0) : 0
+  const totalSpend = selected
+    ? ((selected.spend_vdp || 0) + (selected.spend_newspaper || 0) + (selected.spend_postcard || 0) + (selected.spend_spiffs || 0))
+    : 0
 
   return (
     <div className="card mt-6" style={{ padding: 0, overflow: 'hidden', borderTop: '3px solid var(--red)' }}>
@@ -971,7 +973,7 @@ function DeleteEventSection() {
               <div><span className="fl" style={{ marginBottom: 2 }}>Dates</span><div style={{ fontWeight: 700, color: 'var(--ink)' }}>{fmtRange(selected.start_date)}</div></div>
               <div><span className="fl" style={{ marginBottom: 2 }}>Workers assigned</span><div style={{ fontWeight: 700, color: 'var(--ink)' }}>{workerCount}</div></div>
               <div><span className="fl" style={{ marginBottom: 2 }}>Days with data</span><div style={{ fontWeight: 700, color: 'var(--ink)' }}>{daysWithData} of 3</div></div>
-              <div style={{ gridColumn: '1 / -1' }}><span className="fl" style={{ marginBottom: 2 }}>Spiffs paid</span><div style={{ fontWeight: 700, color: 'var(--ink)' }}>${spiffsPaid.toLocaleString()}</div></div>
+              <div style={{ gridColumn: '1 / -1' }}><span className="fl" style={{ marginBottom: 2 }}>Total ad spend</span><div style={{ fontWeight: 700, color: 'var(--ink)' }}>${totalSpend.toLocaleString()}</div></div>
             </div>
 
             <div className="mt-4 p-3 rounded-md" style={{ background: 'var(--red-pale)', border: '1px solid var(--red)', color: 'var(--red)', fontSize: 13, fontWeight: 600 }}>
