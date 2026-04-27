@@ -1,8 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/daily-report?secret=bebportal2024",
-      "schedule": "0 12 * * *"
+      "path": "/api/cron/process-scheduled-reports?secret=bebportal2024",
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/appointments/reminders?secret=bebportal2024",

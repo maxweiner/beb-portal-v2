@@ -181,7 +181,9 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
     setSending(true)
     setSendResult(null)
     try {
-      const res = await fetch(report.sendEndpoint, {
+      // Append brand so the server-side handler scopes data + per-brand template overrides correctly.
+      const url = `${report.sendEndpoint}?brand=${encodeURIComponent(brand)}`
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to: [...selected] }),
