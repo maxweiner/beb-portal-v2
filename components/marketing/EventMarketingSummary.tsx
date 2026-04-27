@@ -15,8 +15,7 @@ import { supabase } from '@/lib/supabase'
 interface PaymentRow {
   id: string
   amount: number
-  incurred_at: string
-  paid_at: string | null
+  paid_at: string
   vendor: string | null
   quantity: number | null
   invoice_number: string | null
@@ -41,13 +40,13 @@ export default function EventMarketingSummary({ eventId, onClose }: { eventId: s
       const [{ data: p }, { count: appts }] = await Promise.all([
         supabase.from('marketing_payments')
           .select(`
-            id, amount, incurred_at, paid_at, vendor, quantity, invoice_number, qr_code_id,
+            id, amount, paid_at, vendor, quantity, invoice_number, qr_code_id,
             marketing_payment_types(label),
             marketing_payment_methods(label),
             qr_codes(label)
           `)
           .eq('event_id', eventId)
-          .order('incurred_at', { ascending: false }),
+          .order('paid_at', { ascending: false }),
         supabase.from('appointments').select('id', { count: 'exact', head: true })
           .eq('event_id', eventId).eq('status', 'confirmed'),
       ])
@@ -98,10 +97,8 @@ export default function EventMarketingSummary({ eventId, onClose }: { eventId: s
   }, [eventId])
 
   const totalSpend = payments.reduce((s, p) => s + (p.amount || 0), 0)
-  const unpaidSpend = payments.reduce((s, p) => s + (p.paid_at ? 0 : (p.amount || 0)), 0)
-  const unpaidCount = payments.reduce((s, p) => s + (p.paid_at ? 0 : 1), 0)
   const byType = aggregate(payments, p => p.marketing_payment_types?.label || '(no type)')
-  const byMethod = aggregate(payments.filter(p => p.paid_at), p => p.marketing_payment_methods?.label || '(no method)')
+  const byMethod = aggregate(payments, p => p.marketing_payment_methods?.label || '(no method)')
   const costPerScan = scanCount > 0 ? totalSpend / scanCount : null
   const costPerAppt = apptCount > 0 ? totalSpend / apptCount : null
 
@@ -125,10 +122,10 @@ export default function EventMarketingSummary({ eventId, onClose }: { eventId: s
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {/* Hero numbers */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-            <Stat label="Total spend" value={fmt$(totalSpend)} hint={unpaidCount > 0 ? `${fmt$(unpaidSpend)} unpaid` : undefined} hintColor={unpaidCount > 0 ? 'var(--red)' : undefined} />
+            <Stat label="Total spend" value={fmt$(totalSpend)} />
             <Stat label="Cost / scan" value={costPerScan != null ? fmt$(costPerScan) : '—'} hint={costPerScan != null ? `${scanCount} scans` : undefined} />
             <Stat label="Cost / appt" value={costPerAppt != null ? fmt$(costPerAppt) : '—'} hint={costPerAppt != null ? `${apptCount} appts` : undefined} />
-            <Stat label="Items" value={String(payments.length)} hint={unpaidCount > 0 ? `${unpaidCount} unpaid` : undefined} hintColor={unpaidCount > 0 ? 'var(--red)' : undefined} />
+            <Stat label="Payments" value={String(payments.length)} />
           </div>
 
           {/* By type / by method side-by-side */}
@@ -170,31 +167,25 @@ export default function EventMarketingSummary({ eventId, onClose }: { eventId: s
 
           {/* Compact list of payments */}
           <div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>All items</div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>All payments</div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
                 <tr style={{ background: 'var(--cream2)' }}>
-                  <th style={th}>Incurred</th>
+                  <th style={th}>Date</th>
                   <th style={th}>Type</th>
                   <th style={th}>Vendor</th>
                   <th style={{ ...th, textAlign: 'right' }}>Amount</th>
-                  <th style={th}>Status</th>
+                  <th style={th}>Method</th>
                 </tr>
               </thead>
               <tbody>
                 {payments.map(p => (
                   <tr key={p.id} style={{ borderBottom: '1px solid var(--cream2)' }}>
-                    <td style={td}>{fmtDate(p.incurred_at)}</td>
+                    <td style={td}>{fmtDate(p.paid_at)}</td>
                     <td style={td}>{p.marketing_payment_types?.label || '—'}</td>
                     <td style={td}>{p.vendor || '—'}</td>
                     <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{fmt$(p.amount)}</td>
-                    <td style={td}>
-                      {p.paid_at ? (
-                        <span>{fmtDate(p.paid_at)} · {p.marketing_payment_methods?.label || '—'}</span>
-                      ) : (
-                        <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--red)', background: 'var(--red-pale)', padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '.04em' }}>Unpaid</span>
-                      )}
-                    </td>
+                    <td style={td}>{p.marketing_payment_methods?.label || '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -215,12 +206,12 @@ function aggregate(payments: PaymentRow[], keyFn: (p: PaymentRow) => string): { 
   return Array.from(m.entries()).map(([label, total]) => ({ label, total })).sort((a, b) => b.total - a.total)
 }
 
-function Stat({ label, value, hint, hintColor }: { label: string; value: string; hint?: string; hintColor?: string }) {
+function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div style={{ background: 'var(--cream2)', borderRadius: 8, padding: 10 }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.06em' }}>{label}</div>
       <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--ink)', marginTop: 2 }}>{value}</div>
-      {hint && <div style={{ fontSize: 10, color: hintColor || 'var(--mist)', marginTop: 2, fontWeight: 700 }}>{hint}</div>}
+      {hint && <div style={{ fontSize: 10, color: 'var(--mist)', marginTop: 2 }}>{hint}</div>}
     </div>
   )
 }

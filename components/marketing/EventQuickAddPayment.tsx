@@ -3,9 +3,6 @@
 // Quick add a marketing_payments row from the event row's toolbar.
 // Slimmer than PaymentForm in PaymentsTab: event_id is fixed, no
 // edit / delete, and we close on save.
-//
-// Cost is required; "Mark as paid now" is an opt-in toggle so you
-// can record an invoice you haven't paid yet.
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -32,8 +29,6 @@ export default function EventQuickAddPayment({
   const [typeId, setTypeId] = useState('')
   const [vendor, setVendor] = useState('')
   const [amount, setAmount] = useState('')
-  const [incurredAt, setIncurredAt] = useState(new Date().toISOString().slice(0, 10))
-  const [markPaid, setMarkPaid] = useState(false)
   const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 10))
   const [methodId, setMethodId] = useState('')
   const [quantity, setQuantity] = useState('')
@@ -64,8 +59,7 @@ export default function EventQuickAddPayment({
   const amountNum = Number(amount) || 0
   const qtyNum = quantity ? Number(quantity) : null
   const cpp = qtyNum && qtyNum > 0 ? amountNum / qtyNum : null
-  const canSave = !!typeId && !!vendor.trim() && amountNum > 0 && !!incurredAt && !saving
-    && (!markPaid || (!!paidAt && !!methodId))
+  const canSave = !!typeId && !!vendor.trim() && amountNum > 0 && !!paidAt && !!methodId && !saving
 
   async function save() {
     if (!canSave) return
@@ -76,9 +70,8 @@ export default function EventQuickAddPayment({
       type_id: typeId,
       vendor: vendor.trim(),
       amount: amountNum,
-      incurred_at: incurredAt,
-      paid_at: markPaid ? paidAt : null,
-      payment_method_id: markPaid ? methodId : null,
+      paid_at: paidAt,
+      payment_method_id: methodId,
       quantity: qtyNum,
       invoice_number: invoice.trim() || null,
       notes: notes.trim() || null,
@@ -94,15 +87,23 @@ export default function EventQuickAddPayment({
   return (
     <div className="mt-4 p-4 rounded-xl" style={{ background: 'var(--cream2)', border: '1px solid var(--pearl)' }} onClick={e => e.stopPropagation()}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div className="fl" style={{ margin: 0 }}>Add ad-spend cost</div>
+        <div className="fl" style={{ margin: 0 }}>Add ad-spend payment</div>
         <button className="btn-outline btn-sm" onClick={onClose}>Cancel</button>
       </div>
 
-      <div style={{ marginBottom: 10 }}>
-        <label style={lbl}>Type *</label>
-        <select value={typeId} onChange={e => setTypeId(e.target.value)} style={inp}>
-          {types.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-        </select>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+        <div>
+          <label style={lbl}>Type *</label>
+          <select value={typeId} onChange={e => setTypeId(e.target.value)} style={inp}>
+            {types.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={lbl}>Payment method *</label>
+          <select value={methodId} onChange={e => setMethodId(e.target.value)} style={inp}>
+            {methods.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+          </select>
+        </div>
       </div>
 
       <div style={{ marginBottom: 10 }}>
@@ -119,8 +120,8 @@ export default function EventQuickAddPayment({
           </div>
         </div>
         <div>
-          <label style={lbl}>Date incurred *</label>
-          <input type="date" value={incurredAt} onChange={e => setIncurredAt(e.target.value)} style={inp} />
+          <label style={lbl}>Date paid *</label>
+          <input type="date" value={paidAt} onChange={e => setPaidAt(e.target.value)} style={inp} />
         </div>
         <div>
           <label style={lbl}>Quantity</label>
@@ -152,36 +153,9 @@ export default function EventQuickAddPayment({
         <textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} style={{ ...inp, resize: 'vertical' }} />
       </div>
 
-      {/* Mark-as-paid toggle + fields */}
-      <div style={{ borderTop: '1px solid var(--pearl)', paddingTop: 12, marginBottom: 12 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: 'var(--ink)', cursor: 'pointer' }}>
-          <input type="checkbox" checked={markPaid} onChange={e => setMarkPaid(e.target.checked)} />
-          Mark as paid now
-        </label>
-        {markPaid && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
-            <div>
-              <label style={lbl}>Date paid *</label>
-              <input type="date" value={paidAt} onChange={e => setPaidAt(e.target.value)} style={inp} />
-            </div>
-            <div>
-              <label style={lbl}>Payment method *</label>
-              <select value={methodId} onChange={e => setMethodId(e.target.value)} style={inp}>
-                {methods.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-              </select>
-            </div>
-          </div>
-        )}
-        {!markPaid && (
-          <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 6 }}>
-            Leave unchecked to record this cost as unpaid. You can mark it paid later from the Marketing → Payments tab.
-          </div>
-        )}
-      </div>
-
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <button className="btn-primary btn-sm" disabled={!canSave} onClick={save}>
-          {saving ? 'Saving…' : 'Add cost'}
+          {saving ? 'Saving…' : 'Add payment'}
         </button>
       </div>
     </div>
