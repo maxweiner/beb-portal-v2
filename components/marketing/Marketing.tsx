@@ -5,23 +5,15 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { Event } from '@/types'
 import PaymentsTab from './PaymentsTab'
-import MarketingSettingsTab from './MarketingSettingsTab'
 
-type MarketingTab = 'payments' | 'campaigns' | 'settings'
+type MarketingTab = 'payments' | 'campaigns'
 
 export default function Marketing() {
-  const { user } = useApp()
-  const isSuperAdmin = user?.role === 'superadmin'
   const [tab, setTab] = useState<MarketingTab>('payments')
-  const tabs: { id: MarketingTab; label: string }[] = [
-    { id: 'payments', label: '💳 Payments' },
-    { id: 'campaigns', label: '📣 Campaigns' },
-    ...(isSuperAdmin ? [{ id: 'settings' as const, label: '⚙ Settings' }] : []),
-  ]
   return (
     <div>
       <div style={{ borderBottom: '1px solid var(--pearl)', padding: '12px 24px 0', display: 'flex', alignItems: 'center', gap: 4 }}>
-        {tabs.map(({ id, label }) => {
+        {([['payments', '💳 Payments'], ['campaigns', '📣 Campaigns']] as const).map(([id, label]) => {
           const sel = tab === id
           return (
             <button key={id} onClick={() => setTab(id)} style={{
@@ -34,9 +26,7 @@ export default function Marketing() {
           )
         })}
       </div>
-      {tab === 'payments' && <PaymentsTab />}
-      {tab === 'campaigns' && <CampaignsTab />}
-      {tab === 'settings' && isSuperAdmin && <MarketingSettingsTab />}
+      {tab === 'payments' ? <PaymentsTab /> : <CampaignsTab />}
     </div>
   )
 }
