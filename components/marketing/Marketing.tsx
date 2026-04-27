@@ -4,31 +4,9 @@ import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { Event } from '@/types'
-import PaymentsTab from './PaymentsTab'
-
-type MarketingTab = 'payments' | 'campaigns'
 
 export default function Marketing() {
-  const [tab, setTab] = useState<MarketingTab>('payments')
-  return (
-    <div>
-      <div style={{ borderBottom: '1px solid var(--pearl)', padding: '12px 24px 0', display: 'flex', alignItems: 'center', gap: 4 }}>
-        {([['payments', '💳 Payments'], ['campaigns', '📣 Campaigns']] as const).map(([id, label]) => {
-          const sel = tab === id
-          return (
-            <button key={id} onClick={() => setTab(id)} style={{
-              background: sel ? '#fff' : 'transparent',
-              border: 'none', borderBottom: sel ? '2px solid var(--green)' : '2px solid transparent',
-              padding: '10px 16px', cursor: 'pointer', fontWeight: 800, fontSize: 13,
-              color: sel ? 'var(--green-dark)' : 'var(--mist)', fontFamily: 'inherit',
-              borderRadius: '6px 6px 0 0', marginBottom: -1,
-            }}>{label}</button>
-          )
-        })}
-      </div>
-      {tab === 'payments' ? <PaymentsTab /> : <CampaignsTab />}
-    </div>
-  )
+  return <CampaignsTab />
 }
 
 type Channel = 'vdp' | 'postcard' | 'newspaper'
