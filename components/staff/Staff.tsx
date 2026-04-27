@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useApp } from '@/lib/context'
+import { leaderboardBuyers } from '@/lib/leaderboard'
 
 // Count days worked: past events = 3 days, current/future = days with data
 const countDays = (ev: any) => {
@@ -42,7 +43,9 @@ export default function Staff() {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
-  const staff = users.filter(u => u.active && u.is_buyer !== false)
+  // Roster = active buyers assigned to at least one current-year event in
+  // the active brand. Brand-scoping happens upstream via context.events.
+  const staff = leaderboardBuyers(users, events)
 
   const staffStats = staff.map(u => {
     const daysWorked = events.reduce((total, ev) => {

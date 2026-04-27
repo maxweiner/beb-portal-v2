@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import type { NavPage } from '@/app/page'
+import { leaderboardBuyers } from '@/lib/leaderboard'
 
 const countDays = (ev: any) => {
   const end = new Date(ev.start_date + 'T12:00:00')
@@ -56,7 +57,9 @@ export default function MobileDashboard({ setNav }: Props) {
   const greet = new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'
 
   const yearEvents = events.filter(e => e.start_date?.startsWith(currentYear))
-  const buyers = users.filter(u => u.active && u.is_buyer !== false)
+  // Roster = active buyers assigned to at least one current-year event in
+  // the active brand. Brand-scoping happens upstream via context.events.
+  const buyers = leaderboardBuyers(users, events)
 
   /* ── Week calc ── */
   const today = new Date()
