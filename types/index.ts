@@ -19,6 +19,9 @@ export interface User {
   updated_at: string
   liberty_access?: boolean
   sort_order?: number
+  /** Last brand the user actively selected — synced across devices.
+   *  Null = never set; fall back to localStorage / 'beb'. */
+  last_active_brand?: 'beb' | 'liberty' | null
 }
 
 export type EventNoteCategory = 'worked' | 'didnt_work' | 'do_differently'

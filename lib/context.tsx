@@ -143,12 +143,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const handleSession = async (email: string) => {
       if (!mounted || initialized) return
       initialized = true
-      const savedBrand = readLocal<Brand>('beb-brand', 'beb')
+      const cachedBrand = readLocal<Brand>('beb-brand', 'beb')
 
-      // Single parallel load: fetches everything (users + stores + events + ...)
-      // for the user's preferred brand. We find the current user in the returned
-      // users list — no separate .eq('email', ...) query needed.
-      const { users: loadedUsers } = await reloadRef.current(savedBrand)
+      // First reload uses the cached brand so we get something on screen
+      // fast. As soon as we have the user record we re-check against
+      // users.last_active_brand (the cross-device source of truth) and
+      // re-fetch if it differs.
+      const { users: loadedUsers } = await reloadRef.current(cachedBrand)
       if (!mounted) return
 
       const userData = loadedUsers.find(u => u.email === email)
@@ -158,13 +159,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return
       }
 
-      // If saved brand is liberty but user lacks access, fall back to beb and re-fetch.
-      const effectiveBrand: Brand = savedBrand === 'liberty' && !userData.liberty_access ? 'beb' : savedBrand
+      // Resolve the brand we should actually be on:
+      //   1. users.last_active_brand if set (cross-device truth)
+      //   2. localStorage cache as fallback
+      //   3. 'beb' default
+      // Then enforce liberty access.
+      const dbBrand = (userData as any).last_active_brand as Brand | null | undefined
+      let effectiveBrand: Brand = (dbBrand === 'beb' || dbBrand === 'liberty') ? dbBrand : cachedBrand
+      if (effectiveBrand === 'liberty' && !userData.liberty_access) effectiveBrand = 'beb'
+
       setUserState(userData)
       setBrandState(effectiveBrand)
-      if (effectiveBrand !== savedBrand) {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('beb-brand', effectiveBrand)
+      }
+
+      // Re-fetch if the resolved brand differs from what we hot-loaded with.
+      if (effectiveBrand !== cachedBrand) {
         await reloadRef.current(effectiveBrand)
       }
+
+      // First-ever-login backfill: if last_active_brand was null, write
+      // the resolved brand back so future loads are deterministic.
+      if (!dbBrand) {
+        void fetch('/api/user/last-active-brand', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userData.id, brand: effectiveBrand }),
+        }).catch(() => {})
+      }
+
       setLoading(false)
     }
 
@@ -267,6 +291,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const myId = switchIdRef.current
     setIsSwitching(true)
     setPendingBrand(b)
+
+    // Persist to the user record so other devices pick up the change on
+    // their next load. Fire-and-forget — never block the UI on this.
+    const userId = user?.id
+    if (userId) {
+      void fetch('/api/user/last-active-brand', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, brand: b }),
+      }).catch(() => {})
+    }
 
     const dataPromise = reloadRef.current(b)
     const minSpinnerPromise = new Promise<void>(r => setTimeout(r, 1500))
