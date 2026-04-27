@@ -40,7 +40,7 @@ const nextCheckNumber = (rows: CheckRow[]): string => {
   if (isNaN(n) || String(n) !== last) return ''
   return String(n + 1)
 }
-const MAX_CHECKS = 40
+const MAX_CHECKS = 100
 
 type InputMode = 'grid' | 'card'
 
