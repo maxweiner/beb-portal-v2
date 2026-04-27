@@ -42,8 +42,8 @@ export default function CustomReportsList() {
 
   const reload = async () => {
     const [{ data: rs }, { data: ps }] = await Promise.all([
-      supabase.from('reports').select('*').order('updated_at', { ascending: false }),
-      user ? supabase.from('report_pins').select('report_id').eq('user_id', user.id) : Promise.resolve({ data: [] }),
+      supabase.from('custom_reports').select('*').order('updated_at', { ascending: false }),
+      user ? supabase.from('custom_report_pins').select('report_id').eq('user_id', user.id) : Promise.resolve({ data: [] }),
     ])
     setReports((rs || []) as ReportRow[])
     setPins(new Set(((ps || []) as { report_id: string }[]).map(p => p.report_id)))
@@ -70,14 +70,14 @@ export default function CustomReportsList() {
     if (!user) return
     const isPinned = pins.has(reportId)
     if (isPinned) {
-      await supabase.from('report_pins').delete().eq('user_id', user.id).eq('report_id', reportId)
+      await supabase.from('custom_report_pins').delete().eq('user_id', user.id).eq('report_id', reportId)
       setPins(p => { const n = new Set(p); n.delete(reportId); return n })
     } else {
       if (pins.size >= PIN_CAP) {
         alert(`You already have ${PIN_CAP} pinned reports. Unpin one first.`)
         return
       }
-      const { error } = await supabase.from('report_pins').insert({ user_id: user.id, report_id: reportId })
+      const { error } = await supabase.from('custom_report_pins').insert({ user_id: user.id, report_id: reportId })
       if (error) { alert('Pin failed: ' + error.message); return }
       setPins(p => new Set(p).add(reportId))
     }
@@ -85,7 +85,7 @@ export default function CustomReportsList() {
 
   const deleteReport = async (r: ReportRow) => {
     if (!confirm(`Delete report "${r.name}"? This cannot be undone.`)) return
-    const { error } = await supabase.from('reports').delete().eq('id', r.id)
+    const { error } = await supabase.from('custom_reports').delete().eq('id', r.id)
     if (error) { alert('Delete failed: ' + error.message); return }
     reload()
   }
