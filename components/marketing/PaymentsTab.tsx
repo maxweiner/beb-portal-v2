@@ -9,7 +9,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
-import Checkbox from '@/components/ui/Checkbox'
 
 interface PaymentRow {
   id: string
@@ -578,11 +577,10 @@ function PaymentForm({ existing, events, types, methods, userId, onCancel, onSav
         </div>
 
         <div style={{ borderTop: '1px solid var(--pearl)', paddingTop: 14, marginTop: 4 }}>
-          <Checkbox
-            checked={markPaid}
-            onChange={setMarkPaid}
-            label={<span style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>Mark as paid</span>}
-          />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: 'var(--ink)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={markPaid} onChange={e => setMarkPaid(e.target.checked)} />
+            Mark as paid
+          </label>
           {markPaid ? (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 10 }}>
               <div className="field">

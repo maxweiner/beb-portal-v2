@@ -10,7 +10,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
-import Checkbox from '@/components/ui/Checkbox'
 
 interface LookupRow { id: string; label: string }
 
@@ -155,11 +154,10 @@ export default function EventQuickAddPayment({
 
       {/* Mark-as-paid toggle + fields */}
       <div style={{ borderTop: '1px solid var(--pearl)', paddingTop: 12, marginBottom: 12 }}>
-        <Checkbox
-          checked={markPaid}
-          onChange={setMarkPaid}
-          label={<span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>Mark as paid now</span>}
-        />
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: 'var(--ink)', cursor: 'pointer' }}>
+          <input type="checkbox" checked={markPaid} onChange={e => setMarkPaid(e.target.checked)} />
+          Mark as paid now
+        </label>
         {markPaid && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
             <div>
