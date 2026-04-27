@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
+import CustomReportBuilder from './CustomReportBuilder'
 
 interface ReportRow {
   id: string
@@ -37,6 +38,32 @@ export default function CustomReportsList() {
   const [loaded, setLoaded] = useState(false)
   const [search, setSearch] = useState('')
   const [tag, setTag] = useState<string>('')
+
+  // URL param drives whether we render list / builder. ?cr=new = new report,
+  // ?cr=ID&edit=1 = edit existing, ?cr=ID = run (handled in PR C — for now
+  // we open the builder so the user can at least review the saved config).
+  const [route, setRoute] = useState<{ id: string; edit: boolean } | null>(null)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const sync = () => {
+      const u = new URL(window.location.href)
+      const cr = u.searchParams.get('cr')
+      const edit = u.searchParams.get('edit') === '1'
+      setRoute(cr ? { id: cr, edit: edit || cr === 'new' } : null)
+    }
+    sync()
+    window.addEventListener('popstate', sync)
+    return () => window.removeEventListener('popstate', sync)
+  }, [])
+  const closeBuilder = () => {
+    if (typeof window === 'undefined') return
+    const u = new URL(window.location.href)
+    u.searchParams.delete('cr')
+    u.searchParams.delete('edit')
+    window.history.pushState({}, '', u.toString())
+    setRoute(null)
+    reload()
+  }
 
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
 
@@ -90,29 +117,19 @@ export default function CustomReportsList() {
     reload()
   }
 
-  // PR B / C will replace these stubs with real navigation.
+  const navigateToParam = (params: Record<string, string>) => {
+    if (typeof window === 'undefined') return
+    const u = new URL(window.location.href)
+    Object.entries(params).forEach(([k, v]) => u.searchParams.set(k, v))
+    window.history.pushState({}, '', u.toString())
+    setRoute({ id: params.cr, edit: params.edit === '1' || params.cr === 'new' })
+  }
   const openRunner = (id: string) => {
-    if (typeof window === 'undefined') return
-    const u = new URL(window.location.href)
-    u.searchParams.set('cr', id)
-    window.history.pushState({}, '', u.toString())
-    alert('Custom report runner ships in PR C. The list + builder are wired up in PRs A + B; this row will then load the report instead of alerting.')
+    navigateToParam({ cr: id })
+    alert('Runner ships in PR C — for now this just sets the URL param.')
   }
-  const openEditor = (id: string) => {
-    if (typeof window === 'undefined') return
-    const u = new URL(window.location.href)
-    u.searchParams.set('cr', id)
-    u.searchParams.set('edit', '1')
-    window.history.pushState({}, '', u.toString())
-    alert('Custom report builder ships in PR B.')
-  }
-  const openNew = () => {
-    if (typeof window === 'undefined') return
-    const u = new URL(window.location.href)
-    u.searchParams.set('cr', 'new')
-    window.history.pushState({}, '', u.toString())
-    alert('Custom report builder ships in PR B.')
-  }
+  const openEditor = (id: string) => navigateToParam({ cr: id, edit: '1' })
+  const openNew = () => navigateToParam({ cr: 'new', edit: '1' })
 
   if (!isAdmin) {
     return (
@@ -120,6 +137,17 @@ export default function CustomReportsList() {
         <div style={{ fontSize: 40, marginBottom: 12 }}>🔒</div>
         <div className="font-bold" style={{ color: 'var(--ink)' }}>Admins only</div>
       </div>
+    )
+  }
+
+  // Builder view
+  if (route?.edit) {
+    return (
+      <CustomReportBuilder
+        reportId={route.id === 'new' ? null : route.id}
+        onCancel={closeBuilder}
+        onSaved={() => closeBuilder()}
+      />
     )
   }
 
