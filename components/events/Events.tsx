@@ -325,22 +325,27 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   const todayISO = today.toISOString().split('T')[0]
 
   // Auto-expand current + upcoming mobile cards; collapse past + stale.
+  // When the filtered list is short (≤3), expand everything so the user
+  // doesn't have to tap into each one.
   useEffect(() => {
     if (!isMobile) return
+    const expandAll = filtered.length <= 3
     const next = new Set<string>()
     for (const ev of filtered) {
       const start = new Date(ev.start_date + 'T12:00:00')
-      if (isCurrent(ev) || (!isStale(ev) && start > today)) next.add(ev.id)
+      if (expandAll || isCurrent(ev) || (!isStale(ev) && start > today)) next.add(ev.id)
     }
     setExpandedCards(next)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMobile, filtered.length, filtered.map(e => e.id).join('|')])
 
   // Desktop: only auto-expand current events. Upcoming + past start collapsed.
+  // Same short-list shortcut as mobile.
   useEffect(() => {
     if (isMobile) return
+    const expandAll = filtered.length <= 3
     const next = new Set<string>()
-    for (const ev of filtered) if (isCurrent(ev)) next.add(ev.id)
+    for (const ev of filtered) if (expandAll || isCurrent(ev)) next.add(ev.id)
     setExpandedCards(next)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMobile, filtered.length, filtered.map(e => e.id).join('|')])
