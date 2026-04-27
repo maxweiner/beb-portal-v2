@@ -10,6 +10,7 @@ import type { Event, BuyerVacation } from '@/types'
 import type { NavPage } from '@/app/page'
 import EventNotesPanel from './EventNotesPanel'
 import NotificationStatusBadge from '@/components/notifications/NotificationStatusBadge'
+import EventMarketingSummary from '@/components/marketing/EventMarketingSummary'
 
 type Filter = 'thisweek' | 'active' | 'all' | 'current' | 'past' | 'future' | 'days30' | 'days60'
 type Sort = 'date-desc' | 'date-asc' | 'name-asc'
@@ -61,6 +62,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   const [saving, setSaving] = useState(false)
   const [workersOpen, setWorkersOpen] = useState<string | null>(null)
   const [spendOpen, setSpendOpen] = useState<string | null>(null)
+  const [marketingOpen, setMarketingOpen] = useState<string | null>(null)
   const [detail, setDetail] = useState<Event | null>(null)
   const [notesEvent, setNotesEvent] = useState<Event | null>(null)
   const [noteCounts, setNoteCounts] = useState<Record<string, number>>({})
@@ -573,6 +575,11 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                         <SpendPanel ev={ev} onClose={() => setSpendOpen(null)} refetchEvents={fetchEvents} />
                       </div>
                     )}
+                    {marketingOpen === ev.id && (
+                      <div onClick={e => e.stopPropagation()} style={{ padding: '0 12px' }}>
+                        <EventMarketingSummary eventId={ev.id} onClose={() => setMarketingOpen(null)} />
+                      </div>
+                    )}
 
                     {/* Action toolbar */}
                     <div style={{
@@ -581,6 +588,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                     }} onClick={e => e.stopPropagation()}>
                       {[
                         { id: 'workers', icon: '👤', label: 'Who worked', onTap: () => setWorkersOpen(wOpen ? null : ev.id) },
+                        ...(isAdmin ? [{ id: 'marketing', icon: '📊', label: 'Marketing', onTap: () => setMarketingOpen(marketingOpen === ev.id ? null : ev.id) }] : []),
                         ...(isAdmin ? [{ id: 'spend', icon: '💰', label: 'Ad spend', onTap: () => setSpendOpen(spendOpen === ev.id ? null : ev.id) }] : []),
                         { id: 'notes',   icon: '📝', label: 'Notes',      onTap: () => setNotesEvent(ev) },
                         { id: 'pdf',     icon: '⤓',  label: 'Download PDF', onTap: () => downloadPdf(ev) },
@@ -799,6 +807,11 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                       <SpendPanel ev={ev} onClose={() => setSpendOpen(null)} refetchEvents={fetchEvents} />
                     </div>
                   )}
+                  {marketingOpen === ev.id && (
+                    <div onClick={e => e.stopPropagation()} style={{ padding: '14px 20px 0' }}>
+                      <EventMarketingSummary eventId={ev.id} onClose={() => setMarketingOpen(null)} />
+                    </div>
+                  )}
 
                   {/* Action bar */}
                   <div style={{
@@ -808,6 +821,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                   }} onClick={e => e.stopPropagation()}>
                     {[
                       { id: 'workers', icon: '👤', label: 'Who worked', onTap: () => setWorkersOpen(wOpen ? null : ev.id) },
+                      ...(isAdmin ? [{ id: 'marketing', icon: '📊', label: 'Marketing', onTap: () => setMarketingOpen(marketingOpen === ev.id ? null : ev.id) }] : []),
                       ...(isAdmin ? [{ id: 'spend', icon: '💰', label: 'Ad spend', onTap: () => setSpendOpen(spendOpen === ev.id ? null : ev.id) }] : []),
                       { id: 'notes',   icon: '📝', label: 'Notes',      onTap: () => setNotesEvent(ev) },
                       { id: 'pdf',     icon: '⤓',  label: 'Download PDF', onTap: () => downloadPdf(ev) },
