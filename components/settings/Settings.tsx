@@ -322,6 +322,9 @@ export default function Settings() {
         </div>
       </div>
 
+      {/* Active brand — synced across devices */}
+      {user?.liberty_access && <ActiveBrandNote />}
+
       {/* Mobile center button — visible to everyone since it's a per-user UI pref */}
       <CenterButtonSetting />
 
@@ -659,6 +662,30 @@ function CenterButtonSetting() {
             </label>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+/* ── ACTIVE BRAND NOTE (synced across devices) ── */
+function ActiveBrandNote() {
+  const { brand } = useApp()
+  const label = brand === 'liberty' ? 'Liberty' : 'Beneficial'
+  const accent = brand === 'liberty' ? '#3B82F6' : '#1D6B44'
+  return (
+    <div className="card" style={{ marginTop: 18, borderTop: `4px solid ${accent}` }}>
+      <div className="card-title">Active brand</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6 }}>
+        <span style={{
+          fontSize: 12, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase',
+          padding: '6px 12px', borderRadius: 999, background: accent, color: '#fff',
+        }}>{label}</span>
+        <span style={{ fontSize: 12, color: 'var(--mist)' }}>
+          Switch from the sidebar (or top of mobile menu).
+        </span>
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 10 }}>
+        🔗 This selection is synced across all your devices — when you switch on one device the others follow on next load.
       </div>
     </div>
   )
