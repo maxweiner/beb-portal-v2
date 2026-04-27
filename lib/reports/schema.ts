@@ -174,60 +174,6 @@ export const SOURCES: Record<string, SourceDef> = {
       { key: 'owner_phone', label: 'Owner phone', type: 'text' },
     ],
   },
-  marketing_payments: {
-    table: 'marketing_payments',
-    label: 'Marketing payments',
-    // Not brand-scoped at the column level (no brand col on the table) —
-    // the run-time scoping uses store_id ∈ active brand's stores. The
-    // runner falls back to brand=null behavior here; v1 reports that
-    // need brand isolation should add a Store filter.
-    columns: [
-      { key: 'id', label: 'ID', type: 'text' },
-      { key: 'paid_at', label: 'Paid at', type: 'date' },
-      { key: 'vendor', label: 'Vendor', type: 'text' },
-      { key: 'amount', label: 'Amount', type: 'number' },
-      { key: 'quantity', label: 'Quantity', type: 'number' },
-      { key: 'invoice_number', label: 'Invoice #', type: 'text' },
-      { key: 'notes', label: 'Notes', type: 'text' },
-      { key: 'created_at', label: 'Created at', type: 'datetime' },
-    ],
-    related: [
-      {
-        key: 'events', label: 'Event',
-        columns: [
-          { key: 'events(store_name)', label: 'Event store', type: 'text' },
-          { key: 'events(start_date)', label: 'Event start', type: 'date' },
-        ],
-      },
-      {
-        key: 'stores', label: 'Store',
-        columns: [
-          { key: 'stores(name)', label: 'Store name', type: 'text' },
-          { key: 'stores(city)', label: 'Store city', type: 'text' },
-          { key: 'stores(state)', label: 'Store state', type: 'text' },
-        ],
-      },
-      {
-        key: 'marketing_payment_types', label: 'Type',
-        columns: [
-          { key: 'marketing_payment_types(label)', label: 'Type', type: 'text' },
-        ],
-      },
-      {
-        key: 'marketing_payment_methods', label: 'Method',
-        columns: [
-          { key: 'marketing_payment_methods(label)', label: 'Payment method', type: 'text' },
-        ],
-      },
-      {
-        key: 'qr_codes', label: 'QR code',
-        columns: [
-          { key: 'qr_codes(label)', label: 'QR label', type: 'text' },
-          { key: 'qr_codes(lead_source)', label: 'QR source', type: 'text' },
-        ],
-      },
-    ],
-  },
 }
 
 /** All columns (own + related) for a given source, flattened for the column picker. */
