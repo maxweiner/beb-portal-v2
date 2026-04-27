@@ -19,7 +19,6 @@ import Calendar from '@/components/calendar/Calendar'
 import AppointmentsAdmin from '@/components/appointments-admin/AppointmentsAdmin'
 import { RoleGuard } from '@/components/ui/RoleGuard'
 import LibertyAdminPanel from '@/components/admin/LibertyAdminPanel'
-import ReportRecipients from '@/components/admin/ReportRecipients'
 import NotificationTemplatesAdmin from '@/components/admin/NotificationTemplatesAdmin'
 import DataResearch from '@/components/admin/DataResearch'
 import { useState, useEffect } from 'react'
@@ -145,11 +144,6 @@ export default function Home() {
         {nav === 'stores' && (
           <RoleGuard roles={['admin', 'superadmin']}>
             <Stores />
-          </RoleGuard>
-        )}
-        {nav === 'recipients' && (
-          <RoleGuard roles={['superadmin']}>
-            <ReportRecipients />
           </RoleGuard>
         )}
         {nav === 'notification-templates' && (
