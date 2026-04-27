@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useApp } from '@/lib/context'
 import type { NavPage } from '@/app/page'
+import { leaderboardBuyers } from '@/lib/leaderboard'
 
 /** Current-year past/current events where `buyerId` is in the workers array. */
 function getBuyerEventsThisYear(buyerId: string, allEvents: any[]): any[] {
@@ -155,7 +156,9 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
   ]
 
   const fmt = (n: number) => `$${Math.round(n).toLocaleString()}`
-  const buyers = users.filter(u => u.active && u.is_buyer !== false)
+  // Roster = active buyers assigned to at least one current-year event in
+  // the active brand. Brand-scoping happens upstream via context.events.
+  const buyers = leaderboardBuyers(users, events)
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
