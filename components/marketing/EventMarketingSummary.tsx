@@ -5,9 +5,9 @@
 // cost-per-scan + cost-per-appointment + per-QR ROI for the event,
 // plus a compact list of all payments.
 //
-// PR D will retire events.spend_vdp/newspaper/postcard once this is
-// proven; for now we just show payments-driven numbers alongside the
-// existing Ad Spend panel.
+// As of PR D, events.spend_vdp/newspaper/postcard are gone — this is
+// the only home for ad-spend numbers. spend_spiffs stays on events
+// and is shown separately by the small Spiffs panel.
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
