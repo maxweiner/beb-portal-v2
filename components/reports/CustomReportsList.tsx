@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import CustomReportBuilder from './CustomReportBuilder'
+import CustomReportRunner from './CustomReportRunner'
 
 interface ReportRow {
   id: string
@@ -53,7 +54,11 @@ export default function CustomReportsList() {
     }
     sync()
     window.addEventListener('popstate', sync)
-    return () => window.removeEventListener('popstate', sync)
+    window.addEventListener('beb:cr-route-changed', sync as EventListener)
+    return () => {
+      window.removeEventListener('popstate', sync)
+      window.removeEventListener('beb:cr-route-changed', sync as EventListener)
+    }
   }, [])
   const closeBuilder = () => {
     if (typeof window === 'undefined') return
@@ -108,6 +113,10 @@ export default function CustomReportsList() {
       if (error) { alert('Pin failed: ' + error.message); return }
       setPins(p => new Set(p).add(reportId))
     }
+    // Notify Sidebar to re-render its pinned list.
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('beb:pins-changed'))
+    }
   }
 
   const deleteReport = async (r: ReportRow) => {
@@ -124,10 +133,7 @@ export default function CustomReportsList() {
     window.history.pushState({}, '', u.toString())
     setRoute({ id: params.cr, edit: params.edit === '1' || params.cr === 'new' })
   }
-  const openRunner = (id: string) => {
-    navigateToParam({ cr: id })
-    alert('Runner ships in PR C — for now this just sets the URL param.')
-  }
+  const openRunner = (id: string) => navigateToParam({ cr: id })
   const openEditor = (id: string) => navigateToParam({ cr: id, edit: '1' })
   const openNew = () => navigateToParam({ cr: 'new', edit: '1' })
 
@@ -146,7 +152,33 @@ export default function CustomReportsList() {
       <CustomReportBuilder
         reportId={route.id === 'new' ? null : route.id}
         onCancel={closeBuilder}
-        onSaved={() => closeBuilder()}
+        onSaved={(id) => {
+          // After save → land on the runner for the saved report.
+          if (typeof window === 'undefined') return
+          const u = new URL(window.location.href)
+          u.searchParams.set('cr', id)
+          u.searchParams.delete('edit')
+          window.history.pushState({}, '', u.toString())
+          setRoute({ id, edit: false })
+          reload()
+        }}
+      />
+    )
+  }
+
+  // Runner view (?cr=ID without edit=1)
+  if (route && route.id !== 'new') {
+    return (
+      <CustomReportRunner
+        reportId={route.id}
+        onBack={closeBuilder}
+        onEdit={() => {
+          if (typeof window === 'undefined') return
+          const u = new URL(window.location.href)
+          u.searchParams.set('edit', '1')
+          window.history.pushState({}, '', u.toString())
+          setRoute({ id: route.id, edit: true })
+        }}
       />
     )
   }

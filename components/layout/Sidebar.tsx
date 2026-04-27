@@ -7,6 +7,8 @@ import type { NavPage } from '@/app/page'
 
 const COLLAPSE_KEY = 'beb-sidebar-collapsed'
 
+interface PinnedReport { id: string; name: string }
+
 const ICONS: Record<string, JSX.Element> = {
   dashboard: <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="1" width="6" height="6" rx="1" fill="currentColor" opacity=".9"/><rect x="9" y="1" width="6" height="6" rx="1" fill="currentColor" opacity=".9"/><rect x="1" y="9" width="6" height="6" rx="1" fill="currentColor" opacity=".9"/><rect x="9" y="9" width="6" height="6" rx="1" fill="currentColor" opacity=".9"/></svg>,
   calendar:  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="3" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M1 7h14" stroke="currentColor" strokeWidth="1.5"/><path d="M5 1v4M11 1v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>,
@@ -109,6 +111,39 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
     })
   }
 
+  // Pinned custom reports — sub-items below the Reports nav.
+  const [pinnedReports, setPinnedReports] = useState<PinnedReport[]>([])
+  useEffect(() => {
+    if (!user || !isAdmin) return
+    let cancelled = false
+    const load = async () => {
+      const { data: pins } = await supabase.from('custom_report_pins')
+        .select('report_id, custom_reports(id, name)')
+        .eq('user_id', user.id).order('pinned_at', { ascending: false })
+      if (cancelled) return
+      const items: PinnedReport[] = ((pins || []) as any[])
+        .map(p => p.custom_reports)
+        .filter(Boolean)
+        .map(r => ({ id: r.id, name: r.name }))
+      setPinnedReports(items)
+    }
+    load()
+    const onChange = () => load()
+    window.addEventListener('beb:pins-changed', onChange)
+    return () => { cancelled = true; window.removeEventListener('beb:pins-changed', onChange) }
+  }, [user?.id, isAdmin])
+
+  const openPinnedReport = (id: string) => {
+    setNav('reports')
+    if (typeof window !== 'undefined') {
+      const u = new URL(window.location.href)
+      u.searchParams.set('cr', id)
+      u.searchParams.delete('edit')
+      window.history.pushState({}, '', u.toString())
+      window.dispatchEvent(new CustomEvent('beb:cr-route-changed'))
+    }
+  }
+
   return (
     <aside className="sidebar">
       {/* Brand Switcher — only for liberty-enabled users */}
@@ -179,13 +214,34 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
             if (item.adminOnly && !isAdmin) return null
             if (item.superadminOnly && !isSuperadmin) return null
             if (currentSection && !currentOpen) return null
-            return (
+            const navBtn = (
               <button key={item.id} onClick={() => setNav(item.id!)}
                 className={`nav-item${nav === item.id ? ' active' : ''}`}>
                 <span className="ni-icon">{ICONS[item.iconKey!]}</span>
                 {item.label}
               </button>
             )
+            // Render pinned custom reports as sub-items right below "Reports".
+            if (item.id === 'reports' && pinnedReports.length > 0) {
+              return (
+                <div key={item.id}>
+                  {navBtn}
+                  {pinnedReports.map(p => (
+                    <button key={p.id} onClick={() => openPinnedReport(p.id)}
+                      className="nav-item"
+                      style={{
+                        paddingLeft: 36, fontSize: 12,
+                        color: 'rgba(255,255,255,.7)', fontWeight: 600,
+                      }}
+                      title={p.name}>
+                      <span style={{ marginRight: 6 }}>★</span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )
+            }
+            return navBtn
           })
         })()}
       </nav>
