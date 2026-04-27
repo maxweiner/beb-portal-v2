@@ -60,6 +60,10 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   const [newEvent, setNewEvent] = useState({ store_id: '', start_date: '' })
   const [saving, setSaving] = useState(false)
   const [workersOpen, setWorkersOpen] = useState<string | null>(null)
+  // Force-include the most recently created event in the filtered list
+  // (and auto-expand it) regardless of the active filter, so the user
+  // can immediately add buyers. Cleared when they change filter/search.
+  const [justCreatedEventId, setJustCreatedEventId] = useState<string | null>(null)
   const [spendOpen, setSpendOpen] = useState<string | null>(null)
   const [detail, setDetail] = useState<Event | null>(null)
   const [notesEvent, setNotesEvent] = useState<Event | null>(null)
@@ -148,6 +152,9 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   /* ── Filter & sort events ── */
   const filtered = events.filter(ev => {
     if (!ev.start_date) return false
+    // Just-created event is always shown so the user can immediately
+    // add buyers — even if the active filter would otherwise hide it.
+    if (justCreatedEventId && ev.id === justCreatedEventId) return true
     if (search) {
       const s = search.toLowerCase()
       const store = stores.find(st => st.id === ev.store_id)
@@ -232,6 +239,19 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
         const mapped = freshEvents.map((ev: any) => ({ ...ev, days: ev.days || [] }))
         setEvents(mapped)
         setContextEvents(mapped)
+      }
+
+      // Pin the new event into the visible list, expand it, open the
+      // workers picker, and scroll it into view so the user lands on
+      // the buyer-add screen.
+      if (data?.id) {
+        setJustCreatedEventId(data.id)
+        setExpandedCards(prev => new Set(prev).add(data.id))
+        setWorkersOpen(data.id)
+        setTimeout(() => {
+          const el = document.getElementById(`event-card-${data.id}`)
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 50)
       }
     } catch (err: any) {
       alert('Error creating event: ' + (err?.message || 'unknown'))
@@ -357,9 +377,9 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
           Events <span className="text-base font-normal" style={{ color: 'var(--fog)' }}>({filtered.length} of {events.length})</span>
         </h1>
         <div className="flex gap-2 flex-wrap">
-          <input value={search} onChange={e => setSearch(e.target.value)}
+          <input value={search} onChange={e => { setSearch(e.target.value); setJustCreatedEventId(null) }}
             placeholder="Search stores…" style={{ width: 160 }} />
-          <select value={filter} onChange={e => setFilter(e.target.value as Filter)} style={{ width: 'auto' }}>
+          <select value={filter} onChange={e => { setFilter(e.target.value as Filter); setJustCreatedEventId(null) }} style={{ width: 'auto' }}>
             <option value="thisweek">This Week</option>
             <option value="active">Current & Upcoming</option>
             <option value="all">All Events</option>
@@ -428,7 +448,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
             const AVATAR_COLORS = ['#1D6B44', '#166038', '#14532d', '#0F4A28']
 
             return (
-              <div key={ev.id} style={{
+              <div key={ev.id} id={`event-card-${ev.id}`} style={{
                 background: 'var(--card-bg)',
                 border: '1px solid var(--pearl)',
                 borderRadius: 10,
@@ -631,7 +651,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
           const noteCount = noteCounts[ev.id] || 0
 
           return (
-            <div key={ev.id} style={{
+            <div key={ev.id} id={`event-card-${ev.id}`} style={{
               background: 'var(--card-bg)',
               border: '1.5px solid var(--pearl)',
               borderRadius: 16,
