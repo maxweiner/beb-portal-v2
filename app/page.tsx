@@ -14,6 +14,7 @@ import Settings from '@/components/settings/Settings'
 import Staff from '@/components/staff/Staff'
 import Schedule from '@/components/schedule/Schedule'
 import Travel from '@/components/travel/Travel'
+import Expenses from '@/components/expenses/Expenses'
 import Marketing from '@/components/marketing/Marketing'
 import Calendar from '@/components/calendar/Calendar'
 import AppointmentsAdmin from '@/components/appointments-admin/AppointmentsAdmin'
@@ -30,7 +31,7 @@ import MobileStaff from '@/components/mobile/MobileStaff'
 import BrandSwitchOverlay from '@/components/layout/BrandSwitchOverlay'
 import { shouldUseMobile, setMobilePreference } from '@/lib/mobile'
 
-export type NavPage = 'dashboard' | 'calendar' | 'events' | 'schedule' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'libertyadmin' | 'recipients' | 'notification-templates' | 'data-research'
+export type NavPage = 'dashboard' | 'calendar' | 'events' | 'schedule' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'libertyadmin' | 'recipients' | 'notification-templates' | 'data-research' | 'expenses'
 
 export default function Home() {
   const { user, loading, connectionError, reload } = useApp()
@@ -98,6 +99,7 @@ export default function Home() {
           {nav === 'staff'     && <MobileStaff />}
           {nav === 'shipping'  && <Shipping />}
           {nav === 'reports'   && <Reports />}
+          {nav === 'expenses'  && <Expenses />}
           {nav === 'marketing' && <Marketing />}
           {nav === 'settings'  && <Settings />}
           {nav === 'admin'     && <RoleGuard roles={["admin", "superadmin"]}><AdminPanel /></RoleGuard>}
@@ -126,6 +128,7 @@ export default function Home() {
         {nav === 'dayentry'   && <DayEntry />}
         {nav === 'shipping'   && <Shipping />}
         {nav === 'reports'    && <Reports />}
+        {nav === 'expenses'   && <Expenses />}
         {nav === 'settings'   && <Settings />}
         {nav === 'staff'      && <Staff />}
         {nav === 'schedule'   && <Schedule />}
