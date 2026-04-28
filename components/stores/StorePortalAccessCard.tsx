@@ -18,20 +18,24 @@ interface StorePortalToken {
 
 export default function StorePortalAccessCard({ storeId }: { storeId: string }) {
   const [portalToken, setPortalToken] = useState<StorePortalToken | null>(null)
+  const [storeImageUrl, setStoreImageUrl] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     let cancelled = false
-    supabase.from('store_portal_tokens')
-      .select('id, token, active')
-      .eq('store_id', storeId)
-      .eq('active', true)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (cancelled) return
-        setPortalToken(data || null)
-        setLoaded(true)
-      })
+    Promise.all([
+      supabase.from('store_portal_tokens')
+        .select('id, token, active')
+        .eq('store_id', storeId)
+        .eq('active', true)
+        .maybeSingle(),
+      supabase.from('stores').select('store_image_url').eq('id', storeId).maybeSingle(),
+    ]).then(([tokRes, storeRes]) => {
+      if (cancelled) return
+      setPortalToken((tokRes.data as StorePortalToken | null) || null)
+      setStoreImageUrl((storeRes.data as { store_image_url?: string } | null)?.store_image_url || null)
+      setLoaded(true)
+    })
     return () => { cancelled = true }
   }, [storeId])
 
@@ -76,7 +80,18 @@ export default function StorePortalAccessCard({ storeId }: { storeId: string }) 
           borderRadius: 'var(--r)', marginBottom: 8,
         }}>
           <div style={{ background: 'white', padding: 4, borderRadius: 6 }}>
-            <QRCodeSVG value={portalUrl} size={88} includeMargin={false} />
+            <QRCodeSVG
+              value={portalUrl}
+              size={88}
+              includeMargin={false}
+              level="H"
+              imageSettings={storeImageUrl ? {
+                src: storeImageUrl,
+                height: 88 * 0.22,
+                width: 88 * 0.22,
+                excavate: true,
+              } : undefined}
+            />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ash)', marginBottom: 2 }}>

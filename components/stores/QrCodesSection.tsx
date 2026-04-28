@@ -27,6 +27,7 @@ interface AppointmentEmployee {
 interface StoreLite {
   id: string
   name: string
+  store_image_url?: string | null
 }
 
 const DEFAULT_HEAR_ABOUT = [
@@ -101,7 +102,7 @@ export default function QrCodesSection({
         .eq('store_id', storeId)
         .maybeSingle(),
       supabase.from('stores')
-        .select('id, name')
+        .select('id, name, store_image_url')
         .eq('active', true)
         .order('name'),
     ])
@@ -513,9 +514,14 @@ function QrCard({
   const employeeName = qr.appointment_employee_id
     ? employees.find(e => e.id === qr.appointment_employee_id)?.name
     : null
-  const storeName = qr.store_id
-    ? allStores.find(s => s.id === qr.store_id)?.name
+  const linkedStore = qr.store_id
+    ? allStores.find(s => s.id === qr.store_id)
     : null
+  const storeName = linkedStore?.name || null
+  // Logo to overlay in the QR center. NULL → no overlay, just a plain QR.
+  // Stored as a data URL on stores.store_image_url so it's safe to embed
+  // in the SVG/canvas downloads without CORS taint.
+  const logoUrl = linkedStore?.store_image_url || null
 
   // ---- helpers ----
   // Wrap label into lines that fit a given pixel width with a measuring ctx.
@@ -644,7 +650,19 @@ function QrCard({
       borderRadius: 'var(--r)',
     }}>
       <div style={{ background: 'white', padding: 4, borderRadius: 6, flexShrink: 0 }}>
-        <QRCodeSVG id={`qr-svg-${qr.id}`} value={url} size={88} includeMargin={false} />
+        <QRCodeSVG
+          id={`qr-svg-${qr.id}`}
+          value={url}
+          size={88}
+          includeMargin={false}
+          level="H"
+          imageSettings={logoUrl ? {
+            src: logoUrl,
+            height: 88 * 0.22,
+            width: 88 * 0.22,
+            excavate: true,
+          } : undefined}
+        />
       </div>
 
       <div style={{ flex: 1, minWidth: 0 }}>
