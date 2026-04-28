@@ -149,18 +149,24 @@ export async function POST(req: Request) {
   if (slot.available <= 0) return bad('That slot is full', 409)
 
   // QR attribution: re-derive authoritative fields server-side so a
-  // tampered qr_code_id can't claim arbitrary spiff credit.
+  // tampered qr_code_id can't claim arbitrary spiff credit or fake a
+  // lead source. The customer flow never asks "how heard", so when a
+  // channel/custom QR is the entry point we use its label as the
+  // canonical how_heard for reporting.
   let resolvedQrCodeId: string | null = null
   let qrEmployeeId: string | null = null
+  let qrHowHeard: string[] | null = null
   if (qr_code_id) {
     const { data: qr } = await sb
       .from('qr_codes')
-      .select('id, store_id, type, appointment_employee_id')
+      .select('id, store_id, type, appointment_employee_id, lead_source, custom_label')
       .eq('id', qr_code_id)
       .maybeSingle()
     if (qr && qr.store_id === store.id) {
       resolvedQrCodeId = qr.id
       if (qr.type === 'employee') qrEmployeeId = qr.appointment_employee_id
+      if (qr.type === 'channel' && qr.lead_source) qrHowHeard = [qr.lead_source]
+      if (qr.type === 'custom' && qr.custom_label) qrHowHeard = [qr.custom_label]
     }
   }
 
@@ -179,7 +185,7 @@ export async function POST(req: Request) {
       customer_phone: customer_phone.trim(),
       customer_email: customer_email.trim(),
       items_bringing,
-      how_heard: how_heard ?? null,
+      how_heard: qrHowHeard ?? how_heard ?? null,
       booked_by: validBookedBy,
       // Employee-portal explicit value wins; fall back to QR-derived employee.
       appointment_employee_id: appointment_employee_id || qrEmployeeId || null,
