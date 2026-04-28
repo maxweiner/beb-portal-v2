@@ -7,7 +7,6 @@ import type { MockBookingPayload } from '@/lib/appointments/mockData'
 import type { Slot } from '@/lib/appointments/types'
 import PhoneInput from '@/components/ui/PhoneInput'
 import { formatPhoneDisplay } from '@/lib/phone'
-import AppointmentForm from '@/components/booking/AppointmentForm'
 
 // ---------- helpers ----------
 
@@ -229,10 +228,6 @@ export default function BookingClient({
   const [openIdx, setOpenIdx] = useState(0)
   const [selectedDayIdx, setSelectedDayIdx] = useState<number | null>(null)
   const [selectedTime, setSelectedTime] = useState<string | null>(null)
-  // Captured by AppointmentForm.onSuccess so the success page can show
-  // exactly what was just booked.
-  const [bookedDate, setBookedDate] = useState<string | null>(null)
-  const [bookedTime, setBookedTime] = useState<string | null>(null)
 
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
@@ -393,8 +388,8 @@ export default function BookingClient({
               {isReschedule ? 'Rescheduled!' : "You're booked!"}
             </h2>
             <p className="text-gray-700 mb-2">
-              We'll see you on <strong>{bookedDate && formatDateLong(bookedDate)}</strong> at{' '}
-              <strong>{bookedTime && formatTime(bookedTime)}</strong>.
+              We'll see you on <strong>{selectedDay && formatDateLong(selectedDay.dateStr)}</strong> at{' '}
+              <strong>{selectedTime && formatTime(selectedTime)}</strong>.
             </p>
             <p className="text-sm text-gray-500 mt-4">
               {isMock
@@ -482,38 +477,248 @@ export default function BookingClient({
           </div>
         )}
 
-        <AppointmentForm
-          mode="public"
-          store={store}
-          event={event}
-          config={config}
-          override={override ?? null}
-          bookings={bookings}
-          blocks={blocks}
-          slug={slug}
-          bookedBy="customer"
-          lockedHowHeard={qrAttribution?.pre_fill_how_heard ?? null}
-          qrCodeId={qrAttribution?.qr_code_id ?? null}
-          isReschedule={isReschedule}
-          rescheduleToken={isReschedule ? rescheduling!.token : null}
-          isMock={isMock}
-          onSuccess={({ appointmentDate, appointmentTime }) => {
-            setBookedDate(appointmentDate)
-            setBookedTime(appointmentTime)
-            setSubmitState('done')
-          }}
-        />
+        {/* Accordion day picker */}
+        <section>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            {isReschedule ? 'Pick a new day and time' : 'Pick a day and time'}
+          </label>
+          <div className="space-y-2">
+            {dayInfos.map((di, idx) => {
+              const isOpen = idx === openIdx
+              return (
+                <div
+                  key={di.dateStr}
+                  className={`border-2 rounded-xl overflow-hidden bg-white transition-colors ${
+                    isOpen ? 'border-yellow-400' : 'border-gray-200'
+                  }`}
+                >
+                  <button
+                    onClick={() => setOpenIdx(isOpen ? -1 : idx)}
+                    className="w-full flex items-center justify-between px-4 py-3 transition-colors"
+                    style={
+                      isOpen
+                        ? { background: primary + '14', color: primary }
+                        : { background: 'white', color: '#1f2937' }
+                    }
+                  >
+                    <div className="text-left">
+                      <div className="text-xs font-semibold uppercase tracking-wide opacity-70">
+                        Day {di.dayNumber}
+                      </div>
+                      <div className="text-base font-bold mt-0.5">{formatDateLong(di.dateStr)}</div>
+                    </div>
+                    {isOpen
+                      ? <ChevronDown className="w-5 h-5" />
+                      : <ChevronRight className="w-5 h-5" />}
+                  </button>
+                  {isOpen && (
+                    <AccordionDayBody
+                      day={di}
+                      primary={primary}
+                      config={config}
+                      override={override}
+                      bookings={bookings}
+                      blocks={blocks}
+                      selectedTime={selectedDayIdx === idx ? selectedTime : null}
+                      onSelect={t => { setSelectedTime(t); setSelectedDayIdx(idx) }}
+                    />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </section>
 
-        {isReschedule && (
-          <a
-            href={`/book/manage/${rescheduling!.token}`}
-            className="block text-center text-sm underline"
-            style={{ color: primary }}
-          >
-            Cancel reschedule (keep current time)
-          </a>
+        {/* Reschedule confirm card */}
+        {isReschedule && selectedDay && selectedTime && (
+          <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow p-5 space-y-3">
+            <h2 className="font-semibold text-lg" style={{ color: primary }}>
+              Confirm new time
+            </h2>
+            <p className="text-sm text-gray-700">
+              <strong>{formatDateLong(selectedDay.dateStr)}</strong> at{' '}
+              <strong>{formatTime(selectedTime)}</strong>
+            </p>
+            {submitError && (
+              <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
+                {submitError}
+              </div>
+            )}
+            <button
+              type="submit"
+              disabled={!canSubmit || submitState === 'submitting'}
+              className="w-full rounded-lg p-3 text-white font-semibold disabled:opacity-50"
+              style={{ background: primary }}
+            >
+              {submitState === 'submitting' ? 'Rescheduling…' : 'Confirm reschedule'}
+            </button>
+            <a
+              href={`/book/manage/${rescheduling!.token}`}
+              className="block text-center text-sm underline"
+              style={{ color: primary }}
+            >
+              Cancel reschedule (keep current time)
+            </a>
+          </form>
         )}
 
+        {/* Booking form (only after slot selected, and not in reschedule mode) */}
+        {!isReschedule && selectedDay && selectedTime && (
+          <form ref={formRef} onSubmit={handleSubmit} className="bg-white rounded-2xl shadow p-5 space-y-4 scroll-mt-4">
+            <h2 className="font-semibold text-lg" style={{ color: primary }}>
+              Your details
+            </h2>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+              <input
+                type="text"
+                required
+                className="w-full rounded-lg border border-gray-300 p-3"
+                value={name}
+                onChange={e => setName(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+              <PhoneInput
+                required
+                className="w-full rounded-lg border border-gray-300 p-3"
+                value={phone}
+                onChange={v => setPhone(v)}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <input
+                type="email"
+                required
+                className="w-full rounded-lg border border-gray-300 p-3"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                What are you bringing?
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {config.items_options.map(opt => {
+                  const checked = items.includes(opt)
+                  return (
+                    <label
+                      key={opt}
+                      className="flex items-center gap-2 p-2 rounded-lg border text-sm cursor-pointer transition-colors"
+                      style={
+                        checked
+                          ? { borderColor: primary, background: primary + '14' }
+                          : { borderColor: '#d1d5db' }
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleItem(opt)}
+                        className="absolute opacity-0 w-0 h-0 pointer-events-none"
+                      />
+                      <span
+                        aria-hidden="true"
+                        className="flex items-center justify-center text-white font-black leading-none transition-colors shrink-0"
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: 5,
+                          border: `2px solid ${checked ? primary : '#d1d5db'}`,
+                          background: checked ? primary : '#FFFFFF',
+                          fontSize: 14,
+                        }}
+                      >
+                        {checked ? '✓' : ''}
+                      </span>
+                      <span>{opt}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                How did you hear about us?
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {config.hear_about_options.map(opt => {
+                  const checked = howHeard.includes(opt)
+                  const isLocked = opt === lockedSource
+                  return (
+                    <label
+                      key={opt}
+                      className={`flex items-center gap-2 p-2 rounded-lg border text-sm transition-colors ${
+                        isLocked ? 'cursor-not-allowed' : 'cursor-pointer'
+                      }`}
+                      style={
+                        checked
+                          ? { borderColor: primary, background: primary + '14' }
+                          : { borderColor: '#d1d5db' }
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={isLocked}
+                        onChange={() => toggleHowHeard(opt)}
+                        className="absolute opacity-0 w-0 h-0 pointer-events-none"
+                      />
+                      <span
+                        aria-hidden="true"
+                        className="flex items-center justify-center text-white font-black leading-none transition-colors shrink-0"
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: 5,
+                          border: `2px solid ${checked ? primary : '#d1d5db'}`,
+                          background: checked ? primary : '#FFFFFF',
+                          fontSize: 14,
+                          opacity: isLocked ? 0.7 : 1,
+                        }}
+                      >
+                        {checked ? '✓' : ''}
+                      </span>
+                      <span style={isLocked ? { color: '#6b7280' } : undefined}>
+                        {opt}
+                        {isLocked && <span className="ml-1 text-[10px] uppercase tracking-wide font-bold">locked</span>}
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+              {lockedSource && (
+                <p className="text-[11px] text-gray-500 mt-2">
+                  We pre-selected the source you came from — you can add more if applicable.
+                </p>
+              )}
+            </div>
+
+            {submitError && (
+              <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
+                {submitError}
+              </div>
+            )}
+            <button
+              type="submit"
+              disabled={!canSubmit || submitState === 'submitting'}
+              className="w-full rounded-lg p-3 text-white font-semibold disabled:opacity-50"
+              style={{ background: primary }}
+            >
+              {submitState === 'submitting'
+                ? 'Booking…'
+                : `Book ${formatDateShort(selectedDay.dateStr)} at ${formatTime(selectedTime)}`}
+            </button>
+          </form>
+        )}
       </main>
     </div>
   )
