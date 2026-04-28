@@ -584,6 +584,31 @@ export default function MobileDayEntry() {
           <FieldRow label="$ @ 5% Commission" value={fivePct} onChange={setFivePct} money last />
         </div>
 
+        {(selectedEvent?.workers || []).length > 0 && (
+          <div style={cardStyle}>
+            <SectionLabel>Purchases by Buyer</SectionLabel>
+            {(selectedEvent?.workers || []).map((w: any, i: number, arr: any[]) => {
+              const isLead = i === 0
+              return (
+                <FieldRow
+                  key={w.id}
+                  label={
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      {w.name}
+                      {isLead && (
+                        <span style={{ fontSize: 9, fontWeight: 800, color: '#fff', background: 'var(--green)', padding: '2px 6px', borderRadius: 8, letterSpacing: '.04em' }}>⭐ LEAD</span>
+                      )}
+                    </span>
+                  }
+                  value={purchasesByBuyer[w.id] ?? ''}
+                  onChange={v => setPurchasesByBuyer(p => ({ ...p, [w.id]: v }))}
+                  last={i === arr.length - 1}
+                />
+              )
+            })}
+          </div>
+        )}
+
         {touched && (
           <div style={{ ...cardStyle, background: 'var(--green-pale)', borderColor: 'var(--green3)' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
@@ -600,19 +625,6 @@ export default function MobileDayEntry() {
           overflow: 'hidden',
           transition: 'max-height .4s ease, opacity .25s ease',
         }}>
-          {(selectedEvent?.workers || []).length > 0 && (
-            <div style={cardStyle}>
-              <SectionLabel>Purchases by Buyer</SectionLabel>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                {(selectedEvent?.workers || []).map((w: any) => (
-                  <MiniField key={w.id} label={w.name}
-                    value={purchasesByBuyer[w.id] ?? ''}
-                    onChange={v => setPurchasesByBuyer(p => ({ ...p, [w.id]: v }))} />
-                ))}
-              </div>
-            </div>
-          )}
-
           <div style={cardStyle}>
             <SectionLabel>Lead Sources</SectionLabel>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -839,7 +851,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 function FieldRow({ label, value, onChange, money, required, last }: {
-  label: string; value: string; onChange: (v: string) => void
+  label: React.ReactNode; value: string; onChange: (v: string) => void
   money?: boolean; required?: boolean; last?: boolean
 }) {
   return (
@@ -889,7 +901,7 @@ function MiniField({ label, value, onChange }: { label: string; value: string; o
           width: '100%', minHeight: 44, padding: '0 10px',
           fontSize: 18, fontWeight: 700,
           borderRadius: 10, border: '1.5px solid var(--pearl)',
-          background: '#FFFFFF', color: 'var(--ink)',
+          background: 'var(--cream)', color: 'var(--ink)',
           outline: 'none', fontFamily: 'inherit',
         }} />
     </div>
