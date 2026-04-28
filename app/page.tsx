@@ -15,6 +15,7 @@ import Staff from '@/components/staff/Staff'
 import Schedule from '@/components/schedule/Schedule'
 import Travel from '@/components/travel/Travel'
 import Expenses from '@/components/expenses/Expenses'
+import PendingApprovalsModal from '@/components/expenses/PendingApprovalsModal'
 import Marketing from '@/components/marketing/Marketing'
 import Calendar from '@/components/calendar/Calendar'
 import AppointmentsAdmin from '@/components/appointments-admin/AppointmentsAdmin'
@@ -89,6 +90,10 @@ export default function Home() {
       <>
         <ConnectionBanner />
         <BrandSwitchOverlay />
+        <PendingApprovalsModal onOpen={(id) => {
+          setNav('expenses')
+          setTimeout(() => window.dispatchEvent(new CustomEvent('beb:open-expense-report', { detail: { reportId: id } })), 0)
+        }} />
         <MobileLayout nav={nav} setNav={setNav}>
           {nav === 'dashboard' && <MobileDashboard setNav={setNav} />}
           {nav === 'dayentry'  && <MobileDayEntry />}
@@ -121,6 +126,11 @@ export default function Home() {
         📱 Mobile
       </button>
       <Sidebar nav={nav} setNav={setNav} />
+      <PendingApprovalsModal onOpen={(id) => {
+        setNav('expenses')
+        // Defer so Expenses is mounted before we ask it to open a report.
+        setTimeout(() => window.dispatchEvent(new CustomEvent('beb:open-expense-report', { detail: { reportId: id } })), 0)
+      }} />
       <main className="flex-1 overflow-y-auto">
         {nav === 'dashboard'  && <Dashboard setNav={setNav} />}
         {nav === 'calendar'   && <AppointmentsAdmin key={navKey} />}

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { NavPage } from '@/app/page'
+import { usePendingApprovals } from '@/components/expenses/usePendingApprovals'
 
 const COLLAPSE_KEY = 'beb-sidebar-collapsed'
 
@@ -93,6 +94,7 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
   const NAV_ITEMS = isLiberty ? LIBERTY_NAV : BEB_NAV
 
   // Per-section collapse state, persisted to localStorage. Default = all open.
+  const { count: pendingApprovalCount } = usePendingApprovals()
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -215,11 +217,21 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
             if (item.adminOnly && !isAdmin) return null
             if (item.superadminOnly && !isSuperadmin) return null
             if (currentSection && !currentOpen) return null
+            const showExpensesBadge = item.id === 'expenses' && pendingApprovalCount > 0
             const navBtn = (
               <button key={item.id} onClick={() => setNav(item.id!)}
                 className={`nav-item${nav === item.id ? ' active' : ''}`}>
                 <span className="ni-icon">{ICONS[item.iconKey!]}</span>
-                {item.label}
+                <span style={{ flex: 1 }}>{item.label}</span>
+                {showExpensesBadge && (
+                  <span title={`${pendingApprovalCount} report(s) awaiting your review`}
+                    style={{
+                      background: '#DC2626', color: '#fff',
+                      borderRadius: 999, padding: '1px 7px',
+                      fontSize: 10, fontWeight: 800,
+                      minWidth: 18, textAlign: 'center',
+                    }}>{pendingApprovalCount}</span>
+                )}
               </button>
             )
             // Render pinned custom reports as sub-items right below "Reports".
