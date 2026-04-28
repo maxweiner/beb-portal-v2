@@ -86,11 +86,14 @@ export default function ExpenseReportDetail({
   useEffect(() => { load() /* eslint-disable-next-line */ }, [reportId])
 
   // Recompute totals + push to the report row. Cheap; runs after every
-  // expense add / edit / delete. Compensation = 0 until PR9.
+  // expense add / edit / delete. The DB also has a trigger that
+  // recomputes — this client write is belt-and-suspenders so the local
+  // state reflects the change immediately without a re-fetch.
   const recomputeTotals = useCallback(async (next: Expense[]) => {
     if (!report) return
     const totalExpenses = next.reduce((sum, e) => sum + Number(e.amount || 0), 0)
-    const grand = totalExpenses + Number(report.total_compensation || 0)
+    const comp = Number(report.comp_rate || 0)
+    const grand = totalExpenses + comp
     if (
       Number(report.total_expenses) === totalExpenses &&
       Number(report.grand_total) === grand
@@ -101,6 +104,27 @@ export default function ExpenseReportDetail({
     if (upErr) { setError(upErr.message); return }
     setReport(p => p ? { ...p, total_expenses: totalExpenses, grand_total: grand } : p)
   }, [report])
+
+  async function updateCompRate(newRate: number) {
+    if (!canMutate || !report) return
+    if (!Number.isFinite(newRate) || newRate < 0) return
+    if (Number(report.comp_rate) === newRate) return
+    setSaveState('saving'); setError(null)
+    const { error: upErr } = await supabase.from('expense_reports')
+      .update({ comp_rate: newRate })
+      .eq('id', report.id)
+    if (upErr) { setSaveState('error'); setError(upErr.message); return }
+    // The DB trigger updates total_compensation + grand_total; mirror
+    // those locally so the UI reflects the new grand total without a
+    // re-fetch.
+    setReport(p => p ? {
+      ...p,
+      comp_rate: newRate,
+      total_compensation: newRate,
+      grand_total: Number(p.total_expenses || 0) + newRate,
+    } : p)
+    flashSaved()
+  }
 
   async function addExpense(draft: NewExpenseDraft) {
     if (!canMutate || !report) return
@@ -318,23 +342,43 @@ export default function ExpenseReportDetail({
 
         <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {totalsByCategory.length === 0 ? (
-              <span style={{ color: 'var(--mist)', fontSize: 12, fontStyle: 'italic' }}>No expenses yet.</span>
-            ) : totalsByCategory.map(([cat, amt]) => (
-              <span key={cat} style={{
-                padding: '3px 9px', borderRadius: 6,
-                background: 'var(--cream2)', color: 'var(--ink)',
-                fontSize: 12, fontWeight: 700,
-              }}>
-                {categoryIcon(cat)} {categoryLabel(cat)} · {formatCurrency(amt)}
-              </span>
-            ))}
+            {totalsByCategory.length === 0 && Number(report.comp_rate || 0) === 0 ? (
+              <span style={{ color: 'var(--mist)', fontSize: 12, fontStyle: 'italic' }}>No expenses or compensation yet.</span>
+            ) : (
+              <>
+                {totalsByCategory.map(([cat, amt]) => (
+                  <span key={cat} style={{
+                    padding: '3px 9px', borderRadius: 6,
+                    background: 'var(--cream2)', color: 'var(--ink)',
+                    fontSize: 12, fontWeight: 700,
+                  }}>
+                    {categoryIcon(cat)} {categoryLabel(cat)} · {formatCurrency(amt)}
+                  </span>
+                ))}
+                {Number(report.comp_rate || 0) > 0 && (
+                  <span style={{
+                    padding: '3px 9px', borderRadius: 6,
+                    background: '#D1FAE5', color: '#065F46',
+                    fontSize: 12, fontWeight: 700,
+                  }}>
+                    💼 Compensation · {formatCurrency(report.comp_rate)}
+                  </span>
+                )}
+              </>
+            )}
           </div>
           <div style={{ fontWeight: 900, fontSize: 18, color: 'var(--ink)' }}>
             Grand total: {formatCurrency(report.grand_total)}
           </div>
         </div>
       </div>
+
+      {/* Compensation card (Option A — per-trip rate) */}
+      <CompensationCard
+        rate={Number(report.comp_rate || 0)}
+        canMutate={canMutate}
+        onSave={updateCompRate}
+      />
 
       {error && (
         <div style={{ padding: 10, marginBottom: 10, background: '#FEE2E2', color: '#991B1B', borderRadius: 6, fontSize: 13 }}>
@@ -668,4 +712,50 @@ function ExpenseRow({ expense, canMutate, onUpdate, onDelete }: {
 const lbl: React.CSSProperties = {
   display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
   letterSpacing: '.05em', color: 'var(--mist)', marginBottom: 4,
+}
+
+// ── Compensation card (Option A: per-trip rate) ──────────
+function CompensationCard({
+  rate, canMutate, onSave,
+}: {
+  rate: number
+  canMutate: boolean
+  onSave: (next: number) => Promise<void>
+}) {
+  const [local, setLocal] = useState<string>(String(rate))
+  // Keep in sync if the parent value changes (e.g. trigger-recompute, refresh).
+  useEffect(() => { setLocal(String(rate)) }, [rate])
+
+  function commit() {
+    if (!canMutate) return
+    const n = Number(local)
+    if (!Number.isFinite(n) || n < 0) {
+      setLocal(String(rate)); return
+    }
+    void onSave(n)
+  }
+
+  return (
+    <div className="card" style={{ padding: 12, marginBottom: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr minmax(160px, 200px)', gap: 12, alignItems: 'end' }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>
+            💼 Compensation (your time / event rate)
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--mist)' }}>
+            Per-trip rate. Defaults to your role's standard rate; edit before submitting.
+          </div>
+        </div>
+        <div>
+          <label style={lbl}>Amount</label>
+          <input type="number" step="0.01" min="0" value={local}
+            disabled={!canMutate}
+            onChange={e => setLocal(e.target.value)}
+            onBlur={commit}
+            onKeyDown={e => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur() }}
+            placeholder="0.00" />
+        </div>
+      </div>
+    </div>
+  )
 }
