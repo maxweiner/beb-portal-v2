@@ -20,6 +20,7 @@ import {
 } from './expensesUtils'
 import { broadcastExpenseStatusChanged } from './usePendingApprovals'
 import AddReceiptButton from './AddReceiptButton'
+import AddMileageButton from './AddMileageButton'
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -345,6 +346,13 @@ export default function ExpenseReportDetail({
       {canMutate && (
         <div style={{ marginBottom: 10 }}>
           <AddReceiptButton reportId={report.id} onAdded={load} />
+        </div>
+      )}
+
+      {/* Add Mileage — calculated from home → store → home */}
+      {canMutate && (
+        <div style={{ marginBottom: 10 }}>
+          <AddMileageButton reportId={report.id} onAdded={load} />
         </div>
       )}
 
