@@ -306,6 +306,34 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
     setContextEvents(updatedEvents)
   }
 
+  // Reorder workers so `uid` becomes index 0 (= the lead buyer).
+  // Lead is purely positional — workers[0] is the lead in every read path.
+  const setLeadWorker = async (ev: Event, uid: string) => {
+    const workers = ev.workers || []
+    const target = workers.find(w => w.id === uid)
+    if (!target || workers[0]?.id === uid) return
+    const updated = [target, ...workers.filter(w => w.id !== uid)]
+    try {
+      const res = await withTimeout(
+        fetch(`/api/events/${ev.id}/workers`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workers: updated }),
+        })
+      ) as Response
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.error || `HTTP ${res.status}`)
+      }
+    } catch (err: any) {
+      alert('Failed to update lead: ' + (err?.message || 'timeout'))
+      return
+    }
+    const updatedEvents = events.map(e => e.id === ev.id ? { ...e, workers: updated } : e)
+    setEvents(updatedEvents)
+    setContextEvents(updatedEvents)
+  }
+
   // Open the print-styled event recap in a new tab. The ?print=1 flag
   // injects a window.print() call so the browser's PDF dialog fires
   // automatically — same flow used by Reports → Event Recap.
@@ -585,19 +613,32 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
                           {(isAdmin ? buyers : buyers.filter(b => evWorkers.some((w: any) => w.id === b.id))).map(b => {
                             const on = evWorkers.some((w: any) => w.id === b.id)
+                            const isLead = on && evWorkers[0]?.id === b.id
                             return (
-                              <div key={b.id} onClick={isAdmin ? () => toggleWorker(ev, b.id, b.name) : undefined}
-                                style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: isAdmin ? 'pointer' : 'default', fontSize: 14, padding: '6px 0', minHeight: 36 }}>
-                                {isAdmin && (
-                                  <div style={{
-                                    width: 26, height: 26, borderRadius: 6, flexShrink: 0,
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    ...(on ? { background: 'var(--green)' } : { border: '2.5px solid var(--pearl)' })
-                                  }}>
-                                    {on && <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 12.5 C6 12.5, 8 17, 9.5 19 C12 14, 16 8, 20 5" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                                  </div>
+                              <div key={b.id}
+                                style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, padding: '6px 0', minHeight: 36 }}>
+                                <div onClick={isAdmin ? () => toggleWorker(ev, b.id, b.name) : undefined}
+                                  style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: isAdmin ? 'pointer' : 'default', flex: 1, minWidth: 0 }}>
+                                  {isAdmin && (
+                                    <div style={{
+                                      width: 26, height: 26, borderRadius: 6, flexShrink: 0,
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      ...(on ? { background: 'var(--green)' } : { border: '2.5px solid var(--pearl)' })
+                                    }}>
+                                      {on && <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 12.5 C6 12.5, 8 17, 9.5 19 C12 14, 16 8, 20 5" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                    </div>
+                                  )}
+                                  <span style={{ fontWeight: on ? 700 : 400, color: on ? 'var(--green-dark)' : 'var(--ash)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</span>
+                                </div>
+                                {on && isLead && (
+                                  <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: 'var(--green)', padding: '3px 8px', borderRadius: 10, letterSpacing: '.04em' }}>👑 LEAD</span>
                                 )}
-                                <span style={{ fontWeight: on ? 700 : 400, color: on ? 'var(--green-dark)' : 'var(--ash)' }}>{b.name}</span>
+                                {on && !isLead && isAdmin && (
+                                  <button onClick={e => { e.stopPropagation(); setLeadWorker(ev, b.id) }}
+                                    style={{ fontSize: 10, fontWeight: 700, color: 'var(--green-dark)', background: 'transparent', border: '1px solid var(--green3)', padding: '3px 8px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '.04em', whiteSpace: 'nowrap' }}>
+                                    Make lead
+                                  </button>
+                                )}
                               </div>
                             )
                           })}
@@ -827,19 +868,32 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginTop: 8 }}>
                           {(isAdmin ? buyers : buyers.filter(b => evWorkers.some(w => w.id === b.id))).map(b => {
                             const on = evWorkers.some(w => w.id === b.id)
+                            const isLead = on && evWorkers[0]?.id === b.id
                             return (
-                              <div key={b.id} onClick={isAdmin ? () => toggleWorker(ev, b.id, b.name) : undefined}
-                                style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: isAdmin ? 'pointer' : 'default', fontSize: 14, padding: '4px 0' }}>
-                                {isAdmin && (
-                                  <div style={{
-                                    width: 26, height: 26, borderRadius: 6, flexShrink: 0,
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    ...(on ? { background: 'var(--green)' } : { border: '2.5px solid var(--pearl)' }),
-                                  }}>
-                                    {on && <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 12.5 C6 12.5, 8 17, 9.5 19 C12 14, 16 8, 20 5" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                                  </div>
+                              <div key={b.id}
+                                style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, padding: '4px 0' }}>
+                                <div onClick={isAdmin ? () => toggleWorker(ev, b.id, b.name) : undefined}
+                                  style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: isAdmin ? 'pointer' : 'default', flex: 1, minWidth: 0 }}>
+                                  {isAdmin && (
+                                    <div style={{
+                                      width: 26, height: 26, borderRadius: 6, flexShrink: 0,
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      ...(on ? { background: 'var(--green)' } : { border: '2.5px solid var(--pearl)' }),
+                                    }}>
+                                      {on && <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 12.5 C6 12.5, 8 17, 9.5 19 C12 14, 16 8, 20 5" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                    </div>
+                                  )}
+                                  <span style={{ fontWeight: on ? 700 : 400, color: on ? 'var(--green-dark)' : 'var(--ash)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</span>
+                                </div>
+                                {on && isLead && (
+                                  <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: 'var(--green)', padding: '3px 8px', borderRadius: 10, letterSpacing: '.04em' }}>👑 LEAD</span>
                                 )}
-                                <span style={{ fontWeight: on ? 700 : 400, color: on ? 'var(--green-dark)' : 'var(--ash)' }}>{b.name}</span>
+                                {on && !isLead && isAdmin && (
+                                  <button onClick={e => { e.stopPropagation(); setLeadWorker(ev, b.id) }}
+                                    style={{ fontSize: 10, fontWeight: 700, color: 'var(--green-dark)', background: 'transparent', border: '1px solid var(--green3)', padding: '3px 8px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '.04em', whiteSpace: 'nowrap' }}>
+                                    Make lead
+                                  </button>
+                                )}
                               </div>
                             )
                           })}
