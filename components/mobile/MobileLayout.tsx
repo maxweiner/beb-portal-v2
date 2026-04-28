@@ -21,19 +21,6 @@ function MenuIcon({ size = 18 }: { size?: number }) {
   )
 }
 
-function AirplaneIcon({ size = 34 }: { size?: number }) {
-  // Solid black airplane glyph, similar weight to CameraIcon so the
-  // prominent center button reads consistently when the two swap.
-  return (
-    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden>
-      <path
-        d="M28 16c0-.6-.4-1.1-.9-1.3l-9.6-3.5V4.6c0-.9-.7-1.6-1.5-1.6s-1.5.7-1.5 1.6v6.6L4.9 14.7c-.5.2-.9.7-.9 1.3 0 .8.7 1.4 1.5 1.3l9.0-1.6v6.5l-2.7 1.5c-.3.2-.5.5-.5.9v1.3c0 .6.6 1 1.2.8l3-1 3 1c.6.2 1.2-.2 1.2-.8v-1.3c0-.4-.2-.7-.5-.9l-2.7-1.5v-6.5l9.0 1.6c.8.1 1.5-.5 1.5-1.3z"
-        fill="#111"
-      />
-    </svg>
-  )
-}
-
 function CameraIcon({ size = 34 }: { size?: number }) {
   // Polaroid OneStep — front face. Big concentric lens, rectangle
   // viewfinder top-left, rectangle flash top-right, shutter dot.
@@ -187,7 +174,7 @@ function BottomNav({ nav, setNav, onScan, centerMode }: {
           marginTop: -18,
           boxShadow: '0 0 0 4px rgba(255,255,255,.9), 0 6px 16px rgba(29,107,68,.28)',
         }}>
-          {isScan ? <CameraIcon size={34} /> : <AirplaneIcon size={34} />}
+          {isScan ? <CameraIcon size={34} /> : <span style={{ fontSize: 30, lineHeight: 1 }} aria-hidden>✈️</span>}
         </div>
         <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--green-dark)', marginTop: 4, letterSpacing: '.04em' }}>
           {isScan ? 'SCAN' : 'TRAVEL'}
