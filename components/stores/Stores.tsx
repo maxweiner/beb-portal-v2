@@ -718,18 +718,41 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
                   <span style={{ fontSize: 12, color: 'var(--mist)', fontStyle: 'italic' }}>No recipients yet</span>
                 )}
               </div>
-              <input type="email" value={shipRecipientDraft}
-                onChange={e => setShipRecipientDraft(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key !== 'Enter') return
-                  e.preventDefault()
-                  const v = shipRecipientDraft.trim().toLowerCase()
-                  if (!v.includes('@')) return
-                  if (shipRecipients.includes(v)) { setShipRecipientDraft(''); return }
-                  setShipRecipients(p => [...p, v])
+              {(() => {
+                const commit = () => {
+                  // Accept Enter, comma, or semicolon. Also bulk-paste with separators.
+                  const parts = shipRecipientDraft
+                    .split(/[,;\s]+/)
+                    .map(s => s.trim().toLowerCase())
+                    .filter(s => s.includes('@'))
+                  if (parts.length === 0) return
+                  setShipRecipients(p => {
+                    const seen = new Set(p)
+                    const next = [...p]
+                    for (const e of parts) if (!seen.has(e)) { seen.add(e); next.push(e) }
+                    return next
+                  })
                   setShipRecipientDraft('')
-                }}
-                placeholder="email@example.com — press Enter to add" />
+                }
+                return (
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input type="email" value={shipRecipientDraft}
+                      onChange={e => setShipRecipientDraft(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' || e.key === ',' || e.key === ';') {
+                          e.preventDefault()
+                          commit()
+                        }
+                      }}
+                      onBlur={() => { if (shipRecipientDraft.trim().includes('@')) commit() }}
+                      placeholder="email@example.com"
+                      style={{ flex: 1 }} />
+                    <button type="button" className="btn-outline btn-sm"
+                      disabled={!shipRecipientDraft.includes('@')}
+                      onClick={commit}>+ Add</button>
+                  </div>
+                )
+              })()}
             </div>
           </div>
 
