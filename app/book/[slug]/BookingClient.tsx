@@ -199,11 +199,14 @@ export default function BookingClient({
   const secondary = store.color_secondary || '#F5F0E8'
   const isReschedule = !!rescheduling
 
-  // Prefer the soonest event with at least one bookable day. The server
-  // now includes in-flight events (start_date >= today − 2), which means
-  // events[0] sorted oldest-first might be a today-ending or sparsely-
-  // populated event whose days all filter out. Fall through to the next
-  // event so customers don't land on an empty picker.
+  // Prefer the soonest event that has at least one *bookable* day —
+  // date >= today AND hours configured. The server now includes in-flight
+  // events (start_date >= today − 2), so events[0] sorted oldest-first
+  // might be a today-ending event whose only future day_number lacks
+  // hours, leaving an accordion the customer can expand only to read
+  // "no slots configured". Match StorePortalClient's selection rule so
+  // the public page and the staff-portal page never disagree on which
+  // event of a store is "the bookable one".
   const today = todayIso()
   const computeDays = (e: typeof events[number]): DayInfo[] =>
     e.days
@@ -215,6 +218,13 @@ export default function BookingClient({
       })
       .filter(di => di.dateStr >= today)
   const { event, dayInfos } = useMemo(() => {
+    for (const candidate of events) {
+      const di = computeDays(candidate)
+      if (di.some(d => !!d.hours)) return { event: candidate, dayInfos: di }
+    }
+    // Fall through: no event has both a future day AND hours. Try any event
+    // with a future day, then events[0] as a last resort, so the empty-state
+    // message still renders rather than crashing on undefined.
     for (const candidate of events) {
       const di = computeDays(candidate)
       if (di.length > 0) return { event: candidate, dayInfos: di }
