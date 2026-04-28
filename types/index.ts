@@ -65,6 +65,9 @@ export interface ExpenseReport {
   accountant_email_sent_at: string | null
   total_expenses: number
   total_compensation: number
+  /** Per-trip compensation rate (Option A). DB trigger sums into
+   *  total_compensation + grand_total whenever this changes. */
+  comp_rate: number
   grand_total: number
   pdf_url: string | null
   created_at: string
