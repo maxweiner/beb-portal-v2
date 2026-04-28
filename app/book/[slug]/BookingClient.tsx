@@ -498,26 +498,31 @@ export default function BookingClient({
           </div>
         )}
 
-        <AddAppointmentForm
-          mode="customer"
-          store={store}
-          event={event}
-          config={config}
-          override={override ?? null}
-          bookings={bookings}
-          blocks={blocks}
-          slug={slug}
-          bookedBy="customer"
-          isReschedule={isReschedule}
-          rescheduleToken={isReschedule ? rescheduling!.token : null}
-          qrCodeId={qrAttribution?.qr_code_id ?? null}
-          isMock={isMock}
-          onSuccess={({ appointmentDate, appointmentTime }) => {
-            setBookedDate(appointmentDate)
-            setBookedTime(appointmentTime)
-            setSubmitState('done')
-          }}
-        />
+        {/* White card around the form so the cream page bg doesn't bleed
+            through and make the cream-bg input fields look transparent.
+            Mirrors the staff modal's white interior box. */}
+        <div className="bg-white rounded-2xl shadow overflow-hidden">
+          <AddAppointmentForm
+            mode="customer"
+            store={store}
+            event={event}
+            config={config}
+            override={override ?? null}
+            bookings={bookings}
+            blocks={blocks}
+            slug={slug}
+            bookedBy="customer"
+            isReschedule={isReschedule}
+            rescheduleToken={isReschedule ? rescheduling!.token : null}
+            qrCodeId={qrAttribution?.qr_code_id ?? null}
+            isMock={isMock}
+            onSuccess={({ appointmentDate, appointmentTime }) => {
+              setBookedDate(appointmentDate)
+              setBookedTime(appointmentTime)
+              setSubmitState('done')
+            }}
+          />
+        </div>
 
         {isReschedule && (
           <a
