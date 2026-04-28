@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import type { NavPage } from '@/app/page'
 import LicenseScanner from '@/components/scan/LicenseScanner'
 import { useCenterButtonMode } from '@/lib/centerButtonMode'
+import { usePendingApprovals } from '@/components/expenses/usePendingApprovals'
 
 /* ── ICONS ── */
 
@@ -198,6 +199,7 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
   const hasLibertyAccess = user?.liberty_access === true
   const isLiberty = brand === 'liberty'
   const [menuOpen, setMenuOpen] = useState(false)
+  const { count: pendingApprovalCount } = usePendingApprovals()
   const [scannerOpen, setScannerOpen] = useState(false)
   const [scanEventId, setScanEventId] = useState<string | null>(null)
   const [eventPickerOpen, setEventPickerOpen] = useState(false)
@@ -341,7 +343,13 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
                   }}
                   style={{ width: '100%', padding: '14px 20px', background: !p.isScan && nav === p.id ? 'rgba(255,255,255,.1)' : 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 12, color: !p.isScan && nav === p.id ? '#fff' : 'rgba(255,255,255,.6)', fontWeight: !p.isScan && nav === p.id ? 700 : 400, fontSize: 14, textAlign: 'left', borderLeft: !p.isScan && nav === p.id ? '3px solid var(--green3)' : '3px solid transparent', minHeight: 44 }}
                 >
-                  <span style={{ fontSize: 16, width: 20, textAlign: 'center', flexShrink: 0 }}>{p.icon}</span>{p.label}
+                  <span style={{ fontSize: 16, width: 20, textAlign: 'center', flexShrink: 0 }}>{p.icon}</span>
+                  <span style={{ flex: 1 }}>{p.label}</span>
+                  {p.id === 'expenses' && pendingApprovalCount > 0 && (
+                    <span style={{ background: '#DC2626', color: '#fff', borderRadius: 999, padding: '2px 8px', fontSize: 11, fontWeight: 800, minWidth: 20, textAlign: 'center' }}>
+                      {pendingApprovalCount}
+                    </span>
+                  )}
                 </button>
               ))}
               <div style={{ borderTop: '1px solid rgba(255,255,255,.1)', margin: '12px 0 0' }} />

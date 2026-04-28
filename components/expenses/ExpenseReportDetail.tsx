@@ -18,6 +18,7 @@ import {
   STATUS_LABEL, STATUS_COLOR,
   formatCurrency, formatDateLong, todayIso,
 } from './expensesUtils'
+import { broadcastExpenseStatusChanged } from './usePendingApprovals'
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -35,14 +36,20 @@ export default function ExpenseReportDetail({
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [approving, setApproving] = useState(false)
+  const [paying, setPaying] = useState(false)
   const [pdfBusy, setPdfBusy] = useState(false)
   const [emailBusy, setEmailBusy] = useState(false)
   const [emailMsg, setEmailMsg] = useState<string | null>(null)
+  const [approvalMsg, setApprovalMsg] = useState<string | null>(null)
 
   const isOwner = !!user && !!report && user.id === report.user_id
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
+  const isPartner = !!user?.is_partner
   const canMutate = (isOwner && report?.status === 'active') || isAdmin
   const canSubmit = isOwner && report?.status === 'active' && expenses.length > 0
+  const canApprove = isPartner && report?.status === 'submitted_pending_review'
+  const canMarkPaid = (isPartner || isOwner) && report?.status === 'approved'
 
   const event: Event | undefined = useMemo(
     () => events.find(e => e.id === report?.event_id),
@@ -200,9 +207,61 @@ export default function ExpenseReportDetail({
     const { error: upErr } = await supabase.from('expense_reports')
       .update({ status: 'submitted_pending_review', submitted_at: new Date().toISOString() })
       .eq('id', report.id)
-    setSubmitting(false)
-    if (upErr) { setError(upErr.message); return }
+    if (upErr) { setSubmitting(false); setError(upErr.message); return }
     setReport(p => p ? { ...p, status: 'submitted_pending_review', submitted_at: new Date().toISOString() } : p)
+    broadcastExpenseStatusChanged()
+    // Fire the partner alert email — best effort. The state transition
+    // already succeeded; if the email fails the user sees a non-fatal
+    // banner and can ask an admin to chase it down.
+    try {
+      await authedFetch(`/api/expense-reports/${report.id}/notify-partners`, { method: 'POST' })
+    } catch { /* swallow — see comment above */ }
+    setSubmitting(false)
+  }
+
+  async function approveReport() {
+    if (!canApprove || !report) return
+    if (!confirm('Approve this report? The PDF will be emailed to the accountant.')) return
+    setApproving(true); setError(null); setApprovalMsg(null)
+    try {
+      const res = await authedFetch(`/api/expense-reports/${report.id}/approve`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(json.error || 'Could not approve.')
+      } else {
+        if (json.emailWarning) {
+          setApprovalMsg(`Approved. Email warning: ${json.emailWarning}`)
+        } else if (json.email?.reason === 'no_accountant_address') {
+          setApprovalMsg('Approved. Accountant email is not configured — set it in Settings.')
+        } else {
+          setApprovalMsg('Approved. Accountant email sent ✓')
+        }
+        await load()
+        broadcastExpenseStatusChanged()
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Network error')
+    }
+    setApproving(false)
+  }
+
+  async function markPaid() {
+    if (!canMarkPaid || !report) return
+    if (!confirm('Mark this report as paid?')) return
+    setPaying(true); setError(null)
+    try {
+      const res = await authedFetch(`/api/expense-reports/${report.id}/mark-paid`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(json.error || 'Could not mark paid.')
+      } else {
+        await load()
+        broadcastExpenseStatusChanged()
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Network error')
+    }
+    setPaying(false)
   }
 
   // Per-category running totals.
@@ -319,15 +378,39 @@ export default function ExpenseReportDetail({
             </span>
           )}
         </div>
-        {report.status === 'active' && isOwner && (
-          <button className="btn-primary"
-            onClick={submitForReview}
-            disabled={!canSubmit || submitting}
-            title={canSubmit ? '' : 'Add at least one expense before submitting.'}>
-            {submitting ? 'Submitting…' : 'Submit for Review'}
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {report.status === 'active' && isOwner && (
+            <button className="btn-primary"
+              onClick={submitForReview}
+              disabled={!canSubmit || submitting}
+              title={canSubmit ? '' : 'Add at least one expense before submitting.'}>
+              {submitting ? 'Submitting…' : 'Submit for Review'}
+            </button>
+          )}
+          {canApprove && (
+            <button className="btn-primary"
+              style={{ background: '#065F46' }}
+              onClick={approveReport}
+              disabled={approving}
+              title="Approves the report and emails the PDF to the accountant.">
+              {approving ? 'Approving…' : '✓ Approve'}
+            </button>
+          )}
+          {canMarkPaid && (
+            <button className="btn-primary"
+              onClick={markPaid}
+              disabled={paying}>
+              {paying ? 'Marking…' : 'Mark Paid'}
+            </button>
+          )}
+        </div>
       </div>
+
+      {approvalMsg && (
+        <div style={{ marginTop: 10, padding: 10, background: '#D1FAE5', color: '#065F46', borderRadius: 6, fontSize: 13, fontWeight: 600 }}>
+          {approvalMsg}
+        </div>
+      )}
 
       {report.status !== 'active' && (
         <div style={{ marginTop: 12, padding: 12, textAlign: 'center', background: 'var(--cream2)', borderRadius: 8, color: 'var(--ash)', fontSize: 13 }}>

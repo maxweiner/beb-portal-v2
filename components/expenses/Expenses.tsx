@@ -11,7 +11,7 @@
 // Uses the `supabase` anon-key client; PR1's RLS enforces that buyers
 // only see their own reports and can only mutate while status='active'.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useApp } from '@/lib/context'
 import ExpensesList from './ExpensesList'
 import ExpenseReportDetail from './ExpenseReportDetail'
@@ -19,6 +19,16 @@ import ExpenseReportDetail from './ExpenseReportDetail'
 export default function Expenses() {
   const { user } = useApp()
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null)
+
+  // Deep-link from elsewhere in the app (e.g. partner approvals modal).
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const id = (e as CustomEvent<{ reportId?: string }>).detail?.reportId
+      if (id) setSelectedReportId(id)
+    }
+    window.addEventListener('beb:open-expense-report', onOpen)
+    return () => window.removeEventListener('beb:open-expense-report', onOpen)
+  }, [])
 
   if (!user) {
     return (
