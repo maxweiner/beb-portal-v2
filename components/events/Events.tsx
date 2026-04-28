@@ -10,6 +10,7 @@ import type { Event, BuyerVacation } from '@/types'
 import type { NavPage } from '@/app/page'
 import EventNotesPanel from './EventNotesPanel'
 import NotificationStatusBadge from '@/components/notifications/NotificationStatusBadge'
+import EventShippingPanel from '@/components/shipping/EventShippingPanel'
 
 type Filter = 'thisweek' | 'active' | 'all' | 'current' | 'past' | 'future' | 'days30' | 'days60'
 type Sort = 'date-desc' | 'date-asc' | 'name-asc'
@@ -60,6 +61,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   const [newEvent, setNewEvent] = useState({ store_id: '', start_date: '' })
   const [saving, setSaving] = useState(false)
   const [workersOpen, setWorkersOpen] = useState<string | null>(null)
+  const [shippingOpen, setShippingOpen] = useState<string | null>(null)
   // Force-include the most recently created event in the filtered list
   // (and auto-expand it) regardless of the active filter, so the user
   // can immediately add buyers. Cleared when they change filter/search.
@@ -610,6 +612,16 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                         <SpendPanel ev={ev} onClose={() => setSpendOpen(null)} refetchEvents={fetchEvents} />
                       </div>
                     )}
+                    {shippingOpen === ev.id && (
+                      <div onClick={e => e.stopPropagation()} style={{ padding: '0 12px' }}>
+                        <EventShippingPanel
+                          eventId={ev.id}
+                          eventStartDate={ev.start_date}
+                          eventWorkers={evWorkers}
+                          onClose={() => setShippingOpen(null)}
+                        />
+                      </div>
+                    )}
 
                     {/* Action toolbar */}
                     <div style={{
@@ -618,6 +630,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                     }} onClick={e => e.stopPropagation()}>
                       {[
                         { id: 'workers', icon: '👤', label: 'Who worked', onTap: () => setWorkersOpen(wOpen ? null : ev.id) },
+                        ...(store?.hold_time_days ? [{ id: 'shipping', icon: '📦', label: 'Shipping', onTap: () => setShippingOpen(shippingOpen === ev.id ? null : ev.id) }] : []),
                         ...(isAdmin ? [{ id: 'spend', icon: '💰', label: 'Ad spend', onTap: () => setSpendOpen(spendOpen === ev.id ? null : ev.id) }] : []),
                         { id: 'notes',   icon: '📝', label: 'Notes',      onTap: () => setNotesEvent(ev) },
                         { id: 'pdf',     icon: '⤓',  label: 'Download PDF', onTap: () => downloadPdf(ev) },
@@ -842,6 +855,16 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                       <SpendPanel ev={ev} onClose={() => setSpendOpen(null)} refetchEvents={fetchEvents} />
                     </div>
                   )}
+                  {shippingOpen === ev.id && (
+                    <div onClick={e => e.stopPropagation()} style={{ padding: '14px 20px 0' }}>
+                      <EventShippingPanel
+                        eventId={ev.id}
+                        eventStartDate={ev.start_date}
+                        eventWorkers={evWorkers}
+                        onClose={() => setShippingOpen(null)}
+                      />
+                    </div>
+                  )}
 
                   {/* Action bar */}
                   <div style={{
@@ -851,6 +874,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                   }} onClick={e => e.stopPropagation()}>
                     {[
                       { id: 'workers', icon: '👤', label: 'Who worked', onTap: () => setWorkersOpen(wOpen ? null : ev.id) },
+                      ...(store?.hold_time_days ? [{ id: 'shipping', icon: '📦', label: 'Shipping', onTap: () => setShippingOpen(shippingOpen === ev.id ? null : ev.id) }] : []),
                       ...(isAdmin ? [{ id: 'spend', icon: '💰', label: 'Ad spend', onTap: () => setSpendOpen(spendOpen === ev.id ? null : ev.id) }] : []),
                       { id: 'notes',   icon: '📝', label: 'Notes',      onTap: () => setNotesEvent(ev) },
                       { id: 'pdf',     icon: '⤓',  label: 'Download PDF', onTap: () => downloadPdf(ev) },
