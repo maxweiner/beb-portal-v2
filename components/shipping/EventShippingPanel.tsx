@@ -72,6 +72,44 @@ interface BoxRow {
   labels_sent_by: string | null
   shipped_by: string | null
   received_by: string | null
+  carrier_status: string | null
+  carrier_status_detail: string | null
+  carrier_last_event: string | null
+  carrier_event_at: string | null
+  carrier_eta: string | null
+  last_polled_at: string | null
+  carrier_poll_error: string | null
+}
+
+const CARRIER_STATUS_LABEL: Record<string, string> = {
+  unknown: 'Unknown',
+  label_created: 'Label created',
+  in_transit: 'In transit',
+  out_for_delivery: 'Out for delivery',
+  delivered: 'Delivered',
+  exception: 'Exception',
+  returned: 'Returned',
+}
+const CARRIER_STATUS_COLOR: Record<string, string> = {
+  unknown: 'var(--mist)',
+  label_created: '#3B82F6',
+  in_transit: '#F59E0B',
+  out_for_delivery: '#8B5CF6',
+  delivered: 'var(--green)',
+  exception: 'var(--red)',
+  returned: 'var(--red)',
+}
+const CARRIERS_WITH_LIVE_TRACKING = new Set(['fedex'])
+
+function fmtRelative(iso: string | null): string {
+  if (!iso) return ''
+  const ms = Date.now() - new Date(iso).getTime()
+  if (ms < 60_000) return 'just now'
+  const min = Math.floor(ms / 60_000)
+  if (min < 60) return `${min}m ago`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr}h ago`
+  return `${Math.floor(hr / 24)}d ago`
 }
 
 export default function EventShippingPanel({
@@ -95,6 +133,7 @@ export default function EventShippingPanel({
   const [draftJewelry, setDraftJewelry] = useState<number>(0)
   const [draftSilver, setDraftSilver] = useState<number>(0)
   const [busyBoxId, setBusyBoxId] = useState<string | null>(null)
+  const [refreshingBoxId, setRefreshingBoxId] = useState<string | null>(null)
   const [bulkBusy, setBulkBusy] = useState<BoxType | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -210,6 +249,22 @@ export default function EventShippingPanel({
     await reload()
   }
 
+  async function refreshTracking(box: BoxRow) {
+    if (!box.tracking_number || !box.carrier) return
+    setRefreshingBoxId(box.id); setError(null)
+    try {
+      const res = await fetch(`/api/shipping/boxes/${box.id}/refresh-tracking`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(json.error || `Refresh failed (${res.status})`)
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Network error')
+    }
+    setRefreshingBoxId(null)
+    await reload()
+  }
+
   if (!loaded) {
     return (
       <div className="card card-accent" style={{ margin: 0 }}>
@@ -298,9 +353,11 @@ export default function EventShippingPanel({
         canMutate={canMutate}
         bulkBusy={bulkBusy === 'jewelry'}
         busyBoxId={busyBoxId}
+        refreshingBoxId={refreshingBoxId}
         onAdvance={advanceBox}
         onBulkAdvance={(s) => bulkAdvance('jewelry', s)}
         onSetTracking={setManualTracking}
+        onRefresh={refreshTracking}
       />
 
       <div style={{ height: 12 }} />
@@ -311,9 +368,11 @@ export default function EventShippingPanel({
         canMutate={canMutate}
         bulkBusy={bulkBusy === 'silver'}
         busyBoxId={busyBoxId}
+        refreshingBoxId={refreshingBoxId}
         onAdvance={advanceBox}
         onBulkAdvance={(s) => bulkAdvance('silver', s)}
         onSetTracking={setManualTracking}
+        onRefresh={refreshTracking}
       />
 
       <div style={{ marginTop: 14, padding: 10, background: 'var(--cream)', borderRadius: 6, fontSize: 12, color: 'var(--mist)' }}>
@@ -324,16 +383,19 @@ export default function EventShippingPanel({
 }
 
 function BoxSection({
-  title, boxes, canMutate, bulkBusy, busyBoxId, onAdvance, onBulkAdvance, onSetTracking,
+  title, boxes, canMutate, bulkBusy, busyBoxId, refreshingBoxId,
+  onAdvance, onBulkAdvance, onSetTracking, onRefresh,
 }: {
   title: string
   boxes: BoxRow[]
   canMutate: boolean
   bulkBusy: boolean
   busyBoxId: string | null
+  refreshingBoxId: string | null
   onAdvance: (b: BoxRow) => void
   onBulkAdvance: (fromStatus: BoxStatus) => void
   onSetTracking: (b: BoxRow) => void
+  onRefresh: (b: BoxRow) => void
 }) {
   if (boxes.length === 0) {
     return (
@@ -378,57 +440,105 @@ function BoxSection({
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {boxes.map(b => (
-          <BoxRowItem key={b.id} box={b} canMutate={canMutate} busy={busyBoxId === b.id}
-            onAdvance={() => onAdvance(b)} onSetTracking={() => onSetTracking(b)} />
+          <BoxRowItem key={b.id} box={b} canMutate={canMutate}
+            busy={busyBoxId === b.id} refreshing={refreshingBoxId === b.id}
+            onAdvance={() => onAdvance(b)} onSetTracking={() => onSetTracking(b)}
+            onRefresh={() => onRefresh(b)} />
         ))}
       </div>
     </div>
   )
 }
 
-function BoxRowItem({ box, canMutate, busy, onAdvance, onSetTracking }: {
+function BoxRowItem({ box, canMutate, busy, refreshing, onAdvance, onSetTracking, onRefresh }: {
   box: BoxRow
   canMutate: boolean
   busy: boolean
+  refreshing: boolean
   onAdvance: () => void
   onSetTracking: () => void
+  onRefresh: () => void
 }) {
   const idx = STATUS_ORDER.indexOf(box.status)
   const next = STATUS_ORDER[idx + 1]
   const advanceLabel = next === 'labels_sent' ? 'Mark labels sent' : next === 'shipped' ? 'Mark shipped' : next === 'received' ? 'Mark received' : null
   const trackingHref = box.tracking_number && box.carrier ? CARRIER_URL[box.carrier]?.(box.tracking_number) : null
+  const liveTrackable = !!(box.tracking_number && box.carrier && CARRIERS_WITH_LIVE_TRACKING.has(box.carrier))
+  const carrierStatus = box.carrier_status
+  const carrierLabel = carrierStatus ? CARRIER_STATUS_LABEL[carrierStatus] ?? carrierStatus : null
+  const carrierColor = carrierStatus ? CARRIER_STATUS_COLOR[carrierStatus] ?? 'var(--mist)' : 'var(--mist)'
+  const etaLabel = box.carrier_eta ? new Date(box.carrier_eta + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null
 
   return (
     <div style={{
-      display: 'grid', gridTemplateColumns: '60px 110px 1fr auto', gap: 8, alignItems: 'center',
       padding: '8px 10px', background: '#fff', border: '1px solid var(--cream2)', borderRadius: 6,
     }}>
-      <div style={{ fontWeight: 800, color: 'var(--ink)' }}>{box.identifier}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_COLOR[box.status] }} />
-        <span style={{ fontSize: 12, fontWeight: 700, color: STATUS_COLOR[box.status] }}>{STATUS_LABEL[box.status]}</span>
-      </div>
-      <div style={{ fontSize: 12, color: 'var(--mist)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {box.tracking_number ? (
-          trackingHref ? (
-            <a href={trackingHref} target="_blank" rel="noreferrer" style={{ color: 'var(--green-dark)', fontWeight: 600 }}>
-              {box.tracking_number}{box.carrier ? ` · ${box.carrier.toUpperCase()}` : ''}
-            </a>
+      <div style={{
+        display: 'grid', gridTemplateColumns: '60px 110px 1fr auto', gap: 8, alignItems: 'center',
+      }}>
+        <div style={{ fontWeight: 800, color: 'var(--ink)' }}>{box.identifier}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_COLOR[box.status] }} />
+          <span style={{ fontSize: 12, fontWeight: 700, color: STATUS_COLOR[box.status] }}>{STATUS_LABEL[box.status]}</span>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--mist)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {box.tracking_number ? (
+            trackingHref ? (
+              <a href={trackingHref} target="_blank" rel="noreferrer" style={{ color: 'var(--green-dark)', fontWeight: 600 }}>
+                {box.tracking_number}{box.carrier ? ` · ${box.carrier.toUpperCase()}` : ''}
+              </a>
+            ) : (
+              <span style={{ color: 'var(--ink)', fontWeight: 600 }}>{box.tracking_number}</span>
+            )
           ) : (
-            <span style={{ color: 'var(--ink)', fontWeight: 600 }}>{box.tracking_number}</span>
-          )
-        ) : (
-          <span style={{ fontStyle: 'italic' }}>no tracking</span>
-        )}
+            <span style={{ fontStyle: 'italic' }}>no tracking</span>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {liveTrackable && (
+            <button className="btn-outline btn-xs" disabled={refreshing} onClick={onRefresh}
+              title="Refresh carrier status now">{refreshing ? '…' : '↻'}</button>
+          )}
+          {canMutate && (
+            <button className="btn-outline btn-xs" disabled={busy} onClick={onSetTracking}>Tracking</button>
+          )}
+          {canMutate && advanceLabel && (
+            <button className="btn-primary btn-xs" disabled={busy} onClick={onAdvance}>{advanceLabel}</button>
+          )}
+        </div>
       </div>
-      <div style={{ display: 'flex', gap: 4 }}>
-        {canMutate && (
-          <button className="btn-outline btn-xs" disabled={busy} onClick={onSetTracking}>Tracking</button>
-        )}
-        {canMutate && advanceLabel && (
-          <button className="btn-primary btn-xs" disabled={busy} onClick={onAdvance}>{advanceLabel}</button>
-        )}
-      </div>
+
+      {liveTrackable && (carrierStatus || box.carrier_poll_error) && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+          marginTop: 6, paddingTop: 6, borderTop: '1px dashed var(--cream2)', fontSize: 11,
+        }}>
+          {carrierLabel && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              padding: '2px 8px', borderRadius: 999,
+              background: carrierColor + '18', color: carrierColor, fontWeight: 700,
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: carrierColor }} />
+              {carrierLabel}
+            </span>
+          )}
+          {box.carrier_last_event && (
+            <span style={{ color: 'var(--ash)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {box.carrier_last_event}
+            </span>
+          )}
+          {etaLabel && (
+            <span style={{ color: 'var(--mist)' }}>ETA {etaLabel}</span>
+          )}
+          {box.last_polled_at && (
+            <span style={{ color: 'var(--mist)', marginLeft: 'auto' }}>checked {fmtRelative(box.last_polled_at)}</span>
+          )}
+          {box.carrier_poll_error && (
+            <span style={{ color: 'var(--red)', fontStyle: 'italic' }}>error: {box.carrier_poll_error}</span>
+          )}
+        </div>
+      )}
     </div>
   )
 }
