@@ -31,7 +31,7 @@
 
 -- ── 1. Link column on expenses ────────────────────────────
 ALTER TABLE expenses
-  ADD COLUMN IF NOT EXISTS source_reservation_id UUID REFERENCES reservations(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS source_reservation_id UUID REFERENCES travel_reservations(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS idx_expenses_source_reservation
   ON expenses(source_reservation_id) WHERE source_reservation_id IS NOT NULL;
@@ -133,9 +133,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-DROP TRIGGER IF EXISTS trg_seed_expense_from_reservation ON reservations;
+DROP TRIGGER IF EXISTS trg_seed_expense_from_reservation ON travel_reservations;
 CREATE TRIGGER trg_seed_expense_from_reservation
-AFTER INSERT ON reservations
+AFTER INSERT ON travel_reservations
 FOR EACH ROW EXECUTE FUNCTION seed_expense_from_reservation();
 
 -- ── 5. Cleanup expense when reservation is deleted ───────
@@ -154,9 +154,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-DROP TRIGGER IF EXISTS trg_cleanup_expense_on_reservation_delete ON reservations;
+DROP TRIGGER IF EXISTS trg_cleanup_expense_on_reservation_delete ON travel_reservations;
 CREATE TRIGGER trg_cleanup_expense_on_reservation_delete
-BEFORE DELETE ON reservations
+BEFORE DELETE ON travel_reservations
 FOR EACH ROW EXECUTE FUNCTION cleanup_expense_for_deleted_reservation();
 
 -- ── 6. Backfill existing reservations ────────────────────
@@ -164,7 +164,7 @@ FOR EACH ROW EXECUTE FUNCTION cleanup_expense_for_deleted_reservation();
 -- Skip rows already covered (idempotent — safe to re-run the migration).
 INSERT INTO expense_reports (event_id, user_id)
 SELECT DISTINCT res.event_id, res.buyer_id
-FROM reservations res
+FROM travel_reservations res
 WHERE res.buyer_id IS NOT NULL
   AND res.amount IS NOT NULL AND res.amount > 0
   AND res.type IN ('flight', 'hotel', 'rental_car')
@@ -188,7 +188,7 @@ SELECT
        THEN 'Confirmation: ' || res.confirmation_number ELSE NULL END,
   'travel_module',
   res.id
-FROM reservations res
+FROM travel_reservations res
 JOIN expense_reports r ON r.event_id = res.event_id AND r.user_id = res.buyer_id
 WHERE res.buyer_id IS NOT NULL
   AND res.amount IS NOT NULL AND res.amount > 0
@@ -203,5 +203,5 @@ DECLARE
 BEGIN
   SELECT COUNT(*) INTO seeded FROM expenses WHERE source_reservation_id IS NOT NULL;
   SELECT COUNT(*) INTO reports FROM expense_reports;
-  RAISE NOTICE 'Travel integration installed. Reports: %, expenses seeded from reservations: %', reports, seeded;
+  RAISE NOTICE 'Travel integration installed. Reports: %, expenses seeded from travel_reservations: %', reports, seeded;
 END $$;
