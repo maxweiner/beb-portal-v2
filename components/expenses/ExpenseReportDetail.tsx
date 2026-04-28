@@ -35,6 +35,9 @@ export default function ExpenseReportDetail({
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [pdfBusy, setPdfBusy] = useState(false)
+  const [emailBusy, setEmailBusy] = useState(false)
+  const [emailMsg, setEmailMsg] = useState<string | null>(null)
 
   const isOwner = !!user && !!report && user.id === report.user_id
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
@@ -135,6 +138,60 @@ export default function ExpenseReportDetail({
     setExpenses(next)
     await recomputeTotals(next)
     flashSaved()
+  }
+
+  async function authedFetch(input: RequestInfo, init: RequestInit = {}) {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    return fetch(input, {
+      ...init,
+      headers: {
+        ...(init.headers || {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+  }
+
+  async function viewPdf() {
+    if (!report) return
+    setPdfBusy(true); setError(null)
+    try {
+      const res = await authedFetch(`/api/expense-reports/${report.id}/pdf`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.url) {
+        setError(json.error || 'Could not generate PDF.')
+      } else {
+        window.open(json.url, '_blank', 'noopener')
+        // Refresh so pdf_url shows up locally too.
+        await load()
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Network error')
+    }
+    setPdfBusy(false)
+  }
+
+  async function sendToAccountant() {
+    if (!report) return
+    if (!confirm('Generate the PDF and email it to the accountant now?')) return
+    setEmailBusy(true); setError(null); setEmailMsg(null)
+    try {
+      const res = await authedFetch(`/api/expense-reports/${report.id}/send-to-accountant`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.ok) {
+        if (json.reason === 'no_accountant_address') {
+          setError('No accountant email is configured. Set the value in the settings table (key=accountant_email).')
+        } else {
+          setError(json.error || 'Could not send the email.')
+        }
+      } else {
+        setEmailMsg('Sent ✓')
+        await load()
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Network error')
+    }
+    setEmailBusy(false)
   }
 
   async function submitForReview() {
@@ -241,18 +298,39 @@ export default function ExpenseReportDetail({
       </div>
 
       {/* Footer actions */}
-      {report.status === 'active' && isOwner && (
-        <div style={{ marginTop: 18, display: 'flex', justifyContent: 'flex-end' }}>
+      <div style={{ marginTop: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button className="btn-outline btn-sm"
+            onClick={viewPdf} disabled={pdfBusy || expenses.length === 0}
+            title={expenses.length === 0 ? 'Add an expense first.' : ''}>
+            {pdfBusy ? 'Generating…' : 'View PDF'}
+          </button>
+          {isAdmin && (
+            <button className="btn-outline btn-sm"
+              onClick={sendToAccountant} disabled={emailBusy || expenses.length === 0}
+              title={expenses.length === 0 ? 'Add an expense first.' : 'Email this report to the configured accountant.'}>
+              {emailBusy ? 'Sending…' : 'Send to Accountant'}
+            </button>
+          )}
+          {emailMsg && <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--green)' }}>{emailMsg}</span>}
+          {report.accountant_email_sent_at && (
+            <span style={{ fontSize: 11, color: 'var(--mist)' }}>
+              Last sent {new Date(report.accountant_email_sent_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+            </span>
+          )}
+        </div>
+        {report.status === 'active' && isOwner && (
           <button className="btn-primary"
             onClick={submitForReview}
             disabled={!canSubmit || submitting}
             title={canSubmit ? '' : 'Add at least one expense before submitting.'}>
             {submitting ? 'Submitting…' : 'Submit for Review'}
           </button>
-        </div>
-      )}
+        )}
+      </div>
+
       {report.status !== 'active' && (
-        <div style={{ marginTop: 18, padding: 12, textAlign: 'center', background: 'var(--cream2)', borderRadius: 8, color: 'var(--ash)', fontSize: 13 }}>
+        <div style={{ marginTop: 12, padding: 12, textAlign: 'center', background: 'var(--cream2)', borderRadius: 8, color: 'var(--ash)', fontSize: 13 }}>
           Locked — this report is {STATUS_LABEL[report.status].toLowerCase()}.
           {isAdmin && ' (Admins can still edit.)'}
         </div>

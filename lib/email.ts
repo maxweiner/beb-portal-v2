@@ -16,20 +16,30 @@ async function loadKey(): Promise<string | null> {
   return data?.value || null
 }
 
+export interface EmailAttachment {
+  filename: string
+  /** Base64-encoded file contents (no data: prefix). Resend's required format. */
+  content: string
+}
+
 export interface SendEmailArgs {
   to: string
   subject: string
   html: string
   from?: string
+  attachments?: EmailAttachment[]
 }
 
 /**
  * Send a transactional email via Resend. Silent no-op if no API key is
  * configured. Returns the Resend message id on success or throws on error.
  */
-export async function sendEmail({ to, subject, html, from }: SendEmailArgs): Promise<string | null> {
+export async function sendEmail({ to, subject, html, from, attachments }: SendEmailArgs): Promise<string | null> {
   const key = await loadKey()
   if (!key) return null
+
+  const body: Record<string, unknown> = { from: from || DEFAULT_FROM, to, subject, html }
+  if (attachments && attachments.length > 0) body.attachments = attachments
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -37,7 +47,7 @@ export async function sendEmail({ to, subject, html, from }: SendEmailArgs): Pro
       Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ from: from || DEFAULT_FROM, to, subject, html }),
+    body: JSON.stringify(body),
   })
 
   if (!res.ok) {
