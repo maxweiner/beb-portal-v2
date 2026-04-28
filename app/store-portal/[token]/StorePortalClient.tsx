@@ -3,12 +3,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Diamond, Plus, X } from 'lucide-react'
-import { buildSlotsForDay, hoursForEventDay } from '@/lib/appointments/slots'
 import type { BookingPayload } from '@/lib/appointments/types'
-import PhoneInput from '@/components/ui/PhoneInput'
-import Checkbox from '@/components/ui/Checkbox'
 import { formatPhoneDisplay } from '@/lib/phone'
 import EditAppointmentModal from './EditAppointmentModal'
+import AppointmentForm from '@/components/booking/AppointmentForm'
 
 type FontScale = 'sm' | 'md' | 'lg'
 const FONT_SCALE_KEY = 'addApptFontScale'
@@ -119,8 +117,6 @@ export default function StorePortalClient({
     if (typeof window === 'undefined') return false
     return new URLSearchParams(window.location.search).get('add') === '1'
   })
-  const [working, setWorking] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<'upcoming' | 'cancelled'>('upcoming')
   const [editingAppt, setEditingAppt] = useState<FullAppt | null>(null)
 
@@ -150,110 +146,13 @@ export default function StorePortalClient({
       .map(([date, list]) => ({ date, list }))
   }, [cancelledAppointments])
 
-  // Add-form state. Always emit all 3 day slots so the picker stays a
-  // consistent 3-button row; days the event doesn't include (or already
-  // past) render disabled. event.days might be a subset for shorter events.
-  const dayInfos = useMemo(() => {
-    if (!event) return []
-    const today = todayIso()
-    return [1, 2, 3].map(d => {
-      const dayNumber = d as 1 | 2 | 3
-      const dateStr = addDays(event.start_date, dayNumber - 1)
-      const hours = hoursForEventDay(dayNumber, config, override)
-      const enabled = !!hours && dateStr >= today
-      return { dayNumber, dateStr, hours, enabled }
-    })
-  }, [event, config, override])
-
-  const [formDate, setFormDate] = useState<string>('')
-  const [formTime, setFormTime] = useState<string>('')
-  const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
-  const [email, setEmail] = useState('')
-  const [items, setItems] = useState('')
-  const [howHeard, setHowHeard] = useState<string[]>([])
-
-  function toggleHowHeard(opt: string) {
-    setHowHeard(prev => (prev.includes(opt) ? prev.filter(s => s !== opt) : [...prev, opt]))
-  }
-  const [empId, setEmpId] = useState<string>('')
-  const [isWalkin, setIsWalkin] = useState(false)
-
-  const formDay = dayInfos.find(d => d.dateStr === formDate) ?? null
-
-  const formSlots = useMemo(() => {
-    if (!formDay || !formDay.hours) return []
-    return buildSlotsForDay({
-      date: formDay.dateStr,
-      startTime: formDay.hours.start,
-      endTime: formDay.hours.end,
-      intervalMinutes: config.slot_interval_minutes,
-      maxConcurrent: override?.max_concurrent_slots ?? config.max_concurrent_slots,
-      // Use the appointments list directly — it's our most up-to-date view.
-      bookings: appointments
-        .filter(a => a.status === 'confirmed')
-        .map(a => ({
-          appointment_date: a.appointment_date,
-          appointment_time: a.appointment_time,
-          status: 'confirmed' as const,
-        })),
-      blocks,
-    })
-  }, [formDay, config, override, appointments, blocks])
-
-  function resetAddForm() {
-    setFormDate('')
-    setFormTime('')
-    setName(''); setPhone(''); setEmail('')
-    setItems(''); setHowHeard([]); setEmpId(''); setIsWalkin(false)
-    setError(null)
-  }
-
-  async function handleAdd(e: React.FormEvent) {
-    e.preventDefault()
-    if (!formDate) {
-      setError('Please select a day.')
-      return
-    }
-    if (!formTime) {
-      setError('Please select a time.')
-      return
-    }
-    setWorking(true)
-    setError(null)
-    try {
-      const res = await fetch('/api/appointments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          slug,
-          event_id: event.id,
-          appointment_date: formDate,
-          appointment_time: formTime,
-          customer_name: name,
-          customer_phone: phone,
-          customer_email: email || 'noemail@placeholder.local',
-          items_bringing: items.split(',').map(s => s.trim()).filter(Boolean).length
-            ? items.split(',').map(s => s.trim()).filter(Boolean)
-            : ['Not specified'],
-          how_heard: howHeard.length > 0 ? howHeard : ['The Store Told Me'],
-          appointment_employee_id: empId || null,
-          is_walkin: isWalkin,
-          booked_by: 'store',
-        }),
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setError(json.error || `Could not save (${res.status})`)
-      } else {
-        setShowAdd(false)
-        resetAddForm()
-        router.refresh()
-      }
-    } catch (err: any) {
-      setError(err?.message || 'Network error')
-    }
-    setWorking(false)
+  // Form state moved into AppointmentForm — surface keeps only the modal
+  // toggle and post-success behaviour. The chosen slot is reported back
+  // via onSuccess but the portal doesn't need it (the appointments list
+  // re-renders from the server on router.refresh()).
+  function onAddSuccess() {
+    setShowAdd(false)
+    router.refresh()
   }
 
   async function handleCancel(token: string) {
@@ -415,8 +314,7 @@ export default function StorePortalClient({
           className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
           onClick={e => { if (e.target === e.currentTarget) setShowAdd(false) }}
         >
-          <form
-            onSubmit={handleAdd}
+          <div
             className="bg-white sm:rounded-2xl shadow-xl max-w-md w-full overflow-y-auto"
             style={{
               fontSize: `${basePx}px`,
@@ -494,176 +392,29 @@ export default function StorePortalClient({
               </div>
             </div>
 
-            <div className="p-5 space-y-3">
-              {/* Day picker — three buttons, no default */}
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Day *</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {dayInfos.length === 0 ? (
-                    <div className="col-span-3 text-gray-500" style={{ fontSize: inputSize }}>No bookable days</div>
-                  ) : dayInfos.map(di => {
-                    const sel = di.dateStr === formDate
-                    return (
-                      <button
-                        key={di.dayNumber}
-                        type="button"
-                        disabled={!di.enabled}
-                        aria-pressed={sel}
-                        onClick={() => { setFormDate(di.dateStr); setFormTime('') }}
-                        style={{
-                          padding: '0.6em 0.4em',
-                          borderRadius: 8,
-                          border: `1.5px solid ${primary}`,
-                          background: sel ? primary : '#FFFFFF',
-                          color: sel ? '#FFFFFF' : primary,
-                          fontWeight: 700,
-                          fontSize: '0.929em',
-                          opacity: di.enabled ? 1 : 0.4,
-                          cursor: di.enabled ? 'pointer' : 'not-allowed',
-                          transition: 'background .15s ease, color .15s ease',
-                          fontFamily: 'inherit',
-                          lineHeight: 1.2,
-                        }}
-                      >
-                        {fmtDayButton(di.dateStr)}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Time</label>
-                <select
-                  className="w-full rounded-lg border border-gray-300 p-2 bg-white"
-                  style={{ fontSize: inputSize }}
-                  value={formTime}
-                  onChange={e => setFormTime(e.target.value)}
-                  disabled={!formDate || formSlots.length === 0}
-                >
-                  <option value="">— select —</option>
-                  {formSlots.map(s => {
-                    const isUnavailable = s.isPast || s.blocked || s.available === 0
-                    return (
-                      <option key={s.time} value={s.time} disabled={isUnavailable}>
-                        {formatTime(s.time)} {isUnavailable ? '(full)' : `(${s.available} left)`}
-                      </option>
-                    )
-                  })}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Customer name *</label>
-                <input type="text" required value={name} onChange={e => setName(e.target.value)}
-                  style={{ fontSize: inputSize }}
-                  className="w-full rounded-lg border border-gray-300 p-2" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Phone *</label>
-                  <PhoneInput required value={phone} onChange={v => setPhone(v)}
-                    style={{ fontSize: inputSize }}
-                    className="w-full rounded-lg border border-gray-300 p-2" />
-                </div>
-                <div>
-                  <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Email</label>
-                  <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                    placeholder="(optional)"
-                    style={{ fontSize: inputSize }}
-                    className="w-full rounded-lg border border-gray-300 p-2" />
-                </div>
-              </div>
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Bringing</label>
-                <input type="text" value={items} onChange={e => setItems(e.target.value)}
-                  placeholder="Gold, Diamonds (comma separated)"
-                  style={{ fontSize: inputSize }}
-                  className="w-full rounded-lg border border-gray-300 p-2" />
-              </div>
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>How heard (pick any)</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {config.hear_about_options.map(opt => {
-                    const checked = howHeard.includes(opt)
-                    return (
-                      <label
-                        key={opt}
-                        className="flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors"
-                        style={{
-                          fontSize: checkboxLabelSize,
-                          ...(checked
-                            ? { borderColor: primary, background: primary + '14' }
-                            : { borderColor: '#d1d5db' }),
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleHowHeard(opt)}
-                          className="absolute opacity-0 w-0 h-0 pointer-events-none"
-                        />
-                        <span
-                          aria-hidden="true"
-                          className="flex items-center justify-center text-white font-black leading-none transition-colors shrink-0"
-                          style={{
-                            width: 20,
-                            height: 20,
-                            borderRadius: 5,
-                            border: `2px solid ${checked ? primary : '#d1d5db'}`,
-                            background: checked ? primary : '#FFFFFF',
-                            fontSize: 13,
-                          }}
-                        >
-                          {checked ? '✓' : ''}
-                        </span>
-                        <span>{opt}</span>
-                      </label>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Spiff to</label>
-                <select value={empId} onChange={e => setEmpId(e.target.value)}
-                  style={{ fontSize: inputSize }}
-                  className="w-full rounded-lg border border-gray-300 p-2 bg-white">
-                  <option value="">— none —</option>
-                  {employees.map(emp => (
-                    <option key={emp.id} value={emp.id}>{emp.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <Checkbox
-                checked={isWalkin}
-                onChange={setIsWalkin}
-                label="Walk-in (customer is here in person now)"
-                labelStyle={{ fontSize: checkboxLabelSize, paddingTop: 4 }}
+            <div className="p-5">
+              <AppointmentForm
+                mode="portal"
+                store={store}
+                event={event}
+                config={config}
+                override={override || null}
+                bookings={appointments.filter(a => a.status === 'confirmed').map(a => ({
+                  appointment_date: a.appointment_date,
+                  appointment_time: a.appointment_time,
+                  status: 'confirmed',
+                }))}
+                blocks={blocks}
+                employees={employees}
+                slug={slug}
+                bookedBy="store"
+                onSuccess={onAddSuccess}
               />
-
-              {error && (
-                <div className="text-red-700 bg-red-50 border border-red-200 rounded-lg p-2"
-                  style={{ fontSize: inputSize }}>
-                  {error}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={working}
-                className="w-full rounded-lg p-3 text-white font-semibold disabled:opacity-50"
-                style={{ background: primary, fontSize: inputSize }}
-              >
-                {working ? 'Saving…' : 'Add appointment'}
-              </button>
             </div>
-          </form>
+          </div>
         </div>
         )
       })()}
-
       {editingAppt && (
         <EditAppointmentModal
           appt={editingAppt}
