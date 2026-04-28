@@ -74,13 +74,21 @@ export async function getBookingPayload(slug: string): Promise<BookingPayload | 
     hear_about_options: Array.isArray(configRow.hear_about_options) ? configRow.hear_about_options : [],
   }
 
-  // 3. Upcoming events for this store, with their day rows.
+  // 3. Upcoming + in-flight events for this store, with their day rows.
+  // Include events whose 3-day window hasn't ended yet, not just those that
+  // start today or later — otherwise an event that started yesterday vanishes
+  // from the booking page even though customers can still book day 2/3.
   const today = todayIso()
+  const earliestStart = (() => {
+    const d = new Date(today + 'T12:00:00')
+    d.setDate(d.getDate() - 2)
+    return d.toISOString().slice(0, 10)
+  })()
   const { data: eventRows } = await sb
     .from('events')
     .select('id, store_id, start_date, brand, days:event_days(id, day_number)')
     .eq('store_id', store.id)
-    .gte('start_date', today)
+    .gte('start_date', earliestStart)
     .order('start_date', { ascending: true })
 
   const events: BookingEvent[] = (eventRows ?? []).map(e => {
