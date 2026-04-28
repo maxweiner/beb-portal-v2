@@ -335,12 +335,18 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
   const imgRef = useRef<HTMLInputElement>(null)
   const [imageOpen, setImageOpen] = useState(false)
 
-  // Shipping settings
+  // Shipping settings.
+  // The dropdown collapses two underlying columns (hold_time_days +
+  // hold_at_home_office) into one of: 'none' / 'home' / N days.
   const [holdDays, setHoldDays] = useState<number | null>(store.hold_time_days ?? null)
+  const [holdAtHomeOffice, setHoldAtHomeOffice] = useState<boolean>(!!store.hold_at_home_office)
   const [jewBoxCount, setJewBoxCount] = useState<number>(store.default_jewelry_box_count ?? 5)
   const [silBoxCount, setSilBoxCount] = useState<number>(store.default_silver_box_count ?? 3)
   const [shipRecipients, setShipRecipients] = useState<string[]>(store.shipping_recipients ?? [])
   const [shipRecipientDraft, setShipRecipientDraft] = useState('')
+
+  const holdMode: 'none' | 'home' | string =
+    holdAtHomeOffice ? 'home' : holdDays === null ? 'none' : String(holdDays)
 
   useEffect(() => {
     supabase.from('store_employees').select('*').eq('store_id', store.id).order('name')
@@ -395,11 +401,12 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
   )
 
   const shippingStatus = useAutosave(
-    { holdDays, jewBoxCount, silBoxCount, shipRecipients },
-    async ({ holdDays, jewBoxCount, silBoxCount, shipRecipients }) => {
+    { holdDays, holdAtHomeOffice, jewBoxCount, silBoxCount, shipRecipients },
+    async ({ holdDays, holdAtHomeOffice, jewBoxCount, silBoxCount, shipRecipients }) => {
       const { error } = await withTimeout(
         supabase.from('stores').update({
-          hold_time_days: holdDays,
+          hold_time_days: holdAtHomeOffice ? null : holdDays,
+          hold_at_home_office: holdAtHomeOffice,
           default_jewelry_box_count: Math.max(0, Math.floor(jewBoxCount || 0)),
           default_silver_box_count: Math.max(0, Math.floor(silBoxCount || 0)),
           shipping_recipients: shipRecipients,
@@ -682,14 +689,25 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
 
             <div className="field">
               <label className="fl">Hold time</label>
-              <select value={holdDays === null ? 'none' : String(holdDays)}
-                onChange={e => setHoldDays(e.target.value === 'none' ? null : Number(e.target.value))}>
+              <select value={holdMode}
+                onChange={e => {
+                  const v = e.target.value
+                  if (v === 'none')      { setHoldDays(null); setHoldAtHomeOffice(false) }
+                  else if (v === 'home') { setHoldDays(null); setHoldAtHomeOffice(true) }
+                  else                   { setHoldDays(Number(v)); setHoldAtHomeOffice(false) }
+                }}>
                 <option value="none">No Hold</option>
+                <option value="home">Hold at Home Office</option>
                 <option value="7">7 Days</option>
                 <option value="14">14 Days</option>
                 <option value="21">21 Days</option>
                 <option value="30">30 Days</option>
               </select>
+              {holdAtHomeOffice && (
+                <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4, fontStyle: 'italic' }}>
+                  Same effect as "No Hold" — no calendar entry, no reminder, no per-event shipping flow. The label is just for your records.
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
