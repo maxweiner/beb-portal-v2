@@ -8,31 +8,27 @@ export default function NoEventsPage({ store }: { store: BookingStore }) {
 
   return (
     <div className="min-h-screen pb-12" style={{ background: secondary }}>
-      <header className="px-4 pb-6 bg-white" style={{
-        borderBottom: `4px solid ${primary}`,
-        paddingTop: 'max(env(safe-area-inset-top), 32px)',
-      }}>
-        <div className="max-w-md mx-auto flex items-start gap-3">
-          <div className="shrink-0">
-            {store.store_image_url ? (
-              <img src={store.store_image_url} alt={`${store.name} logo`}
-                className="h-20 w-auto max-w-[8rem] rounded-xl object-contain bg-white" />
-            ) : (
-              <div className="h-20 w-20 rounded-xl flex items-center justify-center"
-                style={{ background: '#f3f4f6', color: primary }}>
-                <Diamond className="h-12 w-12" strokeWidth={1.5} />
-              </div>
-            )}
+      <header className="px-5 pt-4 pb-3 bg-white flex items-center gap-3 max-w-md mx-auto"
+        style={{
+          borderTop: `4px solid ${primary}`,
+          paddingTop: 'max(env(safe-area-inset-top), 16px)',
+        }}>
+        {store.store_image_url ? (
+          <img src={store.store_image_url} alt={`${store.name} logo`}
+            className="h-10 w-auto max-w-[6rem] rounded-lg object-contain bg-white" />
+        ) : (
+          <div className="h-10 w-10 rounded-lg flex items-center justify-center"
+            style={{ background: '#f3f4f6', color: primary }}>
+            <Diamond className="h-5 w-5" strokeWidth={1.5} />
           </div>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-2xl font-extrabold leading-tight" style={{ color: primary }}>{store.name}</h1>
-            {(store.owner_phone || store.owner_email) && (
-              <div className="text-sm text-gray-700 mt-1 leading-snug">
-                {store.owner_phone && <div>{formatPhoneDisplay(store.owner_phone)}</div>}
-                {store.owner_email && <div className="break-all">{store.owner_email}</div>}
-              </div>
-            )}
-          </div>
+        )}
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="font-extrabold leading-tight" style={{ color: primary, fontSize: '1.125rem' }}>{store.name}</div>
+          {store.city && (
+            <div className="text-gray-500 leading-tight" style={{ fontSize: '0.8125rem' }}>
+              {store.city}{store.state ? `, ${store.state}` : ''}
+            </div>
+          )}
         </div>
       </header>
 

@@ -25,7 +25,7 @@ export default async function ManagePage({ params }: { params: { token: string }
 
   const { data: store } = await sb
     .from('stores')
-    .select('name, slug, color_primary, color_secondary, store_image_url, owner_phone, owner_email')
+    .select('name, slug, color_primary, color_secondary, store_image_url, owner_phone, owner_email, city, state')
     .eq('id', appt.store_id)
     .maybeSingle()
   if (!store) notFound()
