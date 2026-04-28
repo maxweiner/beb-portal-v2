@@ -7,6 +7,7 @@ import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import type { Theme, BuyerVacation } from '@/types'
 import AvatarPicker from './AvatarPicker'
 import Checkbox from '@/components/ui/Checkbox'
+import AddressAutocompleteInput from '@/components/ui/AddressAutocompleteInput'
 import { getCenterModeOverride, setCenterModeOverride, type CenterModeOverride } from '@/lib/centerButtonMode'
 
 const BEB_THEMES: { id: Theme; label: string; color: string }[] = [
@@ -186,11 +187,12 @@ export default function Settings() {
         </div>
         <div className="field">
           <label className="fl">Home Address</label>
-          <input type="text" value={profile.home_address}
-            placeholder="123 Main St, Albany, NY 12345"
-            onChange={e => setProfile(p => ({ ...p, home_address: e.target.value }))} />
+          <AddressAutocompleteInput
+            value={profile.home_address}
+            placeholder="Start typing your address…"
+            onChange={v => setProfile(p => ({ ...p, home_address: v }))} />
           <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
-            Used by the mileage calculator (home → store → home).
+            Used by the mileage calculator (home → store → home). Pick from the suggestions to lock in a clean, geocodable address.
           </div>
         </div>
       </div>
