@@ -109,14 +109,25 @@ export default function AppointmentForm({
         const dayNumber = d.day_number as 1 | 2 | 3
         const dateStr = addDays(event.start_date, dayNumber - 1)
         const hours = hoursForEventDay(dayNumber, config, override || undefined)
-        const enabled = !!hours && dateStr >= today
+        // A day pill is enabled as long as it isn't in the past — same
+        // rule as the old BookingClient. Days without configured hours
+        // still let you click in; the time grid then renders the "No
+        // slots configured for this day" empty state. This avoids the
+        // form looking dead for stores that only configure hours for a
+        // subset of day_numbers.
+        const enabled = dateStr >= today
         return { dayNumber, dateStr, hours, enabled }
       })
   }, [event, config, override, today])
 
+  // Default to the first day that's enabled AND has hours so the time
+  // grid is immediately useful when there's a clear winner.
+  const firstUsefulIdx = dayInfos.findIndex(d => d.enabled && !!d.hours)
   const firstEnabledIdx = dayInfos.findIndex(d => d.enabled)
   const [selectedDayIdx, setSelectedDayIdx] = useState<number | null>(
-    firstEnabledIdx >= 0 ? firstEnabledIdx : null,
+    firstUsefulIdx >= 0 ? firstUsefulIdx
+      : firstEnabledIdx >= 0 ? firstEnabledIdx
+      : null,
   )
   const selectedDay = selectedDayIdx !== null ? dayInfos[selectedDayIdx] : null
 
