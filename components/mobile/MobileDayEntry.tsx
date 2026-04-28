@@ -75,6 +75,9 @@ export default function MobileDayEntry() {
   const [sources, setSources] = useState<Record<string, string>>(
     Object.fromEntries(LEAD_SOURCES.map(s => [s.key, '']))
   )
+  // Per-buyer purchase counts. Missing key = blank input (≠ 0). Persisted
+  // to event_days.purchases_by_buyer (JSONB).
+  const [purchasesByBuyer, setPurchasesByBuyer] = useState<Record<string, string>>({})
   const [checks, setChecks] = useState<CheckRow[]>([emptyCheck()])
   const [daysStatus, setDaysStatus] = useState<Record<number, 'submitted' | 'draft' | null>>({ 1: null, 2: null, 3: null })
   const [submitted, setSubmitted] = useState(false)
@@ -186,12 +189,17 @@ export default function MobileDayEntry() {
       setTenPct(current.dollars10 != null ? String(current.dollars10) : '')
       setFivePct(current.dollars5  != null ? String(current.dollars5)  : '')
       setSources(Object.fromEntries(LEAD_SOURCES.map(s => [s.key, String((current as any)[s.key] || '')])))
+      const pbb = (current as any).purchases_by_buyer || {}
+      setPurchasesByBuyer(
+        Object.fromEntries(Object.entries(pbb).map(([k, v]) => [k, String(v ?? '')]))
+      )
       setSubmitted(hasData(current))
     } else {
       setExistingEntry(null)
       entryIdRef.current = null
       setCustomers(''); setPurchases(''); setTenPct(''); setFivePct('')
       setSources(Object.fromEntries(LEAD_SOURCES.map(s => [s.key, ''])))
+      setPurchasesByBuyer({})
       setSubmitted(false)
     }
     // Day-level checks — matched by (event_id, day_number), no entry_id.
@@ -245,6 +253,15 @@ export default function MobileDayEntry() {
       const effPurchases = overrides.purchases ?? purchases
       const effTenPct    = overrides.tenPct    ?? tenPct
       const effFivePct   = overrides.fivePct   ?? fivePct
+      // Per-buyer purchases — empty input becomes a missing key so that
+      // "blank = not entered yet" stays distinct from "0 entered".
+      const purchasesByBuyerPayload: Record<string, number> = {}
+      for (const [uid, raw] of Object.entries(purchasesByBuyer)) {
+        const trimmed = (raw ?? '').toString().trim()
+        if (trimmed === '') continue
+        const n = parseInt(trimmed, 10)
+        if (Number.isFinite(n) && n >= 0) purchasesByBuyerPayload[uid] = n
+      }
       const payload: any = {
         event_id: selectedEventId,
         day_number: selectedDay,
@@ -254,6 +271,7 @@ export default function MobileDayEntry() {
         dollars10: effTenPct !== '' ? parseFloat(effTenPct) || 0 : 0,
         dollars5:  effFivePct !== '' ? parseFloat(effFivePct) || 0 : 0,
         ...Object.fromEntries(LEAD_SOURCES.map(s => [s.key, parseInt(sources[s.key]) || 0])),
+        purchases_by_buyer: purchasesByBuyerPayload,
         entered_by: user.id,
         entered_by_name: user.name,
         entered_at: new Date().toISOString(),
@@ -307,7 +325,7 @@ export default function MobileDayEntry() {
   }
 
   const autosaveStatus = useAutosave(
-    { customers, purchases, tenPct, fivePct, sources, checks },
+    { customers, purchases, tenPct, fivePct, sources, checks, purchasesByBuyer },
     async () => { await persist(false) },
     { enabled: !!selectedEventId && hydratedRef.current && !saving, delay: 1000 }
   )
@@ -592,6 +610,19 @@ export default function MobileDayEntry() {
               ))}
             </div>
           </div>
+
+          {(selectedEvent?.workers || []).length > 0 && (
+            <div style={cardStyle}>
+              <SectionLabel>Purchases by Buyer</SectionLabel>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {(selectedEvent?.workers || []).map((w: any) => (
+                  <MiniField key={w.id} label={w.name}
+                    value={purchasesByBuyer[w.id] ?? ''}
+                    onChange={v => setPurchasesByBuyer(p => ({ ...p, [w.id]: v }))} />
+                ))}
+              </div>
+            </div>
+          )}
 
           <div style={cardStyle}>
             <SectionLabel>Checks</SectionLabel>

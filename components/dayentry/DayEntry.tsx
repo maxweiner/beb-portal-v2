@@ -67,6 +67,9 @@ export default function DayEntry() {
   const [sources, setSources] = useState<Record<string, string>>(
     Object.fromEntries(LEAD_SOURCES.map(s => [s.key, '']))
   )
+  // Per-buyer purchase counts. Keys are user_ids; missing key = blank input
+  // (semantically distinct from "0 entered"). Stored in event_days.purchases_by_buyer.
+  const [purchasesByBuyer, setPurchasesByBuyer] = useState<Record<string, string>>({})
   const [checks, setChecks] = useState<CheckRow[]>([emptyCheck()])
   const [inputMode, setInputMode] = useState<InputMode>('grid')
   const [existingRow, setExistingRow] = useState<any>(null)
@@ -119,11 +122,16 @@ export default function DayEntry() {
       setDollars10(rowData.dollars10 != null ? String(rowData.dollars10) : '')
       setDollars5(rowData.dollars5 != null ? String(rowData.dollars5) : '')
       setSources(Object.fromEntries(LEAD_SOURCES.map(s => [s.key, String((rowData as any)[s.key] ?? '')])))
+      const pbb = (rowData as any).purchases_by_buyer || {}
+      setPurchasesByBuyer(
+        Object.fromEntries(Object.entries(pbb).map(([k, v]) => [k, String(v ?? '')]))
+      )
     } else {
       setExistingRow(null)
       rowIdRef.current = null
       setCustomers(''); setPurchases(''); setDollars10(''); setDollars5('')
       setSources(Object.fromEntries(LEAD_SOURCES.map(s => [s.key, ''])))
+      setPurchasesByBuyer({})
     }
     setChecks(checkRows && checkRows.length > 0
       ? checkRows.map((c: any) => ({
@@ -167,6 +175,15 @@ export default function DayEntry() {
       const effPurch = overrides.purchases ?? purchases
       const eff10    = overrides.dollars10 ?? dollars10
       const eff5     = overrides.dollars5  ?? dollars5
+      // Per-buyer purchases — empty input becomes a missing key so that
+      // "blank = not entered yet" stays distinct from "0 entered".
+      const purchasesByBuyerPayload: Record<string, number> = {}
+      for (const [uid, raw] of Object.entries(purchasesByBuyer)) {
+        const trimmed = (raw ?? '').toString().trim()
+        if (trimmed === '') continue
+        const n = parseInt(trimmed, 10)
+        if (Number.isFinite(n) && n >= 0) purchasesByBuyerPayload[uid] = n
+      }
       const payload: any = {
         event_id: selectedEventId,
         day_number: selectedDay,
@@ -176,6 +193,7 @@ export default function DayEntry() {
         dollars10: eff10 !== '' ? parseFloat(eff10) || 0 : 0,
         dollars5:  eff5  !== '' ? parseFloat(eff5)  || 0 : 0,
         ...Object.fromEntries(LEAD_SOURCES.map(s => [s.key, parseInt(sources[s.key]) || 0])),
+        purchases_by_buyer: purchasesByBuyerPayload,
         entered_by: user.id,
         entered_by_name: user.name,
         entered_at: new Date().toISOString(),
@@ -229,7 +247,7 @@ export default function DayEntry() {
   }
 
   const autosaveStatus = useAutosave(
-    { customers, purchases, dollars10, dollars5, sources, checks },
+    { customers, purchases, dollars10, dollars5, sources, checks, purchasesByBuyer },
     async () => { await persist() },
     { enabled: hydratedRef.current && !!selectedEventId && !saving, delay: 1000 },
   )
@@ -511,6 +529,24 @@ export default function DayEntry() {
                   ))}
                 </div>
               </div>
+
+              {/* Per-buyer purchases */}
+              {(selectedEvent?.workers || []).length > 0 && (
+                <div className="card card-accent mb-4" style={{ margin: 0 }}>
+                  <div className="card-title">Purchases by Buyer</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+                    {(selectedEvent?.workers || []).map((w: any) => (
+                      <div key={w.id}>
+                        <label className="fl">{w.name}</label>
+                        <input type="number" min="0" step="1"
+                          value={purchasesByBuyer[w.id] ?? ''}
+                          onChange={e => setPurchasesByBuyer(p => ({ ...p, [w.id]: e.target.value }))}
+                          placeholder="—" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Checks */}
               <div className="card card-accent mb-4" style={{ margin: 0 }}>
