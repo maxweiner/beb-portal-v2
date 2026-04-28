@@ -347,6 +347,14 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
       .then(({ data }) => setEmployees(data || []))
   }, [store.id])
 
+  // Active portal users — used as autocomplete suggestions for the
+  // shipping recipients chip input. Load once when the modal opens.
+  const [portalUsers, setPortalUsers] = useState<{ id: string; name: string; email: string }[]>([])
+  useEffect(() => {
+    supabase.from('users').select('id, name, email').eq('active', true).order('name')
+      .then(({ data }) => setPortalUsers((data || []) as any))
+  }, [])
+
   const infoStatus = useAutosave(
     {
       name: details.name,
@@ -719,10 +727,9 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
                 )}
               </div>
               {(() => {
-                const commit = () => {
-                  // Accept Enter, comma, or semicolon. Also bulk-paste with separators.
-                  const parts = shipRecipientDraft
-                    .split(/[,;\s]+/)
+                const commit = (overrideEmails?: string[]) => {
+                  const source = overrideEmails ?? shipRecipientDraft.split(/[,;\s]+/)
+                  const parts = source
                     .map(s => s.trim().toLowerCase())
                     .filter(s => s.includes('@'))
                   if (parts.length === 0) return
@@ -734,22 +741,60 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
                   })
                   setShipRecipientDraft('')
                 }
+                const q = shipRecipientDraft.trim().toLowerCase()
+                const suggestions = q.length >= 1
+                  ? portalUsers
+                      .filter(u => !shipRecipients.includes((u.email || '').toLowerCase()))
+                      .filter(u => (u.email || '').toLowerCase().includes(q) || (u.name || '').toLowerCase().includes(q))
+                      .slice(0, 6)
+                  : []
                 return (
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <input type="email" value={shipRecipientDraft}
-                      onChange={e => setShipRecipientDraft(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' || e.key === ',' || e.key === ';') {
-                          e.preventDefault()
-                          commit()
-                        }
-                      }}
-                      onBlur={() => { if (shipRecipientDraft.trim().includes('@')) commit() }}
-                      placeholder="email@example.com"
-                      style={{ flex: 1 }} />
-                    <button type="button" className="btn-outline btn-sm"
-                      disabled={!shipRecipientDraft.includes('@')}
-                      onClick={commit}>+ Add</button>
+                  <div style={{ position: 'relative' }}>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <input type="email" value={shipRecipientDraft}
+                        onChange={e => setShipRecipientDraft(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ',' || e.key === ';') {
+                            e.preventDefault()
+                            commit()
+                          }
+                        }}
+                        onBlur={() => {
+                          // Delay so a suggestion click can fire first
+                          setTimeout(() => {
+                            if (shipRecipientDraft.trim().includes('@')) commit()
+                          }, 150)
+                        }}
+                        placeholder="email@example.com or pick a user"
+                        style={{ flex: 1 }} />
+                      <button type="button" className="btn-outline btn-sm"
+                        disabled={!shipRecipientDraft.includes('@')}
+                        onClick={() => commit()}>+ Add</button>
+                    </div>
+                    {suggestions.length > 0 && (
+                      <div style={{
+                        position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
+                        marginTop: 2, background: 'white', border: '1px solid var(--pearl)',
+                        borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,.08)',
+                        maxHeight: 220, overflowY: 'auto',
+                      }}>
+                        {suggestions.map(u => (
+                          <button key={u.id} type="button"
+                            onMouseDown={e => { e.preventDefault(); commit([u.email]) }}
+                            style={{
+                              display: 'block', width: '100%', textAlign: 'left',
+                              padding: '8px 12px', background: 'transparent', border: 'none',
+                              cursor: 'pointer', fontFamily: 'inherit', fontSize: 13,
+                              borderBottom: '1px solid var(--cream2)',
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--cream2)')}
+                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                            <div style={{ fontWeight: 600, color: 'var(--ink)' }}>{u.name || u.email}</div>
+                            <div style={{ fontSize: 11, color: 'var(--mist)' }}>{u.email}</div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )
               })()}
