@@ -5,6 +5,7 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import { canEditEvent } from '@/lib/permissions'
+import Checkbox from '@/components/ui/Checkbox'
 
 const LEAD_SOURCES = [
   { key: 'src_vdp', label: 'VDP' },
@@ -665,48 +666,36 @@ export default function MobileDayEntry() {
                     </div>
                   </div>
 
-                  <label style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    marginTop: 10, padding: '8px 10px',
-                    background: c.commission_rate === 5 ? 'var(--green-pale)' : 'transparent',
-                    border: `1px solid ${c.commission_rate === 5 ? 'var(--green3)' : 'var(--cream2)'}`,
-                    borderRadius: 8, cursor: 'pointer', position: 'relative',
-                  }}>
-                    <input type="checkbox"
-                      checked={c.commission_rate === 5}
-                      onChange={e => setChecks(p => p.map((x, idx) =>
-                        idx === i ? { ...x, commission_rate: e.target.checked ? 5 : 10 } : x))}
-                      style={{
-                        position: 'absolute', opacity: 0,
-                        width: 0, height: 0, pointerEvents: 'none',
-                      }}
-                    />
-                    <div aria-hidden="true" style={{
-                      width: 22, height: 22, flexShrink: 0,
-                      borderRadius: 5,
-                      border: `2px solid ${c.commission_rate === 5 ? 'var(--green)' : 'var(--pearl)'}`,
-                      background: c.commission_rate === 5 ? 'var(--green)' : '#FFFFFF',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: '#FFFFFF', fontSize: 14, fontWeight: 900, lineHeight: 1,
-                      transition: 'all .15s ease',
-                    }}>
-                      {c.commission_rate === 5 ? '✓' : ''}
-                    </div>
-                    <span style={{
-                      fontSize: 12, fontWeight: 700,
-                      color: c.commission_rate === 5 ? 'var(--green-dark)' : 'var(--mist)',
-                      letterSpacing: '.02em',
-                    }}>
-                      5% commission rate
-                    </span>
-                    <span style={{
-                      marginLeft: 'auto', fontSize: 10, fontWeight: 700,
-                      color: c.commission_rate === 5 ? 'var(--green-dark)' : 'var(--silver)',
-                      letterSpacing: '.06em',
-                    }}>
-                      {c.commission_rate === 5 ? '5%' : 'DEFAULT 10%'}
-                    </span>
-                  </label>
+                  <Checkbox
+                    checked={c.commission_rate === 5}
+                    onChange={(next) => setChecks(p => p.map((x, idx) =>
+                      idx === i ? { ...x, commission_rate: next ? 5 : 10 } : x))}
+                    labelStyle={{
+                      display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                      marginTop: 10, padding: '8px 10px',
+                      background: c.commission_rate === 5 ? 'var(--green-pale)' : 'transparent',
+                      border: `1px solid ${c.commission_rate === 5 ? 'var(--green3)' : 'var(--cream2)'}`,
+                      borderRadius: 8,
+                    }}
+                    label={
+                      <>
+                        <span style={{
+                          fontSize: 12, fontWeight: 700,
+                          color: c.commission_rate === 5 ? 'var(--green-dark)' : 'var(--mist)',
+                          letterSpacing: '.02em',
+                        }}>
+                          5% commission rate
+                        </span>
+                        <span style={{
+                          marginLeft: 'auto', fontSize: 10, fontWeight: 700,
+                          color: c.commission_rate === 5 ? 'var(--green-dark)' : 'var(--silver)',
+                          letterSpacing: '.06em',
+                        }}>
+                          {c.commission_rate === 5 ? '5%' : 'DEFAULT 10%'}
+                        </span>
+                      </>
+                    }
+                  />
                 </div>
               )
             })}
