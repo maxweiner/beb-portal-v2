@@ -80,7 +80,18 @@ export default function ManageClient({
         borderBottom: `4px solid ${primary}`,
         paddingTop: 'max(env(safe-area-inset-top), 32px)',
       }}>
-        <div className="max-w-md mx-auto flex items-start justify-between gap-3">
+        <div className="max-w-md mx-auto flex items-start gap-3">
+          <div className="shrink-0">
+            {store.store_image_url ? (
+              <img src={store.store_image_url} alt={`${store.name} logo`}
+                className="h-20 w-auto max-w-[8rem] rounded-xl object-contain bg-white" />
+            ) : (
+              <div className="h-20 w-20 rounded-xl flex items-center justify-center"
+                style={{ background: '#f3f4f6', color: primary }}>
+                <Diamond className="h-12 w-12" strokeWidth={1.5} />
+              </div>
+            )}
+          </div>
           <div className="flex-1 min-w-0">
             <h1 className="text-2xl font-extrabold leading-tight" style={{ color: primary }}>{store.name}</h1>
             {(store.owner_phone || store.owner_email) && (
@@ -90,17 +101,6 @@ export default function ManageClient({
               </div>
             )}
             <p className="text-sm mt-2 text-gray-500">Manage your appointment</p>
-          </div>
-          <div className="shrink-0">
-            {store.store_image_url ? (
-              <img src={store.store_image_url} alt={`${store.name} logo`}
-                className="h-28 w-28 rounded-xl object-cover" />
-            ) : (
-              <div className="h-28 w-28 rounded-xl flex items-center justify-center"
-                style={{ background: '#f3f4f6', color: primary }}>
-                <Diamond className="h-12 w-12" strokeWidth={1.5} />
-              </div>
-            )}
           </div>
         </div>
       </header>
