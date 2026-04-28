@@ -99,7 +99,7 @@ const CARRIER_STATUS_COLOR: Record<string, string> = {
   exception: 'var(--red)',
   returned: 'var(--red)',
 }
-const CARRIERS_WITH_LIVE_TRACKING = new Set(['fedex'])
+const CARRIERS_WITH_LIVE_TRACKING = new Set(['fedex', 'ups'])
 
 function fmtRelative(iso: string | null): string {
   if (!iso) return ''

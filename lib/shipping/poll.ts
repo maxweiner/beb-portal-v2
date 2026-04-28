@@ -5,6 +5,7 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { getFedexStatus } from './carriers/fedex'
+import { getUpsStatus } from './carriers/ups'
 import type { CarrierStatusResult } from './carriers/types'
 
 export interface PollableBox {
@@ -59,9 +60,8 @@ function admin(): SupabaseClient {
 async function fetchCarrierStatus(box: PollableBox): Promise<CarrierStatusResult> {
   if (!box.tracking_number) throw new Error('no tracking number')
   switch (box.carrier) {
-    case 'fedex':
-      return await getFedexStatus(box.tracking_number)
-    // case 'ups': return await getUpsStatus(box.tracking_number)  // PR 6
+    case 'fedex': return await getFedexStatus(box.tracking_number)
+    case 'ups':   return await getUpsStatus(box.tracking_number)
     default:
       throw new Error(`carrier "${box.carrier ?? 'unknown'}" not supported yet`)
   }
