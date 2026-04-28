@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
-import type { Event, ExpenseReport, ExpenseReportStatus, User } from '@/types'
+import type { Event, ExpenseReport, ExpenseReportStatus, ExpenseReportTemplate, User } from '@/types'
 import {
   STATUS_LABEL, STATUS_COLOR,
   formatCurrency, formatDateLong,
@@ -41,6 +41,8 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
   const [pickerOpen, setPickerOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [templates, setTemplates] = useState<ExpenseReportTemplate[]>([])
+  const [pickerTemplateId, setPickerTemplateId] = useState<string>('')
 
   async function reload() {
     if (!user) return
@@ -78,6 +80,18 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
   }
   useEffect(() => { reload() /* eslint-disable-next-line */ }, [user?.id, events.length])
 
+  // Load active templates once for the new-report picker.
+  useEffect(() => {
+    let cancelled = false
+    supabase.from('expense_report_templates')
+      .select('*').eq('is_active', true).order('name', { ascending: true })
+      .then(({ data }) => {
+        if (cancelled) return
+        setTemplates((data ?? []) as ExpenseReportTemplate[])
+      })
+    return () => { cancelled = true }
+  }, [])
+
   const filtered = useMemo(() => {
     return rows.filter(r => {
       if (statusFilter !== 'all' && r.status !== statusFilter) return false
@@ -99,10 +113,13 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
   async function createReportForEvent(ev: Event) {
     if (!user) return
     setCreating(true); setError(null)
-    // If RLS rejects the insert, surface the error inline.
+    const payload: { event_id: string; user_id: string; template_id?: string } = {
+      event_id: ev.id, user_id: user.id,
+    }
+    if (pickerTemplateId) payload.template_id = pickerTemplateId
     const { data, error: insertErr } = await supabase
       .from('expense_reports')
-      .insert({ event_id: ev.id, user_id: user.id })
+      .insert(payload)
       .select('id')
       .single()
     setCreating(false)
@@ -110,7 +127,7 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
       setError(insertErr?.message ?? 'Could not create report.')
       return
     }
-    setPickerOpen(false)
+    setPickerOpen(false); setPickerTemplateId('')
     await reload()
     onOpen(data.id)
   }
@@ -215,6 +232,23 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
               <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)' }}>Pick an event</h2>
               <button onClick={() => setPickerOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--mist)' }}>×</button>
             </div>
+
+            {templates.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <label className="fl">Apply template (optional)</label>
+                <select value={pickerTemplateId} onChange={e => setPickerTemplateId(e.target.value)}>
+                  <option value="">— None —</option>
+                  {templates.map(t => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}{t.estimated_days ? ` (${t.estimated_days} days)` : ''}
+                    </option>
+                  ))}
+                </select>
+                <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
+                  Templates add a checklist of expected categories to the new report.
+                </div>
+              </div>
+            )}
             {eligibleEvents.length === 0 ? (
               <div style={{ padding: 20, textAlign: 'center', color: 'var(--mist)' }}>
                 No events without a report. Create an event first, or open an existing report from the list.
