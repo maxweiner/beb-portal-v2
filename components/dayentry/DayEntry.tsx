@@ -70,6 +70,9 @@ export default function DayEntry() {
   // Per-buyer purchase counts. Keys are user_ids; missing key = blank input
   // (semantically distinct from "0 entered"). Stored in event_days.purchases_by_buyer.
   const [purchasesByBuyer, setPurchasesByBuyer] = useState<Record<string, string>>({})
+  // 5% commission is rare — collapsed behind a + link unless the existing
+  // row already has a non-zero value saved.
+  const [show5pct, setShow5pct] = useState(false)
   const [checks, setChecks] = useState<CheckRow[]>([emptyCheck()])
   const [inputMode, setInputMode] = useState<InputMode>('grid')
   const [existingRow, setExistingRow] = useState<any>(null)
@@ -121,6 +124,7 @@ export default function DayEntry() {
       setPurchases(String(rowData.purchases ?? ''))
       setDollars10(rowData.dollars10 != null ? String(rowData.dollars10) : '')
       setDollars5(rowData.dollars5 != null ? String(rowData.dollars5) : '')
+      setShow5pct((rowData.dollars5 || 0) > 0)
       setSources(Object.fromEntries(LEAD_SOURCES.map(s => [s.key, String((rowData as any)[s.key] ?? '')])))
       const pbb = (rowData as any).purchases_by_buyer || {}
       setPurchasesByBuyer(
@@ -132,6 +136,7 @@ export default function DayEntry() {
       setCustomers(''); setPurchases(''); setDollars10(''); setDollars5('')
       setSources(Object.fromEntries(LEAD_SOURCES.map(s => [s.key, ''])))
       setPurchasesByBuyer({})
+      setShow5pct(false)
     }
     setChecks(checkRows && checkRows.length > 0
       ? checkRows.map((c: any) => ({
@@ -470,7 +475,7 @@ export default function DayEntry() {
                   Day Totals
                   <AutosaveIndicator status={autosaveStatus} />
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: show5pct ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)', gap: 14 }}>
                   <div>
                     <label className="fl">Purchases Made</label>
                     <input type="number" min="0" value={purchases}
@@ -489,15 +494,25 @@ export default function DayEntry() {
                         onChange={e => setDollars10(e.target.value)} placeholder="0" style={{ paddingLeft: 20 }} />
                     </div>
                   </div>
-                  <div>
-                    <label className="fl">$ @ 5% Commission</label>
-                    <div style={{ position: 'relative' }}>
-                      <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)' }}>$</span>
-                      <input type="number" min="0" step="0.01" value={dollars5}
-                        onChange={e => setDollars5(e.target.value)} placeholder="0" style={{ paddingLeft: 20 }} />
+                  {show5pct && (
+                    <div>
+                      <label className="fl">$ @ 5% Commission</label>
+                      <div style={{ position: 'relative' }}>
+                        <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)' }}>$</span>
+                        <input type="number" min="0" step="0.01" value={dollars5}
+                          onChange={e => setDollars5(e.target.value)} placeholder="0" style={{ paddingLeft: 20 }} />
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
+                {!show5pct && (
+                  <button onClick={() => setShow5pct(true)} style={{
+                    marginTop: 10, padding: '6px 12px', background: 'transparent',
+                    border: '1px dashed var(--pearl)', borderRadius: 'var(--r)',
+                    color: 'var(--mist)', fontWeight: 700, fontSize: 12,
+                    cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '.02em',
+                  }}>+ Add 5% Commission</button>
+                )}
                 {hasValidChecks && (
                   <div style={{ marginTop: 12, padding: 10, background: 'var(--green-pale)', border: '1px solid var(--green3)', borderRadius: 'var(--r)', fontSize: 12, color: 'var(--green-dark)' }}>
                     ℹ On Submit, the $ and Purchases fields will be replaced with your check totals ({derivedPurchases} checks · ${checksTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}).

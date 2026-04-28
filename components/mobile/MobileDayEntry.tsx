@@ -78,6 +78,9 @@ export default function MobileDayEntry() {
   // Per-buyer purchase counts. Missing key = blank input (≠ 0). Persisted
   // to event_days.purchases_by_buyer (JSONB).
   const [purchasesByBuyer, setPurchasesByBuyer] = useState<Record<string, string>>({})
+  // 5% commission is rare — collapsed behind a + link unless the row
+  // already has a non-zero value saved.
+  const [show5pct, setShow5pct] = useState(false)
   const [checks, setChecks] = useState<CheckRow[]>([emptyCheck()])
   const [daysStatus, setDaysStatus] = useState<Record<number, 'submitted' | 'draft' | null>>({ 1: null, 2: null, 3: null })
   const [submitted, setSubmitted] = useState(false)
@@ -188,6 +191,7 @@ export default function MobileDayEntry() {
       setPurchases(current.purchases != null ? String(current.purchases) : '')
       setTenPct(current.dollars10 != null ? String(current.dollars10) : '')
       setFivePct(current.dollars5  != null ? String(current.dollars5)  : '')
+      setShow5pct((current.dollars5 || 0) > 0)
       setSources(Object.fromEntries(LEAD_SOURCES.map(s => [s.key, String((current as any)[s.key] || '')])))
       const pbb = (current as any).purchases_by_buyer || {}
       setPurchasesByBuyer(
@@ -198,6 +202,7 @@ export default function MobileDayEntry() {
       setExistingEntry(null)
       entryIdRef.current = null
       setCustomers(''); setPurchases(''); setTenPct(''); setFivePct('')
+      setShow5pct(false)
       setSources(Object.fromEntries(LEAD_SOURCES.map(s => [s.key, ''])))
       setPurchasesByBuyer({})
       setSubmitted(false)
@@ -580,8 +585,18 @@ export default function MobileDayEntry() {
           <SectionLabel>Today's Numbers</SectionLabel>
           <FieldRow label="Purchases Made" value={purchases} onChange={setPurchases} required />
           <FieldRow label="Customers Seen" value={customers} onChange={setCustomers} />
-          <FieldRow label="$ @ 10% Commission" value={tenPct} onChange={setTenPct} money required />
-          <FieldRow label="$ @ 5% Commission" value={fivePct} onChange={setFivePct} money last />
+          <FieldRow label="$ @ 10% Commission" value={tenPct} onChange={setTenPct} money required last={!show5pct} />
+          {show5pct ? (
+            <FieldRow label="$ @ 5% Commission" value={fivePct} onChange={setFivePct} money last />
+          ) : (
+            <button onClick={() => setShow5pct(true)} style={{
+              marginTop: 10, padding: '10px 12px', width: '100%',
+              background: 'transparent', border: '1px dashed var(--pearl)',
+              borderRadius: 10, color: 'var(--mist)', fontWeight: 700,
+              fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
+              letterSpacing: '.04em',
+            }}>+ Add 5% Commission</button>
+          )}
         </div>
 
         {(selectedEvent?.workers || []).length > 0 && (
