@@ -600,17 +600,6 @@ export default function MobileDayEntry() {
           overflow: 'hidden',
           transition: 'max-height .4s ease, opacity .25s ease',
         }}>
-          <div style={cardStyle}>
-            <SectionLabel>Lead Sources</SectionLabel>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              {LEAD_SOURCES.map(s => (
-                <MiniField key={s.key} label={s.label}
-                  value={sources[s.key]}
-                  onChange={v => setSources(p => ({ ...p, [s.key]: v }))} />
-              ))}
-            </div>
-          </div>
-
           {(selectedEvent?.workers || []).length > 0 && (
             <div style={cardStyle}>
               <SectionLabel>Purchases by Buyer</SectionLabel>
@@ -623,6 +612,17 @@ export default function MobileDayEntry() {
               </div>
             </div>
           )}
+
+          <div style={cardStyle}>
+            <SectionLabel>Lead Sources</SectionLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              {LEAD_SOURCES.map(s => (
+                <MiniField key={s.key} label={s.label}
+                  value={sources[s.key]}
+                  onChange={v => setSources(p => ({ ...p, [s.key]: v }))} />
+              ))}
+            </div>
+          </div>
 
           <div style={cardStyle}>
             <SectionLabel>Checks</SectionLabel>

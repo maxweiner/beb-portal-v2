@@ -516,20 +516,6 @@ export default function DayEntry() {
                 </div>
               )}
 
-              {/* Lead sources */}
-              <div className="card card-accent mb-4" style={{ margin: 0 }}>
-                <div className="card-title">Lead Sources</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
-                  {LEAD_SOURCES.map(s => (
-                    <div key={s.key}>
-                      <label className="fl">{s.label}</label>
-                      <input type="number" min="0" value={sources[s.key]}
-                        onChange={e => setSources(p => ({ ...p, [s.key]: e.target.value }))} placeholder="0" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
               {/* Per-buyer purchases */}
               {(selectedEvent?.workers || []).length > 0 && (
                 <div className="card card-accent mb-4" style={{ margin: 0 }}>
@@ -547,6 +533,20 @@ export default function DayEntry() {
                   </div>
                 </div>
               )}
+
+              {/* Lead sources */}
+              <div className="card card-accent mb-4" style={{ margin: 0 }}>
+                <div className="card-title">Lead Sources</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+                  {LEAD_SOURCES.map(s => (
+                    <div key={s.key}>
+                      <label className="fl">{s.label}</label>
+                      <input type="number" min="0" value={sources[s.key]}
+                        onChange={e => setSources(p => ({ ...p, [s.key]: e.target.value }))} placeholder="0" />
+                    </div>
+                  ))}
+                </div>
+              </div>
 
               {/* Checks */}
               <div className="card card-accent mb-4" style={{ margin: 0 }}>
