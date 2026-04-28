@@ -19,6 +19,7 @@ import {
   formatCurrency, formatDateLong, todayIso,
 } from './expensesUtils'
 import { broadcastExpenseStatusChanged } from './usePendingApprovals'
+import AddReceiptButton from './AddReceiptButton'
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -340,7 +341,14 @@ export default function ExpenseReportDetail({
         </div>
       )}
 
-      {/* Add expense form */}
+      {/* Add Receipt (OCR) — primary, mobile-first action */}
+      {canMutate && (
+        <div style={{ marginBottom: 10 }}>
+          <AddReceiptButton reportId={report.id} onAdded={load} />
+        </div>
+      )}
+
+      {/* Manual entry fallback */}
       {canMutate && <AddExpenseForm onAdd={addExpense} />}
 
       {/* Expenses list */}
