@@ -285,6 +285,7 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
     { id: 'staff',        label: 'Staff',          icon: '👥' },
     { id: 'shipping',     label: 'Shipping',       icon: '📦' },
     { id: 'reports',      label: 'Reports',        icon: '📊' },
+    { id: 'expenses',     label: 'Expenses',       icon: '🧾' },
     { id: 'marketing',    label: 'Marketing',      icon: '📣' },
     { id: 'settings',     label: 'Settings',       icon: '⚙️' },
     { id: isLiberty ? 'libertyadmin' : 'admin', label: isLiberty ? 'LEB Admin' : 'Admin', icon: '🔧', adminOnly: true },

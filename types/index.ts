@@ -22,6 +22,69 @@ export interface User {
   /** Last brand the user actively selected — synced across devices.
    *  Null = never set; fall back to localStorage / 'beb'. */
   last_active_brand?: 'beb' | 'liberty' | null
+  /** Expenses module additions (PR1 schema). */
+  home_address?: string | null
+  signature_url?: string | null
+  magic_inbox_email?: string | null
+  /** Partner = approves financials + gets the partner default rate.
+   *  Distinct from role=superadmin; only Max/Joe/Rich have this. */
+  is_partner?: boolean
+}
+
+// ── Expenses & Invoicing module ──────────────────────────────
+export type ExpenseReportStatus = 'active' | 'submitted_pending_review' | 'approved' | 'paid'
+
+export type ExpenseCategory =
+  | 'flight'
+  | 'rental_car'
+  | 'rideshare'
+  | 'hotel'
+  | 'meals'
+  | 'shipping_supplies'
+  | 'jewelry_lots_cash'
+  | 'mileage'
+  | 'custom'
+
+export type ExpenseSource =
+  | 'manual'
+  | 'travel_module'
+  | 'magic_inbox'
+  | 'ocr'
+  | 'mileage_calc'
+
+export interface ExpenseReport {
+  id: string
+  event_id: string
+  user_id: string
+  status: ExpenseReportStatus
+  submitted_at: string | null
+  approved_at: string | null
+  approved_by: string | null
+  paid_at: string | null
+  paid_by: string | null
+  accountant_email_sent_at: string | null
+  total_expenses: number
+  total_compensation: number
+  grand_total: number
+  pdf_url: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface Expense {
+  id: string
+  expense_report_id: string
+  category: ExpenseCategory
+  custom_category_label: string | null
+  vendor: string | null
+  amount: number
+  expense_date: string
+  notes: string | null
+  receipt_url: string | null
+  source: ExpenseSource
+  ocr_extracted_data: Record<string, unknown> | null
+  created_at: string
+  updated_at: string
 }
 
 export type EventNoteCategory = 'worked' | 'didnt_work' | 'do_differently'
