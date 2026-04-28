@@ -208,10 +208,16 @@ export default function BookingClient({
   // the public page and the staff-portal page never disagree on which
   // event of a store is "the bookable one".
   const today = todayIso()
+  // Always consider all three day_numbers, not just the rows that happen
+  // to exist on event_days. getBookingPayload only synthesises default
+  // day rows when event_days is COMPLETELY empty — if a single row exists
+  // (e.g. day 1 was entered but 2 and 3 weren't), the other day_numbers
+  // would otherwise drop out of the picker entirely. Same approach
+  // StorePortalClient uses.
   const computeDays = (e: typeof events[number]): DayInfo[] =>
-    e.days
-      .map(d => {
-        const dayNumber = d.day_number as 1 | 2 | 3
+    [1, 2, 3]
+      .map(n => {
+        const dayNumber = n as 1 | 2 | 3
         const dateStr = addDays(e.start_date, dayNumber - 1)
         const hours = hoursForEventDay(dayNumber, config, override)
         return { dayNumber, dateStr, hours }
