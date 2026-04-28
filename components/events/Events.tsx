@@ -631,7 +631,10 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                                   <span style={{ fontWeight: on ? 700 : 400, color: on ? 'var(--green-dark)' : 'var(--ash)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</span>
                                 </div>
                                 {on && isLead && (
-                                  <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: 'var(--green)', padding: '3px 8px', borderRadius: 10, letterSpacing: '.04em' }}>🍔 LEAD</span>
+                                  <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: 'var(--green)', padding: '3px 8px 3px 4px', borderRadius: 10, letterSpacing: '.04em', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                    <img src="/lead-crown.png" alt="" width={16} height={16} style={{ display: 'block' }} />
+                                    LEAD
+                                  </span>
                                 )}
                                 {on && !isLead && isAdmin && (
                                   <button onClick={e => { e.stopPropagation(); setLeadWorker(ev, b.id) }}
@@ -886,7 +889,10 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                                   <span style={{ fontWeight: on ? 700 : 400, color: on ? 'var(--green-dark)' : 'var(--ash)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</span>
                                 </div>
                                 {on && isLead && (
-                                  <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: 'var(--green)', padding: '3px 8px', borderRadius: 10, letterSpacing: '.04em' }}>🍔 LEAD</span>
+                                  <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: 'var(--green)', padding: '3px 8px 3px 4px', borderRadius: 10, letterSpacing: '.04em', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                    <img src="/lead-crown.png" alt="" width={16} height={16} style={{ display: 'block' }} />
+                                    LEAD
+                                  </span>
                                 )}
                                 {on && !isLead && isAdmin && (
                                   <button onClick={e => { e.stopPropagation(); setLeadWorker(ev, b.id) }}
