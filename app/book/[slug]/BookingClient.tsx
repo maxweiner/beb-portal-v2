@@ -199,19 +199,29 @@ export default function BookingClient({
   const secondary = store.color_secondary || '#F5F0E8'
   const isReschedule = !!rescheduling
 
-  const event = events[0]
-  const dayInfos: DayInfo[] = useMemo(() => {
-    if (!event) return []
-    const today = todayIso()
-    return event.days
+  // Prefer the soonest event with at least one bookable day. The server
+  // now includes in-flight events (start_date >= today − 2), which means
+  // events[0] sorted oldest-first might be a today-ending or sparsely-
+  // populated event whose days all filter out. Fall through to the next
+  // event so customers don't land on an empty picker.
+  const today = todayIso()
+  const computeDays = (e: typeof events[number]): DayInfo[] =>
+    e.days
       .map(d => {
         const dayNumber = d.day_number as 1 | 2 | 3
-        const dateStr = addDays(event.start_date, dayNumber - 1)
+        const dateStr = addDays(e.start_date, dayNumber - 1)
         const hours = hoursForEventDay(dayNumber, config, override)
         return { dayNumber, dateStr, hours }
       })
       .filter(di => di.dateStr >= today)
-  }, [event, config, override])
+  const { event, dayInfos } = useMemo(() => {
+    for (const candidate of events) {
+      const di = computeDays(candidate)
+      if (di.length > 0) return { event: candidate, dayInfos: di }
+    }
+    return { event: events[0], dayInfos: [] as DayInfo[] }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events, config, override, today])
 
   const [openIdx, setOpenIdx] = useState(0)
   const [selectedDayIdx, setSelectedDayIdx] = useState<number | null>(null)
