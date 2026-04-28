@@ -340,6 +340,63 @@ export default function Settings() {
       {(user?.role === 'admin' || user?.role === 'superadmin') && (
         <PostmarkSettings />
       )}
+
+      {/* Expense Settings (admin/superadmin only) */}
+      {(user?.role === 'admin' || user?.role === 'superadmin') && (
+        <ExpenseSettings />
+      )}
+    </div>
+  )
+}
+
+/* ── EXPENSE SETTINGS ── */
+function ExpenseSettings() {
+  const [accountantEmail, setAccountantEmail] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const load = async () => {
+      const { data } = await supabase.from('settings').select('value').eq('key', 'accountant_email').maybeSingle()
+      // Older rows may have been stored as JSON.stringify'd strings; strip
+      // surrounding quotes either way.
+      setAccountantEmail((data?.value || '').replace(/^"|"$/g, ''))
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const status = useAutosave(
+    { accountantEmail },
+    async ({ accountantEmail }) => {
+      await supabase.from('settings').upsert({
+        key: 'accountant_email',
+        value: accountantEmail.trim(),
+      })
+    },
+    { enabled: !loading, delay: 800 },
+  )
+
+  if (loading) return null
+
+  return (
+    <div className="card">
+      <div className="card-title" style={{ display: 'flex', alignItems: 'center' }}>
+        🧾 Expense Settings
+        <AutosaveIndicator status={status} />
+      </div>
+      <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 16, lineHeight: 1.6 }}>
+        When an expense report is approved, the system emails the PDF to this address.
+      </p>
+
+      <div className="field">
+        <label className="fl">Accountant Email</label>
+        <input type="email" value={accountantEmail}
+          onChange={e => setAccountantEmail(e.target.value)}
+          placeholder="accountant@example.com" />
+        <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
+          Used as the recipient for the auto-generated expense report email.
+        </div>
+      </div>
     </div>
   )
 }

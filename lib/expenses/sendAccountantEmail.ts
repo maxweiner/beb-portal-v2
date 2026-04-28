@@ -40,10 +40,12 @@ const fmtDateLong = (iso: string) =>
 async function loadAccountantEmail(): Promise<string | null> {
   const sb = admin()
   // Prefer the settings-table value (matches how resend_api_key is stored
-  // in this codebase). Fall back to ACCOUNTANT_EMAIL env var.
+  // in this codebase). Strip wrapping quotes — historically some settings
+  // values are JSON.stringify'd, others are plain text. Falls back to the
+  // ACCOUNTANT_EMAIL env var.
   const { data } = await sb.from('settings').select('value').eq('key', 'accountant_email').maybeSingle()
-  const fromSettings = (data as any)?.value as string | undefined
-  return fromSettings || process.env.ACCOUNTANT_EMAIL || null
+  const raw = ((data as any)?.value as string | undefined)?.trim().replace(/^"|"$/g, '')
+  return raw || process.env.ACCOUNTANT_EMAIL || null
 }
 
 export interface SendAccountantEmailResult {
