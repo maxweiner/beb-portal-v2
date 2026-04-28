@@ -95,7 +95,28 @@ export default function StorePortalClient({
   const primary = store.color_primary || '#1D6B44'
   const secondary = store.color_secondary || '#F5F0E8'
 
-  const event = events[0]
+  // Pick the soonest event with at least one day that's enabled
+  // (date >= today AND hours configured). The server now widens the
+  // events fetch to include in-flight events whose 3-day window hasn't
+  // ended (start_date >= today − 2), so events[0] sorted oldest-first
+  // can be a today-ending event whose only future day_number happens
+  // to lack hours — leaving the picker dead. Walk the list and pick
+  // the first event that the staff can actually book against; fall
+  // through to events[0] only as a last resort so the empty-state
+  // message still renders when nothing is bookable.
+  const event = useMemo(() => {
+    const todayStr = todayIso()
+    for (const candidate of events) {
+      const hasBookableDay = [1, 2, 3].some(n => {
+        const dayNumber = n as 1 | 2 | 3
+        const dateStr = addDays(candidate.start_date, dayNumber - 1)
+        const hours = hoursForEventDay(dayNumber, config, override)
+        return !!hours && dateStr >= todayStr
+      })
+      if (hasBookableDay) return candidate
+    }
+    return events[0]
+  }, [events, config, override])
 
   // Group appointments by date for display
   const byDate = useMemo(() => {
