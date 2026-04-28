@@ -1,9 +1,23 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useApp } from '@/lib/context'
 import type { Event, BuyerVacation } from '@/types'
 import { supabase } from '@/lib/supabase'
+import EventShippingPanel from '@/components/shipping/EventShippingPanel'
+
+interface ShipmentEntry {
+  id: string
+  event_id: string
+  store_id: string
+  store_name: string
+  ship_date: string
+  jewelry_box_count: number
+  silver_box_count: number
+  status: string
+  event_workers: { id: string; name: string }[]
+  event_start_date: string
+}
 
 type ViewMode = 'month' | 'week' | 'day' | 'timeline' | 'agenda' | 'kanban'
 
@@ -41,8 +55,36 @@ function evDays(ev: Event): string[] {
 }
 
 export default function Schedule() {
-  const { events, stores, users, user } = useApp()
+  const { events, stores, users, user, brand } = useApp()
   const [view, setView] = useState<ViewMode>('month')
+  const [shipments, setShipments] = useState<ShipmentEntry[]>([])
+  const [shipmentDetail, setShipmentDetail] = useState<ShipmentEntry | null>(null)
+
+  // Brand-scoped shipments. Re-fetches on brand switch.
+  useEffect(() => {
+    let cancelled = false
+    supabase.from('event_shipments')
+      .select('id, event_id, store_id, ship_date, jewelry_box_count, silver_box_count, status, events!inner(brand, store_name, workers, start_date)')
+      .eq('events.brand', brand)
+      .neq('status', 'cancelled')
+      .then(({ data }) => {
+        if (cancelled) return
+        const rows = (data || []).map((r: any) => ({
+          id: r.id,
+          event_id: r.event_id,
+          store_id: r.store_id,
+          store_name: r.events?.store_name || '',
+          ship_date: r.ship_date,
+          jewelry_box_count: r.jewelry_box_count,
+          silver_box_count: r.silver_box_count,
+          status: r.status,
+          event_workers: r.events?.workers || [],
+          event_start_date: r.events?.start_date || '',
+        })) as ShipmentEntry[]
+        setShipments(rows)
+      })
+    return () => { cancelled = true }
+  }, [brand])
   // Restore last-used view per user.
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -128,7 +170,7 @@ export default function Schedule() {
         </div>
       </div>
 
-      {view === 'month'    && <MonthView    events={events} stores={stores} users={users} vacations={showVacations ? vacations : []} currentUserId={user?.id} onSelect={setDetail} isNarrow={isNarrow} />}
+      {view === 'month'    && <MonthView    events={events} stores={stores} users={users} vacations={showVacations ? vacations : []} currentUserId={user?.id} onSelect={setDetail} isNarrow={isNarrow} shipments={shipments} onSelectShipment={setShipmentDetail} />}
       {view === 'week'     && <WeekView     events={events} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
       {view === 'day'      && <DayView      events={events} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
       {view === 'timeline' && <TimelineView events={events} stores={stores} onSelect={setDetail} isNarrow={isNarrow} onSwitchView={setView} />}
@@ -136,6 +178,31 @@ export default function Schedule() {
       {view === 'kanban'   && <KanbanView   events={events} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
 
       {detail && <DetailModal ev={detail} stores={stores} onClose={() => setDetail(null)} isNarrow={isNarrow} />}
+      {shipmentDetail && (
+        <ShipmentDrawer
+          shipment={shipmentDetail}
+          onClose={() => setShipmentDetail(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function ShipmentDrawer({ shipment, onClose }: { shipment: ShipmentEntry; onClose: () => void }) {
+  return (
+    <div onClick={e => e.target === e.currentTarget && onClose()}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1000,
+        display: 'flex', justifyContent: 'flex-end',
+      }}>
+      <div style={{ width: 'min(720px, 95vw)', background: 'var(--cream)', height: '100%', overflowY: 'auto', padding: 18, boxShadow: '-8px 0 24px rgba(0,0,0,.18)' }}>
+        <EventShippingPanel
+          eventId={shipment.event_id}
+          eventStartDate={shipment.event_start_date}
+          eventWorkers={shipment.event_workers}
+          onClose={onClose}
+        />
+      </div>
     </div>
   )
 }
@@ -143,7 +210,7 @@ export default function Schedule() {
 /* ══════════════════════════════════════════
    MONTH VIEW
 ══════════════════════════════════════════ */
-function MonthView({ events, stores, users, vacations, currentUserId, onSelect, isNarrow }: { events: Event[]; stores: any[]; users: any[]; vacations: BuyerVacation[]; currentUserId?: string; onSelect: (e: Event) => void; isNarrow: boolean }) {
+function MonthView({ events, stores, users, vacations, currentUserId, onSelect, isNarrow, shipments, onSelectShipment }: { events: Event[]; stores: any[]; users: any[]; vacations: BuyerVacation[]; currentUserId?: string; onSelect: (e: Event) => void; isNarrow: boolean; shipments: ShipmentEntry[]; onSelectShipment: (s: ShipmentEntry) => void }) {
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
@@ -164,6 +231,7 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
   const ds = (d: number) => `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`
 
   const eventsOnDay = (d: number) => events.filter(ev => evDays(ev).includes(ds(d)))
+  const shipmentsOnDay = (d: number) => shipments.filter(s => s.ship_date === ds(d))
 
   const vacationsOnDay = (d: number) => {
     const dateStr = ds(d)
@@ -206,6 +274,7 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
           const dayEvs = day ? eventsOnDay(day) : []
           const isToday = day ? ds(day) === todayStr : false
           const dayVacs = day ? vacationsOnDay(day) : []
+          const dayShips = day ? shipmentsOnDay(day) : []
           const visibleCount = isNarrow ? 2 : 5
           const overflow = dayEvs.length - visibleCount
           const isSelected = isNarrow && day === selectedDay
@@ -244,6 +313,12 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
                       background: storeColor(ev.store_id, stores),
                     }} />
                   ))}
+                  {dayShips.length > 0 && (
+                    <span style={{
+                      width: 6, height: 6, borderRadius: '50%',
+                      background: '#F59E0B', boxShadow: '0 0 0 1.5px #fff inset',
+                    }} title={`${dayShips.length} ship date${dayShips.length === 1 ? '' : 's'}`} />
+                  )}
                   {moreDots > 0 && (
                     <span style={{ fontSize: 8, fontWeight: 800, color: 'var(--mist)', marginLeft: 2 }}>
                       +{moreDots}
@@ -293,6 +368,19 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
                       +{overflow} more
                     </div>
                   )}
+                  {dayShips.map(s => (
+                    <div key={s.id}
+                      onClick={() => onSelectShipment(s)}
+                      title={`Time to ship ${s.store_name} — ${s.jewelry_box_count}J + ${s.silver_box_count}S`}
+                      style={{
+                        background: '#fff8eb', color: '#92400e',
+                        border: '1px dashed #F59E0B',
+                        fontSize: 11, fontWeight: 800,
+                        padding: '3px 6px', borderRadius: 4, marginBottom: 3,
+                        cursor: 'pointer', overflow: 'hidden',
+                        whiteSpace: 'nowrap', textOverflow: 'ellipsis', lineHeight: 1.2,
+                      }}>📦 Ship {s.store_name}</div>
+                  ))}
                   {dayVacs.map(v => (
                     <div key={v.id} title={v.note || 'Vacation'} style={{
                       fontSize: 9, padding: '1px 5px', borderRadius: 99, marginTop: 2,
@@ -317,26 +405,48 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
           stores={stores}
           vacations={vacationsOnDay(selectedDay)}
           onSelect={onSelect}
+          shipments={shipmentsOnDay(selectedDay)}
+          onSelectShipment={onSelectShipment}
         />
       )}
     </div>
   )
 }
 
-function SelectedDayPanel({ dateStr, events, stores, vacations, onSelect }: {
+function SelectedDayPanel({ dateStr, events, stores, vacations, onSelect, shipments, onSelectShipment }: {
   dateStr: string
   events: Event[]
   stores: any[]
   vacations: any[]
   onSelect: (e: Event) => void
+  shipments: ShipmentEntry[]
+  onSelectShipment: (s: ShipmentEntry) => void
 }) {
   const d = new Date(dateStr + 'T12:00:00')
   const heading = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
   return (
     <div style={{ borderTop: '1px solid var(--pearl)', background: '#fff', padding: 14 }}>
       <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink)', marginBottom: 10 }}>{heading}</div>
+      {shipments.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+          {shipments.map(s => (
+            <button key={s.id} onClick={() => onSelectShipment(s)}
+              style={{
+                appearance: 'none', textAlign: 'left',
+                background: '#fff8eb', border: '1px dashed #F59E0B',
+                borderRadius: 8, padding: '10px 12px', cursor: 'pointer',
+                fontFamily: 'inherit', color: '#92400e', fontWeight: 700, fontSize: 13,
+              }}>
+              📦 Time to ship {s.store_name}
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#a16207', marginTop: 2 }}>
+                {s.jewelry_box_count} Jewelry · {s.silver_box_count} Silver
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
       {events.length === 0 ? (
-        <div style={{ fontSize: 13, color: 'var(--mist)', padding: '10px 0' }}>No events.</div>
+        <div style={{ fontSize: 13, color: 'var(--mist)', padding: '10px 0' }}>{shipments.length > 0 ? 'No other events.' : 'No events.'}</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {events.map(ev => (
