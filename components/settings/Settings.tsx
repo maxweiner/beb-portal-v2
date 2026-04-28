@@ -25,7 +25,11 @@ const LIBERTY_THEMES: { id: Theme; label: string; color: string }[] = [
 export default function Settings() {
   const { user, stores, theme, setTheme, reload, brand } = useApp()
   const THEMES = brand === 'liberty' ? LIBERTY_THEMES : BEB_THEMES
-  const [profile, setProfile] = useState({ name: user?.name || '', phone: user?.phone || '' })
+  const [profile, setProfile] = useState({
+    name: user?.name || '',
+    phone: user?.phone || '',
+    home_address: user?.home_address || '',
+  })
   const [notifyMaster, setNotifyMaster] = useState(user?.notify || false)
   const [notifySms, setNotifySms] = useState(user?.notify_sms || false)
   const [storePrefs, setStorePrefs] = useState<Record<string, boolean>>({})
@@ -54,7 +58,11 @@ export default function Settings() {
     profile,
     async (p) => {
       if (!user || !p.name.trim()) return
-      await supabase.from('users').update({ name: p.name.trim(), phone: p.phone.trim() }).eq('id', user.id)
+      await supabase.from('users').update({
+        name: p.name.trim(),
+        phone: p.phone.trim(),
+        home_address: p.home_address.trim() || null,
+      }).eq('id', user.id)
       // Refresh any in-flight notifications for this buyer so the
       // updated name/phone shows up when they actually send.
       void fetch('/api/notifications/reenqueue-for-buyer', {
@@ -175,6 +183,15 @@ export default function Settings() {
         <div className="field">
           <label className="fl">Phone</label>
           <input type="tel" value={profile.phone} onChange={e => setProfile(p => ({ ...p, phone: e.target.value }))} />
+        </div>
+        <div className="field">
+          <label className="fl">Home Address</label>
+          <input type="text" value={profile.home_address}
+            placeholder="123 Main St, Albany, NY 12345"
+            onChange={e => setProfile(p => ({ ...p, home_address: e.target.value }))} />
+          <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
+            Used by the mileage calculator (home → store → home).
+          </div>
         </div>
       </div>
 
@@ -352,28 +369,42 @@ export default function Settings() {
 /* ── EXPENSE SETTINGS ── */
 function ExpenseSettings() {
   const [accountantEmail, setAccountantEmail] = useState('')
+  const [irsMileageRate, setIrsMileageRate] = useState('0.67')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const load = async () => {
-      const { data } = await supabase.from('settings').select('value').eq('key', 'accountant_email').maybeSingle()
-      // Older rows may have been stored as JSON.stringify'd strings; strip
-      // surrounding quotes either way.
-      setAccountantEmail((data?.value || '').replace(/^"|"$/g, ''))
+      const [{ data: ae }, { data: rate }] = await Promise.all([
+        supabase.from('settings').select('value').eq('key', 'accountant_email').maybeSingle(),
+        supabase.from('settings').select('value').eq('key', 'irs_mileage_rate').maybeSingle(),
+      ])
+      setAccountantEmail((ae?.value || '').replace(/^"|"$/g, ''))
+      const rateVal = rate?.value
+      const rateStr = rateVal == null
+        ? '0.67'
+        : (typeof rateVal === 'number' ? String(rateVal) : String(rateVal).replace(/^"|"$/g, ''))
+      setIrsMileageRate(rateStr || '0.67')
       setLoading(false)
     }
     load()
   }, [])
 
   const status = useAutosave(
-    { accountantEmail },
-    async ({ accountantEmail }) => {
-      // settings.value is JSONB — match PostmarkSettings's JSON.stringify
-      // pattern so a bare string passes the column's JSON validation.
-      await supabase.from('settings').upsert({
-        key: 'accountant_email',
-        value: JSON.stringify(accountantEmail.trim()),
-      })
+    { accountantEmail, irsMileageRate },
+    async ({ accountantEmail, irsMileageRate }) => {
+      // settings.value is JSONB — JSON.stringify so a bare string /
+      // number passes column validation.
+      const rate = Number(irsMileageRate)
+      await Promise.all([
+        supabase.from('settings').upsert({
+          key: 'accountant_email',
+          value: JSON.stringify(accountantEmail.trim()),
+        }),
+        supabase.from('settings').upsert({
+          key: 'irs_mileage_rate',
+          value: JSON.stringify(Number.isFinite(rate) && rate > 0 ? rate : 0.67),
+        }),
+      ])
     },
     { enabled: !loading, delay: 800 },
   )
@@ -387,7 +418,7 @@ function ExpenseSettings() {
         <AutosaveIndicator status={status} />
       </div>
       <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 16, lineHeight: 1.6 }}>
-        When an expense report is approved, the system emails the PDF to this address.
+        Settings used by the Expenses & Invoicing module.
       </p>
 
       <div className="field">
@@ -396,7 +427,17 @@ function ExpenseSettings() {
           onChange={e => setAccountantEmail(e.target.value)}
           placeholder="accountant@example.com" />
         <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
-          Used as the recipient for the auto-generated expense report email.
+          Recipient for the auto-generated expense report email when a report is approved.
+        </div>
+      </div>
+
+      <div className="field">
+        <label className="fl">IRS Mileage Rate ($/mile)</label>
+        <input type="number" step="0.001" min="0" value={irsMileageRate}
+          onChange={e => setIrsMileageRate(e.target.value)}
+          placeholder="0.67" />
+        <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
+          Used by the mileage calculator. The 2025 IRS standard rate is $0.67/mi.
         </div>
       </div>
     </div>
