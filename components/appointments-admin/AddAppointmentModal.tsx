@@ -83,19 +83,12 @@ export default function AddAppointmentModal({
   const [storeId, setStoreId] = useState<string>(slugStores[0]?.id || '')
   const store = useMemo(() => slugStores.find(s => s.id === storeId), [slugStores, storeId])
 
-  // Upcoming + in-flight events for the selected store. An event with a
-  // start_date in the past two days is still bookable for its remaining
-  // days, so include it instead of filtering on start_date >= today.
+  // Upcoming events for the selected store
   const today = todayIso()
-  const earliestStart = useMemo(() => {
-    const d = new Date(today + 'T12:00:00')
-    d.setDate(d.getDate() - 2)
-    return d.toISOString().slice(0, 10)
-  }, [today])
   const storeEvents = useMemo(() =>
-    events.filter(e => e.store_id === storeId && e.start_date >= earliestStart)
+    events.filter(e => e.store_id === storeId && e.start_date >= today)
           .sort((a, b) => a.start_date.localeCompare(b.start_date))
-  , [events, storeId, earliestStart])
+  , [events, storeId, today])
   const [eventId, setEventId] = useState<string>('')
   useEffect(() => { setEventId(storeEvents[0]?.id || '') }, [storeEvents])
   const event = storeEvents.find(e => e.id === eventId)
