@@ -12,15 +12,40 @@ export interface PollableBox {
   tracking_number: string | null
   carrier: string | null
   status: string
+  labels_sent_at: string | null
+  shipped_at: string | null
+  received_at: string | null
 }
 
 export interface PollOutcome {
   boxId: string
   ok: boolean
   status?: string
+  previousStatus?: string
   carrierStatus?: string
+  autoAdvanced?: boolean
   autoReceived?: boolean
   error?: string
+}
+
+// Carrier event → minimum manual-workflow status the box should be at.
+// Only used to ADVANCE; the poller never downgrades. unknown / exception
+// / returned leave the manual status alone (preserve human's choice).
+const MANUAL_RANK: Record<string, number> = {
+  pending: 0,
+  labels_sent: 1,
+  shipped: 2,
+  received: 3,
+}
+
+function carrierTargetManual(carrierStatus: string): string | null {
+  switch (carrierStatus) {
+    case 'label_created':    return 'labels_sent'
+    case 'in_transit':
+    case 'out_for_delivery': return 'shipped'
+    case 'delivered':        return 'received'
+    default: return null
+  }
 }
 
 function admin(): SupabaseClient {
@@ -71,15 +96,38 @@ export async function pollOneBox(box: PollableBox, sb: SupabaseClient = admin())
     carrier_poll_error: null,
   }
 
+  // Auto-advance the manual workflow status to track what the carrier
+  // says, so the action button isn't stuck at "Mark labels sent" while
+  // FedEx is already showing the package in transit. Only moves forward;
+  // skipped steps get their _at timestamp backfilled (with _by left NULL
+  // so we can tell carrier-marked from human-marked).
+  let autoAdvanced = false
   let autoReceived = false
   let nextBoxStatus = box.status
-  if (result.status === 'delivered' && box.status !== 'received' && box.status !== 'cancelled') {
-    update.status = 'received'
-    update.received_at = result.deliveredAt ?? nowIso
-    // received_by left NULL on purpose — distinguishes carrier auto-mark
-    // from a human pressing "Mark received".
-    autoReceived = true
-    nextBoxStatus = 'received'
+  const target = carrierTargetManual(result.status)
+  const currentRank = MANUAL_RANK[box.status]
+  const targetRank = target != null ? MANUAL_RANK[target] : -1
+  if (
+    target != null &&
+    box.status !== 'cancelled' &&
+    currentRank != null &&
+    targetRank > currentRank
+  ) {
+    update.status = target
+    nextBoxStatus = target
+    autoAdvanced = true
+    if (target === 'received') autoReceived = true
+
+    const stamp = result.eventAt ?? nowIso
+    if (targetRank >= MANUAL_RANK.labels_sent && !box.labels_sent_at) {
+      update.labels_sent_at = stamp
+    }
+    if (targetRank >= MANUAL_RANK.shipped && !box.shipped_at) {
+      update.shipped_at = stamp
+    }
+    if (targetRank >= MANUAL_RANK.received && !box.received_at) {
+      update.received_at = result.deliveredAt ?? stamp
+    }
   }
 
   const { error } = await sb.from('event_shipment_boxes').update(update).eq('id', box.id)
@@ -90,7 +138,9 @@ export async function pollOneBox(box: PollableBox, sb: SupabaseClient = admin())
     boxId: box.id,
     ok: true,
     status: nextBoxStatus,
+    previousStatus: box.status,
     carrierStatus: result.status,
+    autoAdvanced,
     autoReceived,
   }
 }
@@ -107,7 +157,7 @@ export async function claimDueBoxes(
   const cutoff = new Date(Date.now() - minIntervalMs).toISOString()
   const { data, error } = await sb
     .from('event_shipment_boxes')
-    .select('id, tracking_number, carrier, status, last_polled_at')
+    .select('id, tracking_number, carrier, status, labels_sent_at, shipped_at, received_at, last_polled_at')
     .not('tracking_number', 'is', null)
     .not('carrier', 'is', null)
     .not('status', 'in', '(received,cancelled)')

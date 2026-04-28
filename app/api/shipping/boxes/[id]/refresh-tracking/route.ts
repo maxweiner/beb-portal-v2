@@ -30,7 +30,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const sb = admin()
   const { data: box, error } = await sb
     .from('event_shipment_boxes')
-    .select('id, tracking_number, carrier, status')
+    .select('id, tracking_number, carrier, status, labels_sent_at, shipped_at, received_at')
     .eq('id', params.id)
     .maybeSingle()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
