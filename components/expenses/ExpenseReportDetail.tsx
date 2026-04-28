@@ -527,6 +527,13 @@ function AddExpenseForm({ onAdd }: { onAdd: (d: NewExpenseDraft) => Promise<void
 }
 
 // ── Editable expense row ──────────────────────────────────
+const SOURCE_BADGE: Partial<Record<Expense['source'], { label: string; bg: string; fg: string }>> = {
+  travel_module: { label: '✈️ from Travel', bg: '#DBEAFE', fg: '#1E40AF' },
+  ocr:           { label: '📷 OCR',         bg: '#FEF3C7', fg: '#92400E' },
+  magic_inbox:   { label: '✉️ inbox',        bg: '#E0E7FF', fg: '#3730A3' },
+  mileage_calc:  { label: '🛣 calc',         bg: '#D1FAE5', fg: '#065F46' },
+}
+
 function ExpenseRow({ expense, canMutate, onUpdate, onDelete }: {
   expense: Expense
   canMutate: boolean
@@ -564,8 +571,20 @@ function ExpenseRow({ expense, canMutate, onUpdate, onDelete }: {
     onUpdate({ [key]: value } as Partial<Expense>)
   }
 
+  const sourceBadge = SOURCE_BADGE[expense.source]
+
   return (
     <div className="card" style={{ padding: 12 }}>
+      {sourceBadge && (
+        <div style={{ marginBottom: 8 }}>
+          <span style={{
+            display: 'inline-block',
+            background: sourceBadge.bg, color: sourceBadge.fg,
+            padding: '2px 8px', borderRadius: 999,
+            fontSize: 10, fontWeight: 800,
+          }}>{sourceBadge.label}</span>
+        </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(110px, 130px) minmax(140px, 1fr) minmax(140px, 1fr) minmax(110px, 130px) auto', gap: 8, alignItems: 'end' }}>
         <div>
           <label style={lbl}>Date</label>
