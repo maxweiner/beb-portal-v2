@@ -647,14 +647,32 @@ function CenterButtonSetting() {
               padding: '10px 12px', borderRadius: 8,
               border: `1.5px solid ${sel ? 'var(--green)' : 'var(--pearl)'}`,
               background: sel ? 'var(--green-pale)' : 'white',
-              cursor: 'pointer',
+              cursor: 'pointer', position: 'relative',
             }}>
+              {/* Visually-hidden input — the global `input { width: 100% }`
+                  rule in globals.css mauls a raw radio, so we hide it and
+                  render a custom circle (mirroring the shared Checkbox
+                  pattern). */}
               <input
                 type="radio" name="center-mode"
                 checked={sel}
                 onChange={() => update(opt.v)}
-                style={{ marginTop: 4 }}
+                style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0,0,0,0)', border: 0 }}
               />
+              <span aria-hidden="true" style={{
+                width: 18, height: 18, flexShrink: 0, marginTop: 2,
+                borderRadius: '50%',
+                border: `2px solid ${sel ? 'var(--green)' : 'var(--pearl)'}`,
+                background: '#FFFFFF',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'border-color .15s ease',
+              }}>
+                {sel && (
+                  <span style={{
+                    width: 8, height: 8, borderRadius: '50%', background: 'var(--green)',
+                  }} />
+                )}
+              </span>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: sel ? 'var(--green-dark)' : 'var(--ink)' }}>{opt.label}</div>
                 <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>{opt.hint}</div>
