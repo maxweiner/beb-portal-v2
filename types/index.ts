@@ -60,6 +60,11 @@ export interface Store {
   color_primary?: string | null
   color_secondary?: string | null
   timezone?: string | null
+  /** Shipping hold-time in days. NULL = "No Hold" (no shipping flow at all). */
+  hold_time_days?: number | null
+  default_jewelry_box_count?: number
+  default_silver_box_count?: number
+  shipping_recipients?: string[]
 }
 
 export interface EventDay {

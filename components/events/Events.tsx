@@ -434,6 +434,19 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
           const stale = isStale(ev)
           const upcoming = !cur && !stale && new Date(ev.start_date + 'T12:00:00') > today
 
+          // Shipping countdown — only when store has a hold time set
+          const shipCountdown = (() => {
+            if (!store?.hold_time_days) return null
+            const start = new Date(ev.start_date + 'T12:00:00')
+            const ship = new Date(start); ship.setDate(ship.getDate() + store.hold_time_days)
+            const days = Math.round((ship.getTime() - today.getTime()) / 86400000)
+            const dateStr = ship.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+            if (days > 1)  return { label: `Ships in ${days} days · ${dateStr}`,  color: 'var(--amber)',     urgent: false }
+            if (days === 1) return { label: `Ships tomorrow · ${dateStr}`,        color: 'var(--amber)',     urgent: true }
+            if (days === 0) return { label: `📦 Ships today · ${dateStr}`,        color: 'var(--green-dark)', urgent: true }
+            return { label: `Past ship date (${dateStr})`,                         color: 'var(--silver)',    urgent: false }
+          })()
+
           /* ───── Mobile card layout — rendered only on mobile ───── */
           if (isMobile) {
             const expanded = expandedCards.has(ev.id)
@@ -476,6 +489,11 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                     {store?.city}{store?.state ? ', ' + store.state : ''} · {fmtRange(ev.start_date)}
                     {cur && <span style={{ color: 'var(--green3)', fontWeight: 700, marginLeft: 6 }}>· Current</span>}
                   </div>
+                  {shipCountdown && (
+                    <div style={{ marginTop: 6, display: 'inline-block', padding: '2px 8px', borderRadius: 10,
+                      background: 'rgba(255,255,255,.18)', color: '#fff', fontWeight: 700, fontSize: 11,
+                    }}>📦 {shipCountdown.label}</div>
+                  )}
                 </div>
 
                 {expanded && (
@@ -711,6 +729,12 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                   }}>
                     {store?.city}{store?.state ? ', ' + store.state : ''} · {fmtRange(ev.start_date)}
                     <span style={{ color: statusColor, fontWeight: 700 }}> · {statusText}</span>
+                    {shipCountdown && (
+                      <span style={{ marginLeft: 8, padding: '2px 8px', borderRadius: 10,
+                        background: shipCountdown.urgent ? 'rgba(245,158,11,.15)' : 'var(--cream2)',
+                        color: shipCountdown.color, fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap',
+                      }}>📦 {shipCountdown.label}</span>
+                    )}
                   </div>
 
                   {/* Avatar stack + buyer first names */}

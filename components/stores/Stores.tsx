@@ -335,6 +335,13 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
   const imgRef = useRef<HTMLInputElement>(null)
   const [imageOpen, setImageOpen] = useState(false)
 
+  // Shipping settings
+  const [holdDays, setHoldDays] = useState<number | null>(store.hold_time_days ?? null)
+  const [jewBoxCount, setJewBoxCount] = useState<number>(store.default_jewelry_box_count ?? 5)
+  const [silBoxCount, setSilBoxCount] = useState<number>(store.default_silver_box_count ?? 3)
+  const [shipRecipients, setShipRecipients] = useState<string[]>(store.shipping_recipients ?? [])
+  const [shipRecipientDraft, setShipRecipientDraft] = useState('')
+
   useEffect(() => {
     supabase.from('store_employees').select('*').eq('store_id', store.id).order('name')
       .then(({ data }) => setEmployees(data || []))
@@ -371,6 +378,23 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
         supabase.from('stores').update({
           calendar_feed_url: feedUrl,
           calendar_offset_hours: calendarOffset,
+        }).eq('id', store.id)
+      )
+      if (error) throw error
+      await refetchStores()
+    },
+    { delay: 1000 }
+  )
+
+  const shippingStatus = useAutosave(
+    { holdDays, jewBoxCount, silBoxCount, shipRecipients },
+    async ({ holdDays, jewBoxCount, silBoxCount, shipRecipients }) => {
+      const { error } = await withTimeout(
+        supabase.from('stores').update({
+          hold_time_days: holdDays,
+          default_jewelry_box_count: Math.max(0, Math.floor(jewBoxCount || 0)),
+          default_silver_box_count: Math.max(0, Math.floor(silBoxCount || 0)),
+          shipping_recipients: shipRecipients,
         }).eq('id', store.id)
       )
       if (error) throw error
@@ -635,6 +659,78 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
                 }
               }}>Remove</button>
             )}
+          </div>
+
+          {/* Shipping settings */}
+          <div className="card card-accent" style={{ margin: 0 }}>
+            <div className="card-title" style={{ display: 'flex', alignItems: 'center' }}>
+              📦 Shipping
+              <AutosaveIndicator status={shippingStatus} />
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 12 }}>
+              Hold time controls when boxes ship back to BEB after each event.
+              "No Hold" turns off the entire shipping flow for this store.
+            </p>
+
+            <div className="field">
+              <label className="fl">Hold time</label>
+              <select value={holdDays === null ? 'none' : String(holdDays)}
+                onChange={e => setHoldDays(e.target.value === 'none' ? null : Number(e.target.value))}>
+                <option value="none">No Hold</option>
+                <option value="7">7 Days</option>
+                <option value="14">14 Days</option>
+                <option value="21">21 Days</option>
+                <option value="30">30 Days</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="field">
+                <label className="fl">Default Jewelry box count</label>
+                <input type="number" min={0} value={jewBoxCount}
+                  onChange={e => setJewBoxCount(Number(e.target.value))} />
+              </div>
+              <div className="field">
+                <label className="fl">Default Silver box count</label>
+                <input type="number" min={0} value={silBoxCount}
+                  onChange={e => setSilBoxCount(Number(e.target.value))} />
+              </div>
+            </div>
+
+            <div className="field">
+              <label className="fl">Recipients</label>
+              <p style={{ fontSize: 11, color: 'var(--mist)', margin: '0 0 6px' }}>
+                Get the ship-day reminder + stuck-shipment alerts. Enter to add.
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                {shipRecipients.map(em => (
+                  <span key={em} style={{
+                    padding: '4px 8px', borderRadius: 12, background: 'var(--cream2)',
+                    fontSize: 12, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6,
+                  }}>
+                    {em}
+                    <button onClick={() => setShipRecipients(p => p.filter(x => x !== em))}
+                      style={{ background: 'none', border: 'none', color: 'var(--mist)', cursor: 'pointer', padding: 0, fontSize: 14, lineHeight: 1 }}
+                      aria-label={`Remove ${em}`}>×</button>
+                  </span>
+                ))}
+                {shipRecipients.length === 0 && (
+                  <span style={{ fontSize: 12, color: 'var(--mist)', fontStyle: 'italic' }}>No recipients yet</span>
+                )}
+              </div>
+              <input type="email" value={shipRecipientDraft}
+                onChange={e => setShipRecipientDraft(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key !== 'Enter') return
+                  e.preventDefault()
+                  const v = shipRecipientDraft.trim().toLowerCase()
+                  if (!v.includes('@')) return
+                  if (shipRecipients.includes(v)) { setShipRecipientDraft(''); return }
+                  setShipRecipients(p => [...p, v])
+                  setShipRecipientDraft('')
+                }}
+                placeholder="email@example.com — press Enter to add" />
+            </div>
           </div>
 
         </div>
