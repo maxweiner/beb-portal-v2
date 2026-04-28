@@ -368,9 +368,11 @@ function ExpenseSettings() {
   const status = useAutosave(
     { accountantEmail },
     async ({ accountantEmail }) => {
+      // settings.value is JSONB — match PostmarkSettings's JSON.stringify
+      // pattern so a bare string passes the column's JSON validation.
       await supabase.from('settings').upsert({
         key: 'accountant_email',
-        value: accountantEmail.trim(),
+        value: JSON.stringify(accountantEmail.trim()),
       })
     },
     { enabled: !loading, delay: 800 },
