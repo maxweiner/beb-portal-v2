@@ -590,12 +590,11 @@ export default function MobileDayEntry() {
             <FieldRow label="$ @ 5% Commission" value={fivePct} onChange={setFivePct} money last />
           ) : (
             <button onClick={() => setShow5pct(true)} style={{
-              marginTop: 10, padding: '10px 12px', width: '100%',
-              background: 'transparent', border: '1px dashed var(--pearl)',
-              borderRadius: 10, color: 'var(--mist)', fontWeight: 700,
-              fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
-              letterSpacing: '.04em',
-            }}>+ Add 5% Commission</button>
+              marginTop: 10, padding: 0, background: 'none', border: 'none',
+              color: 'var(--green-dark)', fontWeight: 700, fontSize: 12,
+              cursor: 'pointer', fontFamily: 'inherit',
+              textDecoration: 'underline', textAlign: 'left',
+            }}>Show 5% commission field</button>
           )}
         </div>
 

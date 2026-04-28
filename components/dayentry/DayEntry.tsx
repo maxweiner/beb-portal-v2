@@ -507,11 +507,11 @@ export default function DayEntry() {
                 </div>
                 {!show5pct && (
                   <button onClick={() => setShow5pct(true)} style={{
-                    marginTop: 10, padding: '6px 12px', background: 'transparent',
-                    border: '1px dashed var(--pearl)', borderRadius: 'var(--r)',
-                    color: 'var(--mist)', fontWeight: 700, fontSize: 12,
-                    cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '.02em',
-                  }}>+ Add 5% Commission</button>
+                    marginTop: 10, padding: 0, background: 'none', border: 'none',
+                    color: 'var(--green-dark)', fontWeight: 700, fontSize: 12,
+                    cursor: 'pointer', fontFamily: 'inherit',
+                    textDecoration: 'underline',
+                  }}>Show 5% commission field</button>
                 )}
                 {hasValidChecks && (
                   <div style={{ marginTop: 12, padding: 10, background: 'var(--green-pale)', border: '1px solid var(--green3)', borderRadius: 'var(--r)', fontSize: 12, color: 'var(--green-dark)' }}>
