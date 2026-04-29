@@ -266,9 +266,6 @@ function UsersTab() {
                   <span style={{ fontSize: 13, fontWeight: 600, color: getBuyer(u) ? 'var(--green-dark)' : 'var(--ash)' }}>Buyer</span>
                 </label>
               )}
-              {isSuperAdmin && u.id !== me?.id && (
-                <button onClick={() => deleteUser(u.id, u.name)} className="btn-danger btn-xs">Delete</button>
-              )}
             </div>
           </div>
         </div>
@@ -298,9 +295,19 @@ function UsersTab() {
               ))}
               <button onClick={() => setEditForm({ ...editForm, alternate_emails: [...editForm.alternate_emails, ''] })} className="btn-outline btn-sm" style={{ marginTop: 8 }}>+ Add Another Email</button>
             </div>
-            <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+            <div style={{ display: 'flex', gap: 12, marginTop: 24, alignItems: 'center' }}>
               <button onClick={saveUserEdit} className="btn-primary">Save Changes</button>
               <button onClick={() => setEditingUser(null)} className="btn-outline">Cancel</button>
+              {isSuperAdmin && editingUser.id !== me?.id && (
+                <button
+                  onClick={async () => {
+                    await deleteUser(editingUser.id, editingUser.name)
+                    setEditingUser(null)
+                  }}
+                  className="btn-danger"
+                  style={{ marginLeft: 'auto' }}
+                >Delete User</button>
+              )}
             </div>
           </div>
         </div>
