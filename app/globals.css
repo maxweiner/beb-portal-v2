@@ -245,9 +245,9 @@ input:focus, select:focus, textarea:focus { border-color: var(--green); }
 .sidebar-nav { flex: 1; padding: 6px 8px; overflow-y: auto; }
 .nav-group-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; color: var(--sidebar-muted); padding: 12px 12px 4px; }
 .nav-group-label:first-child { padding-top: 6px; }
-.nav-item { display: flex; align-items: center; gap: 0; padding: 6px 12px; border-radius: 7px; color: var(--sidebar-text); font-size: 13px; font-weight: 700; cursor: pointer; transition: all .13s; margin-bottom: 1px; background: none; border: none; width: 100%; text-align: left; justify-content: flex-start; }
-.nav-item:hover { background: rgba(255,255,255,.08); color: #fff; }
-.nav-item.active { background: var(--sidebar-active); color: #fff; }
+.nav-item { display: flex; align-items: center; gap: 0; padding: 6px 12px; border-radius: 7px; color: var(--sidebar-text); font-size: 13px; font-weight: 700; cursor: pointer; transition: background .15s, color .15s, box-shadow .2s; margin-bottom: 1px; background: none; border: none; width: 100%; text-align: left; justify-content: flex-start; }
+.nav-item:hover { background: rgba(255,255,255,.10); color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.10), 0 0 14px rgba(255,255,255,.10); }
+.nav-item.active { background: var(--sidebar-active); color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.16), 0 0 18px rgba(255,255,255,.08); }
 .ni-icon { width: 36px; display: flex; align-items: center; justify-content: flex-start; flex-shrink: 0; opacity: .8; }
 .ni-icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
 .sidebar-footer { padding: 14px; border-top: 1px solid rgba(255,255,255,.08); }

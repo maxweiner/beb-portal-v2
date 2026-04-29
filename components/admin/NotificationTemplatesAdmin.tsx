@@ -73,7 +73,13 @@ function shellHtml(inner: string): string {
   </body></html>`
 }
 
-export default function NotificationTemplatesAdmin() {
+interface Props {
+  /** When true, render without the page-level header / padding so the
+   *  list can sit inside another page's card. */
+  embedded?: boolean
+}
+
+export default function NotificationTemplatesAdmin({ embedded = false }: Props = {}) {
   const { user, brand } = useApp()
   const isSuperAdmin = user?.role === 'superadmin'
   const [templates, setTemplates] = useState<TemplateRow[]>([])
@@ -91,6 +97,7 @@ export default function NotificationTemplatesAdmin() {
   }, [])
 
   if (!isSuperAdmin) {
+    if (embedded) return null
     return (
       <div className="p-6 max-w-3xl mx-auto">
         <div className="card text-center" style={{ padding: 40 }}>
@@ -128,22 +135,19 @@ export default function NotificationTemplatesAdmin() {
   }
 
   if (!loaded) {
-    return <div className="p-6"><p style={{ color: 'var(--mist)' }}>Loading…</p></div>
+    return <div className={embedded ? '' : 'p-6'}><p style={{ color: 'var(--mist)' }}>Loading…</p></div>
   }
 
   const triggerDefs = listTriggers()
   const v2ForBrand = templates.filter(t => t.brand === brand && t.trigger_type)
   const legacy = templates.filter(t => !t.brand)
 
-  return (
-    <div className="p-6" style={{ maxWidth: 880, margin: '0 auto' }}>
-      <div style={{ marginBottom: 20 }}>
-        <h1 className="text-2xl font-black" style={{ color: 'var(--ink)' }}>Notification Templates</h1>
-        <p style={{ fontSize: 13, color: 'var(--mist)', marginTop: 4 }}>
-          Editing templates for <strong style={{ textTransform: 'uppercase' }}>{brand}</strong>.
-          Switch brand in the sidebar to edit the other set.
-        </p>
-      </div>
+  const inner = (
+    <>
+      <p style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 14 }}>
+        Editing templates for <strong style={{ textTransform: 'uppercase' }}>{brand}</strong>.
+        Switch brand in the sidebar to edit the other set.
+      </p>
 
       {/* v2 per-brand triggers */}
       <div style={{ marginBottom: 26 }}>
@@ -185,6 +189,17 @@ export default function NotificationTemplatesAdmin() {
           ))}
         </div>
       </div>
+    </>
+  )
+
+  if (embedded) return inner
+
+  return (
+    <div className="p-6" style={{ maxWidth: 880, margin: '0 auto' }}>
+      <div style={{ marginBottom: 20 }}>
+        <h1 className="text-2xl font-black" style={{ color: 'var(--ink)' }}>Notification Templates</h1>
+      </div>
+      {inner}
     </div>
   )
 }

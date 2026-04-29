@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useApp } from '@/lib/context'
 import ReportEditView, { type ReportDef } from './ReportEditView'
 import CustomReportsListLazy from './CustomReportsList'
+import NotificationTemplatesAdmin from '@/components/admin/NotificationTemplatesAdmin'
 
 const TODAY = new Date()
 const fmtToday = TODAY.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
@@ -96,8 +97,9 @@ const REPORTS: (ReportDef & { Icon: React.FC<{ size?: number; color?: string }>;
 export default function Reports() {
   const { user } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
+  const isSuperAdmin = user?.role === 'superadmin'
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [tab, setTab] = useState<'templates' | 'custom'>('templates')
+  const [tab, setTab] = useState<'templates' | 'custom' | 'notifications'>('templates')
 
   if (!isAdmin) {
     return (
@@ -118,10 +120,16 @@ export default function Reports() {
     if (def) return <ReportEditView report={def} onBack={() => setActiveId(null)} />
   }
 
+  const tabs: ([typeof tab, string][]) = [
+    ['templates', 'Templates'],
+    ['custom', 'Custom'],
+    ...(isSuperAdmin ? ([['notifications', 'Notifications']] as [typeof tab, string][]) : []),
+  ]
+
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <div style={{ marginBottom: 16 }}>
-        <h1 className="text-2xl font-black" style={{ color: 'var(--ink)' }}>Reports</h1>
+        <h1 className="text-2xl font-black" style={{ color: 'var(--ink)' }}>Reports & Notify</h1>
         <div style={{ fontSize: 13, color: 'var(--mist)', marginTop: 4 }}>
           Edit, preview, and send any report. Click a tile to open its editor.
         </div>
@@ -129,7 +137,7 @@ export default function Reports() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, padding: 4, marginBottom: 16, background: 'var(--cream2)', borderRadius: 'var(--r)', border: '1px solid var(--pearl)', width: 'fit-content' }}>
-        {([['templates', 'Templates'], ['custom', 'Custom']] as const).map(([id, label]) => (
+        {tabs.map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} style={{
             padding: '6px 14px', borderRadius: 'calc(var(--r) - 2px)', border: 'none', cursor: 'pointer',
             fontSize: 12, fontWeight: 700,
@@ -139,6 +147,18 @@ export default function Reports() {
           }}>{label}</button>
         ))}
       </div>
+
+      {tab === 'notifications' && (
+        <div className="card" style={{ background: '#FFFFFF' }}>
+          <div style={{
+            fontSize: 15, fontWeight: 800, color: 'var(--ink)', marginBottom: 4,
+          }}>SMS Notifications</div>
+          <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 12 }}>
+            Customer-facing SMS &amp; email templates. Per-brand triggers + legacy appointment templates.
+          </div>
+          <NotificationTemplatesAdmin embedded />
+        </div>
+      )}
 
       {tab === 'custom' && <CustomReportsListLazy />}
       {tab === 'templates' && (
