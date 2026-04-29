@@ -13,6 +13,7 @@ import NotificationStatusBadge from '@/components/notifications/NotificationStat
 import EventShippingPanel from '@/components/shipping/EventShippingPanel'
 import UnderstaffedBadge from './UnderstaffedBadge'
 import { eventStaffing } from '@/lib/eventStaffing'
+import { eventDisplayName } from '@/lib/eventName'
 
 type Filter = 'thisweek' | 'active' | 'all' | 'current' | 'past' | 'future' | 'days30' | 'days60'
 type Sort = 'date-desc' | 'date-asc' | 'name-asc'
@@ -169,6 +170,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
       const s = search.toLowerCase()
       const store = stores.find(st => st.id === ev.store_id)
       return (ev.store_name || '').toLowerCase().includes(s) ||
+        (store?.name || '').toLowerCase().includes(s) ||
         (store?.city || '').toLowerCase().includes(s) ||
         (store?.state || '').toLowerCase().includes(s)
     }
@@ -545,7 +547,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                     <span style={{
                       fontSize: 15, fontWeight: 900, flex: 1, minWidth: 0,
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>{ev.store_name}</span>
+                    }}>{eventDisplayName(ev, stores)}</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                       {(() => {
                         const s = eventStaffing(ev)
@@ -824,7 +826,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                   flex: 1, fontSize: 17, fontWeight: 900, color: '#fff',
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
                 }}>
-                  {ev.store_name}
+                  {eventDisplayName(ev, stores)}
                 </span>
                 <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
                   {[1, 2, 3].map(d => {
@@ -1111,7 +1113,7 @@ function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
         <div style={{ background: 'var(--sidebar-bg)', padding: '20px 24px', borderRadius: 'var(--r2) var(--r2) 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <div style={{ color: 'var(--green3)', fontSize: 14 }}>◆ Event Details</div>
-            <div style={{ color: '#fff', fontSize: 18, fontWeight: 900, marginTop: 2 }}>{ev.store_name}</div>
+            <div style={{ color: '#fff', fontSize: 18, fontWeight: 900, marginTop: 2 }}>{eventDisplayName(ev, stores)}</div>
             <div style={{ color: 'rgba(255,255,255,.5)', fontSize: 13, marginTop: 2 }}>{store?.city}, {store?.state} · {ev.start_date}</div>
           </div>
           <button onClick={onClose}

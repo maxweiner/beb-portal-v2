@@ -5,6 +5,7 @@ import { useApp } from '@/lib/context'
 import type { NavPage } from '@/app/page'
 import { leaderboardBuyers } from '@/lib/leaderboard'
 import { eventStaffing } from '@/lib/eventStaffing'
+import { eventDisplayName } from '@/lib/eventName'
 import UnderstaffedBadge from '@/components/events/UnderstaffedBadge'
 
 /** Current-year past/current events where `buyerId` is in the workers array. */
@@ -253,14 +254,22 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
                     }}>
                       {staffing.understaffed && staffing.needed != null && (
                         <span style={{ position: 'absolute', top: 8, right: 8 }}>
-                          <UnderstaffedBadge assigned={staffing.assigned} needed={staffing.needed} variant="full" />
+                          <UnderstaffedBadge assigned={staffing.assigned} needed={staffing.needed} variant="compact" />
                         </span>
                       )}
                       <div style={{
                         fontSize: 14, fontWeight: 900, color: 'var(--green-dark)',
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        paddingRight: staffing.understaffed ? 130 : 0,
-                      }}>{ev.store_name}</div>
+                        // Wrap up to 2 lines for long store names; the
+                        // compact badge sits in the corner above row 1
+                        // so reserve a little right-padding.
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        lineHeight: 1.2,
+                        wordBreak: 'break-word',
+                        paddingRight: staffing.understaffed ? 56 : 0,
+                      }}>{eventDisplayName(ev, stores)}</div>
                       <div style={{ fontSize: 11, color: 'var(--green-dark)', opacity: 0.65 }}>
                         {store?.city}{store?.state ? ', ' + store.state : ''}
                       </div>
@@ -305,7 +314,7 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
               const evWorkersList = (ev.workers || []).filter((w: any) => w.name)
               return (
                 <div key={ev.id} style={{ minWidth: 190, flex: 1, background: 'var(--cream2)', borderRadius: 'var(--r)', padding: '12px 14px', borderLeft: `3px solid ${storeColors[i % storeColors.length]}` }}>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)', marginBottom: 2 }}>{ev.store_name}</div>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)', marginBottom: 2 }}>{eventDisplayName(ev, stores)}</div>
                   <div style={{ fontSize: 12, color: 'var(--mist)' }}>{store?.city}{store?.city && store?.state ? ', ' : ''}{store?.state}</div>
                   <div style={{ fontSize: 11, color: 'var(--fog)', marginTop: 6 }}>{fmtD(evStart)} – {fmtD(evEnd)}</div>
                   {evWorkersList.length > 0 && (
@@ -472,7 +481,7 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
                                 {buyerEvents.map(ev => (
                                   <div key={ev.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13 }}>
                                     <span style={{ color: 'var(--ink)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                      {ev.store_name}
+                                      {eventDisplayName(ev, stores)}
                                     </span>
                                     <span style={{ color: 'var(--mist)', flexShrink: 0 }}>{formatEventDateRange(ev.start_date)}</span>
                                   </div>

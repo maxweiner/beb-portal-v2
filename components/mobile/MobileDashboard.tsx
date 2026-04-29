@@ -5,6 +5,7 @@ import { useApp } from '@/lib/context'
 import type { NavPage } from '@/app/page'
 import { leaderboardBuyers } from '@/lib/leaderboard'
 import { eventStaffing } from '@/lib/eventStaffing'
+import { eventDisplayName } from '@/lib/eventName'
 import UnderstaffedBadge from '@/components/events/UnderstaffedBadge'
 
 const countDays = (ev: any) => {
@@ -53,7 +54,7 @@ interface Props {
 }
 
 export default function MobileDashboard({ setNav }: Props) {
-  const { user, users, events, setDayEntryIntent } = useApp()
+  const { user, users, events, stores, setDayEntryIntent } = useApp()
   const currentYear = String(new Date().getFullYear())
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
   const greet = new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'
@@ -200,7 +201,7 @@ export default function MobileDashboard({ setNav }: Props) {
                         lineHeight: 1.2,
                         wordBreak: 'break-word',
                         paddingRight: isMine ? 40 : 0,
-                      }}>{ev.store_name}</div>
+                      }}>{eventDisplayName(ev, stores)}</div>
                       {spend > 0 ? (
                         <>
                           <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--green-dark)', lineHeight: 1.1 }}>
