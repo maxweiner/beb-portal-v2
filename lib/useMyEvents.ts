@@ -4,25 +4,15 @@
 // Next-Event card and the profile sheet. Reads from useApp().events
 // (already in context — no extra DB round-trip) and filters to the
 // signed-in user's assignments.
-//
-// Events have no end_date column today; we treat them as 3-day events
-// (start_date + 2). Same assumption as lib/eventStaffing.ts.
 
 import { useMemo } from 'react'
 import { useApp } from './context'
+import { eventEndIso, EVENT_LENGTH_DAYS } from './eventDates'
 import type { Event } from '@/types'
-
-const ASSUMED_EVENT_LENGTH_DAYS = 3
 
 function todayIsoLocal(): string {
   const d = new Date()
   d.setHours(0, 0, 0, 0)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-function eventEndIso(startIso: string): string {
-  const d = new Date(startIso + 'T12:00:00')
-  d.setDate(d.getDate() + (ASSUMED_EVENT_LENGTH_DAYS - 1))
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
@@ -83,24 +73,12 @@ export function eventCountdown(startIso: string): { label: string; emphasis: 'no
   if (diff > 1) return { label: `In ${diff} days`, emphasis: 'normal' }
   if (diff === 1) return { label: 'Tomorrow', emphasis: 'normal' }
   if (diff === 0) return { label: 'Today', emphasis: 'attention' }
-  if (diff >= -(ASSUMED_EVENT_LENGTH_DAYS - 1)) {
-    return { label: `Day ${1 - diff} of ${ASSUMED_EVENT_LENGTH_DAYS}`, emphasis: 'attention' }
+  if (diff >= -(EVENT_LENGTH_DAYS - 1)) {
+    return { label: `Day ${1 - diff} of ${EVENT_LENGTH_DAYS}`, emphasis: 'attention' }
   }
   return { label: '', emphasis: 'normal' }
 }
 
-/**
- * Format an event's date range. 3-day events span start..start+2.
- *   "Mar 11–14, 2026"   when start and end share month / year
- *   "Feb 28 – Mar 2, 2026"   when they cross a month boundary
- */
-export function formatEventRange(startIso: string): string {
-  const start = new Date(startIso + 'T12:00:00')
-  const end = new Date(start); end.setDate(end.getDate() + (ASSUMED_EVENT_LENGTH_DAYS - 1))
-  const sm = start.toLocaleDateString('en-US', { month: 'short' })
-  const em = end.toLocaleDateString('en-US', { month: 'short' })
-  const year = start.getFullYear()
-  return sm !== em
-    ? `${sm} ${start.getDate()} – ${em} ${end.getDate()}, ${year}`
-    : `${sm} ${start.getDate()}–${end.getDate()}, ${year}`
-}
+// formatEventRange moved to lib/eventDates.ts — re-exported here for
+// backwards compatibility with existing import sites.
+export { formatEventRange } from './eventDates'

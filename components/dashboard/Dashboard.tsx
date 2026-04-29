@@ -8,6 +8,7 @@ import { eventStaffing } from '@/lib/eventStaffing'
 import { eventDisplayName } from '@/lib/eventName'
 import { fmtMoney } from '@/lib/format'
 import { isWorkerAssigned } from '@/lib/permissions'
+import { formatEventRange, weekRange, eventOverlapsWeek, daysWorkedOnEvent } from '@/lib/eventDates'
 import UnderstaffedBadge from '@/components/events/UnderstaffedBadge'
 import NextEventCard from './NextEventCard'
 import ProfileTrigger from './ProfileTrigger'
@@ -22,25 +23,6 @@ function getBuyerEventsThisYear(buyerId: string, allEvents: any[]): any[] {
     const start = new Date(ev.start_date + 'T00:00:00')
     return start <= today
   }).sort((a, b) => b.start_date.localeCompare(a.start_date))
-}
-/** "Apr 7–9, 2026" or "Jan 30 – Feb 1, 2026" across a month boundary. */
-function formatEventDateRange(startDate: string): string {
-  const start = new Date(startDate + 'T12:00:00')
-  const end = new Date(startDate + 'T12:00:00'); end.setDate(end.getDate() + 2)
-  const sm = start.toLocaleDateString('en-US', { month: 'short' })
-  const em = end.toLocaleDateString('en-US', { month: 'short' })
-  const year = start.getFullYear()
-  if (sm !== em) return `${sm} ${start.getDate()} – ${em} ${end.getDate()}, ${year}`
-  return `${sm} ${start.getDate()}–${end.getDate()}, ${year}`
-}
-
-// Count days worked: past events = 3 days, current/future = days with data
-const countDays = (ev: any) => {
-  const end = new Date(ev.start_date + 'T12:00:00')
-  end.setDate(end.getDate() + 2)
-  end.setHours(23, 59, 59)
-  const isPast = end < new Date()
-  return isPast ? 3 : (ev.days || []).length
 }
 
 
@@ -57,29 +39,14 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
 
   // This week: Monday to Sunday
   const today = new Date()
-  const dayOfWeek = today.getDay() // 0=Sun, 1=Mon...
-  const monday = new Date(today)
-  monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1))
-  monday.setHours(0, 0, 0, 0)
-  const sunday = new Date(monday)
-  sunday.setDate(monday.getDate() + 6)
-  sunday.setHours(23, 59, 59, 999)
-
-  // An event "falls in" the week if ANY of its 3 days overlaps Mon–Sun.
-  const overlapsWeek = (e: any, weekStart: Date, weekEnd: Date) => {
-    if (!e.start_date) return false
-    const evStart = new Date(e.start_date + 'T00:00:00')
-    const evEnd = new Date(e.start_date + 'T00:00:00'); evEnd.setDate(evEnd.getDate() + 2)
-    evEnd.setHours(23, 59, 59, 999)
-    return evStart <= weekEnd && evEnd >= weekStart
-  }
-  const weekEvents = events.filter(e => overlapsWeek(e, monday, sunday))
+  const { start: monday, end: sunday } = weekRange(today)
+  const weekEvents = events.filter(e => eventOverlapsWeek(e, monday, sunday))
 
   // Fallback: if nothing this week, peek at next week's window.
   const nextWeekStart = new Date(monday); nextWeekStart.setDate(monday.getDate() + 7)
   const nextWeekEnd = new Date(sunday); nextWeekEnd.setDate(sunday.getDate() + 7)
   const nextWeekFallback = weekEvents.length === 0
-    ? events.filter(e => overlapsWeek(e, nextWeekStart, nextWeekEnd))
+    ? events.filter(e => eventOverlapsWeek(e, nextWeekStart, nextWeekEnd))
     : []
   const showingNextWeek = weekEvents.length === 0 && nextWeekFallback.length > 0
   const displayedEvents = weekEvents.length > 0 ? weekEvents : nextWeekFallback
@@ -414,7 +381,7 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
                   const ranked = buyers.map(b => {
                     const days = currentYearEvents.reduce((s, ev) => {
                       const workedEvent = isWorkerAssigned(ev, b.id)
-                      return s + (workedEvent ? countDays(ev) : 0)
+                      return s + (workedEvent ? daysWorkedOnEvent(ev) : 0)
                     }, 0)
                     return { ...b, days }
                   }).sort((a, b) => b.days - a.days)
@@ -488,7 +455,7 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
                                     <span style={{ color: 'var(--ink)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                       {eventDisplayName(ev, stores)}
                                     </span>
-                                    <span style={{ color: 'var(--mist)', flexShrink: 0 }}>{formatEventDateRange(ev.start_date)}</span>
+                                    <span style={{ color: 'var(--mist)', flexShrink: 0 }}>{formatEventRange(ev.start_date)}</span>
                                   </div>
                                 ))}
                               </div>
@@ -532,7 +499,7 @@ function Leaderboard({ events, users, buyers }: { events: any[]; users: any[]; b
   const ranked = buyers.map(b => {
     const days = currentYearEvents.reduce((s, ev) => {
       const workedEvent = isWorkerAssigned(ev, b.id)
-      return s + (workedEvent ? countDays(ev) : 0)
+      return s + (workedEvent ? daysWorkedOnEvent(ev) : 0)
     }, 0)
     const isIneligible = ineligible.some(n => b.name?.toLowerCase().includes(n))
     return { ...b, days, isIneligible }
