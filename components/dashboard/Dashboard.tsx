@@ -7,6 +7,7 @@ import { leaderboardBuyers } from '@/lib/leaderboard'
 import { eventStaffing } from '@/lib/eventStaffing'
 import { eventDisplayName } from '@/lib/eventName'
 import UnderstaffedBadge from '@/components/events/UnderstaffedBadge'
+import NextEventCard from './NextEventCard'
 
 /** Current-year past/current events where `buyerId` is in the workers array. */
 function getBuyerEventsThisYear(buyerId: string, allEvents: any[]): any[] {
@@ -291,6 +292,9 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
           )}
         </div>
       </div>
+
+      {/* Next event hero — buyer's soonest upcoming/in-progress event. */}
+      <NextEventCard setNav={setNav} variant="desktop" />
 
       {/* Next Week Preview — only on weekends */}
       {isWeekend && nextWeekEvents.length > 0 && (

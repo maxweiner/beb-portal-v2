@@ -7,6 +7,7 @@ import { leaderboardBuyers } from '@/lib/leaderboard'
 import { eventStaffing } from '@/lib/eventStaffing'
 import { eventDisplayName } from '@/lib/eventName'
 import UnderstaffedBadge from '@/components/events/UnderstaffedBadge'
+import NextEventCard from '@/components/dashboard/NextEventCard'
 
 const countDays = (ev: any) => {
   const end = new Date(ev.start_date + 'T12:00:00')
@@ -223,6 +224,11 @@ export default function MobileDashboard({ setNav }: Props) {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Next event hero — buyer's soonest upcoming/in-progress event. */}
+      <div style={{ padding: '14px 14px 0' }}>
+        <NextEventCard setNav={setNav} variant="mobile" />
       </div>
 
       {/* Leaderboard (unchanged) */}
