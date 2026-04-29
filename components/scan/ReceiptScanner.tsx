@@ -160,7 +160,6 @@ export default function ReceiptScanner({ eventId, userId, storeName, dayNumber, 
           signal: controller.signal,
         }).finally(() => clearTimeout(timeout))
         const result = await res.json()
-        console.log('[SCAN] ID back result:', JSON.stringify(result).slice(0, 200))
         if (result.error) setError('OCR error: ' + result.error)
         if (result.success && result.data && result.data.name) {
           setData(prev => ({
@@ -219,7 +218,6 @@ export default function ReceiptScanner({ eventId, userId, storeName, dayNumber, 
           signal: controller.signal,
         }).finally(() => clearTimeout(timeout))
         const result = await res.json()
-        console.log('[SCAN] Receipt result:', JSON.stringify(result).slice(0, 200))
         if (result.error) setError('OCR error: ' + result.error)
         if (result.success && result.data) {
           setData(prev => ({

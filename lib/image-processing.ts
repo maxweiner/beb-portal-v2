@@ -11,7 +11,7 @@
  */
 
 /** Convert RGBA ImageData to luminance-equivalent grayscale, in-place. */
-export function toGrayscale(imageData: ImageData): ImageData {
+function toGrayscale(imageData: ImageData): ImageData {
   const d = imageData.data
   for (let i = 0; i < d.length; i += 4) {
     // BT.709 luminance weights — matches how humans perceive brightness.
@@ -28,7 +28,7 @@ export function toGrayscale(imageData: ImageData): ImageData {
  *
  * Assumes `imageData` is already grayscale (R === G === B).
  */
-export function enhanceContrast(imageData: ImageData, clip = 0.02): ImageData {
+function enhanceContrast(imageData: ImageData, clip = 0.02): ImageData {
   const d = imageData.data
   const hist = new Uint32Array(256)
   for (let i = 0; i < d.length; i += 4) hist[d[i]]++
@@ -68,7 +68,7 @@ export function enhanceContrast(imageData: ImageData, clip = 0.02): ImageData {
  *  -1   5  -1
  *   0  -1   0
  */
-export function sharpen(imageData: ImageData): ImageData {
+function sharpen(imageData: ImageData): ImageData {
   const { width: w, height: h, data: src } = imageData
   const out = new Uint8ClampedArray(src.length)
   const rowStride = w * 4
@@ -147,7 +147,7 @@ function otsuThreshold(imageData: ImageData): number {
 }
 
 /** Binarize to pure black/white. `threshold` defaults to Otsu-computed. */
-export function binarize(imageData: ImageData, threshold?: number): ImageData {
+function binarize(imageData: ImageData, threshold?: number): ImageData {
   const d = imageData.data
   const t = threshold ?? otsuThreshold(imageData)
   for (let i = 0; i < d.length; i += 4) {

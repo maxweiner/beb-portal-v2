@@ -224,12 +224,8 @@ export default function Calendar() {
   // Fetch once when stores are available, then every 5 min
   useEffect(() => {
     if (stores.length === 0) return
-    if (hasFetched.current) {
-      console.log('[Calendar] useEffect fired again but hasFetched=true, skipping. stores.length=', stores.length)
-      return
-    }
+    if (hasFetched.current) return
     hasFetched.current = true
-    console.log('[Calendar] Initial fetch starting, stores.length=', stores.length)
 
     const doRefresh = () => {
       const storeIds = new Set(events.filter(ev => {
