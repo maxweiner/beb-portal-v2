@@ -182,7 +182,15 @@ export default function MobileDashboard({ setNav }: Props) {
                       )}
                       <div style={{
                         fontSize: 13, fontWeight: 900, color: 'var(--green-dark)',
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        // Wrap up to 2 lines for long store names ("Goodman &
+                        // Sons Jewelers, Williamsburg" doesn't fit on one).
+                        // Anything longer truncates with an ellipsis on line 2.
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        lineHeight: 1.2,
+                        wordBreak: 'break-word',
                         paddingRight: isMine ? 40 : 0,
                       }}>{ev.store_name}</div>
                       {spend > 0 ? (
