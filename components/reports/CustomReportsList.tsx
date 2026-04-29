@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
+import { isAdmin as roleIsAdmin, isSuperAdmin } from '@/lib/permissions'
 import CustomReportBuilder from './CustomReportBuilder'
 import CustomReportRunner from './CustomReportRunner'
 
@@ -70,7 +71,7 @@ export default function CustomReportsList() {
     reload()
   }
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
+  const isAdmin = roleIsAdmin(user)
 
   const reload = async () => {
     const [{ data: rs }, { data: ps }] = await Promise.all([
@@ -227,7 +228,7 @@ export default function CustomReportsList() {
             ) : filtered.map(r => {
               const isPinned = pins.has(r.id)
               const isOwn = r.created_by === user?.id
-              const canEdit = isOwn || user?.role === 'superadmin'
+              const canEdit = isOwn || isSuperAdmin(user)
               return (
                 <tr key={r.id} style={{ borderBottom: '1px solid var(--cream2)' }}>
                   <td style={{ padding: '10px 12px' }}>

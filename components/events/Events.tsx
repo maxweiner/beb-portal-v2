@@ -5,7 +5,8 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import { isMobileDevice } from '@/lib/mobile'
-import { canEditEvent } from '@/lib/permissions'
+import { canEditEvent, isAdmin as roleIsAdmin, isWorkerAssigned } from '@/lib/permissions'
+import { fmtMoney } from '@/lib/format'
 import type { Event, BuyerVacation } from '@/types'
 import type { NavPage } from '@/app/page'
 import EventNotesPanel from './EventNotesPanel'
@@ -51,7 +52,7 @@ function getInitials(name: string): string {
 
 export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   const { stores, users, user, brand, setEvents: setContextEvents, setDayEntryIntent } = useApp()
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
+  const isAdmin = roleIsAdmin(user)
   const isSuperAdmin = user?.role === 'superadmin'
 
   const [events, setEvents] = useState<Event[]>([])
@@ -281,7 +282,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
       })
       const conflicts = events.filter(other => {
         if (other.id === ev.id) return false
-        if (!(other.workers || []).some(w => w.id === uid)) return false
+        if (!isWorkerAssigned(other, uid)) return false
         const otherDays = [0, 1, 2].map(i => {
           const d = new Date(other.start_date + 'T12:00:00')
           d.setDate(d.getDate() + i)
@@ -393,7 +394,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   }
 
   const fmt = (ds: string) => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  const fmtDollars = (n: number) => `$${Math.round(n).toLocaleString()}`
+  const fmtDollars = fmtMoney
   const fmtRange = (startDate: string) => {
     const start = new Date(startDate + 'T12:00:00')
     const end = new Date(startDate + 'T12:00:00'); end.setDate(end.getDate() + 2)

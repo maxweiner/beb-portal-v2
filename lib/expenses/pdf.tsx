@@ -11,6 +11,7 @@
 import React from 'react'
 import { Document, Page, View, Text, StyleSheet, Image } from '@react-pdf/renderer'
 import type { Expense, ExpenseCategory, ExpenseReport } from '@/types'
+import { fmtMoney } from '@/lib/format'
 
 const COLORS = {
   ink:       '#1F2937',
@@ -89,11 +90,7 @@ function categoryLabel(c: ExpenseCategory, customLabel: string | null): string {
   return CATEGORY_LABELS[c] ?? c
 }
 
-const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
-const fmt$ = (n: number | string | null | undefined) => {
-  const v = typeof n === 'string' ? parseFloat(n) : (n ?? 0)
-  return USD.format(Number.isFinite(v) ? v : 0)
-}
+const fmt$ = (n: number | string | null | undefined) => fmtMoney(n, { cents: true })
 const fmtDate = (iso: string) =>
   new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 const fmtDateLong = (iso: string) =>

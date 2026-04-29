@@ -7,6 +7,8 @@ import type { NavPage } from '@/app/page'
 import { leaderboardBuyers } from '@/lib/leaderboard'
 import { eventStaffing } from '@/lib/eventStaffing'
 import { eventDisplayName } from '@/lib/eventName'
+import { fmtMoney } from '@/lib/format'
+import { isAdmin as roleIsAdmin, isWorkerAssigned } from '@/lib/permissions'
 import UnderstaffedBadge from '@/components/events/UnderstaffedBadge'
 import NextEventCard from '@/components/dashboard/NextEventCard'
 import MyUpcomingEventsList from '@/components/dashboard/MyUpcomingEventsList'
@@ -25,7 +27,6 @@ const TIERS: Record<number, { label: string; icon: string; color: string }> = {
 }
 
 const INELIGIBLE = ['joe', 'max', 'rich']
-const fmtMoney = (n: number) => `$${Math.round(n).toLocaleString()}`
 
 const weekStart = (d: Date) => {
   const r = new Date(d); r.setHours(0, 0, 0, 0)
@@ -59,7 +60,7 @@ interface Props {
 export default function MobileDashboard({ setNav }: Props) {
   const { user, users, events, stores, setDayEntryIntent } = useApp()
   const currentYear = String(new Date().getFullYear())
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
+  const isAdmin = roleIsAdmin(user)
   const greet = new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'
 
   const yearEvents = events.filter(e => e.start_date?.startsWith(currentYear))
@@ -82,8 +83,8 @@ export default function MobileDashboard({ setNav }: Props) {
   const sortedDisplayed = useMemo(() => {
     if (isAdmin) return displayed
     return [...displayed].sort((a, b) => {
-      const aMine = (a.workers || []).some((w: any) => w.id === user?.id) ? 0 : 1
-      const bMine = (b.workers || []).some((w: any) => w.id === user?.id) ? 0 : 1
+      const aMine = isWorkerAssigned(a, user?.id) ? 0 : 1
+      const bMine = isWorkerAssigned(b, user?.id) ? 0 : 1
       if (aMine !== bMine) return aMine - bMine
       return a.start_date.localeCompare(b.start_date)
     })
@@ -92,13 +93,13 @@ export default function MobileDashboard({ setNav }: Props) {
 
   /* ── Personal stats (for name-tap popup) ── */
   const myDays = yearEvents.reduce((s, ev) =>
-    s + ((ev.workers || []).some((w: any) => w.id === user?.id) ? countDays(ev) : 0), 0)
-  const myEvents = yearEvents.filter(ev => (ev.workers || []).some((w: any) => w.id === user?.id)).length
+    s + (isWorkerAssigned(ev, user?.id) ? countDays(ev) : 0), 0)
+  const myEvents = yearEvents.filter(ev => isWorkerAssigned(ev, user?.id)).length
 
   let rank = 0; let lastDays = -1
   const ranked = buyers.map(b => {
     const days = yearEvents.reduce((s, ev) =>
-      s + ((ev.workers || []).some((w: any) => w.id === b.id) ? countDays(ev) : 0), 0)
+      s + (isWorkerAssigned(ev, b.id) ? countDays(ev) : 0), 0)
     return { ...b, days, isIneligible: INELIGIBLE.some(n => b.name?.toLowerCase().includes(n)) }
   }).sort((a, b) => b.days - a.days).map((b, i) => {
     if (b.days !== lastDays) { rank = i + 1; lastDays = b.days }
@@ -166,7 +167,7 @@ export default function MobileDashboard({ setNav }: Props) {
                 gap: 8,
               }}>
                 {sortedDisplayed.map(ev => {
-                  const isMine = !isAdmin && (ev.workers || []).some((w: any) => w.id === user?.id)
+                  const isMine = !isAdmin && isWorkerAssigned(ev, user?.id)
                   const spend = eventSpend(ev)
                   const status = eventDayStatus(ev)
                   const staffing = eventStaffing(ev)
