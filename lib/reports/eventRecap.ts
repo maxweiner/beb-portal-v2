@@ -13,6 +13,7 @@ interface DayRow {
   purchases: number | null
   dollars10: number | null
   dollars5: number | null
+  dollars0: number | null
 }
 
 interface BuyerEntryRow {
@@ -106,23 +107,18 @@ export async function buildEventRecap(opts: BuildOpts): Promise<EventRecapResult
     return { day: d.day_number, customers: d.customers || 0, purchases: d.purchases || 0, dollars }
   })
 
-  // Store purchases (no commission) — rolled up from buyer_checks where
-  // commission_rate = 0. Surfaced as a separate line below the show
-  // totals; intentionally NOT added to grand.dollars or any commission
-  // % math so the show's commission percentage isn't artificially
-  // depressed by store-level purchases.
-  const { data: storeChecks } = await sb
-    .from('buyer_checks')
-    .select('day_number, amount')
-    .eq('event_id', opts.eventId)
-    .eq('commission_rate', 0)
+  // Store purchases (no commission) — read from event_days.dollars0,
+  // the daily aggregate written by the 0% quick-entry box on Day Entry.
+  // Surfaced as a separate line below the show totals; intentionally
+  // NOT added to grand.dollars or any commission % math so the show's
+  // commission percentage isn't artificially depressed by store-level
+  // purchases.
   const storeNoCommByDay = new Map<number, number>()
   let storeNoCommTotal = 0
-  for (const c of (storeChecks ?? []) as Array<{ day_number: number | null; amount: number | string | null }>) {
-    const amt = Number(c.amount || 0)
+  for (const d of days) {
+    const amt = Number(d.dollars0 || 0)
     if (!Number.isFinite(amt) || amt <= 0) continue
-    const dn = c.day_number ?? 0
-    storeNoCommByDay.set(dn, (storeNoCommByDay.get(dn) ?? 0) + amt)
+    storeNoCommByDay.set(d.day_number, amt)
     storeNoCommTotal += amt
   }
 

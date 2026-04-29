@@ -64,6 +64,7 @@ export default function DayEntry() {
   const [purchases, setPurchases] = useState('')
   const [dollars10, setDollars10] = useState('')
   const [dollars5, setDollars5]  = useState('')
+  const [dollars0, setDollars0]  = useState('')
   const [sources, setSources] = useState<Record<string, string>>(
     Object.fromEntries(LEAD_SOURCES.map(s => [s.key, '']))
   )
@@ -73,6 +74,8 @@ export default function DayEntry() {
   // 5% commission is rare — collapsed behind a + link unless the existing
   // row already has a non-zero value saved.
   const [show5pct, setShow5pct] = useState(false)
+  // Same pattern as 5% — collapsed unless the saved row already has a value.
+  const [show0pct, setShow0pct] = useState(false)
   const [checks, setChecks] = useState<CheckRow[]>([emptyCheck()])
   const [inputMode, setInputMode] = useState<InputMode>('grid')
   const [existingRow, setExistingRow] = useState<any>(null)
@@ -124,7 +127,9 @@ export default function DayEntry() {
       setPurchases(String(rowData.purchases ?? ''))
       setDollars10(rowData.dollars10 != null ? String(rowData.dollars10) : '')
       setDollars5(rowData.dollars5 != null ? String(rowData.dollars5) : '')
+      setDollars0(rowData.dollars0 != null ? String(rowData.dollars0) : '')
       setShow5pct((rowData.dollars5 || 0) > 0)
+      setShow0pct((rowData.dollars0 || 0) > 0)
       setSources(Object.fromEntries(LEAD_SOURCES.map(s => [s.key, String((rowData as any)[s.key] ?? '')])))
       const pbb = (rowData as any).purchases_by_buyer || {}
       setPurchasesByBuyer(
@@ -133,10 +138,11 @@ export default function DayEntry() {
     } else {
       setExistingRow(null)
       rowIdRef.current = null
-      setCustomers(''); setPurchases(''); setDollars10(''); setDollars5('')
+      setCustomers(''); setPurchases(''); setDollars10(''); setDollars5(''); setDollars0('')
       setSources(Object.fromEntries(LEAD_SOURCES.map(s => [s.key, ''])))
       setPurchasesByBuyer({})
       setShow5pct(false)
+      setShow0pct(false)
     }
     setChecks(checkRows && checkRows.length > 0
       ? checkRows.map((c: any) => ({
@@ -167,7 +173,7 @@ export default function DayEntry() {
   const commission = nF(dollars10) * 0.1 + nF(dollars5) * 0.05
 
   /* ── Persist ── */
-  type Overrides = Partial<{ purchases: string; dollars10: string; dollars5: string }>
+  type Overrides = Partial<{ purchases: string; dollars10: string; dollars5: string; dollars0: string }>
   const persist = async (overrides: Overrides = {}) => {
     if (persistInFlightRef.current) return
     if (!selectedEventId || !user?.id) return
@@ -181,6 +187,7 @@ export default function DayEntry() {
       const effPurch = overrides.purchases ?? purchases
       const eff10    = overrides.dollars10 ?? dollars10
       const eff5     = overrides.dollars5  ?? dollars5
+      const eff0     = overrides.dollars0  ?? dollars0
       // Per-buyer purchases — empty input becomes a missing key so that
       // "blank = not entered yet" stays distinct from "0 entered".
       const purchasesByBuyerPayload: Record<string, number> = {}
@@ -198,6 +205,7 @@ export default function DayEntry() {
         purchases: parseInt(effPurch) || 0,
         dollars10: eff10 !== '' ? parseFloat(eff10) || 0 : 0,
         dollars5:  eff5  !== '' ? parseFloat(eff5)  || 0 : 0,
+        dollars0:  eff0  !== '' ? parseFloat(eff0)  || 0 : 0,
         ...Object.fromEntries(LEAD_SOURCES.map(s => [s.key, parseInt(sources[s.key]) || 0])),
         purchases_by_buyer: purchasesByBuyerPayload,
         entered_by: user.id,
@@ -253,7 +261,7 @@ export default function DayEntry() {
   }
 
   const autosaveStatus = useAutosave(
-    { customers, purchases, dollars10, dollars5, sources, checks, purchasesByBuyer },
+    { customers, purchases, dollars10, dollars5, dollars0, sources, checks, purchasesByBuyer },
     async () => { await persist() },
     { enabled: hydratedRef.current && !!selectedEventId && !saving, delay: 1000 },
   )
@@ -267,11 +275,13 @@ export default function DayEntry() {
       purchases: String(derivedPurchases),
       dollars10: derived10 > 0 ? String(derived10) : '',
       dollars5:  derived5  > 0 ? String(derived5)  : '',
+      dollars0:  derived0  > 0 ? String(derived0)  : '',
     } : {}
     if (hasValidChecks) {
       setPurchases(overrides.purchases!)
       setDollars10(overrides.dollars10!)
       setDollars5(overrides.dollars5!)
+      setDollars0(overrides.dollars0!)
     }
     setSaving(true)
     try {
@@ -476,7 +486,7 @@ export default function DayEntry() {
                   Day Totals
                   <AutosaveIndicator status={autosaveStatus} />
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: show5pct ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)', gap: 14 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${3 + (show5pct ? 1 : 0) + (show0pct ? 1 : 0)}, 1fr)`, gap: 14 }}>
                   <div>
                     <label className="fl">Purchases Made</label>
                     <input type="number" min="0" value={purchases}
@@ -505,15 +515,35 @@ export default function DayEntry() {
                       </div>
                     </div>
                   )}
+                  {show0pct && (
+                    <div>
+                      <label className="fl" title="Store purchases — no commission, excluded from event totals">$ @ 0% (Store)</label>
+                      <div style={{ position: 'relative' }}>
+                        <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)' }}>$</span>
+                        <input type="number" min="0" step="0.01" value={dollars0}
+                          onChange={e => setDollars0(e.target.value)} placeholder="0" style={{ paddingLeft: 20 }} />
+                      </div>
+                    </div>
+                  )}
                 </div>
-                {!show5pct && (
-                  <button onClick={() => setShow5pct(true)} style={{
-                    marginTop: 10, padding: 0, background: 'none', border: 'none',
-                    color: 'var(--green-dark)', fontWeight: 700, fontSize: 12,
-                    cursor: 'pointer', fontFamily: 'inherit',
-                    textDecoration: 'underline',
-                  }}>Show 5% commission field</button>
-                )}
+                <div style={{ display: 'flex', gap: 16, marginTop: 10 }}>
+                  {!show5pct && (
+                    <button onClick={() => setShow5pct(true)} style={{
+                      padding: 0, background: 'none', border: 'none',
+                      color: 'var(--green-dark)', fontWeight: 700, fontSize: 12,
+                      cursor: 'pointer', fontFamily: 'inherit',
+                      textDecoration: 'underline',
+                    }}>Show 5% commission field</button>
+                  )}
+                  {!show0pct && (
+                    <button onClick={() => setShow0pct(true)} style={{
+                      padding: 0, background: 'none', border: 'none',
+                      color: 'var(--green-dark)', fontWeight: 700, fontSize: 12,
+                      cursor: 'pointer', fontFamily: 'inherit',
+                      textDecoration: 'underline',
+                    }}>Show 0% commission field</button>
+                  )}
+                </div>
                 {hasValidChecks && (
                   <div style={{ marginTop: 12, padding: 10, background: 'var(--green-pale)', border: '1px solid var(--green3)', borderRadius: 'var(--r)', fontSize: 12, color: 'var(--green-dark)' }}>
                     ℹ On Submit, the $ and Purchases fields will be replaced with your check totals ({derivedPurchases} checks · ${checksTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}).

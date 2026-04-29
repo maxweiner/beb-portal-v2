@@ -72,6 +72,7 @@ export default function MobileDayEntry() {
   const [purchases, setPurchases] = useState('')
   const [tenPct, setTenPct] = useState('')
   const [fivePct, setFivePct] = useState('')
+  const [zeroPct, setZeroPct] = useState('')
   const [sources, setSources] = useState<Record<string, string>>(
     Object.fromEntries(LEAD_SOURCES.map(s => [s.key, '']))
   )
@@ -81,6 +82,7 @@ export default function MobileDayEntry() {
   // 5% commission is rare — collapsed behind a + link unless the row
   // already has a non-zero value saved.
   const [show5pct, setShow5pct] = useState(false)
+  const [show0pct, setShow0pct] = useState(false)
   const [checks, setChecks] = useState<CheckRow[]>([emptyCheck()])
   // Form # column visibility — per-store default (stores.default_form_number_visible)
   // with a per-user override persisted in localStorage at
@@ -225,7 +227,9 @@ export default function MobileDayEntry() {
       setPurchases(current.purchases != null ? String(current.purchases) : '')
       setTenPct(current.dollars10 != null ? String(current.dollars10) : '')
       setFivePct(current.dollars5  != null ? String(current.dollars5)  : '')
+      setZeroPct(current.dollars0  != null ? String(current.dollars0)  : '')
       setShow5pct((current.dollars5 || 0) > 0)
+      setShow0pct((current.dollars0 || 0) > 0)
       setSources(Object.fromEntries(LEAD_SOURCES.map(s => [s.key, String((current as any)[s.key] || '')])))
       const pbb = (current as any).purchases_by_buyer || {}
       setPurchasesByBuyer(
@@ -235,8 +239,9 @@ export default function MobileDayEntry() {
     } else {
       setExistingEntry(null)
       entryIdRef.current = null
-      setCustomers(''); setPurchases(''); setTenPct(''); setFivePct('')
+      setCustomers(''); setPurchases(''); setTenPct(''); setFivePct(''); setZeroPct('')
       setShow5pct(false)
+      setShow0pct(false)
       setSources(Object.fromEntries(LEAD_SOURCES.map(s => [s.key, ''])))
       setPurchasesByBuyer({})
       setSubmitted(false)
@@ -279,7 +284,7 @@ export default function MobileDayEntry() {
   // state on the same tick, persist() takes an `overrides` arg.
   // Writes directly to event_days (day-level shared record) — buyers
   // assigned to the event + admins all edit the same row.
-  type Overrides = Partial<{ purchases: string; tenPct: string; fivePct: string }>
+  type Overrides = Partial<{ purchases: string; tenPct: string; fivePct: string; zeroPct: string }>
   const persist = async (_submit: boolean, overrides: Overrides = {}) => {
     if (persistInFlightRef.current) return
     if (!selectedEventId || !user?.id) return
@@ -293,6 +298,7 @@ export default function MobileDayEntry() {
       const effPurchases = overrides.purchases ?? purchases
       const effTenPct    = overrides.tenPct    ?? tenPct
       const effFivePct   = overrides.fivePct   ?? fivePct
+      const effZeroPct   = overrides.zeroPct   ?? zeroPct
       // Per-buyer purchases — empty input becomes a missing key so that
       // "blank = not entered yet" stays distinct from "0 entered".
       const purchasesByBuyerPayload: Record<string, number> = {}
@@ -310,6 +316,7 @@ export default function MobileDayEntry() {
         purchases: effPurchases !== '' ? parseInt(effPurchases) || 0 : 0,
         dollars10: effTenPct !== '' ? parseFloat(effTenPct) || 0 : 0,
         dollars5:  effFivePct !== '' ? parseFloat(effFivePct) || 0 : 0,
+        dollars0:  effZeroPct !== '' ? parseFloat(effZeroPct) || 0 : 0,
         ...Object.fromEntries(LEAD_SOURCES.map(s => [s.key, parseInt(sources[s.key]) || 0])),
         purchases_by_buyer: purchasesByBuyerPayload,
         entered_by: user.id,
@@ -365,7 +372,7 @@ export default function MobileDayEntry() {
   }
 
   const autosaveStatus = useAutosave(
-    { customers, purchases, tenPct, fivePct, sources, checks, purchasesByBuyer },
+    { customers, purchases, tenPct, fivePct, zeroPct, sources, checks, purchasesByBuyer },
     async () => { await persist(false) },
     { enabled: !!selectedEventId && hydratedRef.current && !saving, delay: 1000 }
   )
@@ -378,11 +385,13 @@ export default function MobileDayEntry() {
       purchases: String(derivedPurchases),
       tenPct: derived10 > 0 ? String(derived10) : '',
       fivePct: derived5 > 0 ? String(derived5) : '',
+      zeroPct: derived0 > 0 ? String(derived0) : '',
     } : {}
     if (hasValidChecks) {
       setPurchases(overrides.purchases!)
       setTenPct(overrides.tenPct!)
       setFivePct(overrides.fivePct!)
+      setZeroPct(overrides.zeroPct!)
     }
     setSaving(true)
     try {
@@ -620,17 +629,31 @@ export default function MobileDayEntry() {
           <SectionLabel>Today's Numbers</SectionLabel>
           <FieldRow label="Purchases Made" value={purchases} onChange={setPurchases} required />
           <FieldRow label="Customers Seen" value={customers} onChange={setCustomers} />
-          <FieldRow label="$ @ 10% Commission" value={tenPct} onChange={setTenPct} money required last={!show5pct} />
-          {show5pct ? (
-            <FieldRow label="$ @ 5% Commission" value={fivePct} onChange={setFivePct} money last />
-          ) : (
-            <button onClick={() => setShow5pct(true)} style={{
-              marginTop: 10, padding: 0, background: 'none', border: 'none',
-              color: 'var(--green-dark)', fontWeight: 700, fontSize: 12,
-              cursor: 'pointer', fontFamily: 'inherit',
-              textDecoration: 'underline', textAlign: 'left',
-            }}>Show 5% commission field</button>
+          <FieldRow label="$ @ 10% Commission" value={tenPct} onChange={setTenPct} money required last={!show5pct && !show0pct} />
+          {show5pct && (
+            <FieldRow label="$ @ 5% Commission" value={fivePct} onChange={setFivePct} money last={!show0pct} />
           )}
+          {show0pct && (
+            <FieldRow label="$ @ 0% (Store)" value={zeroPct} onChange={setZeroPct} money last />
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+            {!show5pct && (
+              <button onClick={() => setShow5pct(true)} style={{
+                padding: 0, background: 'none', border: 'none',
+                color: 'var(--green-dark)', fontWeight: 700, fontSize: 12,
+                cursor: 'pointer', fontFamily: 'inherit',
+                textDecoration: 'underline', textAlign: 'left',
+              }}>Show 5% commission field</button>
+            )}
+            {!show0pct && (
+              <button onClick={() => setShow0pct(true)} style={{
+                padding: 0, background: 'none', border: 'none',
+                color: 'var(--green-dark)', fontWeight: 700, fontSize: 12,
+                cursor: 'pointer', fontFamily: 'inherit',
+                textDecoration: 'underline', textAlign: 'left',
+              }}>Show 0% commission field</button>
+            )}
+          </div>
         </div>
 
         {(selectedEvent?.workers || []).length > 0 && (
