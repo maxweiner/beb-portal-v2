@@ -8,6 +8,7 @@ import { eventStaffing } from '@/lib/eventStaffing'
 import { eventDisplayName } from '@/lib/eventName'
 import UnderstaffedBadge from '@/components/events/UnderstaffedBadge'
 import NextEventCard from './NextEventCard'
+import ProfileTrigger from './ProfileTrigger'
 
 /** Current-year past/current events where `buyerId` is in the workers array. */
 function getBuyerEventsThisYear(buyerId: string, allEvents: any[]): any[] {
@@ -187,9 +188,7 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
               <div style={{ color: 'rgba(245,240,232,.8)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em' }}>
                 Good {greeting}
               </div>
-              <h1 style={{ color: '#fff', fontSize: 28, fontWeight: 900, letterSpacing: '-.02em', marginTop: 2 }}>
-                {user?.name?.split(' ')[0]} 👋
-              </h1>
+              <ProfileTrigger user={user} setNav={setNav} />
               <div style={{ color: 'rgba(245,240,232,.6)', fontSize: 13, marginTop: 4 }}>
                 {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · Week of {fmtWeek}
               </div>
