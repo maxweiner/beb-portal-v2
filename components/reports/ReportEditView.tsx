@@ -83,6 +83,9 @@ function buildPreviewHtml(template: TemplateRow, vars: Record<string, string>): 
 export default function ReportEditView({ report, onBack }: { report: ReportDef; onBack: () => void }) {
   const { user, events, stores, brand } = useApp()
   const isEventRecap = report.id === 'event-recap'
+  // Transactional templates (no broadcast send) — fired by their own
+  // cron / trigger. Hide schedule, recipients, and broadcast-only fields.
+  const isTransactional = report.sendEndpoint === null
   const [template, setTemplate] = useState<TemplateRow | null>(null)
   const [users, setUsers] = useState<UserOpt[]>([])
   // Persistent per-(template, brand) recipients. Toggling autosaves.
@@ -162,7 +165,10 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
   async function saveTemplate() {
     if (!template) return
     setSavingTemplate(true)
-    const { error } = await supabase.from('report_templates').update({
+    // Upsert so the editor works for templates whose seed row hasn't been
+    // applied yet — otherwise update on a missing id silently no-ops.
+    const { error } = await supabase.from('report_templates').upsert({
+      id: template.id,
       subject: template.subject,
       greeting: template.greeting,
       header_subtitle: template.header_subtitle,
@@ -170,7 +176,7 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
       shoutout_fallback: template.shoutout_fallback,
       updated_at: new Date().toISOString(),
       updated_by: user?.id ?? null,
-    }).eq('id', template.id)
+    }, { onConflict: 'id' })
     setSavingTemplate(false)
     if (error) { alert('Save failed: ' + error.message); return }
     setSavedAt(new Date())
@@ -343,9 +349,16 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
           }}>{BRAND_LABELS[brand as 'beb' | 'liberty']}</span>
         </div>
         <div style={{ fontSize: 13, color: 'var(--mist)' }}>{report.description}</div>
-        <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4, fontStyle: 'italic' }}>
-          Template body is shared across brands. Schedule + recipients below are per-brand — switch the brand toggle to manage the other side.
-        </div>
+        {!isTransactional && (
+          <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4, fontStyle: 'italic' }}>
+            Template body is shared across brands. Schedule + recipients below are per-brand — switch the brand toggle to manage the other side.
+          </div>
+        )}
+        {isTransactional && (
+          <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4, fontStyle: 'italic' }}>
+            Sent transactionally — no broadcast schedule or recipient list. Edits go live immediately for the next send.
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14 }}>
@@ -366,21 +379,23 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
               <input value={template.subject} onChange={e => setField('subject', e.target.value)} />
             </div>
             <div className="field">
-              <label className="fl">Greeting</label>
+              <label className="fl">{isTransactional ? 'Opening line' : 'Greeting'}</label>
               <input value={template.greeting} onChange={e => setField('greeting', e.target.value)} />
             </div>
+            {!isTransactional && (
+              <div className="field">
+                <label className="fl">Header subtitle</label>
+                <input value={template.header_subtitle} onChange={e => setField('header_subtitle', e.target.value)} />
+              </div>
+            )}
             <div className="field">
-              <label className="fl">Header subtitle</label>
-              <input value={template.header_subtitle} onChange={e => setField('header_subtitle', e.target.value)} />
-            </div>
-            <div className="field">
-              <label className="fl">Shoutout / opening message (optional)</label>
+              <label className="fl">{isTransactional ? 'Body' : 'Shoutout / opening message (optional)'}</label>
               <textarea rows={3} value={template.shoutout_fallback}
                 onChange={e => setField('shoutout_fallback', e.target.value)}
-                placeholder="Leave blank for none. Used as the fallback when AI generation isn't available." />
+                placeholder={isTransactional ? 'Main paragraph of the email. Use {{vars}} as listed below.' : "Leave blank for none. Used as the fallback when AI generation isn't available."} />
             </div>
             <div className="field">
-              <label className="fl">Footer</label>
+              <label className="fl">{isTransactional ? 'Closing line' : 'Footer'}</label>
               <input value={template.footer} onChange={e => setField('footer', e.target.value)} />
             </div>
 
@@ -421,8 +436,8 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
             </div>
           )}
 
-          {/* Schedule (per-brand) */}
-          {schedule && !isEventRecap && (
+          {/* Schedule (per-brand) — broadcast templates only */}
+          {schedule && !isEventRecap && !isTransactional && (
             <div className="card" style={{ marginBottom: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                 <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)' }}>
@@ -499,6 +514,7 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
             </div>
           )}
 
+          {!isTransactional && (
           <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <div>
@@ -576,6 +592,7 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
               )}
             </div>
           </div>
+          )}
         </div>
 
         {/* RIGHT: live preview */}
