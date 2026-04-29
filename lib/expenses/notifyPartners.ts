@@ -4,6 +4,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email'
+import { fmtMoney } from '@/lib/format'
 
 function admin() {
   return createClient(
@@ -13,11 +14,7 @@ function admin() {
   )
 }
 
-const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
-const fmt$ = (n: number | string | null | undefined) => {
-  const v = typeof n === 'string' ? parseFloat(n) : (n ?? 0)
-  return USD.format(Number.isFinite(v) ? v : 0)
-}
+const fmt$ = (n: number | string | null | undefined) => fmtMoney(n, { cents: true })
 const fmtDateLong = (iso: string) =>
   new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 

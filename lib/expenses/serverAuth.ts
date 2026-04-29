@@ -4,6 +4,7 @@
 // gating can't be spoofed by a tampered request body.
 
 import { createClient } from '@supabase/supabase-js'
+import { isAdmin } from '@/lib/permissions'
 
 function admin() {
   return createClient(
@@ -38,5 +39,5 @@ export async function getAuthedUser(req: Request): Promise<AuthedUser | null> {
 }
 
 export function isAdminLike(u: AuthedUser | null): boolean {
-  return !!u && (u.role === 'admin' || u.role === 'superadmin')
+  return !!u && isAdmin(u)
 }

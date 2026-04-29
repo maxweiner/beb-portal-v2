@@ -6,6 +6,7 @@ import type { Event, BuyerVacation } from '@/types'
 import { supabase } from '@/lib/supabase'
 import EventShippingPanel from '@/components/shipping/EventShippingPanel'
 import { eventStaffing } from '@/lib/eventStaffing'
+import { fmtMoney } from '@/lib/format'
 import UnderstaffedBadge from '@/components/events/UnderstaffedBadge'
 
 interface ShipmentEntry {
@@ -850,7 +851,7 @@ function KanbanView({ events, stores, onSelect, isNarrow }: { events: Event[]; s
                           <div style={{ fontSize: 9, color: 'var(--mist)', textTransform: 'uppercase' }}>Purchases</div>
                         </div>
                         <div>
-                          <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--green)' }}>${Math.round(dollars).toLocaleString()}</div>
+                          <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--green)' }}>{fmtMoney(dollars)}</div>
                           <div style={{ fontSize: 9, color: 'var(--mist)', textTransform: 'uppercase' }}>Amount Spent</div>
                         </div>
                       </div>
@@ -885,7 +886,7 @@ function DetailModal({ ev, stores, onClose, isNarrow }: { ev: Event; stores: any
   const closeRate = totalCustomers > 0 ? Math.round(totalPurchases/totalCustomers*100) : 0
   const color = storeColor(ev.store_id, stores)
   const fmt = (ds: string) => new Date(ds+'T12:00:00').toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'})
-  const fmtDollars = (n: number) => `$${Math.round(n).toLocaleString()}`
+  const fmtDollars = fmtMoney
 
   // Esc closes the drawer
   useEffect(() => {

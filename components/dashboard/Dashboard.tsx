@@ -6,6 +6,8 @@ import type { NavPage } from '@/app/page'
 import { leaderboardBuyers } from '@/lib/leaderboard'
 import { eventStaffing } from '@/lib/eventStaffing'
 import { eventDisplayName } from '@/lib/eventName'
+import { fmtMoney } from '@/lib/format'
+import { isWorkerAssigned } from '@/lib/permissions'
 import UnderstaffedBadge from '@/components/events/UnderstaffedBadge'
 import NextEventCard from './NextEventCard'
 import ProfileTrigger from './ProfileTrigger'
@@ -16,7 +18,7 @@ function getBuyerEventsThisYear(buyerId: string, allEvents: any[]): any[] {
   const today = new Date(); today.setHours(23, 59, 59, 999)
   return allEvents.filter(ev => {
     if (!ev.start_date?.startsWith(yearPrefix)) return false
-    if (!(ev.workers || []).some((w: any) => w.id === buyerId)) return false
+    if (!isWorkerAssigned(ev, buyerId)) return false
     const start = new Date(ev.start_date + 'T00:00:00')
     return start <= today
   }).sort((a, b) => b.start_date.localeCompare(a.start_date))
@@ -160,7 +162,7 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
     { label: 'Other', value: totals.src_other, color: '#6B7280' },
   ]
 
-  const fmt = (n: number) => `$${Math.round(n).toLocaleString()}`
+  const fmt = fmtMoney
   // Roster = active buyers assigned to at least one current-year event in
   // the active brand. Brand-scoping happens upstream via context.events.
   const buyers = leaderboardBuyers(users, events)
@@ -411,7 +413,7 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
                   const currentYearEvents = events.filter(e => e.start_date?.startsWith(currentYear))
                   const ranked = buyers.map(b => {
                     const days = currentYearEvents.reduce((s, ev) => {
-                      const workedEvent = (ev.workers || []).some((w: any) => w.id === b.id)
+                      const workedEvent = isWorkerAssigned(ev, b.id)
                       return s + (workedEvent ? countDays(ev) : 0)
                     }, 0)
                     return { ...b, days }
@@ -529,7 +531,7 @@ function Leaderboard({ events, users, buyers }: { events: any[]; users: any[]; b
 
   const ranked = buyers.map(b => {
     const days = currentYearEvents.reduce((s, ev) => {
-      const workedEvent = (ev.workers || []).some((w: any) => w.id === b.id)
+      const workedEvent = isWorkerAssigned(ev, b.id)
       return s + (workedEvent ? countDays(ev) : 0)
     }, 0)
     const isIneligible = ineligible.some(n => b.name?.toLowerCase().includes(n))
