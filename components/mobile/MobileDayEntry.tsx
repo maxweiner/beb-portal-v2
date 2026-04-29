@@ -63,7 +63,7 @@ function parseMoneyInput(input: string): string {
 }
 
 export default function MobileDayEntry() {
-  const { events, user, dayEntryIntent, setDayEntryIntent } = useApp()
+  const { events, stores, user, dayEntryIntent, setDayEntryIntent } = useApp()
   const [selectedEventId, setSelectedEventId] = useState('')
   const [selectedDay, setSelectedDay] = useState(1)
   const [eventSwitcherOpen, setEventSwitcherOpen] = useState(false)
@@ -82,6 +82,12 @@ export default function MobileDayEntry() {
   // already has a non-zero value saved.
   const [show5pct, setShow5pct] = useState(false)
   const [checks, setChecks] = useState<CheckRow[]>([emptyCheck()])
+  // Form # column visibility — per-store default (stores.default_form_number_visible)
+  // with a per-user override persisted in localStorage at
+  // beb-form-no-{user_id}-{store_id}.
+  const [formColVisible, setFormColVisible] = useState(true)
+  // Which check row's overflow ⋯ menu is open (null = none).
+  const [overflowOpenIdx, setOverflowOpenIdx] = useState<number | null>(null)
   const [daysStatus, setDaysStatus] = useState<Record<number, 'submitted' | 'draft' | null>>({ 1: null, 2: null, 3: null })
   const [submitted, setSubmitted] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -160,6 +166,34 @@ export default function MobileDayEntry() {
     if (diff >= 0 && diff <= 2) setSelectedDay(diff + 1)
     else setSelectedDay(1)
   }, [selectedEventId])
+
+  // Load Form # column preference: localStorage override > stores.default_form_number_visible > true.
+  useEffect(() => {
+    if (!user || !selectedEvent) return
+    const storeId = selectedEvent.store_id
+    if (!storeId) return
+    const lsKey = `beb-form-no-${user.id}-${storeId}`
+    let next: boolean
+    try {
+      const saved = localStorage.getItem(lsKey)
+      if (saved === '1') next = true
+      else if (saved === '0') next = false
+      else {
+        const store = stores.find(s => s.id === storeId)
+        next = store?.default_form_number_visible !== false
+      }
+    } catch { next = true }
+    setFormColVisible(next)
+  }, [user?.id, selectedEvent?.store_id, stores])
+
+  function toggleFormCol() {
+    if (!user || !selectedEvent?.store_id) return
+    const next = !formColVisible
+    setFormColVisible(next)
+    try {
+      localStorage.setItem(`beb-form-no-${user.id}-${selectedEvent.store_id}`, next ? '1' : '0')
+    } catch { /* ignore */ }
+  }
 
   useEffect(() => {
     if (selectedEventId) loadEntries()
@@ -652,139 +686,131 @@ export default function MobileDayEntry() {
           </div>
 
           <div style={cardStyle}>
-            <SectionLabel>Checks</SectionLabel>
+            {/* Section header — title left, Form # toggle right */}
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+              <SectionLabel>Checks</SectionLabel>
+              <button onClick={toggleFormCol}
+                aria-label={formColVisible ? 'Hide Form # column' : 'Show Form # column'}
+                style={{
+                  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  fontSize: 11, fontWeight: 700, color: 'var(--green-dark)',
+                  textDecoration: 'underline',
+                }}>
+                {formColVisible ? '− Hide form #' : '+ Show form #'}
+              </button>
+            </div>
+
             {checks.map((c, i) => {
               const isAuto = i > 0 && !!c.check_number && !c.amount
+              const setRate = (next: 0 | 5 | 10) =>
+                setChecks(p => p.map((x, idx) => idx === i ? { ...x, commission_rate: next } : x))
+              const setField = <K extends keyof CheckRow>(key: K, val: CheckRow[K]) =>
+                setChecks(p => p.map((x, idx) => idx === i ? { ...x, [key]: val } : x))
+
               return (
                 <div key={c.id || i} style={{
-                  background: 'var(--cream)', borderRadius: 12, padding: 12,
-                  marginBottom: 10, border: '1px solid var(--cream2)',
+                  position: 'relative',
+                  background: 'var(--cream)', borderRadius: 10, padding: '8px 10px',
+                  marginBottom: 6, border: '1px solid var(--cream2)',
+                  display: 'grid',
+                  gridTemplateColumns: formColVisible
+                    ? '22px minmax(60px, 0.9fr) minmax(60px, 0.9fr) minmax(80px, 1.2fr) auto auto'
+                    : '22px 1fr 1.2fr auto auto',
+                  gap: 4, alignItems: 'end',
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--mist)', letterSpacing: '.1em' }}>#{i + 1}</span>
-                    <select value={c.payment_type}
-                      onChange={e => setChecks(p => p.map((x, idx) => idx === i ? { ...x, payment_type: e.target.value } : x))}
-                      style={{
-                        flex: 1, padding: '6px 8px', fontSize: 13, borderRadius: 8,
-                        border: '1px solid var(--pearl)', background: '#FFF', fontFamily: 'inherit',
-                      }}>
-                      <option value="check">Check</option>
-                      <option value="cash">Cash</option>
-                    </select>
-                    {checks.length > 1 && (
-                      <button
-                        onClick={() => setChecks(p => p.filter((_, idx) => idx !== i))}
-                        aria-label={`Remove check ${i + 1}`}
-                        style={{
-                          width: 36, height: 36, borderRadius: 8,
-                          border: '1px solid var(--cream2)', background: '#FFF',
-                          color: 'var(--silver)', fontSize: 20, cursor: 'pointer',
-                          padding: 0, lineHeight: 1, fontFamily: 'inherit',
-                        }}>×</button>
-                    )}
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-                    <div>
-                      <label style={labelStyle}>
-                        Check # {isAuto && <span style={{ color: 'var(--green)', fontStyle: 'italic', textTransform: 'none', letterSpacing: 0 }}>auto</span>}
-                      </label>
-                      <input type="text" inputMode="numeric" value={c.check_number}
-                        onChange={e => setChecks(p => p.map((x, idx) => idx === i ? { ...x, check_number: e.target.value } : x))}
-                        placeholder={i === 0 ? '1045' : ''}
-                        style={{
-                          ...inputStyle,
-                          border: `1.5px solid ${isAuto ? 'var(--green3)' : 'var(--pearl)'}`,
-                          background: isAuto ? 'var(--green-pale)' : '#FFFFFF',
-                        }} />
-                    </div>
-                    <div>
-                      <label style={labelStyle}>Buy Form #</label>
-                      <input type="text" inputMode="numeric" value={c.buy_form_number}
-                        onChange={e => setChecks(p => p.map((x, idx) => idx === i ? { ...x, buy_form_number: e.target.value } : x))}
-                        placeholder="—" style={inputStyle} />
-                    </div>
-                  </div>
+                  <span style={{
+                    fontSize: 11, fontWeight: 900, color: 'var(--mist)',
+                    paddingBottom: 8, textAlign: 'center',
+                  }}>#{i + 1}</span>
 
                   <div>
-                    <label style={labelStyle}>Amount</label>
-                    <div style={{ position: 'relative' }}>
-                      <span style={{
-                        position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
-                        color: 'var(--mist)', fontWeight: 700, fontSize: 18,
-                      }}>$</span>
-                      <input type="text" inputMode="decimal"
-                        value={formatMoneyInput(c.amount)}
-                        onChange={e => {
-                          const cleaned = parseMoneyInput(e.target.value)
-                          setChecks(p => p.map((x, idx) => idx === i ? { ...x, amount: cleaned } : x))
-                        }}
-                        placeholder="0.00"
-                        style={{ ...inputStyle, padding: '0 12px 0 26px', fontSize: 20, fontWeight: 800 }} />
-                    </div>
+                    <label style={miniLabelStyle}>
+                      Check # {isAuto && <span style={{ color: 'var(--green)', fontStyle: 'italic', textTransform: 'none', letterSpacing: 0 }}>auto</span>}
+                    </label>
+                    <input type="text" inputMode="numeric" value={c.check_number}
+                      onChange={e => setField('check_number', e.target.value)}
+                      placeholder={i === 0 ? '1045' : ''}
+                      style={{
+                        ...compactInputStyle,
+                        border: `1.5px solid ${isAuto ? 'var(--green3)' : 'var(--pearl)'}`,
+                        background: isAuto ? 'var(--green-pale)' : '#FFFFFF',
+                      }} />
                   </div>
 
-                  <Checkbox
-                    checked={c.commission_rate === 5}
-                    onChange={(next) => setChecks(p => p.map((x, idx) =>
-                      idx === i ? { ...x, commission_rate: next ? 5 : 10 } : x))}
-                    labelStyle={{
-                      display: 'flex', alignItems: 'center', gap: 10, width: '100%',
-                      marginTop: 10, padding: '8px 10px',
-                      background: c.commission_rate === 5 ? 'var(--green-pale)' : 'transparent',
-                      border: `1px solid ${c.commission_rate === 5 ? 'var(--green3)' : 'var(--cream2)'}`,
-                      borderRadius: 8,
-                    }}
-                    label={
-                      <>
-                        <span style={{
-                          fontSize: 12, fontWeight: 700,
-                          color: c.commission_rate === 5 ? 'var(--green-dark)' : 'var(--mist)',
-                          letterSpacing: '.02em',
-                        }}>
-                          5% commission rate
-                        </span>
-                        <span style={{
-                          marginLeft: 'auto', fontSize: 10, fontWeight: 700,
-                          color: c.commission_rate === 5 ? 'var(--green-dark)' : 'var(--silver)',
-                          letterSpacing: '.06em',
-                        }}>
-                          {c.commission_rate === 5 ? '5%' : c.commission_rate === 0 ? '—' : 'DEFAULT 10%'}
-                        </span>
-                      </>
-                    }
-                  />
+                  {formColVisible && (
+                    <div>
+                      <label style={miniLabelStyle}>Form #</label>
+                      <input type="text" inputMode="numeric" value={c.buy_form_number}
+                        onChange={e => setField('buy_form_number', e.target.value)}
+                        placeholder="—" style={compactInputStyle} />
+                    </div>
+                  )}
 
-                  <Checkbox
-                    checked={c.commission_rate === 0}
-                    onChange={(next) => setChecks(p => p.map((x, idx) =>
-                      idx === i ? { ...x, commission_rate: next ? 0 : 10 } : x))}
-                    labelStyle={{
-                      display: 'flex', alignItems: 'center', gap: 10, width: '100%',
-                      marginTop: 8, padding: '8px 10px',
-                      background: c.commission_rate === 0 ? '#F3F4F6' : 'transparent',
-                      border: `1px solid ${c.commission_rate === 0 ? '#9CA3AF' : 'var(--cream2)'}`,
-                      borderRadius: 8,
-                    }}
-                    label={
-                      <>
-                        <span style={{
-                          fontSize: 12, fontWeight: 700,
-                          color: c.commission_rate === 0 ? '#1F2937' : 'var(--mist)',
-                          letterSpacing: '.02em',
-                        }}>
-                          Store purchase (0% — no commission)
-                        </span>
-                        <span style={{
-                          marginLeft: 'auto', fontSize: 10, fontWeight: 700,
-                          color: c.commission_rate === 0 ? '#1F2937' : 'var(--silver)',
-                          letterSpacing: '.06em',
-                        }}>
-                          {c.commission_rate === 0 ? '0%' : ''}
-                        </span>
-                      </>
-                    }
-                  />
+                  <div>
+                    <label style={miniLabelStyle}>Amount</label>
+                    <input type="text" inputMode="decimal"
+                      value={formatMoneyInput(c.amount)}
+                      onChange={e => setField('amount', parseMoneyInput(e.target.value))}
+                      placeholder="0.00"
+                      style={{ ...compactInputStyle, fontSize: 14, fontWeight: 800 }} />
+                  </div>
+
+                  {/* Rate pills: 5% / 0%. 10% is implicit when neither is on. */}
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button onClick={() => setRate(c.commission_rate === 5 ? 10 : 5)}
+                      title="5% commission rate"
+                      style={{
+                        ...ratePillBase,
+                        background: c.commission_rate === 5 ? 'var(--green-pale)' : '#fff',
+                        borderColor: c.commission_rate === 5 ? 'var(--green3)' : 'var(--pearl)',
+                        color: c.commission_rate === 5 ? 'var(--green-dark)' : 'var(--mist)',
+                      }}>5%</button>
+                    <button onClick={() => setRate(c.commission_rate === 0 ? 10 : 0)}
+                      title="Store purchase — no commission, excluded from event totals"
+                      style={{
+                        ...ratePillBase,
+                        background: c.commission_rate === 0 ? '#F3F4F6' : '#fff',
+                        borderColor: c.commission_rate === 0 ? 'var(--mist)' : 'var(--pearl)',
+                        color: c.commission_rate === 0 ? '#1F2937' : 'var(--mist)',
+                      }}>0%</button>
+                  </div>
+
+                  <button onClick={() => setOverflowOpenIdx(overflowOpenIdx === i ? null : i)}
+                    aria-label={`Row ${i + 1} actions`}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: 'var(--mist)', fontSize: 18, padding: '0 2px',
+                      lineHeight: 1, minWidth: 22, fontFamily: 'inherit',
+                    }}>⋯</button>
+
+                  {overflowOpenIdx === i && (
+                    <div onClick={e => e.stopPropagation()}
+                      style={{
+                        position: 'absolute', top: '100%', right: 4, zIndex: 10,
+                        marginTop: 4, background: '#fff',
+                        border: '1px solid var(--pearl)', borderRadius: 8,
+                        boxShadow: '0 6px 16px rgba(0,0,0,.12)',
+                        padding: 4, minWidth: 160,
+                      }}>
+                      <button onClick={() => {
+                        setField('payment_type', c.payment_type === 'check' ? 'cash' : 'check')
+                        setOverflowOpenIdx(null)
+                      }}
+                        style={overflowItemStyle}>
+                        {c.payment_type === 'check' ? '💵 Mark as cash' : '🧾 Mark as check'}
+                      </button>
+                      {checks.length > 1 && (
+                        <button onClick={() => {
+                          setChecks(p => p.filter((_, idx) => idx !== i))
+                          setOverflowOpenIdx(null)
+                        }}
+                          style={{ ...overflowItemStyle, color: '#B91C1C' }}>
+                          🗑 Delete row
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -797,7 +823,7 @@ export default function MobileDayEntry() {
                 color: 'var(--green)', fontWeight: 700, fontSize: 14,
                 cursor: 'pointer', fontFamily: 'inherit', marginTop: 4,
               }}>
-              + Add Check
+              + Add row
             </button>
 
             {validChecks.length > 0 && (
@@ -886,6 +912,34 @@ const inputStyle: React.CSSProperties = {
   borderRadius: 10, border: '1.5px solid var(--pearl)',
   background: '#FFFFFF', color: 'var(--ink)',
   outline: 'none', fontFamily: 'inherit',
+}
+// Compact-row atoms used by the V6 Detailed Checks layout.
+const miniLabelStyle: React.CSSProperties = {
+  fontSize: 9, fontWeight: 800, color: 'var(--mist)',
+  letterSpacing: '.05em', textTransform: 'uppercase',
+  display: 'block', marginBottom: 2,
+}
+const compactInputStyle: React.CSSProperties = {
+  width: '100%', boxSizing: 'border-box',
+  padding: '6px 8px', fontSize: 13,
+  borderRadius: 6, border: '1px solid var(--pearl)',
+  background: '#FFFFFF', color: 'var(--ink)',
+  outline: 'none', fontFamily: 'inherit',
+  fontVariantNumeric: 'tabular-nums',
+}
+const ratePillBase: React.CSSProperties = {
+  border: '1px solid var(--pearl)',
+  fontSize: 11, fontWeight: 800,
+  padding: '5px 8px', borderRadius: 6,
+  cursor: 'pointer', minWidth: 32, lineHeight: 1,
+  fontFamily: 'inherit',
+}
+const overflowItemStyle: React.CSSProperties = {
+  display: 'block', width: '100%', textAlign: 'left',
+  background: 'transparent', border: 'none',
+  padding: '8px 10px', borderRadius: 6,
+  fontSize: 13, fontWeight: 700, color: 'var(--ink)',
+  cursor: 'pointer', fontFamily: 'inherit',
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
