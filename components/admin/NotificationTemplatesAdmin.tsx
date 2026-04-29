@@ -210,7 +210,6 @@ function prettyName(id: string): string {
 
 function TriggerRow({
   title,
-  description,
   enabled,
   scaffold,
   channels,
@@ -227,57 +226,35 @@ function TriggerRow({
   disabled: boolean
   onClick: () => void
 }) {
-  const [hover, setHover] = useState(false)
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      onFocus={() => setHover(true)}
-      onBlur={() => setHover(false)}
       style={{
         background: 'white',
-        border: `1px solid ${hover ? 'var(--green3)' : 'var(--pearl)'}`,
-        borderRadius: 10, padding: '12px 14px', textAlign: 'left',
+        border: '1px solid var(--pearl)',
+        borderRadius: 10, padding: '10px 14px', textAlign: 'left',
         cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
         opacity: disabled ? 0.5 : 1,
-        transition: 'border-color .15s ease',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-        <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink)' }}>{title}</div>
-        <div style={{
-          fontSize: 11, color: 'var(--mist)',
-          opacity: hover ? 1 : 0, transition: 'opacity .15s ease',
-        }}>
-          hover for details
-        </div>
+      <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink)', textAlign: 'left' }}>{title}</div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        {enabled ? (
+          <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--green-dark)', background: 'var(--green-pale)', padding: '2px 6px', borderRadius: 4 }}>ENABLED</span>
+        ) : (
+          <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--mist)', background: 'var(--cream2)', padding: '2px 6px', borderRadius: 4 }}>DISABLED</span>
+        )}
+        {scaffold && (
+          <span style={{ fontSize: 10, fontWeight: 800, color: '#92400E', background: '#FEF3C7', padding: '2px 6px', borderRadius: 4 }}>SCAFFOLD</span>
+        )}
+        {channels.length > 0 && (
+          <span style={{ fontSize: 10, color: 'var(--mist)' }}>
+            {channels.join('+').toUpperCase()} · {delayMinutes}m delay
+          </span>
+        )}
       </div>
-
-      {hover && (
-        <div style={{
-          marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--cream2)',
-          display: 'flex', flexDirection: 'column', gap: 6,
-        }}>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-            {enabled ? (
-              <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--green-dark)', background: 'var(--green-pale)', padding: '2px 6px', borderRadius: 4 }}>ENABLED</span>
-            ) : (
-              <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--mist)', background: 'var(--cream2)', padding: '2px 6px', borderRadius: 4 }}>DISABLED</span>
-            )}
-            {scaffold && (
-              <span style={{ fontSize: 10, fontWeight: 800, color: '#92400E', background: '#FEF3C7', padding: '2px 6px', borderRadius: 4 }}>SCAFFOLD</span>
-            )}
-            {channels.length > 0 && (
-              <span style={{ fontSize: 10, color: 'var(--mist)' }}>
-                {channels.join('+').toUpperCase()} · {delayMinutes}m delay
-              </span>
-            )}
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--mist)' }}>{description}</div>
-        </div>
-      )}
     </button>
   )
 }
@@ -285,7 +262,6 @@ function TriggerRow({
 function LegacyRow({
   title,
   channel,
-  description,
   onClick,
 }: {
   title: string
@@ -293,44 +269,22 @@ function LegacyRow({
   description: string
   onClick: () => void
 }) {
-  const [hover, setHover] = useState(false)
   return (
     <button
       onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      onFocus={() => setHover(true)}
-      onBlur={() => setHover(false)}
       style={{
         background: 'white',
-        border: `1px solid ${hover ? 'var(--green3)' : 'var(--pearl)'}`,
-        borderRadius: 10, padding: '12px 14px', textAlign: 'left',
+        border: '1px solid var(--pearl)',
+        borderRadius: 10, padding: '10px 14px', textAlign: 'left',
         cursor: 'pointer', fontFamily: 'inherit',
-        transition: 'border-color .15s ease',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-        <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink)' }}>{title}</div>
-        <div style={{
-          fontSize: 11, color: 'var(--mist)',
-          opacity: hover ? 1 : 0, transition: 'opacity .15s ease',
-        }}>
-          hover for details
-        </div>
-      </div>
-      {hover && (
-        <div style={{
-          marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--cream2)',
-          display: 'flex', flexDirection: 'column', gap: 6,
-        }}>
-          <div>
-            <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--mist)', background: 'var(--cream2)', padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '.04em' }}>
-              {channel}
-            </span>
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--mist)' }}>{description}</div>
-        </div>
-      )}
+      <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink)', textAlign: 'left' }}>{title}</div>
+      <span style={{
+        fontSize: 10, fontWeight: 800, color: 'var(--mist)', background: 'var(--cream2)',
+        padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '.04em',
+      }}>{channel}</span>
     </button>
   )
 }
