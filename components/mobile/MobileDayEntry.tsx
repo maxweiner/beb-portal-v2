@@ -715,8 +715,8 @@ export default function MobileDayEntry() {
                   marginBottom: 6, border: '1px solid var(--cream2)',
                   display: 'grid',
                   gridTemplateColumns: formColVisible
-                    ? '22px minmax(60px, 0.9fr) minmax(60px, 0.9fr) minmax(80px, 1.2fr) auto auto'
-                    : '22px 1fr 1.2fr auto auto',
+                    ? '22px minmax(56px, 1fr) minmax(56px, 1fr) minmax(56px, 1fr) auto auto'
+                    : '22px minmax(56px, 1fr) minmax(56px, 1fr) auto auto',
                   gap: 4, alignItems: 'end',
                 }}>
                   <span style={{
@@ -753,7 +753,7 @@ export default function MobileDayEntry() {
                       value={formatMoneyInput(c.amount)}
                       onChange={e => setField('amount', parseMoneyInput(e.target.value))}
                       placeholder="0.00"
-                      style={{ ...compactInputStyle, fontSize: 14, fontWeight: 800 }} />
+                      style={compactInputStyle} />
                   </div>
 
                   {/* Rate pills: 5% / 0%. 10% is implicit when neither is on. */}
@@ -921,7 +921,7 @@ const miniLabelStyle: React.CSSProperties = {
 }
 const compactInputStyle: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box',
-  padding: '6px 8px', fontSize: 13,
+  padding: '6px 8px', fontSize: 14,
   borderRadius: 6, border: '1px solid var(--pearl)',
   background: '#FFFFFF', color: 'var(--ink)',
   outline: 'none', fontFamily: 'inherit',
@@ -930,8 +930,8 @@ const compactInputStyle: React.CSSProperties = {
 const ratePillBase: React.CSSProperties = {
   border: '1px solid var(--pearl)',
   fontSize: 11, fontWeight: 800,
-  padding: '5px 8px', borderRadius: 6,
-  cursor: 'pointer', minWidth: 32, lineHeight: 1,
+  padding: '5px 8px', borderRadius: 3,
+  cursor: 'pointer', minWidth: 38, lineHeight: 1,
   fontFamily: 'inherit',
 }
 const overflowItemStyle: React.CSSProperties = {
