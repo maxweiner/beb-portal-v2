@@ -708,23 +708,28 @@ export default function MobileDayEntry() {
               const setField = <K extends keyof CheckRow>(key: K, val: CheckRow[K]) =>
                 setChecks(p => p.map((x, idx) => idx === i ? { ...x, [key]: val } : x))
 
+              const gridCols = formColVisible
+                ? '22px minmax(56px, 1fr) minmax(56px, 1fr) minmax(56px, 1fr) auto auto'
+                : '22px minmax(56px, 1fr) minmax(56px, 1fr) auto auto'
+
               return (
                 <div key={c.id || i} style={{
                   position: 'relative',
                   background: 'var(--cream)', borderRadius: 10, padding: '8px 10px',
                   marginBottom: 6, border: '1px solid var(--cream2)',
-                  display: 'grid',
-                  gridTemplateColumns: formColVisible
-                    ? '22px minmax(56px, 1fr) minmax(56px, 1fr) minmax(56px, 1fr) auto auto'
-                    : '22px minmax(56px, 1fr) minmax(56px, 1fr) auto auto',
-                  gap: 4, alignItems: 'center',
                 }}>
-                  <span style={{
-                    fontSize: 11, fontWeight: 900, color: 'var(--mist)',
-                    textAlign: 'center',
-                  }}>#{i + 1}</span>
+                  {/* Row A: inputs + controls — alignItems:center keeps row#,
+                      pills, and ⋯ on the input's vertical centerline. */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: gridCols,
+                    columnGap: 4, alignItems: 'center',
+                  }}>
+                    <span style={{
+                      fontSize: 11, fontWeight: 900, color: 'var(--mist)',
+                      textAlign: 'center',
+                    }}>#{i + 1}</span>
 
-                  <div>
                     <input type="text" inputMode="numeric" value={c.check_number}
                       onChange={e => setField('check_number', e.target.value)}
                       placeholder={i === 0 ? '1045' : ''}
@@ -733,21 +738,13 @@ export default function MobileDayEntry() {
                         border: `1.5px solid ${isAuto ? 'var(--green3)' : 'var(--pearl)'}`,
                         background: isAuto ? 'var(--green-pale)' : '#FFFFFF',
                       }} />
-                    <label style={miniLabelStyle}>
-                      Check # {isAuto && <span style={{ color: 'var(--green)', fontStyle: 'italic', textTransform: 'none', letterSpacing: 0 }}>auto</span>}
-                    </label>
-                  </div>
 
-                  {formColVisible && (
-                    <div>
+                    {formColVisible && (
                       <input type="text" inputMode="numeric" value={c.buy_form_number}
                         onChange={e => setField('buy_form_number', e.target.value)}
                         placeholder="—" style={compactInputStyle} />
-                      <label style={miniLabelStyle}>Form #</label>
-                    </div>
-                  )}
+                    )}
 
-                  <div>
                     <div style={{ position: 'relative' }}>
                       <span aria-hidden style={{
                         position: 'absolute', left: 6, top: '50%',
@@ -761,11 +758,9 @@ export default function MobileDayEntry() {
                         placeholder="0.00"
                         style={{ ...compactInputStyle, paddingLeft: 18 }} />
                     </div>
-                    <label style={miniLabelStyle}>Amount</label>
-                  </div>
 
-                  {/* Rate pills: 5% / 0%. 10% is implicit when neither is on. */}
-                  <div style={{ display: 'flex', gap: 4 }}>
+                    {/* Rate pills: 5% / 0%. 10% is implicit when neither is on. */}
+                    <div style={{ display: 'flex', gap: 4 }}>
                     <button onClick={() => setRate(c.commission_rate === 5 ? 10 : 5)}
                       title="5% commission rate"
                       style={{
@@ -784,13 +779,32 @@ export default function MobileDayEntry() {
                       }}>0%</button>
                   </div>
 
-                  <button onClick={() => setOverflowOpenIdx(overflowOpenIdx === i ? null : i)}
-                    aria-label={`Row ${i + 1} actions`}
-                    style={{
-                      background: 'none', border: 'none', cursor: 'pointer',
-                      color: 'var(--mist)', fontSize: 18, padding: '0 2px',
-                      lineHeight: 1, minWidth: 22, fontFamily: 'inherit',
-                    }}>⋯</button>
+                    <button onClick={() => setOverflowOpenIdx(overflowOpenIdx === i ? null : i)}
+                      aria-label={`Row ${i + 1} actions`}
+                      style={{
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        color: 'var(--mist)', fontSize: 18, padding: '0 2px',
+                        lineHeight: 1, minWidth: 22, fontFamily: 'inherit',
+                      }}>⋯</button>
+                  </div>
+
+                  {/* Row B: labels — same grid template as Row A so each
+                      label sits directly under its input. Empty cells in
+                      the row#/pills/⋯ columns. */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: gridCols,
+                    columnGap: 4, marginTop: 3,
+                  }}>
+                    <span />
+                    <label style={miniLabelStyle}>
+                      Check # {isAuto && <span style={{ color: 'var(--green)', fontStyle: 'italic', textTransform: 'none', letterSpacing: 0 }}>auto</span>}
+                    </label>
+                    {formColVisible && <label style={miniLabelStyle}>Form #</label>}
+                    <label style={miniLabelStyle}>Amount</label>
+                    <span />
+                    <span />
+                  </div>
 
                   {overflowOpenIdx === i && (
                     <div onClick={e => e.stopPropagation()}
@@ -925,7 +939,7 @@ const inputStyle: React.CSSProperties = {
 const miniLabelStyle: React.CSSProperties = {
   fontSize: 9, fontWeight: 800, color: 'var(--mist)',
   letterSpacing: '.05em', textTransform: 'uppercase',
-  display: 'block', marginTop: 3, textAlign: 'center',
+  display: 'block', textAlign: 'center',
 }
 const compactInputStyle: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box',
