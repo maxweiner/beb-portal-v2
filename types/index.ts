@@ -159,6 +159,8 @@ export interface EventDay {
   purchases: number
   dollars10: number
   dollars5: number
+  /** Store purchases at 0% commission. Reported separately; NEVER summed into dollars10 + dollars5 or commission % math. */
+  dollars0: number
   src_vdp: number
   src_postcard: number
   src_social: number
