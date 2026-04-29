@@ -866,6 +866,35 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                     )}
                   </div>
 
+                  {/* Buyers needed editor + live assigned count */}
+                  <div style={{ padding: '10px 20px 0', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                    <span style={{ color: 'var(--mist)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', fontSize: 11 }}>Needs</span>
+                    <input type="number" min={1} max={20} step={1}
+                      value={buyersNeededEdits[ev.id] ?? (ev.buyers_needed != null ? String(ev.buyers_needed) : '')}
+                      placeholder="—"
+                      onChange={e => setBuyersNeededEdits(p => ({ ...p, [ev.id]: e.target.value }))}
+                      onBlur={e => saveBuyersNeeded(ev, e.target.value)}
+                      onClick={e => e.stopPropagation()}
+                      style={{
+                        width: 60, padding: '4px 8px', fontSize: 14,
+                        borderRadius: 6, border: '1px solid var(--pearl)',
+                        background: '#fff', textAlign: 'center', fontFamily: 'inherit',
+                      }} />
+                    <span style={{ color: 'var(--mist)' }}>buyer{(ev.buyers_needed ?? 0) === 1 ? '' : 's'}</span>
+                    {(() => {
+                      const s = eventStaffing(ev)
+                      if (s.needed == null) return null
+                      return (
+                        <span style={{
+                          marginLeft: 'auto', fontSize: 12, fontWeight: 800,
+                          color: s.understaffed ? '#92400E' : 'var(--green-dark)',
+                        }}>
+                          {s.assigned} assigned
+                        </span>
+                      )
+                    })()}
+                  </div>
+
                   {/* Avatar stack + buyer first names */}
                   {evWorkers.length > 0 && (
                     <div onClick={() => setDetail(ev)} style={{
