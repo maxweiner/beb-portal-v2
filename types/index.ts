@@ -133,6 +133,10 @@ export interface Store {
   default_jewelry_box_count?: number
   default_silver_box_count?: number
   shipping_recipients?: string[]
+  /** Mobile Enter Day Data: default visibility of the Form # column.
+   *  Per-user override persisted in localStorage at
+   *  beb-form-no-{user_id}-{store_id}. */
+  default_form_number_visible?: boolean
 }
 
 export interface EventDay {
