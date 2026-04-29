@@ -72,6 +72,25 @@ const REPORTS: (ReportDef & { Icon: React.FC<{ size?: number; color?: string }>;
     varHint: '{{storeName}} and {{eventDate}} for the event being recapped',
     sampleVars: { storeName: 'Sample Store Name', eventDate: 'Sat, Apr 27' },
   },
+  {
+    // Transactional template: fired by the daily expense-submit-reminder
+    // cron, one email per active report whose event has ended. No
+    // broadcast schedule or recipient list — sendEndpoint=null causes
+    // the editor to hide both sections.
+    id: 'expense-submit-reminder',
+    title: 'Expense Submit Reminder',
+    description: 'Daily nudge to buyers whose expense reports are still active after their event has ended. Editable copy; cron-driven.',
+    Icon: DocumentIcon, accent: '#EF4444',
+    sendEndpoint: null,
+    varHint: '{{buyerName}}, {{eventName}}, {{eventDate}}, {{ordinal}} (Reminder/Second/Final), {{closingLine}}',
+    sampleVars: {
+      buyerName: 'Max Weiner',
+      eventName: "Daniel's Jewelers",
+      eventDate: 'April 21, 2026',
+      ordinal: 'Reminder',
+      closingLine: "We'll nudge you one more time in 3 days if it's still not submitted.",
+    },
+  },
 ]
 
 export default function Reports() {

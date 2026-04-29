@@ -1,9 +1,18 @@
-// One-off "submit your report" email sent by the daily cron. Composed
-// inline (Resend transactional, no notification-system template needed
-// — same pattern as notifyPartnersOfSubmission).
+// One-off "submit your report" email sent by the daily cron.
+//
+// Copy is editable from Reports → Templates → Expense Submit Reminder
+// (report_templates.id = 'expense-submit-reminder'). Falls back to the
+// inline default below if the row is disabled or missing — keeps the
+// cron working even before the template editor was wired up.
 
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email'
+
+const TEMPLATE_ID = 'expense-submit-reminder'
+
+function substitute(s: string, vars: Record<string, string>): string {
+  return s.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => vars[k] ?? '')
+}
 
 function admin() {
   return createClient(
@@ -62,13 +71,44 @@ export async function sendSubmitReminderForReport(
   const portalLink = opts.portalBaseUrl ? `${opts.portalBaseUrl}/?report=${reportId}` : null
 
   const ordinal = attemptNumber === 1 ? 'Reminder' : attemptNumber === 2 ? 'Second reminder' : 'Final reminder'
-  const subject = `${ordinal}: please submit your expense report — ${eventName}`
+  const closingLine = attemptNumber === 3
+    ? "This is the final reminder we'll send for this report."
+    : "We'll nudge you one more time in 3 days if it's still not submitted."
+  const vars: Record<string, string> = {
+    buyerName: escapeHtml(buyerName),
+    eventName: escapeHtml(eventName),
+    eventDate: escapeHtml(eventDate),
+    ordinal,
+    closingLine: escapeHtml(closingLine),
+  }
+
+  // Pull editable copy from report_templates if the admin has enabled it,
+  // otherwise use the hard-coded fallback below.
+  const { data: tpl } = await sb.from('report_templates')
+    .select('subject, greeting, shoutout_fallback, footer, enabled')
+    .eq('id', TEMPLATE_ID).maybeSingle()
+
+  const useTpl = tpl && (tpl as any).enabled !== false && ((tpl as any).subject || (tpl as any).shoutout_fallback)
+  const subject = useTpl
+    ? substitute((tpl as any).subject || `${ordinal}: please submit your expense report — ${eventName}`, vars)
+    : `${ordinal}: please submit your expense report — ${eventName}`
+
+  const greetingHtml = useTpl
+    ? `<p>${substitute((tpl as any).greeting || 'Hi {{buyerName}},', vars)}</p>`
+    : `<p>Hi ${vars.buyerName},</p>`
+  const bodyHtml = useTpl
+    ? `<p>${substitute((tpl as any).shoutout_fallback || '', vars)}</p>`
+    : `<p>Your expense report for <strong>${vars.eventName}</strong>${eventDate ? ` (${vars.eventDate})` : ''} is still in <em>active</em> status — please add any remaining receipts and submit it for review.</p>`
+  const footerHtml = useTpl
+    ? `<p style="margin-top:18px;font-size:12px;color:#9CA3AF;">${substitute((tpl as any).footer || '{{closingLine}}', vars)}</p>`
+    : `<p style="margin-top:18px;font-size:12px;color:#9CA3AF;">${vars.closingLine}</p>`
+
   const html = `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#1F2937;max-width:540px;">
-      <p>Hi ${escapeHtml(buyerName)},</p>
-      <p>Your expense report for <strong>${escapeHtml(eventName)}</strong>${eventDate ? ` (${escapeHtml(eventDate)})` : ''} is still in <em>active</em> status — please add any remaining receipts and submit it for review.</p>
+      ${greetingHtml}
+      ${bodyHtml}
       ${portalLink ? `<p style="margin-top:18px;"><a href="${portalLink}" style="display:inline-block;background:#1D6B44;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:700;">Open the portal</a></p>` : ''}
-      <p style="margin-top:18px;font-size:12px;color:#9CA3AF;">${attemptNumber === 3 ? 'This is the final reminder we\'ll send for this report.' : 'We\'ll nudge you one more time in 3 days if it\'s still not submitted.'}</p>
+      ${footerHtml}
     </div>
   `.trim()
 
