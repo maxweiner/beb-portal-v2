@@ -105,10 +105,6 @@ export const TRIGGER_REGISTRY: Record<TriggerType, TriggerDefinition> = {
   },
 }
 
-export function getTrigger(type: string): TriggerDefinition | null {
-  return (TRIGGER_REGISTRY as Record<string, TriggerDefinition>)[type] ?? null
-}
-
 export function listTriggers(): TriggerDefinition[] {
   return Object.values(TRIGGER_REGISTRY)
 }

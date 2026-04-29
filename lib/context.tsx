@@ -265,9 +265,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       )
     }
     const channel = channelBuilder.subscribe((status: string) => {
-      if (status === 'SUBSCRIBED') {
-        console.log('[Realtime] Connected — listening for changes')
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
         console.warn(`[Realtime] ${status} — supabase-js will auto-reconnect`)
       }
     })
