@@ -26,9 +26,35 @@ export const metadata: Metadata = {
   },
 }
 
+// Inline script that sets the theme class on <html> *before* React
+// hydrates, so the very first paint already has the right brand colors
+// even on slow mobile loads. Mirrors the standard dark-mode pattern.
+// MUST stay in lockstep with `themeClass` derivation in lib/context.tsx —
+// if you change the rules there, change them here too.
+const THEME_BOOT_SCRIPT = `
+(function(){
+  try {
+    var brand = localStorage.getItem('beb-brand');
+    if (brand !== 'beb' && brand !== 'liberty') brand = 'beb';
+    var theme = localStorage.getItem('beb-theme') || 'original';
+    var cls = '';
+    if (brand === 'liberty') {
+      cls = (theme.indexOf('liberty') === 0) ? ('theme-' + theme) : 'theme-liberty';
+    } else {
+      // brand=beb wins over a stale liberty-* theme.
+      cls = (theme && theme !== 'original' && theme.indexOf('liberty') !== 0) ? ('theme-' + theme) : '';
+    }
+    if (cls) document.documentElement.classList.add(cls);
+  } catch (e) {}
+})();
+`.trim()
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+      </head>
       <body>
         <AppProvider>
           {children}
