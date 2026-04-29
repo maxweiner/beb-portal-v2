@@ -712,20 +712,33 @@ export default function MobileDayEntry() {
                 ? '22px minmax(56px, 1fr) minmax(56px, 1fr) minmax(56px, 1fr) auto auto'
                 : '22px minmax(56px, 1fr) minmax(56px, 1fr) auto auto'
 
+              // Column indices for Row 2 labels (varies with formColVisible).
+              const checkCol  = 2
+              const formCol   = 3
+              const amountCol = formColVisible ? 4 : 3
+
               return (
                 <div key={c.id || i} style={{
                   position: 'relative',
-                  background: 'var(--cream)', borderRadius: 10, padding: '8px 10px',
+                  background: 'var(--cream)', borderRadius: 10,
+                  padding: '16px 10px 8px',
                   marginBottom: 6, border: '1px solid var(--cream2)',
                 }}>
-                  {/* Row A: inputs + controls — alignItems:center keeps row#,
-                      pills, and ⋯ on the input's vertical centerline. */}
+                  {/* Single grid · 2 rows. Row 1 = inputs + controls
+                      (alignItems:center). Row 2 = labels with explicit
+                      gridColumn so they sit under the same column the
+                      input occupies — Row B-style empty <span>s would
+                      collapse the auto columns and shift the input
+                      columns wider, drifting the labels off-axis. */}
                   <div style={{
                     display: 'grid',
                     gridTemplateColumns: gridCols,
-                    columnGap: 4, alignItems: 'center',
+                    gridTemplateRows: 'auto auto',
+                    columnGap: 4, rowGap: 3,
+                    alignItems: 'center',
                   }}>
                     <span style={{
+                      gridRow: 1, gridColumn: 1,
                       fontSize: 11, fontWeight: 900, color: 'var(--mist)',
                       textAlign: 'center',
                     }}>#{i + 1}</span>
@@ -735,6 +748,7 @@ export default function MobileDayEntry() {
                       placeholder={i === 0 ? '1045' : ''}
                       style={{
                         ...compactInputStyle,
+                        gridRow: 1, gridColumn: checkCol,
                         border: `1.5px solid ${isAuto ? 'var(--green3)' : 'var(--pearl)'}`,
                         background: isAuto ? 'var(--green-pale)' : '#FFFFFF',
                       }} />
@@ -742,10 +756,11 @@ export default function MobileDayEntry() {
                     {formColVisible && (
                       <input type="text" inputMode="numeric" value={c.buy_form_number}
                         onChange={e => setField('buy_form_number', e.target.value)}
-                        placeholder="—" style={compactInputStyle} />
+                        placeholder="—"
+                        style={{ ...compactInputStyle, gridRow: 1, gridColumn: formCol }} />
                     )}
 
-                    <div style={{ position: 'relative' }}>
+                    <div style={{ gridRow: 1, gridColumn: amountCol, position: 'relative' }}>
                       <span aria-hidden style={{
                         position: 'absolute', left: 6, top: '50%',
                         transform: 'translateY(-50%)',
@@ -760,50 +775,45 @@ export default function MobileDayEntry() {
                     </div>
 
                     {/* Rate pills: 5% / 0%. 10% is implicit when neither is on. */}
-                    <div style={{ display: 'flex', gap: 4 }}>
-                    <button onClick={() => setRate(c.commission_rate === 5 ? 10 : 5)}
-                      title="5% commission rate"
-                      style={{
-                        ...ratePillBase,
-                        background: c.commission_rate === 5 ? 'var(--green-pale)' : '#fff',
-                        borderColor: c.commission_rate === 5 ? 'var(--green3)' : 'var(--pearl)',
-                        color: c.commission_rate === 5 ? 'var(--green-dark)' : 'var(--mist)',
-                      }}>5%</button>
-                    <button onClick={() => setRate(c.commission_rate === 0 ? 10 : 0)}
-                      title="Store purchase — no commission, excluded from event totals"
-                      style={{
-                        ...ratePillBase,
-                        background: c.commission_rate === 0 ? '#F3F4F6' : '#fff',
-                        borderColor: c.commission_rate === 0 ? 'var(--mist)' : 'var(--pearl)',
-                        color: c.commission_rate === 0 ? '#1F2937' : 'var(--mist)',
-                      }}>0%</button>
-                  </div>
+                    <div style={{
+                      gridRow: 1, gridColumn: amountCol + 1,
+                      display: 'flex', gap: 4,
+                    }}>
+                      <button onClick={() => setRate(c.commission_rate === 5 ? 10 : 5)}
+                        title="5% commission rate"
+                        style={{
+                          ...ratePillBase,
+                          background: c.commission_rate === 5 ? 'var(--green-pale)' : '#fff',
+                          borderColor: c.commission_rate === 5 ? 'var(--green3)' : 'var(--pearl)',
+                          color: c.commission_rate === 5 ? 'var(--green-dark)' : 'var(--mist)',
+                        }}>5%</button>
+                      <button onClick={() => setRate(c.commission_rate === 0 ? 10 : 0)}
+                        title="Store purchase — no commission, excluded from event totals"
+                        style={{
+                          ...ratePillBase,
+                          background: c.commission_rate === 0 ? '#F3F4F6' : '#fff',
+                          borderColor: c.commission_rate === 0 ? 'var(--mist)' : 'var(--pearl)',
+                          color: c.commission_rate === 0 ? '#1F2937' : 'var(--mist)',
+                        }}>0%</button>
+                    </div>
 
                     <button onClick={() => setOverflowOpenIdx(overflowOpenIdx === i ? null : i)}
                       aria-label={`Row ${i + 1} actions`}
                       style={{
+                        gridRow: 1, gridColumn: amountCol + 2,
                         background: 'none', border: 'none', cursor: 'pointer',
                         color: 'var(--mist)', fontSize: 18, padding: '0 2px',
                         lineHeight: 1, minWidth: 22, fontFamily: 'inherit',
                       }}>⋯</button>
-                  </div>
 
-                  {/* Row B: labels — same grid template as Row A so each
-                      label sits directly under its input. Empty cells in
-                      the row#/pills/⋯ columns. */}
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: gridCols,
-                    columnGap: 4, marginTop: 3,
-                  }}>
-                    <span />
-                    <label style={miniLabelStyle}>
+                    {/* Row 2: labels under their respective inputs. */}
+                    <label style={{ ...miniLabelStyle, gridRow: 2, gridColumn: checkCol }}>
                       Check # {isAuto && <span style={{ color: 'var(--green)', fontStyle: 'italic', textTransform: 'none', letterSpacing: 0 }}>auto</span>}
                     </label>
-                    {formColVisible && <label style={miniLabelStyle}>Form #</label>}
-                    <label style={miniLabelStyle}>Amount</label>
-                    <span />
-                    <span />
+                    {formColVisible && (
+                      <label style={{ ...miniLabelStyle, gridRow: 2, gridColumn: formCol }}>Form #</label>
+                    )}
+                    <label style={{ ...miniLabelStyle, gridRow: 2, gridColumn: amountCol }}>Amount</label>
                   </div>
 
                   {overflowOpenIdx === i && (
