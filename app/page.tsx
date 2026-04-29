@@ -18,6 +18,7 @@ import Expenses from '@/components/expenses/Expenses'
 import PendingApprovalsModal from '@/components/expenses/PendingApprovalsModal'
 import PartnerFinancials from '@/components/financials/PartnerFinancials'
 import Marketing from '@/components/marketing/Marketing'
+import TodoPage from '@/components/todo/TodoPage'
 import Calendar from '@/components/calendar/Calendar'
 import AppointmentsAdmin from '@/components/appointments-admin/AppointmentsAdmin'
 import { RoleGuard } from '@/components/ui/RoleGuard'
@@ -33,7 +34,7 @@ import MobileStaff from '@/components/mobile/MobileStaff'
 import BrandSwitchOverlay from '@/components/layout/BrandSwitchOverlay'
 import { shouldUseMobile, setMobilePreference } from '@/lib/mobile'
 
-export type NavPage = 'dashboard' | 'calendar' | 'events' | 'schedule' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'libertyadmin' | 'recipients' | 'notification-templates' | 'data-research' | 'expenses' | 'financials'
+export type NavPage = 'dashboard' | 'calendar' | 'events' | 'schedule' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'libertyadmin' | 'recipients' | 'notification-templates' | 'data-research' | 'expenses' | 'financials' | 'todo'
 
 export default function Home() {
   const { user, loading, connectionError, reload } = useApp()
@@ -133,6 +134,7 @@ export default function Home() {
             setTimeout(() => window.dispatchEvent(new CustomEvent('beb:open-expense-report', { detail: { reportId: id } })), 0)
           }} />}
           {nav === 'marketing' && <Marketing />}
+          {nav === 'todo'      && <TodoPage />}
           {nav === 'settings'  && <Settings />}
           {nav === 'admin'     && <RoleGuard roles={["admin", "superadmin"]}><AdminPanel /></RoleGuard>}
           {nav === 'libertyadmin' && <RoleGuard roles={["admin", "superadmin"]}><LibertyAdminPanel /></RoleGuard>}
@@ -170,6 +172,7 @@ export default function Home() {
           setNav('expenses')
           setTimeout(() => window.dispatchEvent(new CustomEvent('beb:open-expense-report', { detail: { reportId: id } })), 0)
         }} />}
+        {nav === 'todo'       && <TodoPage />}
         {nav === 'settings'   && <Settings />}
         {nav === 'staff'      && <Staff />}
         {nav === 'schedule'   && <Schedule />}

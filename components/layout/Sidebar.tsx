@@ -57,6 +57,7 @@ const BEB_NAV: NavItem[] = [
   { id: 'marketing',    label: 'Marketing',      iconKey: 'marketing' },
   { id: 'shipping',     label: 'Shipping',       iconKey: 'shipping' },
   { id: 'expenses',     label: 'Expenses',       iconKey: 'expenses' },
+  { id: 'todo',         label: 'To-Do List',     iconKey: 'reports' },
   { id: 'settings',     label: 'Settings',       iconKey: 'settings' },
 ]
 
@@ -79,6 +80,7 @@ const LIBERTY_NAV: NavItem[] = [
   { id: 'marketing',    label: 'Marketing',      iconKey: 'marketing' },
   { id: 'shipping',     label: 'Shipping',       iconKey: 'shipping' },
   { id: 'expenses',     label: 'Expenses',       iconKey: 'expenses' },
+  { id: 'todo',         label: 'To-Do List',     iconKey: 'reports' },
   { id: 'settings',     label: 'Settings',       iconKey: 'settings' },
 ]
 
