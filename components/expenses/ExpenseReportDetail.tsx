@@ -51,7 +51,8 @@ export default function ExpenseReportDetail({
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
   const isPartner = !!user?.is_partner
   const canMutate = (isOwner && report?.status === 'active') || isAdmin
-  const canSubmit = isOwner && report?.status === 'active' && expenses.length > 0
+  const hasContent = expenses.length > 0 || Number(report?.comp_rate || 0) > 0
+  const canSubmit = isOwner && report?.status === 'active' && hasContent
   const canApprove = isPartner && report?.status === 'submitted_pending_review'
   const canRecall  = isOwner && report?.status === 'submitted_pending_review'
   const canMarkPaid = (isPartner || isOwner) && report?.status === 'approved'
@@ -470,7 +471,7 @@ export default function ExpenseReportDetail({
             <button className="btn-primary"
               onClick={submitForReview}
               disabled={!canSubmit || submitting}
-              title={canSubmit ? '' : 'Add at least one expense before submitting.'}>
+              title={canSubmit ? '' : 'Add at least one expense or set a compensation amount before submitting.'}>
               {submitting ? 'Submitting…' : 'Submit for Review'}
             </button>
           )}
