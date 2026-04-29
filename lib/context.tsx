@@ -168,10 +168,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       let effectiveBrand: Brand = (dbBrand === 'beb' || dbBrand === 'liberty') ? dbBrand : cachedBrand
       if (effectiveBrand === 'liberty' && !userData.liberty_access) effectiveBrand = 'beb'
 
+      // Resync theme to match the resolved brand. Without this, a stale
+      // `beb-theme` from a previous session can leave the app showing the
+      // wrong colors after auth (e.g. cached theme=liberty-gold but
+      // dbBrand=beb).
+      const cachedTheme = readLocal<Theme>('beb-theme', 'original')
+      let effectiveTheme: Theme = cachedTheme
+      if (effectiveBrand === 'liberty' && !cachedTheme.startsWith('liberty')) {
+        effectiveTheme = readLocal<Theme>('beb-liberty-theme', LIBERTY_DEFAULT_THEME)
+      } else if (effectiveBrand === 'beb' && cachedTheme.startsWith('liberty')) {
+        effectiveTheme = readLocal<Theme>('beb-beb-theme', 'original')
+      }
+
       setUserState(userData)
       setBrandState(effectiveBrand)
+      if (effectiveTheme !== themeRef.current) setThemeState(effectiveTheme)
       if (typeof window !== 'undefined') {
         window.localStorage.setItem('beb-brand', effectiveBrand)
+        window.localStorage.setItem('beb-theme', effectiveTheme)
       }
 
       // Re-fetch if the resolved brand differs from what we hot-loaded with.
@@ -334,9 +348,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const setStores = (s: Store[]) => setStoresState(s)
   const setEvents = (e: Event[]) => setEventsState(e)
 
+  // Brand wins over theme: a stale `liberty-*` theme paired with brand=beb
+  // would render Liberty colors against a BEB session. The boot script in
+  // app/layout.tsx must mirror this exactly.
   const themeClass = brand === 'liberty'
     ? (theme.startsWith('liberty') ? `theme-${theme}` : 'theme-liberty')
-    : (theme !== 'original' ? `theme-${theme}` : '')
+    : (theme && theme !== 'original' && !theme.startsWith('liberty') ? `theme-${theme}` : '')
+
+  // Mirror the theme class onto <html> so it's consistent with the boot
+  // script that ran before hydration. Removing whatever theme-* class was
+  // there first keeps the cascade clean (additive .add() would let stale
+  // classes shadow the new one).
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const root = document.documentElement
+    Array.from(root.classList).forEach(c => {
+      if (c.startsWith('theme-')) root.classList.remove(c)
+    })
+    if (themeClass) root.classList.add(themeClass)
+  }, [themeClass])
 
   const ctxValue = useMemo<AppContextType>(() => ({
     user, users, stores, events, shipments, permissions,
@@ -352,11 +382,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     reload, dayEntryIntent,
   ])
 
+  // Theme class lives on <html> only (set by the boot script for the
+  // first paint, kept in sync by the useEffect above). No wrapper div
+  // needed — CSS variable cascade reaches every descendant from <html>.
   return (
     <AppContext.Provider value={ctxValue}>
-      <div className={themeClass}>
-        {children}
-      </div>
+      {children}
     </AppContext.Provider>
   )
 }
