@@ -90,6 +90,11 @@ export default function DayEntry() {
   const rowIdRef = useRef<string | null>(null)
   const hydratedRef = useRef(false)
   const persistInFlightRef = useRef(false)
+  // Records which (event, day) the in-memory form state was loaded for.
+  // persist() refuses to write if this doesn't match selectedEventId +
+  // selectedDay — prevents an in-flight autosave from clobbering the
+  // newly-selected day with the previous day's stale state.
+  const loadedKeyRef = useRef<string | null>(null)
 
   // Nudge state (Day 3 soft prompt for event notes)
   const [showNotesNudge, setShowNotesNudge] = useState(false)
@@ -118,6 +123,10 @@ export default function DayEntry() {
   const loadExisting = async () => {
     setLoading(true)
     hydratedRef.current = false
+    // Invalidate the loaded-key so any autosave that fires mid-load
+    // sees the mismatch and skips.
+    loadedKeyRef.current = null
+    const fetchKey = `${selectedEventId}:${selectedDay}`
     const [{ data: rowData }, { data: checkRows }] = await Promise.all([
       supabase.from('event_days').select('*')
         .eq('event_id', selectedEventId).eq('day_number', selectedDay).maybeSingle(),
@@ -161,6 +170,10 @@ export default function DayEntry() {
         }))
       : [emptyCheck()])
     setLoading(false)
+    // Mark the in-memory state as belonging to the day we just loaded.
+    // Done synchronously here so autosaves that fire after the load
+    // settled can recognize the state as canonical.
+    loadedKeyRef.current = fetchKey
     setTimeout(() => { hydratedRef.current = true }, 0)
   }
 
@@ -183,6 +196,10 @@ export default function DayEntry() {
   const persist = async (overrides: Overrides = {}) => {
     if (persistInFlightRef.current) return
     if (!selectedEventId || !user?.id) return
+    // Refuse to write if the in-memory state belongs to a different
+    // (event, day) than the one currently selected — happens when an
+    // autosave timer fires mid-day-switch.
+    if (loadedKeyRef.current !== `${selectedEventId}:${selectedDay}`) return
     const ev = events.find(e => e.id === selectedEventId)
     if (!canEditEvent(user, ev as any)) {
       alert("You're not assigned to this event — save blocked.")

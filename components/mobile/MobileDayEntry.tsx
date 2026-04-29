@@ -104,6 +104,10 @@ export default function MobileDayEntry() {
   const [existingEntry, setExistingEntry] = useState<any>(null)
   const entryIdRef = useRef<string | null>(null)
   const hydratedRef = useRef(false)
+  // Tracks the (event, day) the in-memory form state was loaded for.
+  // persist() refuses to write if it doesn't match — prevents an
+  // in-flight autosave from clobbering the new day with stale state.
+  const loadedKeyRef = useRef<string | null>(null)
   // Mutex so overlapping autosave + manual-submit calls don't both INSERT
   // before the first one's id has been written back into entryIdRef.
   const persistInFlightRef = useRef(false)
@@ -215,6 +219,8 @@ export default function MobileDayEntry() {
 
   const loadEntries = async () => {
     hydratedRef.current = false
+    loadedKeyRef.current = null
+    const fetchKey = `${selectedEventId}:${selectedDay}`
     setLoadingEntry(true)
     // Shared per-event-day row on event_days (no buyer filter — anyone on
     // the event edits the same record).
@@ -274,6 +280,7 @@ export default function MobileDayEntry() {
       commission_rate: c.commission_rate === 5 ? 5 : c.commission_rate === 0 ? 0 : 10,
     })) : [emptyCheck()])
     setLoadingEntry(false)
+    loadedKeyRef.current = fetchKey
     setTimeout(() => { hydratedRef.current = true }, 0)
   }
 
@@ -300,6 +307,10 @@ export default function MobileDayEntry() {
   const persist = async (_submit: boolean, overrides: Overrides = {}) => {
     if (persistInFlightRef.current) return
     if (!selectedEventId || !user?.id) return
+    // Refuse to write if the in-memory state belongs to a different
+    // (event, day) than the one currently selected — prevents an
+    // autosave from corrupting Day 2 with Day 1's just-loaded state.
+    if (loadedKeyRef.current !== `${selectedEventId}:${selectedDay}`) return
     const ev = events.find(e => e.id === selectedEventId)
     if (!canEditEvent(user, ev as any)) {
       alert("You're not assigned to this event — save blocked.")
