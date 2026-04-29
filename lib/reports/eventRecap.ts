@@ -106,6 +106,26 @@ export async function buildEventRecap(opts: BuildOpts): Promise<EventRecapResult
     return { day: d.day_number, customers: d.customers || 0, purchases: d.purchases || 0, dollars }
   })
 
+  // Store purchases (no commission) — rolled up from buyer_checks where
+  // commission_rate = 0. Surfaced as a separate line below the show
+  // totals; intentionally NOT added to grand.dollars or any commission
+  // % math so the show's commission percentage isn't artificially
+  // depressed by store-level purchases.
+  const { data: storeChecks } = await sb
+    .from('buyer_checks')
+    .select('day_number, amount')
+    .eq('event_id', opts.eventId)
+    .eq('commission_rate', 0)
+  const storeNoCommByDay = new Map<number, number>()
+  let storeNoCommTotal = 0
+  for (const c of (storeChecks ?? []) as Array<{ day_number: number | null; amount: number | string | null }>) {
+    const amt = Number(c.amount || 0)
+    if (!Number.isFinite(amt) || amt <= 0) continue
+    const dn = c.day_number ?? 0
+    storeNoCommByDay.set(dn, (storeNoCommByDay.get(dn) ?? 0) + amt)
+    storeNoCommTotal += amt
+  }
+
   const perBuyer = new Map<string, { name: string; purchases: number; dollars: number; days: number }>()
   for (const e of entries) {
     const key = e.buyer_id || 'unknown'
@@ -131,6 +151,7 @@ export async function buildEventRecap(opts: BuildOpts): Promise<EventRecapResult
     greeting, headerSubtitle, footer,
     storeName, eventDateStr,
     perDay, grand, buyerRows,
+    storeNoCommByDay, storeNoCommTotal,
   })
 
   return {
@@ -151,6 +172,8 @@ function recapBody(opts: {
   perDay: { day: number; customers: number; purchases: number; dollars: number }[]
   grand: { customers: number; purchases: number; dollars: number }
   buyerRows: { name: string; purchases: number; dollars: number; days: number }[]
+  storeNoCommByDay: Map<number, number>
+  storeNoCommTotal: number
 }): string {
   const dayRows = opts.perDay.map(d => `
     <tr>
@@ -159,6 +182,30 @@ function recapBody(opts: {
       <td style="padding:8px 10px;text-align:right">${d.purchases}</td>
       <td style="padding:8px 10px;text-align:right;font-weight:700;color:#1D6B44">${money(d.dollars)}</td>
     </tr>`).join('')
+
+  const storeNoCommSection = opts.storeNoCommTotal > 0 ? `
+    <section style="background:#fff;border:1px solid #d8d3ca;border-radius:12px;padding:16px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:800;color:#737368;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">
+        Store purchases — no commission
+      </div>
+      <div style="font-size:11px;color:#9CA3AF;margin-bottom:10px">
+        Excluded from show totals + commission %. Listed here for record only.
+      </div>
+      <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;border-collapse:collapse">
+        <tbody>
+          ${[...opts.storeNoCommByDay.entries()].sort((a, b) => a[0] - b[0]).map(([dn, amt]) => `
+            <tr>
+              <td style="padding:6px 10px;font-weight:700">Day ${dn || '—'}</td>
+              <td style="padding:6px 10px;text-align:right;font-weight:700;color:#1F2937">${money(amt)}</td>
+            </tr>`).join('')}
+          <tr style="border-top:2px solid #d8d3ca;background:#f5f0e8">
+            <td style="padding:8px 10px;font-weight:900">Store-purchase total</td>
+            <td style="padding:8px 10px;text-align:right;font-weight:900;color:#1F2937">${money(opts.storeNoCommTotal)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  ` : ''
 
   return `
     <header style="margin-bottom:20px">
@@ -189,6 +236,8 @@ function recapBody(opts: {
         </tbody>
       </table>
     </section>
+
+    ${storeNoCommSection}
 
     <footer style="margin-top:24px;text-align:center;font-size:12px;color:#a8a89a">${escapeHtml(opts.footer)}</footer>
   `

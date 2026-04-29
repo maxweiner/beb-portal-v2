@@ -145,7 +145,7 @@ export default function DayEntry() {
           buy_form_number: c.buy_form_number || '',
           amount: c.amount != null ? String(c.amount) : '',
           payment_type: c.payment_type || 'check',
-          commission_rate: c.commission_rate === 5 ? 5 : 10,
+          commission_rate: c.commission_rate === 5 ? 5 : c.commission_rate === 0 ? 0 : 10,
         }))
       : [emptyCheck()])
     setLoading(false)
@@ -159,6 +159,7 @@ export default function DayEntry() {
   const derivedPurchases = validChecks.length
   const derived10 = validChecks.filter(c => c.commission_rate === 10).reduce((s, c) => s + parseFloat(c.amount), 0)
   const derived5  = validChecks.filter(c => c.commission_rate === 5 ).reduce((s, c) => s + parseFloat(c.amount), 0)
+  const derived0  = validChecks.filter(c => c.commission_rate === 0 ).reduce((s, c) => s + parseFloat(c.amount), 0)
   const hasValidChecks = validChecks.length > 0
 
   const totalSpend = nF(dollars10) + nF(dollars5)
@@ -241,7 +242,7 @@ export default function DayEntry() {
             buy_form_number: c.buy_form_number,
             amount: parseFloat(c.amount) || 0,
             payment_type: c.payment_type,
-            commission_rate: c.commission_rate === 5 ? 5 : 10,
+            commission_rate: c.commission_rate === 5 ? 5 : c.commission_rate === 0 ? 0 : 10,
           }))
         )
         if (error) throw error
@@ -572,7 +573,7 @@ export default function DayEntry() {
                       {derivedPurchases} purchase{derivedPurchases !== 1 ? 's' : ''} · ${checksTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} total
                       {derived5 > 0 && (
                         <span style={{ marginLeft: 8 }}>
-                          (${derived10.toLocaleString('en-US', { minimumFractionDigits: 0 })} @ 10% · ${derived5.toLocaleString('en-US', { minimumFractionDigits: 0 })} @ 5%)
+                          (${derived10.toLocaleString('en-US', { minimumFractionDigits: 0 })} @ 10% · ${derived5.toLocaleString('en-US', { minimumFractionDigits: 0 })} @ 5%{derived0 > 0 ? ` · $${derived0.toLocaleString('en-US', { minimumFractionDigits: 0 })} @ 0% (store)` : ''})
                         </span>
                       )}
                     </div>
@@ -595,7 +596,7 @@ export default function DayEntry() {
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                       <thead>
                         <tr style={{ borderBottom: '2px solid var(--pearl)' }}>
-                          {['#', 'Type', 'Check #', 'Amount', 'Buy Form #', '5%', ''].map(h => (
+                          {['#', 'Type', 'Check #', 'Amount', 'Buy Form #', '5%', '0%', ''].map(h => (
                             <th key={h} style={{ padding: '6px 8px', textAlign: 'left', fontWeight: 700, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--mist)', whiteSpace: 'nowrap' }}>{h}</th>
                           ))}
                         </tr>
@@ -632,6 +633,15 @@ export default function DayEntry() {
                                   size={18}
                                   checked={c.commission_rate === 5}
                                   onChange={(next) => updateCheck(i, 'commission_rate', next ? 5 : 10)}
+                                />
+                              </div>
+                            </td>
+                            <td style={{ padding: '4px 8px', textAlign: 'center' }}>
+                              <div style={{ display: 'inline-flex' }}>
+                                <Checkbox
+                                  size={18}
+                                  checked={c.commission_rate === 0}
+                                  onChange={(next) => updateCheck(i, 'commission_rate', next ? 0 : 10)}
                                 />
                               </div>
                             </td>
@@ -681,6 +691,18 @@ export default function DayEntry() {
                           }}
                           label={
                             <span style={{ fontSize: 12, fontWeight: 700, color: c.commission_rate === 5 ? 'var(--green-dark)' : 'var(--mist)' }}>5%</span>
+                          }
+                        />
+                        <Checkbox
+                          checked={c.commission_rate === 0}
+                          onChange={(next) => updateCheck(i, 'commission_rate', next ? 0 : 10)}
+                          labelStyle={{
+                            padding: '6px 10px', borderRadius: 'var(--r)',
+                            background: c.commission_rate === 0 ? '#F3F4F6' : 'transparent',
+                            border: `1px solid ${c.commission_rate === 0 ? '#9CA3AF' : 'var(--pearl)'}`, marginBottom: 2,
+                          }}
+                          label={
+                            <span style={{ fontSize: 12, fontWeight: 700, color: c.commission_rate === 0 ? '#1F2937' : 'var(--mist)' }} title="Store purchase — no commission, excluded from event totals">0%</span>
                           }
                         />
                         <button onClick={() => removeCheck(i)} style={{ background: 'none', border: 'none', color: 'var(--mist)', cursor: 'pointer', fontSize: 18, padding: '0 4px', marginBottom: 2 }}>×</button>
