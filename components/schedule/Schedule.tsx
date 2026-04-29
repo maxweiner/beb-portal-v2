@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import EventShippingPanel from '@/components/shipping/EventShippingPanel'
 import { eventStaffing } from '@/lib/eventStaffing'
 import { fmtMoney } from '@/lib/format'
+import { eventSpend, eventCommission, daySpend } from '@/lib/eventSpend'
 import UnderstaffedBadge from '@/components/events/UnderstaffedBadge'
 
 interface ShipmentEntry {
@@ -696,7 +697,7 @@ function AgendaView({ events, stores, onSelect, isNarrow }: { events: Event[]; s
             {monthEvents.map(ev => {
               const past = isPast(ev)
               const color = storeColor(ev.store_id, stores)
-              const dollars = ev.days.reduce((s,d) => s + (d.dollars10||0) + (d.dollars5||0), 0)
+              const dollars = eventSpend(ev)
               const purchases = ev.days.reduce((s,d) => s + (d.purchases||0), 0)
               return (
                 <div key={ev.id} onClick={() => onSelect(ev)} style={{
@@ -823,7 +824,7 @@ function KanbanView({ events, stores, onSelect, isNarrow }: { events: Event[]; s
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {colEvents.map(ev => {
                 const color = storeColor(ev.store_id, stores)
-                const dollars = ev.days.reduce((s,d) => s + (d.dollars10||0) + (d.dollars5||0), 0)
+                const dollars = eventSpend(ev)
                 const purchases = ev.days.reduce((s,d) => s + (d.purchases||0), 0)
                 return (
                   <div key={ev.id} onClick={() => onSelect(ev)} style={{
@@ -881,8 +882,8 @@ function DetailModal({ ev, stores, onClose, isNarrow }: { ev: Event; stores: any
   const days = [...(ev.days||[])].sort((a,b) => a.day_number - b.day_number)
   const totalPurchases = days.reduce((s,d) => s + (d.purchases||0), 0)
   const totalCustomers = days.reduce((s,d) => s + (d.customers||0), 0)
-  const totalDollars = days.reduce((s,d) => s + (d.dollars10||0) + (d.dollars5||0), 0)
-  const totalCommission = days.reduce((s,d) => s + (d.dollars10||0)*0.10 + (d.dollars5||0)*0.05, 0)
+  const totalDollars = eventSpend(ev)
+  const totalCommission = eventCommission(ev)
   const closeRate = totalCustomers > 0 ? Math.round(totalPurchases/totalCustomers*100) : 0
   const color = storeColor(ev.store_id, stores)
   const fmt = (ds: string) => new Date(ds+'T12:00:00').toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'})
@@ -944,7 +945,7 @@ function DetailModal({ ev, stores, onClose, isNarrow }: { ev: Event; stores: any
                 const dayDate = new Date(ev.start_date+'T12:00:00')
                 dayDate.setDate(dayDate.getDate() + d.day_number - 1)
                 const dayDateStr = isNaN(dayDate.getTime()) ? '' : dayDate.toISOString().slice(0,10)
-                const dayDollars = (d.dollars10||0) + (d.dollars5||0)
+                const dayDollars = daySpend(d)
                 const dayCR = d.customers > 0 ? Math.round(d.purchases/d.customers*100) : 0
                 return (
                   <div key={d.day_number} style={{ paddingBottom: 12, marginBottom: 12, borderBottom: '1px solid var(--cream2)' }}>

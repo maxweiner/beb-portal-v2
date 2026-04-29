@@ -9,6 +9,7 @@ import { eventDisplayName } from '@/lib/eventName'
 import { fmtMoney } from '@/lib/format'
 import { isWorkerAssigned } from '@/lib/permissions'
 import { formatEventRange, weekRange, eventOverlapsWeek, daysWorkedOnEvent } from '@/lib/eventDates'
+import { eventSpend, dayHasData, daySpend, dayCommission } from '@/lib/eventSpend'
 import UnderstaffedBadge from '@/components/events/UnderstaffedBadge'
 import NextEventCard from './NextEventCard'
 import ProfileTrigger from './ProfileTrigger'
@@ -51,12 +52,9 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
   const showingNextWeek = weekEvents.length === 0 && nextWeekFallback.length > 0
   const displayedEvents = weekEvents.length > 0 ? weekEvents : nextWeekFallback
 
-  const getEventSpend = (ev: any): number =>
-    (ev.days || []).reduce((s: number, d: any) => s + (Number(d.dollars10) || 0) + (Number(d.dollars5) || 0), 0)
+  const getEventSpend = eventSpend
   const getEventDayStatus = (ev: any): string => {
-    const entered = (ev.days || []).filter((d: any) =>
-      (Number(d.purchases) || 0) > 0 || (Number(d.dollars10) || 0) > 0 || (Number(d.dollars5) || 0) > 0
-    ).length
+    const entered = (ev.days || []).filter(dayHasData).length
     return entered === 0 ? '' : `Day ${entered} of 3`
   }
 
@@ -64,8 +62,8 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
     ev.days.forEach((d: any) => {
       acc.purchases  += d.purchases  || 0
       acc.customers  += d.customers  || 0
-      acc.dollars    += parseFloat(d.dollars10 || 0) + parseFloat(d.dollars5 || 0)
-      acc.commission += parseFloat(d.dollars10 || 0) * 0.10 + parseFloat(d.dollars5 || 0) * 0.05
+      acc.dollars    += daySpend(d)
+      acc.commission += dayCommission(d)
     })
     return acc
   }, { purchases: 0, customers: 0, dollars: 0, commission: 0 })
@@ -95,8 +93,8 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
     ev.days.forEach(d => {
       acc.customers  += d.customers  || 0
       acc.purchases  += d.purchases  || 0
-      acc.dollars    += (d.dollars10 || 0) + (d.dollars5 || 0)
-      acc.commission += (d.dollars10 || 0) * 0.10 + (d.dollars5 || 0) * 0.05
+      acc.dollars    += daySpend(d)
+      acc.commission += dayCommission(d)
       acc.src_vdp         += d.src_vdp         || 0
       acc.src_postcard    += d.src_postcard    || 0
       acc.src_social      += d.src_social      || 0
@@ -114,7 +112,7 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
     const days = evs.flatMap(e => e.days)
     const purchases = days.reduce((s, d) => s + (d.purchases || 0), 0)
     const customers = days.reduce((s, d) => s + (d.customers || 0), 0)
-    const dollars = days.reduce((s, d) => s + (d.dollars10 || 0) + (d.dollars5 || 0), 0)
+    const dollars = days.reduce((s, d) => s + daySpend(d), 0)
     const cr = customers > 0 ? Math.round(purchases / customers * 100) : 0
     return { store, evs: evs.length, purchases, customers, dollars, cr }
   }).filter(r => r.evs > 0).sort((a, b) => b.dollars - a.dollars)
