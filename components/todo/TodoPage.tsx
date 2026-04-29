@@ -12,6 +12,7 @@ import {
 } from '@/lib/todo/api'
 import type { Todo, TodoList } from '@/lib/todo/types'
 import TodoListDetail from './TodoListDetail'
+import MyTasksView from './MyTasksView'
 
 interface UndoTask { kind: 'task'; todo: Todo; listId: string }
 interface UndoList { kind: 'list'; list: TodoList }
@@ -24,6 +25,8 @@ export default function TodoPage() {
   const [lists, setLists] = useState<TodoList[]>([])
   const [loaded, setLoaded] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  // 'list' = the selected list's detail; 'mytasks' = cross-list inbox.
+  const [view, setView] = useState<'list' | 'mytasks'>('list')
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [undo, setUndo] = useState<UndoEntry | null>(null)
@@ -62,6 +65,7 @@ export default function TodoPage() {
         const fresh = await fetchMyLists()
         setLists(fresh)
       } catch { /* fall through; we may still have it locally */ }
+      setView('list')
       setSelectedId(detail.listId)
       setHighlightTodoId(detail.todoId || null)
       setRefreshKey(k => k + 1)
@@ -100,6 +104,17 @@ export default function TodoPage() {
         background: 'var(--cream)',
         padding: '18px 14px', overflowY: 'auto',
       }}>
+        {/* My Tasks — pinned above the user's lists */}
+        <button onClick={() => setView('mytasks')} style={{
+          display: 'block', width: '100%', textAlign: 'left',
+          padding: '8px 10px', borderRadius: 6, marginBottom: 12,
+          background: view === 'mytasks' ? 'var(--green-pale)' : 'transparent',
+          border: '1px solid ' + (view === 'mytasks' ? 'var(--green3)' : 'transparent'),
+          cursor: 'pointer', fontFamily: 'inherit',
+          fontSize: 13, fontWeight: view === 'mytasks' ? 800 : 700,
+          color: view === 'mytasks' ? 'var(--green-dark)' : 'var(--ink)',
+        }}>📥 My Tasks</button>
+
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           marginBottom: 12,
@@ -145,9 +160,9 @@ export default function TodoPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {lists.map(l => {
-              const sel = l.id === selectedId
+              const sel = view === 'list' && l.id === selectedId
               return (
-                <button key={l.id} onClick={() => setSelectedId(l.id)} style={{
+                <button key={l.id} onClick={() => { setView('list'); setSelectedId(l.id) }} style={{
                   display: 'block', width: '100%', textAlign: 'left',
                   padding: '8px 10px', borderRadius: 6,
                   background: sel ? 'var(--green-pale)' : 'transparent',
@@ -165,7 +180,17 @@ export default function TodoPage() {
 
       {/* Right pane */}
       <main style={{ flex: 1, overflowY: 'auto', background: 'var(--cream2)' }}>
-        {selected ? (
+        {view === 'mytasks' ? (
+          <MyTasksView
+            currentUserId={user.id}
+            onOpenInList={(listId, todoId) => {
+              setView('list')
+              setSelectedId(listId)
+              setHighlightTodoId(todoId)
+              setRefreshKey(k => k + 1)
+            }}
+          />
+        ) : selected ? (
           <TodoListDetail
             key={selected.id + ':' + refreshKey}
             list={selected}

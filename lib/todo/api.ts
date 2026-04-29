@@ -136,6 +136,26 @@ export async function restoreTodo(id: string): Promise<void> {
   if (error) throw error
 }
 
+/**
+ * All non-deleted tasks assigned to a user, with their parent list's
+ * label embedded. Backs the My Tasks inbox.
+ */
+export interface MyAssignedTodo extends Todo {
+  list: { id: string; name: string; color: string | null; icon: string | null } | null
+}
+export async function fetchMyAssignedTodos(userId: string): Promise<MyAssignedTodo[]> {
+  const { data, error } = await supabase
+    .from('todos')
+    .select(`${TODO_COLS}, list:todo_lists(id, name, color, icon)`)
+    .eq('assignee_id', userId)
+    .is('deleted_at', null)
+    .order('completed', { ascending: true })
+    .order('pinned', { ascending: false })
+    .order('updated_at', { ascending: false })
+  if (error) throw error
+  return (data || []) as unknown as MyAssignedTodo[]
+}
+
 // ── Members + assignment ───────────────────────────────────
 
 const MEMBER_COLS = 'id, list_id, user_id, role, added_at, added_by'
