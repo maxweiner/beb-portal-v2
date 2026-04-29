@@ -4,10 +4,22 @@
 // storage path (for persisting on the report row) and a signed URL
 // (for the immediate "open the PDF" button on the client).
 
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
 import { renderToBuffer } from '@react-pdf/renderer'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { ExpenseReportPdf, type PdfData, type PdfReceipt } from './pdf'
 import type { Expense, ExpenseReport } from '@/types'
+
+// Wordmark logo for the PDF header. Cached on first read so subsequent
+// renders within the same warm function instance skip the disk hit.
+const LOGO_PATH = path.join(process.cwd(), 'public', 'beb-wordmark.png')
+let logoBuf: Buffer | null = null
+async function loadLogo(): Promise<Buffer | null> {
+  if (logoBuf) return logoBuf
+  try { logoBuf = await readFile(LOGO_PATH); return logoBuf }
+  catch { return null }  // Fall back to text wordmark if the asset is missing.
+}
 
 const RECEIPTS_BUCKET = 'expense-receipts'
 const PDFS_BUCKET = 'expense-pdfs'
@@ -75,6 +87,7 @@ export async function generateAndStoreReportPdf(reportId: string): Promise<{
     owner,
     receipts,
     signatureUrl,
+    logo: await loadLogo(),
   }
 
   const buffer = await renderToBuffer(ExpenseReportPdf(data) as any)

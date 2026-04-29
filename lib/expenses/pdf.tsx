@@ -26,8 +26,12 @@ const COLORS = {
 const styles = StyleSheet.create({
   page:       { padding: 36, fontSize: 10, fontFamily: 'Helvetica', color: COLORS.ink },
   hRow:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  brand:      { fontSize: 13, fontWeight: 700, color: COLORS.greenDark, letterSpacing: 1 },
-  brandSub:   { fontSize: 9, color: COLORS.mist, marginTop: 2 },
+  // Wordmark logo aspect ratio after cropping internal whitespace is
+  // roughly 1093×505 (~2.16:1).
+  logoLg:     { width: 170, height: 79, objectFit: 'contain' },
+  logoSm:     { width: 90, height: 42, objectFit: 'contain' },
+  brandSub:   { fontSize: 9, color: COLORS.mist, marginTop: 4 },
+  hMetaLine:  { fontSize: 9, color: COLORS.mist },
   title:      { fontSize: 22, fontWeight: 700, color: COLORS.greenDark, marginBottom: 8 },
   meta:       { marginTop: 12 },
   metaRow:    { flexDirection: 'row', marginBottom: 4 },
@@ -110,9 +114,11 @@ export interface PdfData {
   owner: { name: string }
   receipts: PdfReceipt[]
   signatureUrl?: string | null
+  /** PNG/JPG buffer for the BEB wordmark; rendered in each page header. */
+  logo?: Buffer | null
 }
 
-export function ExpenseReportPdf({ report, expenses, event, owner, receipts, signatureUrl }: PdfData) {
+export function ExpenseReportPdf({ report, expenses, event, owner, receipts, signatureUrl, logo }: PdfData) {
   // Group + sum by category, in canonical order so the cover totals
   // and the itemized section line up.
   const byCat = new Map<ExpenseCategory, Expense[]>()
@@ -139,7 +145,9 @@ export function ExpenseReportPdf({ report, expenses, event, owner, receipts, sig
       <Page size="LETTER" style={styles.page}>
         <View style={styles.hRow}>
           <View>
-            <Text style={styles.brand}>BENEFICIAL ESTATE BUYERS</Text>
+            {logo
+              ? <Image style={styles.logoLg} src={{ data: logo, format: 'png' }} />
+              : <Text style={{ fontSize: 13, fontWeight: 700, color: COLORS.greenDark, letterSpacing: 1 }}>BENEFICIAL ESTATE BUYERS</Text>}
             <Text style={styles.brandSub}>Expense report</Text>
           </View>
           <View>
@@ -194,8 +202,10 @@ export function ExpenseReportPdf({ report, expenses, event, owner, receipts, sig
       {/* ITEMIZED PAGE */}
       <Page size="LETTER" style={styles.page}>
         <View style={styles.hRow}>
-          <Text style={styles.brand}>BENEFICIAL ESTATE BUYERS</Text>
-          <Text style={{ fontSize: 9, color: COLORS.mist }}>{owner.name} · {event?.store_name ?? ''}</Text>
+          {logo
+            ? <Image style={styles.logoSm} src={{ data: logo, format: 'png' }} />
+            : <Text style={{ fontSize: 13, fontWeight: 700, color: COLORS.greenDark, letterSpacing: 1 }}>BENEFICIAL ESTATE BUYERS</Text>}
+          <Text style={styles.hMetaLine}>{owner.name} · {event?.store_name ?? ''}</Text>
         </View>
 
         <Text style={styles.sectionHdr}>Itemized Expenses</Text>
@@ -239,8 +249,10 @@ export function ExpenseReportPdf({ report, expenses, event, owner, receipts, sig
       {receipts.length > 0 && (
         <Page size="LETTER" style={styles.page} wrap>
           <View style={styles.hRow}>
-            <Text style={styles.brand}>BENEFICIAL ESTATE BUYERS</Text>
-            <Text style={{ fontSize: 9, color: COLORS.mist }}>{owner.name} · receipts ({receipts.length})</Text>
+            {logo
+              ? <Image style={styles.logoSm} src={{ data: logo, format: 'png' }} />
+              : <Text style={{ fontSize: 13, fontWeight: 700, color: COLORS.greenDark, letterSpacing: 1 }}>BENEFICIAL ESTATE BUYERS</Text>}
+            <Text style={styles.hMetaLine}>{owner.name} · receipts ({receipts.length})</Text>
           </View>
           <Text style={styles.sectionHdr}>Receipt Appendix</Text>
           <View style={styles.recGrid}>
