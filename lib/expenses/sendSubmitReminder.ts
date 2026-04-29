@@ -56,7 +56,10 @@ export async function sendSubmitReminderForReport(
   const buyerName = (owner as any)?.name ?? 'there'
   const eventName = (event as any)?.store_name ?? 'your event'
   const eventDate = (event as any)?.start_date ? fmtDateLong((event as any).start_date) : ''
-  const portalLink = opts.portalBaseUrl ?? null
+  // Deep-link directly to this report (matches notifyPartners +
+  // sendAccountantEmail). app/page.tsx reads the `?report=` param and
+  // opens the Expenses tab pre-pointed at it.
+  const portalLink = opts.portalBaseUrl ? `${opts.portalBaseUrl}/?report=${reportId}` : null
 
   const ordinal = attemptNumber === 1 ? 'Reminder' : attemptNumber === 2 ? 'Second reminder' : 'Final reminder'
   const subject = `${ordinal}: please submit your expense report — ${eventName}`
