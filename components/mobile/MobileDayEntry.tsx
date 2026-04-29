@@ -220,7 +220,7 @@ export default function MobileDayEntry() {
       buy_form_number: c.buy_form_number || '',
       amount: c.amount != null ? String(c.amount) : '',
       payment_type: c.payment_type || 'check',
-      commission_rate: c.commission_rate === 5 ? 5 : 10,
+      commission_rate: c.commission_rate === 5 ? 5 : c.commission_rate === 0 ? 0 : 10,
     })) : [emptyCheck()])
     setLoadingEntry(false)
     setTimeout(() => { hydratedRef.current = true }, 0)
@@ -237,6 +237,7 @@ export default function MobileDayEntry() {
   const derivedPurchases = validChecks.length
   const derived10 = validChecks.filter(c => c.commission_rate === 10).reduce((s, c) => s + parseFloat(c.amount), 0)
   const derived5  = validChecks.filter(c => c.commission_rate === 5 ).reduce((s, c) => s + parseFloat(c.amount), 0)
+  const derived0  = validChecks.filter(c => c.commission_rate === 0 ).reduce((s, c) => s + parseFloat(c.amount), 0)
   const hasValidChecks = validChecks.length > 0
 
   // Top aggregate fields (purchases / $ @ 10% / $ @ 5%) stay raw-editable.
@@ -320,7 +321,7 @@ export default function MobileDayEntry() {
           day_number: selectedDay,
           check_number: c.check_number, buy_form_number: c.buy_form_number,
           amount: parseFloat(c.amount) || 0, payment_type: c.payment_type,
-          commission_rate: c.commission_rate === 5 ? 5 : 10,
+          commission_rate: c.commission_rate === 5 ? 5 : c.commission_rate === 0 ? 0 : 10,
         })))
         if (error) throw error
       }
@@ -748,7 +749,38 @@ export default function MobileDayEntry() {
                           color: c.commission_rate === 5 ? 'var(--green-dark)' : 'var(--silver)',
                           letterSpacing: '.06em',
                         }}>
-                          {c.commission_rate === 5 ? '5%' : 'DEFAULT 10%'}
+                          {c.commission_rate === 5 ? '5%' : c.commission_rate === 0 ? '—' : 'DEFAULT 10%'}
+                        </span>
+                      </>
+                    }
+                  />
+
+                  <Checkbox
+                    checked={c.commission_rate === 0}
+                    onChange={(next) => setChecks(p => p.map((x, idx) =>
+                      idx === i ? { ...x, commission_rate: next ? 0 : 10 } : x))}
+                    labelStyle={{
+                      display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                      marginTop: 8, padding: '8px 10px',
+                      background: c.commission_rate === 0 ? '#F3F4F6' : 'transparent',
+                      border: `1px solid ${c.commission_rate === 0 ? '#9CA3AF' : 'var(--cream2)'}`,
+                      borderRadius: 8,
+                    }}
+                    label={
+                      <>
+                        <span style={{
+                          fontSize: 12, fontWeight: 700,
+                          color: c.commission_rate === 0 ? '#1F2937' : 'var(--mist)',
+                          letterSpacing: '.02em',
+                        }}>
+                          Store purchase (0% — no commission)
+                        </span>
+                        <span style={{
+                          marginLeft: 'auto', fontSize: 10, fontWeight: 700,
+                          color: c.commission_rate === 0 ? '#1F2937' : 'var(--silver)',
+                          letterSpacing: '.06em',
+                        }}>
+                          {c.commission_rate === 0 ? '0%' : ''}
                         </span>
                       </>
                     }
@@ -776,9 +808,10 @@ export default function MobileDayEntry() {
                 <div>
                   {validChecks.length} check{validChecks.length === 1 ? '' : 's'} · {fmtMoney(checksTotal)}
                 </div>
-                {derived5 > 0 && (
+                {(derived5 > 0 || derived0 > 0) && (
                   <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--mist)' }}>
                     {fmtMoney(derived10)} @ 10% · {fmtMoney(derived5)} @ 5%
+                    {derived0 > 0 && ` · ${fmtMoney(derived0)} @ 0% (store)`}
                   </div>
                 )}
               </div>
