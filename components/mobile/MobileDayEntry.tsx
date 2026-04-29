@@ -717,17 +717,14 @@ export default function MobileDayEntry() {
                   gridTemplateColumns: formColVisible
                     ? '22px minmax(56px, 1fr) minmax(56px, 1fr) minmax(56px, 1fr) auto auto'
                     : '22px minmax(56px, 1fr) minmax(56px, 1fr) auto auto',
-                  gap: 4, alignItems: 'end',
+                  gap: 4, alignItems: 'center',
                 }}>
                   <span style={{
                     fontSize: 11, fontWeight: 900, color: 'var(--mist)',
-                    paddingBottom: 8, textAlign: 'center',
+                    textAlign: 'center',
                   }}>#{i + 1}</span>
 
                   <div>
-                    <label style={miniLabelStyle}>
-                      Check # {isAuto && <span style={{ color: 'var(--green)', fontStyle: 'italic', textTransform: 'none', letterSpacing: 0 }}>auto</span>}
-                    </label>
                     <input type="text" inputMode="numeric" value={c.check_number}
                       onChange={e => setField('check_number', e.target.value)}
                       placeholder={i === 0 ? '1045' : ''}
@@ -736,24 +733,35 @@ export default function MobileDayEntry() {
                         border: `1.5px solid ${isAuto ? 'var(--green3)' : 'var(--pearl)'}`,
                         background: isAuto ? 'var(--green-pale)' : '#FFFFFF',
                       }} />
+                    <label style={miniLabelStyle}>
+                      Check # {isAuto && <span style={{ color: 'var(--green)', fontStyle: 'italic', textTransform: 'none', letterSpacing: 0 }}>auto</span>}
+                    </label>
                   </div>
 
                   {formColVisible && (
                     <div>
-                      <label style={miniLabelStyle}>Form #</label>
                       <input type="text" inputMode="numeric" value={c.buy_form_number}
                         onChange={e => setField('buy_form_number', e.target.value)}
                         placeholder="—" style={compactInputStyle} />
+                      <label style={miniLabelStyle}>Form #</label>
                     </div>
                   )}
 
                   <div>
+                    <div style={{ position: 'relative' }}>
+                      <span aria-hidden style={{
+                        position: 'absolute', left: 6, top: '50%',
+                        transform: 'translateY(-50%)',
+                        color: 'var(--mist)', fontSize: 13, fontWeight: 700,
+                        pointerEvents: 'none',
+                      }}>$</span>
+                      <input type="text" inputMode="decimal"
+                        value={formatMoneyInput(c.amount)}
+                        onChange={e => setField('amount', parseMoneyInput(e.target.value))}
+                        placeholder="0.00"
+                        style={{ ...compactInputStyle, paddingLeft: 18 }} />
+                    </div>
                     <label style={miniLabelStyle}>Amount</label>
-                    <input type="text" inputMode="decimal"
-                      value={formatMoneyInput(c.amount)}
-                      onChange={e => setField('amount', parseMoneyInput(e.target.value))}
-                      placeholder="0.00"
-                      style={compactInputStyle} />
                   </div>
 
                   {/* Rate pills: 5% / 0%. 10% is implicit when neither is on. */}
@@ -917,7 +925,7 @@ const inputStyle: React.CSSProperties = {
 const miniLabelStyle: React.CSSProperties = {
   fontSize: 9, fontWeight: 800, color: 'var(--mist)',
   letterSpacing: '.05em', textTransform: 'uppercase',
-  display: 'block', marginBottom: 2,
+  display: 'block', marginTop: 3, textAlign: 'center',
 }
 const compactInputStyle: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box',
