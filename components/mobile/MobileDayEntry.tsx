@@ -756,8 +756,9 @@ export default function MobileDayEntry() {
                       style={compactInputStyle} />
                   </div>
 
-                  {/* Rate pills: 5% / 0%. 10% is implicit when neither is on. */}
-                  <div style={{ display: 'flex', gap: 4 }}>
+                  {/* Rate pills: 5% / 0%, stacked vertically to save horizontal
+                      space. 10% is implicit when neither is on. */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                     <button onClick={() => setRate(c.commission_rate === 5 ? 10 : 5)}
                       title="5% commission rate"
                       style={{
@@ -917,7 +918,7 @@ const inputStyle: React.CSSProperties = {
 const miniLabelStyle: React.CSSProperties = {
   fontSize: 9, fontWeight: 800, color: 'var(--mist)',
   letterSpacing: '.05em', textTransform: 'uppercase',
-  display: 'block', marginBottom: 2,
+  display: 'block', marginBottom: 2, textAlign: 'center',
 }
 const compactInputStyle: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box',
