@@ -3,7 +3,7 @@
 // just fetch and write.
 
 import { supabase } from '@/lib/supabase'
-import type { Todo, TodoList } from './types'
+import type { Todo, TodoList, TodoListMember, TodoRole } from './types'
 
 const LIST_COLS = 'id, name, owner_id, color, icon, created_at, updated_at, deleted_at'
 const TODO_COLS = 'id, list_id, content, assignee_id, completed, completed_at, completed_by, pinned, position, created_by, created_at, updated_at, deleted_at'
@@ -133,5 +133,55 @@ export async function restoreTodo(id: string): Promise<void> {
   const { error } = await supabase.from('todos')
     .update({ deleted_at: null })
     .eq('id', id)
+  if (error) throw error
+}
+
+// ── Members + assignment ───────────────────────────────────
+
+const MEMBER_COLS = 'id, list_id, user_id, role, added_at, added_by'
+
+export async function fetchListMembers(listId: string): Promise<TodoListMember[]> {
+  const { data, error } = await supabase
+    .from('todo_list_members')
+    .select(MEMBER_COLS)
+    .eq('list_id', listId)
+  if (error) throw error
+  return (data || []) as TodoListMember[]
+}
+
+/** Owner-only per RLS. Used by ShareListModal. */
+export async function addListMember(input: {
+  listId: string
+  userId: string
+  addedBy: string
+  role?: TodoRole
+}): Promise<void> {
+  const { error } = await supabase.from('todo_list_members').insert({
+    list_id: input.listId,
+    user_id: input.userId,
+    role: input.role ?? 'editor',
+    added_by: input.addedBy,
+  })
+  if (error) throw error
+}
+
+/** Owner can remove anyone; member can remove themselves. */
+export async function removeListMember(listId: string, userId: string): Promise<void> {
+  const { error } = await supabase.from('todo_list_members')
+    .delete()
+    .eq('list_id', listId).eq('user_id', userId)
+  if (error) throw error
+}
+
+/**
+ * Assign or unassign a task. Calls the SECURITY DEFINER RPC so an
+ * editor can auto-add a non-member as an editor without owner rights.
+ * Pass null assigneeId to clear.
+ */
+export async function assignTodo(todoId: string, assigneeId: string | null): Promise<void> {
+  const { error } = await supabase.rpc('todo_assign_task', {
+    p_todo_id: todoId,
+    p_assignee_id: assigneeId,
+  })
   if (error) throw error
 }

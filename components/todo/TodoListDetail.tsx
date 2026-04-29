@@ -4,7 +4,7 @@
 // inline rename + delete), quick-add input, pinned/active/completed
 // sections. Optimistic mutations with rollback on supabase error.
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   DndContext, KeyboardSensor, PointerSensor, closestCenter,
   useSensor, useSensors, type DragEndEvent,
@@ -13,13 +13,18 @@ import {
   SortableContext, verticalListSortingStrategy,
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable'
+import { useApp } from '@/lib/context'
 import {
   fetchTodos, createTodo, updateTodo, setTodoCompleted, softDeleteTodo,
   updateList, softDeleteList,
+  fetchListMembers, assignTodo,
 } from '@/lib/todo/api'
 import { nextPosition, positionBetween } from '@/lib/todo/positions'
-import type { Todo, TodoList } from '@/lib/todo/types'
+import type { Todo, TodoList, TodoListMember } from '@/lib/todo/types'
+import Avatar from '@/components/ui/Avatar'
 import TaskRow from './TaskRow'
+import ShareListModal from './ShareListModal'
+import AssigneePicker from './AssigneePicker'
 
 interface Props {
   list: TodoList
@@ -34,21 +39,34 @@ export default function TodoListDetail({
   list, currentUserId, isOwner,
   onListRenamed, onListDeleted, onTaskSoftDeleted,
 }: Props) {
+  const { users } = useApp()
   const [todos, setTodos] = useState<Todo[]>([])
+  const [members, setMembers] = useState<TodoListMember[]>([])
   const [loaded, setLoaded] = useState(false)
   const [draftText, setDraftText] = useState('')
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState(list.name)
   const [showCompleted, setShowCompleted] = useState(true)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [pickerFor, setPickerFor] = useState<{ todoId: string; rect: DOMRect } | null>(null)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
+  const refetchMembers = async () => {
+    const m = await fetchListMembers(list.id)
+    setMembers(m)
+  }
+
   useEffect(() => {
     let cancelled = false
     setLoaded(false)
-    fetchTodos(list.id).then(rows => { if (!cancelled) { setTodos(rows); setLoaded(true) } })
+    Promise.all([fetchTodos(list.id), fetchListMembers(list.id)])
+      .then(([rows, m]) => {
+        if (cancelled) return
+        setTodos(rows); setMembers(m); setLoaded(true)
+      })
     return () => { cancelled = true }
   }, [list.id])
 
@@ -127,6 +145,19 @@ export default function TodoListDetail({
     try { await updateTodo(t.id, { content }) }
     catch (err: any) {
       alert('Could not save: ' + (err?.message || 'unknown'))
+      setTodos(prev => prev.map(x => x.id === t.id ? t : x))
+    }
+  }
+
+  const handleAssign = async (t: Todo, assigneeId: string | null) => {
+    setTodos(prev => prev.map(x => x.id === t.id ? { ...x, assignee_id: assigneeId } : x))
+    setPickerFor(null)
+    try {
+      await assignTodo(t.id, assigneeId)
+      // Auto-share may have added a member; refetch.
+      if (assigneeId) await refetchMembers()
+    } catch (err: any) {
+      alert('Could not assign: ' + (err?.message || 'unknown'))
       setTodos(prev => prev.map(x => x.id === t.id ? t : x))
     }
   }
@@ -217,10 +248,16 @@ export default function TodoListDetail({
             }}
           >{list.name}</h1>
         )}
+        <MemberStack members={members} />
         {isOwner && (
-          <button onClick={handleDeleteList} className="btn-outline btn-sm">
-            Delete list
-          </button>
+          <>
+            <button onClick={() => setShareOpen(true)} className="btn-outline btn-sm">
+              Share
+            </button>
+            <button onClick={handleDeleteList} className="btn-outline btn-sm">
+              Delete list
+            </button>
+          </>
         )}
       </div>
 
@@ -248,10 +285,12 @@ export default function TodoListDetail({
                 <SortableContext items={pinned.map(t => t.id)} strategy={verticalListSortingStrategy}>
                   {pinned.map(t => (
                     <TaskRow key={t.id} todo={t} draggable
+                      assignee={users.find(u => u.id === t.assignee_id) || null}
                       onToggleComplete={() => toggleComplete(t)}
                       onTogglePin={() => togglePin(t)}
                       onEditContent={c => editContent(t, c)}
                       onDelete={() => deleteTask(t)}
+                      onOpenAssignee={rect => setPickerFor({ todoId: t.id, rect })}
                     />
                   ))}
                 </SortableContext>
@@ -267,10 +306,12 @@ export default function TodoListDetail({
                 <SortableContext items={active.map(t => t.id)} strategy={verticalListSortingStrategy}>
                   {active.map(t => (
                     <TaskRow key={t.id} todo={t} draggable
+                      assignee={users.find(u => u.id === t.assignee_id) || null}
                       onToggleComplete={() => toggleComplete(t)}
                       onTogglePin={() => togglePin(t)}
                       onEditContent={c => editContent(t, c)}
                       onDelete={() => deleteTask(t)}
+                      onOpenAssignee={rect => setPickerFor({ todoId: t.id, rect })}
                     />
                   ))}
                 </SortableContext>
@@ -278,6 +319,28 @@ export default function TodoListDetail({
             )}
           </Section>
 
+          {shareOpen && (
+            <ShareListModal
+              list={list}
+              members={members}
+              currentUserId={currentUserId}
+              onClose={() => setShareOpen(false)}
+              onMembersChanged={refetchMembers}
+            />
+          )}
+          {pickerFor && (() => {
+            const t = todos.find(x => x.id === pickerFor.todoId)
+            if (!t) return null
+            return (
+              <AssigneePicker
+                anchorRect={pickerFor.rect}
+                hasCurrent={!!t.assignee_id}
+                onPick={uid => handleAssign(t, uid)}
+                onClear={() => handleAssign(t, null)}
+                onClose={() => setPickerFor(null)}
+              />
+            )
+          })()}
           {completed.length > 0 && (
             <div style={{ marginTop: 18 }}>
               <button
@@ -295,15 +358,46 @@ export default function TodoListDetail({
               </button>
               {showCompleted && completed.map(t => (
                 <TaskRow key={t.id} todo={t} draggable={false}
+                  assignee={users.find(u => u.id === t.assignee_id) || null}
                   onToggleComplete={() => toggleComplete(t)}
                   onTogglePin={() => togglePin(t)}
                   onEditContent={c => editContent(t, c)}
                   onDelete={() => deleteTask(t)}
+                  onOpenAssignee={rect => setPickerFor({ todoId: t.id, rect })}
                 />
               ))}
             </div>
           )}
         </>
+      )}
+    </div>
+  )
+}
+
+function MemberStack({ members }: { members: TodoListMember[] }) {
+  const { users } = useApp()
+  const visible = members.slice(0, 5)
+  const overflow = members.length - visible.length
+  return (
+    <div style={{ display: 'flex', alignItems: 'center' }}>
+      {visible.map((m, i) => {
+        const u = users.find(x => x.id === m.user_id)
+        const name = u?.name || u?.email || '?'
+        return (
+          <span key={m.id} title={name} style={{ marginLeft: i === 0 ? 0 : -8 }}>
+            <Avatar name={name} photoUrl={u?.photo_url} size={26} ring />
+          </span>
+        )
+      })}
+      {overflow > 0 && (
+        <span style={{
+          marginLeft: -8,
+          width: 26, height: 26, borderRadius: '50%',
+          background: 'var(--cream2)', color: 'var(--ash)',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 11, fontWeight: 800,
+          boxShadow: '0 0 0 2px #fff',
+        }}>+{overflow}</span>
       )}
     </div>
   )

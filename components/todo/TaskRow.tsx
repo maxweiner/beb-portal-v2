@@ -7,21 +7,27 @@ import { useEffect, useRef, useState } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import Checkbox from '@/components/ui/Checkbox'
+import Avatar from '@/components/ui/Avatar'
 import type { Todo } from '@/lib/todo/types'
+import type { User } from '@/types'
 
 interface Props {
   todo: Todo
+  assignee: User | null
   onToggleComplete: () => void
   onTogglePin: () => void
   onEditContent: (next: string) => void
   onDelete: () => void
+  onOpenAssignee: (anchor: DOMRect) => void
   /** True when this row is in a sortable container. Disables drag for
    *  completed rows since they live in their own non-orderable section. */
   draggable: boolean
 }
 
 export default function TaskRow({
-  todo, onToggleComplete, onTogglePin, onEditContent, onDelete, draggable,
+  todo, assignee,
+  onToggleComplete, onTogglePin, onEditContent, onDelete, onOpenAssignee,
+  draggable,
 }: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: todo.id, disabled: !draggable })
@@ -94,6 +100,26 @@ export default function TaskRow({
         >{todo.content}</button>
       )}
 
+      <button
+        onClick={e => onOpenAssignee((e.currentTarget as HTMLElement).getBoundingClientRect())}
+        title={assignee ? `Assigned to ${assignee.name}` : 'Unassigned — click to assign'}
+        aria-label={assignee ? `Assigned to ${assignee.name}` : 'Assign'}
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          padding: '2px', display: 'flex', alignItems: 'center',
+        }}
+      >
+        {assignee
+          ? <Avatar name={assignee.name || assignee.email || '?'} photoUrl={assignee.photo_url} size={24} />
+          : (
+            <span aria-hidden style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: 24, height: 24, borderRadius: '50%',
+              border: '1.5px dashed var(--pearl)', color: 'var(--mist)',
+              fontSize: 14, lineHeight: 1, fontWeight: 700,
+            }}>+</span>
+          )}
+      </button>
       <button
         onClick={onTogglePin}
         title={todo.pinned ? 'Unpin' : 'Pin'}
