@@ -2,12 +2,14 @@
 
 import { useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
+import { supabase } from '@/lib/supabase'
 import type { NavPage } from '@/app/page'
 import { leaderboardBuyers } from '@/lib/leaderboard'
 import { eventStaffing } from '@/lib/eventStaffing'
 import { eventDisplayName } from '@/lib/eventName'
 import UnderstaffedBadge from '@/components/events/UnderstaffedBadge'
 import NextEventCard from '@/components/dashboard/NextEventCard'
+import MyUpcomingEventsList from '@/components/dashboard/MyUpcomingEventsList'
 
 const countDays = (ev: any) => {
   const end = new Date(ev.start_date + 'T12:00:00')
@@ -325,8 +327,13 @@ export default function MobileDashboard({ setNav }: Props) {
               </div>
             )}
 
+            {/* My upcoming events */}
+            <div style={{ marginBottom: 14 }}>
+              <MyUpcomingEventsList onOpenEvent={() => { setStatsOpen(false); setNav?.('events') }} />
+            </div>
+
             {/* Three stat tiles */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 6 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
               {[
                 { label: 'Days', value: String(myDays), color: 'var(--green)' },
                 { label: 'Events', value: String(myEvents), color: '#3B82F6' },
@@ -341,6 +348,17 @@ export default function MobileDashboard({ setNav }: Props) {
                 </div>
               ))}
             </div>
+
+            {/* Sign Out */}
+            <button onClick={() => supabase.auth.signOut()} style={{
+              display: 'block', width: '100%', padding: '12px',
+              background: 'var(--cream2)', border: '1px solid var(--pearl)',
+              borderRadius: 10, cursor: 'pointer',
+              fontSize: 13, fontWeight: 800, color: 'var(--ink)',
+              fontFamily: 'inherit', letterSpacing: '.02em',
+            }}>
+              Sign Out
+            </button>
           </div>
         </div>
       )}
