@@ -748,11 +748,19 @@ export default function MobileDayEntry() {
                   )}
 
                   <div>
-                    <input type="text" inputMode="decimal"
-                      value={formatMoneyInput(c.amount)}
-                      onChange={e => setField('amount', parseMoneyInput(e.target.value))}
-                      placeholder="0.00"
-                      style={compactInputStyle} />
+                    <div style={{ position: 'relative' }}>
+                      <span aria-hidden style={{
+                        position: 'absolute', left: 6, top: '50%',
+                        transform: 'translateY(-50%)',
+                        color: 'var(--mist)', fontSize: 13, fontWeight: 700,
+                        pointerEvents: 'none',
+                      }}>$</span>
+                      <input type="text" inputMode="decimal"
+                        value={formatMoneyInput(c.amount)}
+                        onChange={e => setField('amount', parseMoneyInput(e.target.value))}
+                        placeholder="0.00"
+                        style={{ ...compactInputStyle, paddingLeft: 18 }} />
+                    </div>
                     <label style={miniLabelStyle}>Amount</label>
                   </div>
 
