@@ -9,16 +9,10 @@ import { eventStaffing } from '@/lib/eventStaffing'
 import { eventDisplayName } from '@/lib/eventName'
 import { fmtMoney } from '@/lib/format'
 import { isAdmin as roleIsAdmin, isWorkerAssigned } from '@/lib/permissions'
+import { weekRange, eventOverlapsWeek, daysWorkedOnEvent } from '@/lib/eventDates'
 import UnderstaffedBadge from '@/components/events/UnderstaffedBadge'
 import NextEventCard from '@/components/dashboard/NextEventCard'
 import MyUpcomingEventsList from '@/components/dashboard/MyUpcomingEventsList'
-
-const countDays = (ev: any) => {
-  const end = new Date(ev.start_date + 'T12:00:00')
-  end.setDate(end.getDate() + 2)
-  end.setHours(23, 59, 59)
-  return end < new Date() ? 3 : (ev.days || []).length
-}
 
 const TIERS: Record<number, { label: string; icon: string; color: string }> = {
   1: { label: 'Estate Elite', icon: '👑', color: '#F5A000' },
@@ -28,22 +22,6 @@ const TIERS: Record<number, { label: string; icon: string; color: string }> = {
 
 const INELIGIBLE = ['joe', 'max', 'rich']
 
-const weekStart = (d: Date) => {
-  const r = new Date(d); r.setHours(0, 0, 0, 0)
-  const day = r.getDay()
-  const diff = r.getDate() - day + (day === 0 ? -6 : 1)
-  r.setDate(diff)
-  return r
-}
-const weekEnd = (d: Date) => {
-  const r = weekStart(d); r.setDate(r.getDate() + 6); r.setHours(23, 59, 59, 999); return r
-}
-const overlapsWeek = (e: any, ws: Date, we: Date) => {
-  if (!e.start_date) return false
-  const s = new Date(e.start_date + 'T00:00:00')
-  const en = new Date(e.start_date + 'T00:00:00'); en.setDate(en.getDate() + 2); en.setHours(23, 59, 59, 999)
-  return s <= we && en >= ws
-}
 const eventSpend = (ev: any) =>
   (ev.days || []).reduce((s: number, d: any) => s + (Number(d.dollars10) || 0) + (Number(d.dollars5) || 0), 0)
 const eventDayStatus = (ev: any) => {
@@ -69,13 +47,11 @@ export default function MobileDashboard({ setNav }: Props) {
   const buyers = leaderboardBuyers(users, events)
 
   /* ── Week calc ── */
-  const today = new Date()
-  const ws = weekStart(today)
-  const we = weekEnd(today)
-  const thisWeek = events.filter(e => overlapsWeek(e, ws, we))
+  const { start: ws, end: we } = weekRange()
+  const thisWeek = events.filter(e => eventOverlapsWeek(e, ws, we))
   const nextWs = new Date(ws); nextWs.setDate(ws.getDate() + 7)
   const nextWe = new Date(we); nextWe.setDate(we.getDate() + 7)
-  const nextWeek = thisWeek.length === 0 ? events.filter(e => overlapsWeek(e, nextWs, nextWe)) : []
+  const nextWeek = thisWeek.length === 0 ? events.filter(e => eventOverlapsWeek(e, nextWs, nextWe)) : []
   const showingFallback = thisWeek.length === 0 && nextWeek.length > 0
   const displayed = thisWeek.length > 0 ? thisWeek : nextWeek
 
@@ -93,13 +69,13 @@ export default function MobileDashboard({ setNav }: Props) {
 
   /* ── Personal stats (for name-tap popup) ── */
   const myDays = yearEvents.reduce((s, ev) =>
-    s + (isWorkerAssigned(ev, user?.id) ? countDays(ev) : 0), 0)
+    s + (isWorkerAssigned(ev, user?.id) ? daysWorkedOnEvent(ev) : 0), 0)
   const myEvents = yearEvents.filter(ev => isWorkerAssigned(ev, user?.id)).length
 
   let rank = 0; let lastDays = -1
   const ranked = buyers.map(b => {
     const days = yearEvents.reduce((s, ev) =>
-      s + (isWorkerAssigned(ev, b.id) ? countDays(ev) : 0), 0)
+      s + (isWorkerAssigned(ev, b.id) ? daysWorkedOnEvent(ev) : 0), 0)
     return { ...b, days, isIneligible: INELIGIBLE.some(n => b.name?.toLowerCase().includes(n)) }
   }).sort((a, b) => b.days - a.days).map((b, i) => {
     if (b.days !== lastDays) { rank = i + 1; lastDays = b.days }
