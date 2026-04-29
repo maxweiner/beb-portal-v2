@@ -3,7 +3,7 @@
 // just fetch and write.
 
 import { supabase } from '@/lib/supabase'
-import type { Todo, TodoList, TodoListMember, TodoRole } from './types'
+import type { Todo, TodoList, TodoListMember, TodoNotification, TodoRole } from './types'
 
 const LIST_COLS = 'id, name, owner_id, color, icon, created_at, updated_at, deleted_at'
 const TODO_COLS = 'id, list_id, content, assignee_id, completed, completed_at, completed_by, pinned, position, created_by, created_at, updated_at, deleted_at'
@@ -176,12 +176,43 @@ export async function removeListMember(listId: string, userId: string): Promise<
 /**
  * Assign or unassign a task. Calls the SECURITY DEFINER RPC so an
  * editor can auto-add a non-member as an editor without owner rights.
- * Pass null assigneeId to clear.
+ * Pass null assigneeId to clear. The RPC also writes a notification
+ * row when the new assignee differs from the previous and isn't the
+ * caller themselves.
  */
 export async function assignTodo(todoId: string, assigneeId: string | null): Promise<void> {
   const { error } = await supabase.rpc('todo_assign_task', {
     p_todo_id: todoId,
     p_assignee_id: assigneeId,
   })
+  if (error) throw error
+}
+
+// ── Notifications ──────────────────────────────────────────
+
+const NOTIF_COLS = 'id, recipient_id, type, todo_id, list_id, actor_id, read, created_at'
+
+export async function fetchTodoNotifications(limit = 30): Promise<TodoNotification[]> {
+  const { data, error } = await supabase
+    .from('todo_notifications')
+    .select(NOTIF_COLS)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return (data || []) as TodoNotification[]
+}
+
+export async function markTodoNotificationsRead(ids: string[]): Promise<void> {
+  if (ids.length === 0) return
+  const { error } = await supabase.from('todo_notifications')
+    .update({ read: true })
+    .in('id', ids)
+  if (error) throw error
+}
+
+export async function markAllTodoNotificationsRead(): Promise<void> {
+  const { error } = await supabase.from('todo_notifications')
+    .update({ read: true })
+    .eq('read', false)
   if (error) throw error
 }

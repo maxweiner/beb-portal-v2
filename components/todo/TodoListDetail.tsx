@@ -33,11 +33,15 @@ interface Props {
   onListRenamed: (next: TodoList) => void
   onListDeleted: () => void
   onTaskSoftDeleted: (todo: Todo) => void
+  /** Briefly flashes this task's row when set; pair with onHighlightShown. */
+  highlightTodoId?: string | null
+  onHighlightShown?: () => void
 }
 
 export default function TodoListDetail({
   list, currentUserId, isOwner,
   onListRenamed, onListDeleted, onTaskSoftDeleted,
+  highlightTodoId, onHighlightShown,
 }: Props) {
   const { users } = useApp()
   const [todos, setTodos] = useState<Todo[]>([])
@@ -71,6 +75,13 @@ export default function TodoListDetail({
   }, [list.id])
 
   useEffect(() => { setNameDraft(list.name) }, [list.name])
+
+  // Auto-clear the highlight flag after the flash animation finishes.
+  useEffect(() => {
+    if (!highlightTodoId) return
+    const t = setTimeout(() => onHighlightShown?.(), 2200)
+    return () => clearTimeout(t)
+  }, [highlightTodoId, onHighlightShown])
 
   const { pinned, active, completed } = useMemo(() => {
     const p: Todo[] = []; const a: Todo[] = []; const c: Todo[] = []
@@ -291,6 +302,7 @@ export default function TodoListDetail({
                       onEditContent={c => editContent(t, c)}
                       onDelete={() => deleteTask(t)}
                       onOpenAssignee={rect => setPickerFor({ todoId: t.id, rect })}
+                      highlight={t.id === highlightTodoId}
                     />
                   ))}
                 </SortableContext>
@@ -312,6 +324,7 @@ export default function TodoListDetail({
                       onEditContent={c => editContent(t, c)}
                       onDelete={() => deleteTask(t)}
                       onOpenAssignee={rect => setPickerFor({ todoId: t.id, rect })}
+                      highlight={t.id === highlightTodoId}
                     />
                   ))}
                 </SortableContext>
@@ -364,6 +377,7 @@ export default function TodoListDetail({
                   onEditContent={c => editContent(t, c)}
                   onDelete={() => deleteTask(t)}
                   onOpenAssignee={rect => setPickerFor({ todoId: t.id, rect })}
+                  highlight={t.id === highlightTodoId}
                 />
               ))}
             </div>

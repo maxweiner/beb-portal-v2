@@ -29,6 +29,8 @@ export default function TodoPage() {
   const [undo, setUndo] = useState<UndoEntry | null>(null)
   // Bumped on task-undo to force TodoListDetail to remount + refetch.
   const [refreshKey, setRefreshKey] = useState(0)
+  // When a notification deep-links us, the target todo flashes briefly.
+  const [highlightTodoId, setHighlightTodoId] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -48,6 +50,25 @@ export default function TodoPage() {
     const t = setTimeout(() => setUndo(null), UNDO_DURATION_MS)
     return () => clearTimeout(t)
   }, [undo])
+
+  // Deep-link from the notification bell.
+  useEffect(() => {
+    const onOpen = async (e: Event) => {
+      const detail = (e as CustomEvent<{ listId: string; todoId: string }>).detail
+      if (!detail?.listId) return
+      // Refetch lists in case the deep-linked list was added since
+      // this session loaded (e.g. someone shared with us mid-session).
+      try {
+        const fresh = await fetchMyLists()
+        setLists(fresh)
+      } catch { /* fall through; we may still have it locally */ }
+      setSelectedId(detail.listId)
+      setHighlightTodoId(detail.todoId || null)
+      setRefreshKey(k => k + 1)
+    }
+    window.addEventListener('beb:open-todo', onOpen)
+    return () => window.removeEventListener('beb:open-todo', onOpen)
+  }, [])
 
   if (!user) {
     return <div style={{ padding: 40, color: 'var(--mist)' }}>Sign in to view your lists.</div>
@@ -150,6 +171,8 @@ export default function TodoPage() {
             list={selected}
             currentUserId={user.id}
             isOwner={selected.owner_id === user.id}
+            highlightTodoId={highlightTodoId}
+            onHighlightShown={() => setHighlightTodoId(null)}
             onListRenamed={next => setLists(prev => prev.map(l => l.id === next.id ? next : l))}
             onListDeleted={() => {
               const removed = lists.find(l => l.id === selectedId)

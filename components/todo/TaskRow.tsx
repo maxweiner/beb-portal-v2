@@ -22,12 +22,15 @@ interface Props {
   /** True when this row is in a sortable container. Disables drag for
    *  completed rows since they live in their own non-orderable section. */
   draggable: boolean
+  /** Briefly flash the row background. Used to highlight the target of
+   *  a notification deep-link. */
+  highlight?: boolean
 }
 
 export default function TaskRow({
   todo, assignee,
   onToggleComplete, onTogglePin, onEditContent, onDelete, onOpenAssignee,
-  draggable,
+  draggable, highlight,
 }: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: todo.id, disabled: !draggable })
@@ -56,7 +59,15 @@ export default function TaskRow({
       display: 'flex', alignItems: 'center', gap: 10,
       padding: '8px 10px', background: '#fff',
       borderBottom: '1px solid var(--cream2)',
+      animation: highlight ? 'todoFlash 2s ease-out' : undefined,
     }}>
+      <style>{`
+        @keyframes todoFlash {
+          0%   { background: #FEF3C7; }
+          70%  { background: #FEF3C7; }
+          100% { background: #fff; }
+        }
+      `}</style>
       {draggable && (
         <span
           {...attributes} {...listeners}

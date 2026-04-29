@@ -3,6 +3,17 @@
 export type TodoRole = 'owner' | 'editor'
 export type TodoNotificationType = 'task_assigned' | 'task_nudged'
 
+export interface TodoNotification {
+  id: string
+  recipient_id: string
+  type: TodoNotificationType
+  todo_id: string
+  list_id: string
+  actor_id: string | null
+  read: boolean
+  created_at: string
+}
+
 export interface TodoList {
   id: string
   name: string

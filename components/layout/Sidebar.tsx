@@ -5,6 +5,7 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { NavPage } from '@/app/page'
 import { usePendingApprovals } from '@/components/expenses/usePendingApprovals'
+import TodoNotificationsBell from '@/components/todo/TodoNotificationsBell'
 
 const COLLAPSE_KEY = 'beb-sidebar-collapsed'
 
@@ -272,6 +273,9 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
             ★ Liberty Estate Buyers
           </div>
         )}
+        <div style={{ marginBottom: 6 }}>
+          <TodoNotificationsBell setNav={setNav} />
+        </div>
         <div className="sidebar-user-name">{user?.name || user?.email}</div>
         <div className="sidebar-user-role">{user?.role?.replace('_', ' ')}</div>
         <button onClick={() => supabase.auth.signOut()} className="btn-outline btn-xs btn-full">Sign Out</button>
