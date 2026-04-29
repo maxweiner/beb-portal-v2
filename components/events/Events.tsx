@@ -11,6 +11,8 @@ import type { NavPage } from '@/app/page'
 import EventNotesPanel from './EventNotesPanel'
 import NotificationStatusBadge from '@/components/notifications/NotificationStatusBadge'
 import EventShippingPanel from '@/components/shipping/EventShippingPanel'
+import UnderstaffedBadge from './UnderstaffedBadge'
+import { eventStaffing } from '@/lib/eventStaffing'
 
 type Filter = 'thisweek' | 'active' | 'all' | 'current' | 'past' | 'future' | 'days30' | 'days60'
 type Sort = 'date-desc' | 'date-asc' | 'name-asc'
@@ -58,9 +60,12 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   const [sort, setSort] = useState<Sort>('date-asc')
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
-  const [newEvent, setNewEvent] = useState({ store_id: '', start_date: '' })
+  const [newEvent, setNewEvent] = useState<{ store_id: string; start_date: string; buyers_needed: string }>({ store_id: '', start_date: '', buyers_needed: '3' })
   const [saving, setSaving] = useState(false)
   const [workersOpen, setWorkersOpen] = useState<string | null>(null)
+  // Per-event in-progress edits to buyers_needed so the input doesn't
+  // fight with optimistic re-renders while the partner is typing.
+  const [buyersNeededEdits, setBuyersNeededEdits] = useState<Record<string, string>>({})
   const [shippingOpen, setShippingOpen] = useState<string | null>(null)
   // Force-include the most recently created event in the filtered list
   // (and auto-expand it) regardless of the active filter, so the user
@@ -203,6 +208,11 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   const createEvent = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newEvent.store_id || !newEvent.start_date) return
+    const buyersNeeded = parseInt(newEvent.buyers_needed, 10)
+    if (!Number.isFinite(buyersNeeded) || buyersNeeded < 1 || buyersNeeded > 20) {
+      alert('Buyers needed must be a whole number between 1 and 20.')
+      return
+    }
     setSaving(true)
     try {
       const store = stores.find(s => s.id === newEvent.store_id)
@@ -214,6 +224,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
           store_id: newEvent.store_id,
           store_name: store?.name || '',
           start_date: newEvent.start_date,
+          buyers_needed: buyersNeeded,
           created_by: user?.id,
         }).select().single()
       )
@@ -221,7 +232,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
 
       // Reset form
       setShowForm(false)
-      setNewEvent({ store_id: '', start_date: '' })
+      setNewEvent({ store_id: '', start_date: '', buyers_needed: '3' })
 
       // Re-fetch with a fresh query
       const { data: freshEvents } = await withTimeout(
@@ -304,6 +315,29 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
     const updatedEvents = events.map(e => e.id === ev.id ? { ...e, workers: updated } : e)
     setEvents(updatedEvents)
     setContextEvents(updatedEvents)
+  }
+
+  async function saveBuyersNeeded(ev: Event, raw: string) {
+    const n = parseInt(raw, 10)
+    if (!Number.isFinite(n) || n < 1 || n > 20) {
+      // Invalid → drop the in-progress edit so the displayed value
+      // snaps back to the saved one.
+      setBuyersNeededEdits(p => { const next = { ...p }; delete next[ev.id]; return next })
+      return
+    }
+    if (n === ev.buyers_needed) {
+      setBuyersNeededEdits(p => { const next = { ...p }; delete next[ev.id]; return next })
+      return
+    }
+    const { error } = await supabase.from('events').update({ buyers_needed: n }).eq('id', ev.id)
+    if (error) {
+      alert('Failed to save buyers needed: ' + error.message)
+      return
+    }
+    const updatedEvents = events.map(e => e.id === ev.id ? { ...e, buyers_needed: n } : e)
+    setEvents(updatedEvents)
+    setContextEvents(updatedEvents)
+    setBuyersNeededEdits(p => { const next = { ...p }; delete next[ev.id]; return next })
   }
 
   // Reorder workers so `uid` becomes index 0 (= the lead buyer).
@@ -437,6 +471,12 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
               <label className="fl">Start Date</label>
               <input type="date" value={newEvent.start_date} onChange={e => setNewEvent(p => ({ ...p, start_date: e.target.value }))} required />
             </div>
+            <div className="field" style={{ minWidth: 110 }}>
+              <label className="fl">Buyers Needed</label>
+              <input type="number" min={1} max={20} step={1} required
+                value={newEvent.buyers_needed}
+                onChange={e => setNewEvent(p => ({ ...p, buyers_needed: e.target.value }))} />
+            </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="submit" disabled={saving} className="btn-primary btn-sm">{saving ? 'Creating…' : 'Create Event'}</button>
               <button type="button" onClick={() => setShowForm(false)} className="btn-outline btn-sm">Cancel</button>
@@ -507,6 +547,12 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>{ev.store_name}</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      {(() => {
+                        const s = eventStaffing(ev)
+                        return s.understaffed && s.needed != null
+                          ? <UnderstaffedBadge assigned={s.assigned} needed={s.needed} variant="compact" />
+                          : null
+                      })()}
                       <span style={{ fontSize: 15, fontWeight: 900, color: 'var(--green3)' }}>{fmtDollars(dollars)}</span>
                       <span aria-hidden style={{
                         fontSize: 16, color: 'rgba(255,255,255,.7)', display: 'inline-block',
@@ -528,6 +574,35 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
 
                 {expanded && (
                   <>
+                    {/* Buyers needed editor + live assigned count. */}
+                    <div style={{ padding: '10px 14px 0', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                      <span style={{ color: 'var(--mist)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', fontSize: 10 }}>Needs</span>
+                      <input type="number" min={1} max={20} step={1}
+                        value={buyersNeededEdits[ev.id] ?? (ev.buyers_needed != null ? String(ev.buyers_needed) : '')}
+                        placeholder="—"
+                        onChange={e => setBuyersNeededEdits(p => ({ ...p, [ev.id]: e.target.value }))}
+                        onBlur={e => saveBuyersNeeded(ev, e.target.value)}
+                        onClick={e => e.stopPropagation()}
+                        style={{
+                          width: 50, padding: '3px 6px', fontSize: 13,
+                          borderRadius: 6, border: '1px solid var(--pearl)',
+                          background: '#fff', textAlign: 'center', fontFamily: 'inherit',
+                        }} />
+                      <span style={{ color: 'var(--mist)' }}>buyer{(ev.buyers_needed ?? 0) === 1 ? '' : 's'}</span>
+                      {(() => {
+                        const s = eventStaffing(ev)
+                        if (s.needed == null) return null
+                        return (
+                          <span style={{
+                            marginLeft: 'auto', fontSize: 11, fontWeight: 800,
+                            color: s.understaffed ? '#92400E' : 'var(--green-dark)',
+                          }}>
+                            {s.assigned} assigned
+                          </span>
+                        )
+                      })()}
+                    </div>
+
                     {/* Avatar stack + comma-separated first names */}
                     <div style={{ padding: '10px 14px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
                       {evWorkers.length === 0 ? (
