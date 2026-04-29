@@ -178,7 +178,7 @@ export interface Event {
   store_id: string
   store_name: string
   start_date: string
-  workers?: { id: string; name: string }[]
+  workers?: { id: string; name: string; deleted?: boolean }[]
   spend_vdp?: number
   spend_newspaper?: number
   spend_postcard?: number
@@ -186,6 +186,9 @@ export interface Event {
   days: EventDay[]
   calendar_feed_url?: string
   created_by?: string
+  /** Required staffing for the event. NULL = not specified (no
+   *  hazard). New events enforce non-null at the form layer. */
+  buyers_needed?: number | null
 }
 
 export interface Shipment {

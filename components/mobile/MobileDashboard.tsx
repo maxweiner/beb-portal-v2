@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import type { NavPage } from '@/app/page'
 import { leaderboardBuyers } from '@/lib/leaderboard'
+import { eventStaffing } from '@/lib/eventStaffing'
+import UnderstaffedBadge from '@/components/events/UnderstaffedBadge'
 
 const countDays = (ev: any) => {
   const end = new Date(ev.start_date + 'T12:00:00')
@@ -163,6 +165,7 @@ export default function MobileDashboard({ setNav }: Props) {
                   const isMine = !isAdmin && (ev.workers || []).some((w: any) => w.id === user?.id)
                   const spend = eventSpend(ev)
                   const status = eventDayStatus(ev)
+                  const staffing = eventStaffing(ev)
                   return (
                     <button key={ev.id} onClick={() => openEvent(ev)} style={{
                       background: 'rgba(240,253,244,.95)', borderRadius: 12,
@@ -179,6 +182,11 @@ export default function MobileDashboard({ setNav }: Props) {
                           fontSize: 9, fontWeight: 900, letterSpacing: '.06em',
                           padding: '2px 6px', borderRadius: 99,
                         }}>YOU</span>
+                      )}
+                      {staffing.understaffed && staffing.needed != null && (
+                        <span style={{ position: 'absolute', top: 6, right: isMine ? 50 : 6 }}>
+                          <UnderstaffedBadge assigned={staffing.assigned} needed={staffing.needed} variant="compact" />
+                        </span>
                       )}
                       <div style={{
                         fontSize: 13, fontWeight: 900, color: 'var(--green-dark)',

@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useApp } from '@/lib/context'
 import type { NavPage } from '@/app/page'
 import { leaderboardBuyers } from '@/lib/leaderboard'
+import { eventStaffing } from '@/lib/eventStaffing'
+import UnderstaffedBadge from '@/components/events/UnderstaffedBadge'
 
 /** Current-year past/current events where `buyerId` is in the workers array. */
 function getBuyerEventsThisYear(buyerId: string, allEvents: any[]): any[] {
@@ -239,6 +241,7 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
                   const spend = getEventSpend(ev)
                   const status = getEventDayStatus(ev)
                   const store = stores.find(s => s.id === ev.store_id)
+                  const staffing = eventStaffing(ev)
                   return (
                     <button key={ev.id} onClick={() => setNav?.('events')} style={{
                       background: 'rgba(240,253,244,.95)', borderRadius: 12, padding: '14px 16px',
@@ -246,10 +249,17 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
                       boxShadow: '0 2px 10px rgba(0,0,0,.08)',
                       textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
                       display: 'flex', flexDirection: 'column', gap: 4,
+                      position: 'relative',
                     }}>
+                      {staffing.understaffed && staffing.needed != null && (
+                        <span style={{ position: 'absolute', top: 8, right: 8 }}>
+                          <UnderstaffedBadge assigned={staffing.assigned} needed={staffing.needed} variant="full" />
+                        </span>
+                      )}
                       <div style={{
                         fontSize: 14, fontWeight: 900, color: 'var(--green-dark)',
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        paddingRight: staffing.understaffed ? 130 : 0,
                       }}>{ev.store_name}</div>
                       <div style={{ fontSize: 11, color: 'var(--green-dark)', opacity: 0.65 }}>
                         {store?.city}{store?.state ? ', ' + store.state : ''}

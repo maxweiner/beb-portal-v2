@@ -5,6 +5,8 @@ import { useApp } from '@/lib/context'
 import type { Event, BuyerVacation } from '@/types'
 import { supabase } from '@/lib/supabase'
 import EventShippingPanel from '@/components/shipping/EventShippingPanel'
+import { eventStaffing } from '@/lib/eventStaffing'
+import UnderstaffedBadge from '@/components/events/UnderstaffedBadge'
 
 interface ShipmentEntry {
   id: string
@@ -350,19 +352,31 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
                     color: isToday ? '#fff' : 'var(--ash)', background: isToday ? 'var(--green)' : 'transparent',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4,
                   }}>{day}</div>
-                  {dayEvs.slice(0, visibleCount).map(ev => (
-                    <div
-                      key={ev.id}
-                      onClick={() => onSelect(ev)}
-                      title={`${ev.store_name} — ${ev.start_date}`}
-                      style={{
-                        background: storeColor(ev.store_id, stores), color: '#fff',
-                        fontSize: 12, fontWeight: 700,
-                        padding: '4px 7px', borderRadius: 4,
-                        marginBottom: 3, cursor: 'pointer', overflow: 'hidden',
-                        whiteSpace: 'nowrap', textOverflow: 'ellipsis', lineHeight: 1.2,
-                      }}>◆ {ev.store_name}</div>
-                  ))}
+                  {dayEvs.slice(0, visibleCount).map(ev => {
+                    const staffing = eventStaffing(ev)
+                    return (
+                      <div
+                        key={ev.id}
+                        onClick={() => onSelect(ev)}
+                        title={`${ev.store_name} — ${ev.start_date}`}
+                        style={{
+                          position: 'relative',
+                          background: storeColor(ev.store_id, stores), color: '#fff',
+                          fontSize: 12, fontWeight: 700,
+                          padding: '4px 7px', borderRadius: 4,
+                          marginBottom: 3, cursor: 'pointer', overflow: 'hidden',
+                          whiteSpace: 'nowrap', textOverflow: 'ellipsis', lineHeight: 1.2,
+                          paddingRight: staffing.understaffed ? 22 : 7,
+                        }}>
+                        ◆ {ev.store_name}
+                        {staffing.understaffed && staffing.needed != null && (
+                          <span style={{ position: 'absolute', top: 2, right: 2 }}>
+                            <UnderstaffedBadge assigned={staffing.assigned} needed={staffing.needed} variant="icon" />
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
                   {overflow > 0 && (
                     <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mist)', padding: '2px 4px' }}>
                       +{overflow} more
