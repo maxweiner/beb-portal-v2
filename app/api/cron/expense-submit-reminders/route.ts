@@ -1,18 +1,26 @@
-// Cron worker: nag any 'active' expense report whose event started 7+
-// days ago. Repeats every 3 days, max 3 reminders per report.
+// Cron worker: nag any 'active' expense report once the event has ended
+// (with a small grace period so buyers aren't pinged the moment they
+// land at home). Repeats every 3 days, max 3 reminders per report.
+//
+// Hard rule: never remind while an event is still running or hasn't
+// started. The SQL filter expresses this in terms of the 3-day event
+// length so the rule survives if FIRST_NUDGE_DAYS is ever tuned to 0.
 //
 // Auth: ?secret=<CRON_SECRET> matching the existing vercel.json
 // cron-route convention.
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { EVENT_LENGTH_DAYS, eventEndDate } from '@/lib/eventDates'
 import { sendSubmitReminderForReport } from '@/lib/expenses/sendSubmitReminder'
 
 export const dynamic = 'force-dynamic'
 
 const MAX_REMINDERS = 3
 const COOLDOWN_DAYS = 3
-const FIRST_NUDGE_DAYS = 7   // event-start + 7 days → first reminder eligible
+// Days after the event ENDS before the first nudge fires. Tuned for
+// "event over + buyer probably home + had a chance to upload receipts."
+const GRACE_DAYS_AFTER_EVENT_END = 4
 
 function admin() {
   return createClient(
@@ -36,23 +44,30 @@ async function run(req: Request) {
   }
 
   const sb = admin()
-  // Pull active reports with events, filter eligibility in JS so we
-  // can use the cleaner JOIN and avoid a complex SQL date expression.
+  // SQL gate: event start_date must be at least (event-length + grace)
+  // days in the past — i.e. the event ended at least GRACE days ago.
+  // This is the hard "never remind while an event is in progress" rule.
+  const sqlCutoffStartDays = EVENT_LENGTH_DAYS + GRACE_DAYS_AFTER_EVENT_END
   const { data: rows, error } = await sb
     .from('expense_reports')
     .select('id, status, reminder_count, last_reminder_sent_at, event:events!inner(start_date)')
     .eq('status', 'active')
     .lt('reminder_count', MAX_REMINDERS)
-    .lte('event.start_date', todayMinusDaysIso(FIRST_NUDGE_DAYS))
+    .lte('event.start_date', todayMinusDaysIso(sqlCutoffStartDays))
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   const cutoff = new Date()
   cutoff.setUTCDate(cutoff.getUTCDate() - COOLDOWN_DAYS)
   const cutoffIso = cutoff.toISOString()
 
-  const eligible = (rows ?? []).filter((r: any) =>
-    !r.last_reminder_sent_at || r.last_reminder_sent_at < cutoffIso,
-  )
+  // Defense-in-depth: re-verify the event has actually ended, in case
+  // EVENT_LENGTH_DAYS ever changes or a row sneaks past the SQL gate.
+  const today = new Date()
+  const eligible = (rows ?? []).filter((r: any) => {
+    if (!r.event?.start_date) return false
+    if (eventEndDate(r.event.start_date) > today) return false
+    return !r.last_reminder_sent_at || r.last_reminder_sent_at < cutoffIso
+  })
   if (eligible.length === 0) {
     return NextResponse.json({ ok: true, eligible: 0 })
   }
