@@ -23,6 +23,10 @@
     {
       "path": "/api/cron/poll-tracking?secret=bebportal2024",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/expense-submit-reminders?secret=bebportal2024",
+      "schedule": "0 14 * * *"
     }
   ]
 }
