@@ -44,6 +44,14 @@ export function weekRange(d: Date = new Date()): { start: Date; end: Date } {
   return { start, end }
 }
 
+/** True if today (local) falls inside the event's 3-day window. */
+export function isEventCurrent(ev: { start_date?: string | null }): boolean {
+  if (!ev.start_date) return false
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const start = new Date(ev.start_date + 'T12:00:00'); start.setHours(0, 0, 0, 0)
+  return today >= start && today <= eventEndDate(ev.start_date)
+}
+
 /** True if any of the event's 3 days falls inside [weekStart..weekEnd]. */
 export function eventOverlapsWeek(
   ev: { start_date?: string | null },

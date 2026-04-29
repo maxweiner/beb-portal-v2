@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import { canEditEvent } from '@/lib/permissions'
+import { isEventCurrent } from '@/lib/eventDates'
+import { searchEvents } from '@/lib/eventSearch'
 import Checkbox from '@/components/ui/Checkbox'
 
 const LEAD_SOURCES = [
@@ -67,6 +69,10 @@ export default function MobileDayEntry() {
   const [selectedEventId, setSelectedEventId] = useState('')
   const [selectedDay, setSelectedDay] = useState(1)
   const [eventSwitcherOpen, setEventSwitcherOpen] = useState(false)
+  // Free-text search inside the picker panels. Empty = "current events
+  // only"; any value = "all events matching this query" (matches the
+  // Events page search behavior).
+  const [eventSearch, setEventSearch] = useState('')
   const [mode, setMode] = useState<'quick' | 'detailed'>('quick')
   const [customers, setCustomers] = useState('')
   const [purchases, setPurchases] = useState('')
@@ -95,7 +101,6 @@ export default function MobileDayEntry() {
   const [saving, setSaving] = useState(false)
   const [loadingEntry, setLoadingEntry] = useState(false)
   const [showOverlay, setShowOverlay] = useState(false)
-  const [showPastEvents, setShowPastEvents] = useState(false)
   const [existingEntry, setExistingEntry] = useState<any>(null)
   const entryIdRef = useRef<string | null>(null)
   const hydratedRef = useRef(false)
@@ -132,13 +137,20 @@ export default function MobileDayEntry() {
     : events.filter(ev => (ev.workers || []).some((w: any) => w.id === user?.id))
   ).slice().sort((a, b) => b.start_date.localeCompare(a.start_date))
 
+  const currentEvents = useMemo(
+    () => availableEvents.filter(isEventCurrent),
+    [availableEvents],
+  )
+  // Picker contents: search overrides the current-only default.
+  const pickerResults = useMemo(
+    () => eventSearch.trim()
+      ? searchEvents(availableEvents, eventSearch, stores)
+      : currentEvents,
+    [eventSearch, availableEvents, currentEvents, stores],
+  )
+
   const selectedEvent = availableEvents.find(e => e.id === selectedEventId)
 
-  const isActive = (ev: any, today: Date) => {
-    const start = new Date(ev.start_date + 'T12:00:00')
-    const end = new Date(ev.start_date + 'T12:00:00'); end.setDate(end.getDate() + 2)
-    return today >= start && today <= end
-  }
   const isFuture = (ev: any, today: Date) => {
     const start = new Date(ev.start_date + 'T12:00:00')
     return today < start
@@ -150,7 +162,7 @@ export default function MobileDayEntry() {
   useEffect(() => {
     if (selectedEventId || availableEvents.length === 0) return
     const today = new Date(); today.setHours(0, 0, 0, 0)
-    const active = availableEvents.find(ev => isActive(ev, today))
+    const active = availableEvents.find(isEventCurrent)
     if (active) { setSelectedEventId(active.id); return }
     // Events are sorted newest-first; reverse to find the SOONEST upcoming.
     const upcoming = availableEvents.slice().reverse().find(ev => isFuture(ev, today))
@@ -424,42 +436,26 @@ export default function MobileDayEntry() {
     )
   }
 
-  // User has events but none are active or upcoming — offer a past-events picker.
+  // User has events but none are active or upcoming — offer a search picker.
   if (!selectedEvent) {
     return (
-      <div style={{ padding: '40px 20px', textAlign: 'center', background: 'var(--cream)', minHeight: '100%' }}>
-        <div style={{ fontSize: 40, marginBottom: 12 }}>📅</div>
-        <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--ink)' }}>No active or upcoming events</div>
-        <div style={{ fontSize: 13, color: 'var(--mist)', marginTop: 6, marginBottom: 18 }}>
-          Check back when your next buy is scheduled.
-        </div>
-        <button onClick={() => setShowPastEvents(v => !v)} style={{
-          padding: '10px 18px', borderRadius: 10, border: '1.5px solid var(--green)',
-          background: 'transparent', color: 'var(--green)', fontSize: 13, fontWeight: 700,
-          cursor: 'pointer', fontFamily: 'inherit',
-        }}>
-          {showPastEvents ? 'Hide past events' : 'View past events'}
-        </button>
-        {showPastEvents && (
-          <div style={{
-            marginTop: 16, textAlign: 'left',
-            background: '#FFFFFF', borderRadius: 12,
-            border: '1px solid var(--cream2)', overflow: 'hidden',
-          }}>
-            {availableEvents.map(ev => (
-              <button key={ev.id} onClick={() => setSelectedEventId(ev.id)} style={{
-                width: '100%', padding: '12px 14px', background: 'transparent',
-                border: 'none', borderBottom: '1px solid var(--cream2)',
-                textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
-              }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>{ev.store_name}</div>
-                <div style={{ fontSize: 11, color: 'var(--mist)' }}>
-                  {new Date(ev.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                </div>
-              </button>
-            ))}
+      <div style={{ padding: '40px 20px', background: 'var(--cream)', minHeight: '100%' }}>
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>📅</div>
+          <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--ink)' }}>No events are currently in progress</div>
+          <div style={{ fontSize: 13, color: 'var(--mist)', marginTop: 6 }}>
+            Search for an event below.
           </div>
-        )}
+        </div>
+        <EventPickerSearch value={eventSearch} onChange={setEventSearch} />
+        <PickerList
+          label={eventSearch ? `Search results (${pickerResults.length})` : null}
+          results={pickerResults}
+          stores={stores}
+          selectedEventId={selectedEventId}
+          emptyMessage={eventSearch ? 'No events match that search.' : 'Type a store name, city, or state to find an event.'}
+          onPick={ev => { setEventSearch(''); setSelectedEventId(ev.id) }}
+        />
       </div>
     )
   }
@@ -523,23 +519,18 @@ export default function MobileDayEntry() {
           {new Date(selectedEvent.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
         </div>
         {eventSwitcherOpen && (
-          <div style={{
-            marginTop: 10, background: 'var(--cream)', borderRadius: 10,
-            border: '1px solid var(--cream2)', overflow: 'hidden',
-          }}>
-            {availableEvents.map(ev => (
-              <button key={ev.id} onClick={() => { setSelectedEventId(ev.id); setEventSwitcherOpen(false) }} style={{
-                width: '100%', padding: '10px 14px',
-                background: ev.id === selectedEventId ? 'var(--green-pale)' : 'transparent',
-                border: 'none', borderBottom: '1px solid var(--cream2)',
-                textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
-              }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>{ev.store_name}</div>
-                <div style={{ fontSize: 11, color: 'var(--mist)' }}>
-                  {new Date(ev.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                </div>
-              </button>
-            ))}
+          <div style={{ marginTop: 10 }}>
+            <EventPickerSearch value={eventSearch} onChange={setEventSearch} />
+            <PickerList
+              label={eventSearch ? `Search results (${pickerResults.length})` : 'Current events'}
+              results={pickerResults}
+              stores={stores}
+              selectedEventId={selectedEventId}
+              emptyMessage={eventSearch
+                ? 'No events match that search.'
+                : 'No events are currently in progress. Search for an event below.'}
+              onPick={ev => { setEventSearch(''); setSelectedEventId(ev.id); setEventSwitcherOpen(false) }}
+            />
           </div>
         )}
 
@@ -1072,6 +1063,84 @@ function Stat({ label, value }: { label: string; value: string }) {
         color: 'var(--green-dark)', textTransform: 'uppercase',
       }}>{label}</div>
       <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--green)', marginTop: 2 }}>{value}</div>
+    </div>
+  )
+}
+
+function EventPickerSearch({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div style={{ position: 'relative', marginBottom: 10 }}>
+      <input value={value} onChange={e => onChange(e.target.value)}
+        placeholder="Search by store, city, or state…"
+        style={{
+          width: '100%', minHeight: 40, padding: '0 36px 0 12px',
+          fontSize: 14, borderRadius: 10, border: '1.5px solid var(--pearl)',
+          background: '#FFFFFF', color: 'var(--ink)',
+          outline: 'none', fontFamily: 'inherit',
+        }} />
+      {value && (
+        <button onClick={() => onChange('')}
+          aria-label="Clear search"
+          style={{
+            position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--mist)', fontSize: 18, padding: '0 6px',
+            lineHeight: 1, fontFamily: 'inherit',
+          }}>×</button>
+      )}
+    </div>
+  )
+}
+
+function PickerList({ label, results, stores, selectedEventId, emptyMessage, onPick }: {
+  label: string | null
+  results: any[]
+  stores: any[]
+  selectedEventId: string
+  emptyMessage: string
+  onPick: (ev: any) => void
+}) {
+  return (
+    <div>
+      {label && (
+        <div style={{
+          fontSize: 11, fontWeight: 800, color: 'var(--mist)',
+          textTransform: 'uppercase', letterSpacing: '.06em',
+          padding: '0 4px 6px',
+        }}>{label}</div>
+      )}
+      {results.length === 0 ? (
+        <div style={{
+          padding: '14px 16px', fontSize: 13, color: 'var(--mist)',
+          background: 'var(--cream2)', borderRadius: 10, textAlign: 'center',
+        }}>
+          {emptyMessage}
+        </div>
+      ) : (
+        <div style={{
+          background: '#FFFFFF', borderRadius: 10,
+          border: '1px solid var(--cream2)', overflow: 'hidden',
+        }}>
+          {results.map((ev, i) => {
+            const store = stores.find((s: any) => s.id === ev.store_id)
+            return (
+              <button key={ev.id} onClick={() => onPick(ev)} style={{
+                width: '100%', padding: '12px 14px',
+                background: ev.id === selectedEventId ? 'var(--green-pale)' : 'transparent',
+                border: 'none',
+                borderBottom: i < results.length - 1 ? '1px solid var(--cream2)' : 'none',
+                textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
+              }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>{ev.store_name}</div>
+                <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>
+                  {new Date(ev.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  {store?.city ? ` · ${store.city}${store.state ? ', ' + store.state : ''}` : ''}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

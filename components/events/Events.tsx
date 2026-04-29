@@ -15,6 +15,7 @@ import EventShippingPanel from '@/components/shipping/EventShippingPanel'
 import UnderstaffedBadge from './UnderstaffedBadge'
 import { eventStaffing } from '@/lib/eventStaffing'
 import { eventDisplayName } from '@/lib/eventName'
+import { searchEvents } from '@/lib/eventSearch'
 
 type Filter = 'thisweek' | 'active' | 'all' | 'current' | 'past' | 'future' | 'days30' | 'days60'
 type Sort = 'date-desc' | 'date-asc' | 'name-asc'
@@ -167,14 +168,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
     // Search OVERRIDES the date filter — typing into the search box
     // returns all matching stores regardless of date so the user
     // doesn't have to also remember to widen the filter.
-    if (search) {
-      const s = search.toLowerCase()
-      const store = stores.find(st => st.id === ev.store_id)
-      return (ev.store_name || '').toLowerCase().includes(s) ||
-        (store?.name || '').toLowerCase().includes(s) ||
-        (store?.city || '').toLowerCase().includes(s) ||
-        (store?.state || '').toLowerCase().includes(s)
-    }
+    if (search) return searchEvents([ev], search, stores).length > 0
     const start = new Date(ev.start_date + 'T12:00:00')
     const end = new Date(ev.start_date + 'T12:00:00')
     end.setDate(end.getDate() + 2); end.setHours(23,59,59)
