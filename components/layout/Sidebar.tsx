@@ -25,6 +25,7 @@ const ICONS: Record<string, JSX.Element> = {
   staff:     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="5" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><circle cx="11" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M1 14c0-2.5 1.8-4 4-4s4 1.5 4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M11 10c1.5 0 4 .8 4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>,
   settings:  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>,
   expenses:  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2.5" y="1" width="11" height="14" rx="1" stroke="currentColor" strokeWidth="1.5"/><path d="M5.5 4.5h5M5.5 7.5h5M5.5 10.5h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>,
+  financials:<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 13V6M6 13V3M10 13V8M14 13V5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>,
 }
 
 interface NavItem {
@@ -34,6 +35,7 @@ interface NavItem {
   section?: boolean
   adminOnly?: boolean
   superadminOnly?: boolean
+  partnerOnly?: boolean
 }
 
 const BEB_NAV: NavItem[] = [
@@ -55,6 +57,7 @@ const BEB_NAV: NavItem[] = [
   { id: 'shipping',     label: 'Shipping',       iconKey: 'shipping' },
   { id: 'reports',      label: 'Reports',        iconKey: 'reports' },
   { id: 'expenses',     label: 'Expenses',       iconKey: 'expenses' },
+  { id: 'financials',   label: 'Financials',     iconKey: 'financials', partnerOnly: true },
   { id: 'settings',     label: 'Settings',       iconKey: 'settings' },
 ]
 
@@ -77,6 +80,7 @@ const LIBERTY_NAV: NavItem[] = [
   { id: 'shipping',     label: 'Shipping',       iconKey: 'shipping' },
   { id: 'reports',      label: 'Reports',        iconKey: 'reports' },
   { id: 'expenses',     label: 'Expenses',       iconKey: 'expenses' },
+  { id: 'financials',   label: 'Financials',     iconKey: 'financials', partnerOnly: true },
   { id: 'settings',     label: 'Settings',       iconKey: 'settings' },
 ]
 
@@ -89,6 +93,7 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
   const { user, brand, setBrand } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
   const isSuperadmin = user?.role === 'superadmin'
+  const isPartner = !!user?.is_partner
   const hasLibertyAccess = user?.liberty_access === true
   const isLiberty = brand === 'liberty'
   const NAV_ITEMS = isLiberty ? LIBERTY_NAV : BEB_NAV
@@ -216,6 +221,7 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
             }
             if (item.adminOnly && !isAdmin) return null
             if (item.superadminOnly && !isSuperadmin) return null
+            if (item.partnerOnly && !isPartner) return null
             if (currentSection && !currentOpen) return null
             const showExpensesBadge = item.id === 'expenses' && pendingApprovalCount > 0
             const navBtn = (

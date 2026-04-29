@@ -277,7 +277,8 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
     ? { id: 'travel', label: 'Travel Share', icon: '✈️' }
     : { id: 'dashboard' as NavPage, label: 'Scan ID', icon: '📷', isScan: true }
 
-  const ALL_PAGES: { id: NavPage; label: string; icon: string; adminOnly?: boolean; isScan?: boolean }[] = [
+  const isPartner = !!user?.is_partner
+  const ALL_PAGES: { id: NavPage; label: string; icon: string; adminOnly?: boolean; partnerOnly?: boolean; isScan?: boolean }[] = [
     { id: 'dashboard',    label: 'Dashboard',      icon: '⌂' },
     { id: 'events',       label: 'Events',         icon: '◆' },
     { id: 'dayentry',     label: 'Enter Day Data', icon: '📝' },
@@ -288,13 +289,16 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
     { id: 'shipping',     label: 'Shipping',       icon: '📦' },
     { id: 'reports',      label: 'Reports',        icon: '📊' },
     { id: 'expenses',     label: 'Expenses',       icon: '🧾' },
+    { id: 'financials',   label: 'Financials',     icon: '💼', partnerOnly: true },
     { id: 'marketing',    label: 'Marketing',      icon: '📣' },
     { id: 'settings',     label: 'Settings',       icon: '⚙️' },
     { id: isLiberty ? 'libertyadmin' : 'admin', label: isLiberty ? 'LEB Admin' : 'Admin', icon: '🔧', adminOnly: true },
     { id: 'stores',       label: 'Stores',         icon: '🏪', adminOnly: true },
   ]
 
-  const visiblePages = ALL_PAGES.filter(p => !p.adminOnly || isAdmin)
+  const visiblePages = ALL_PAGES.filter(p =>
+    (!p.adminOnly || isAdmin) && (!p.partnerOnly || isPartner),
+  )
 
   return (
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--page-bg)' }}>
