@@ -32,6 +32,10 @@ export default function MyUpcomingEventsList({
       <button key={ev.id}
         onClick={() => onOpenEvent(ev)}
         style={{
+          // display:block overrides the global `button { display:inline-flex;
+          // justify-content:center }` rule, which was centering the store
+          // name and squishing the city/date onto the same row.
+          display: 'block',
           width: '100%', textAlign: 'left', cursor: 'pointer',
           background: 'transparent', border: 'none',
           padding: '10px 12px', fontFamily: 'inherit',
