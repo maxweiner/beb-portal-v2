@@ -21,6 +21,7 @@ import {
 import { broadcastExpenseStatusChanged } from './usePendingApprovals'
 import AddReceiptButton from './AddReceiptButton'
 import AddMileageButton from './AddMileageButton'
+import TemplateChecklist from './TemplateChecklist'
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -393,6 +394,11 @@ export default function ExpenseReportDetail({
           </div>
         </div>
       </div>
+
+      {/* Template checklist (when one was applied at creation) */}
+      {report.template_id && (
+        <TemplateChecklist templateId={report.template_id} expenses={expenses} />
+      )}
 
       {/* Compensation card (Option A — per-trip rate) */}
       <CompensationCard

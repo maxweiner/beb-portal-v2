@@ -9,6 +9,7 @@ import AvatarPicker from './AvatarPicker'
 import Checkbox from '@/components/ui/Checkbox'
 import AddressAutocompleteInput from '@/components/ui/AddressAutocompleteInput'
 import { getCenterModeOverride, setCenterModeOverride, type CenterModeOverride } from '@/lib/centerButtonMode'
+import TripTemplatesSettings from '@/components/expenses/TripTemplatesSettings'
 
 const BEB_THEMES: { id: Theme; label: string; color: string }[] = [
   { id: 'original',   label: 'Original',        color: '#1D6B44' },
@@ -364,6 +365,9 @@ export default function Settings() {
       {(user?.role === 'admin' || user?.role === 'superadmin') && (
         <ExpenseSettings />
       )}
+
+      {/* Trip Templates (partner only — see is_partner) */}
+      {user?.is_partner && <TripTemplatesSettings />}
     </div>
   )
 }

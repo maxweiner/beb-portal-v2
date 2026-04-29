@@ -70,6 +70,18 @@ export interface ExpenseReport {
   comp_rate: number
   grand_total: number
   pdf_url: string | null
+  template_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ExpenseReportTemplate {
+  id: string
+  name: string
+  description: string | null
+  estimated_days: number | null
+  expected_categories: ExpenseCategory[]
+  is_active: boolean
   created_at: string
   updated_at: string
 }
