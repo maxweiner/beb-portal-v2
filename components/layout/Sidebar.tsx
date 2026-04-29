@@ -51,12 +51,12 @@ const BEB_NAV: NavItem[] = [
   { id: 'admin',        label: 'Admin Panel',    iconKey: 'admin',      adminOnly: true },
   { id: 'stores',       label: 'Stores',         iconKey: 'stores',     adminOnly: true },
   { id: 'data-research', label: 'Data Research', iconKey: 'reports',    adminOnly: true },
+  { id: 'reports',      label: 'Reports & Notify', iconKey: 'reports' },
+  { id: 'financials',   label: 'Financials',     iconKey: 'financials', partnerOnly: true },
   { label: 'Tools', section: true },
   { id: 'marketing',    label: 'Marketing',      iconKey: 'marketing' },
   { id: 'shipping',     label: 'Shipping',       iconKey: 'shipping' },
-  { id: 'reports',      label: 'Reports & Notify', iconKey: 'reports' },
   { id: 'expenses',     label: 'Expenses',       iconKey: 'expenses' },
-  { id: 'financials',   label: 'Financials',     iconKey: 'financials', partnerOnly: true },
   { id: 'settings',     label: 'Settings',       iconKey: 'settings' },
 ]
 
@@ -73,12 +73,12 @@ const LIBERTY_NAV: NavItem[] = [
   { id: 'libertyadmin', label: 'Liberty Admin',  iconKey: 'admin',      adminOnly: true },
   { id: 'stores',       label: 'Stores',         iconKey: 'stores',     adminOnly: true },
   { id: 'data-research', label: 'Data Research', iconKey: 'reports',    adminOnly: true },
+  { id: 'reports',      label: 'Reports & Notify', iconKey: 'reports' },
+  { id: 'financials',   label: 'Financials',     iconKey: 'financials', partnerOnly: true },
   { label: 'Tools', section: true },
   { id: 'marketing',    label: 'Marketing',      iconKey: 'marketing' },
   { id: 'shipping',     label: 'Shipping',       iconKey: 'shipping' },
-  { id: 'reports',      label: 'Reports & Notify', iconKey: 'reports' },
   { id: 'expenses',     label: 'Expenses',       iconKey: 'expenses' },
-  { id: 'financials',   label: 'Financials',     iconKey: 'financials', partnerOnly: true },
   { id: 'settings',     label: 'Settings',       iconKey: 'settings' },
 ]
 
