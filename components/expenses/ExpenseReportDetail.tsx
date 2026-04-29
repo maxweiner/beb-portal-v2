@@ -39,6 +39,7 @@ export default function ExpenseReportDetail({
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [approving, setApproving] = useState(false)
+  const [recalling, setRecalling] = useState(false)
   const [paying, setPaying] = useState(false)
   const [pdfBusy, setPdfBusy] = useState(false)
   const [emailBusy, setEmailBusy] = useState(false)
@@ -51,6 +52,7 @@ export default function ExpenseReportDetail({
   const canMutate = (isOwner && report?.status === 'active') || isAdmin
   const canSubmit = isOwner && report?.status === 'active' && expenses.length > 0
   const canApprove = isPartner && report?.status === 'submitted_pending_review'
+  const canRecall  = isOwner && report?.status === 'submitted_pending_review'
   const canMarkPaid = (isPartner || isOwner) && report?.status === 'approved'
 
   const event: Event | undefined = useMemo(
@@ -271,6 +273,25 @@ export default function ExpenseReportDetail({
     setApproving(false)
   }
 
+  async function recallReport() {
+    if (!canRecall || !report) return
+    if (!confirm('Recall this report from review? It will return to active so you can edit and re-submit.')) return
+    setRecalling(true); setError(null)
+    try {
+      const res = await authedFetch(`/api/expense-reports/${report.id}/recall`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(json.error || 'Could not recall.')
+      } else {
+        setReport(p => p ? { ...p, status: 'active', submitted_at: null } : p)
+        broadcastExpenseStatusChanged()
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Network error')
+    }
+    setRecalling(false)
+  }
+
   async function markPaid() {
     if (!canMarkPaid || !report) return
     if (!confirm('Mark this report as paid?')) return
@@ -447,6 +468,14 @@ export default function ExpenseReportDetail({
               {submitting ? 'Submitting…' : 'Submit for Review'}
             </button>
           )}
+          {canRecall && (
+            <button className="btn-outline"
+              onClick={recallReport}
+              disabled={recalling}
+              title="Pulls the report back to active so you can edit and re-submit.">
+              {recalling ? 'Recalling…' : '↩ Recall'}
+            </button>
+          )}
           {canApprove && (
             <button className="btn-primary"
               style={{ background: '#065F46' }}
@@ -475,7 +504,8 @@ export default function ExpenseReportDetail({
       {report.status !== 'active' && (
         <div style={{ marginTop: 12, padding: 12, textAlign: 'center', background: 'var(--cream2)', borderRadius: 8, color: 'var(--ash)', fontSize: 13 }}>
           Locked — this report is {STATUS_LABEL[report.status].toLowerCase()}.
-          {isAdmin && ' (Admins can still edit.)'}
+          {canRecall && ' Use Recall to edit and re-submit.'}
+          {isAdmin && !canRecall && ' (Admins can still edit.)'}
         </div>
       )}
     </div>
