@@ -27,6 +27,11 @@
     {
       "path": "/api/cron/expense-submit-reminders?secret=bebportal2024",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/expense-quiet-hours-flush?secret=bebportal2024",
+      "schedule": "*/15 * * * *"
     }
   ]
 }
+</content>

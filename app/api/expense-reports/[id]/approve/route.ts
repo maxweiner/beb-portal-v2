@@ -13,6 +13,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthedUser } from '@/lib/expenses/serverAuth'
 import { sendAccountantEmailForReport } from '@/lib/expenses/sendAccountantEmail'
+import { nextBusinessHoursMomentEt } from '@/lib/expenses/quietHours'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,10 +56,26 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     .eq('id', params.id)
   if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 })
 
-  // 2. Fire the accountant email (regenerates PDF + attaches + stamps
-  //    accountant_email_sent_at on success).
+  // 2. Fire the accountant email — but only if we're inside business
+  //    hours (Mon-Fri 7am-9pm ET, where the accountant lives). Outside
+  //    that window we stamp accountant_email_send_after with the next
+  //    business-hours moment, and /api/cron/expense-quiet-hours-flush
+  //    picks it up later.
   const url = new URL(req.url)
   const portalBaseUrl = `${url.protocol}//${url.host}`
+
+  const deferUntil = nextBusinessHoursMomentEt()
+  if (deferUntil) {
+    await sb.from('expense_reports')
+      .update({ accountant_email_send_after: deferUntil.toISOString() })
+      .eq('id', params.id)
+    return NextResponse.json({
+      ok: true,
+      approved: true,
+      email: { ok: true, deferred: true, sendAfter: deferUntil.toISOString() },
+    })
+  }
+
   let emailResult
   try {
     emailResult = await sendAccountantEmailForReport(params.id, { portalBaseUrl })
