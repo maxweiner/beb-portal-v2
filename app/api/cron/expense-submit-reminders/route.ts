@@ -57,7 +57,13 @@ async function run(req: Request) {
     return NextResponse.json({ ok: true, eligible: 0 })
   }
 
-  const portalBaseUrl = `${url.protocol}//${url.host}`
+  // Vercel cron requests hit the deployment-hash hostname, not the
+  // production domain — building the link from req.host produced
+  // emails that 404'd. Use the canonical portal URL instead.
+  const portalBaseUrl =
+    process.env.NEXT_PUBLIC_BOOKING_BASE_URL
+    || process.env.NEXT_PUBLIC_APP_URL
+    || 'https://beb-portal-v2.vercel.app'
   const outcomes = []
   for (const r of eligible) {
     const next = (r.reminder_count ?? 0) + 1

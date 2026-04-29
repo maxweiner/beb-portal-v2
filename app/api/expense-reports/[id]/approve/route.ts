@@ -61,8 +61,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   //    that window we stamp accountant_email_send_after with the next
   //    business-hours moment, and /api/cron/expense-quiet-hours-flush
   //    picks it up later.
-  const url = new URL(req.url)
-  const portalBaseUrl = `${url.protocol}//${url.host}`
+  const portalBaseUrl =
+    process.env.NEXT_PUBLIC_BOOKING_BASE_URL
+    || process.env.NEXT_PUBLIC_APP_URL
+    || 'https://beb-portal-v2.vercel.app'
 
   const deferUntil = nextBusinessHoursMomentEt()
   if (deferUntil) {
