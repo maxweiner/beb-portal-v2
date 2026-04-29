@@ -105,13 +105,35 @@ export default function DayEntry() {
   const [pastStartDate, setPastStartDate] = useState('')
   const [creatingSaving, setCreatingSaving] = useState(false)
 
+  // Deep-link intents (Events pill tap) carry an explicit day. Skip the
+  // auto-pick-today effect once for those so it doesn't immediately
+  // overwrite the requested day.
+  const skipAutoDayPickRef = useRef(false)
+
   /* ── Consume deep-link intent from Events pill tap ── */
   useEffect(() => {
     if (!dayEntryIntent) return
+    skipAutoDayPickRef.current = true
     setSelectedEventId(dayEntryIntent.eventId)
     setSelectedDay(dayEntryIntent.day)
     setDayEntryIntent(null)
   }, [dayEntryIntent])
+
+  /* ── Auto-pick today's day when an event is selected ── */
+  // Mobile already does this; desktop used to default to Day 1 every
+  // time. Mirrors the mobile heuristic: if today falls inside the
+  // 3-day event window, jump to that day; otherwise stay on Day 1.
+  useEffect(() => {
+    if (!selectedEventId) return
+    if (skipAutoDayPickRef.current) { skipAutoDayPickRef.current = false; return }
+    const ev = myEvents.find(e => e.id === selectedEventId)
+    if (!ev?.start_date) return
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const start = new Date(ev.start_date + 'T12:00:00'); start.setHours(0, 0, 0, 0)
+    const diff = Math.round((today.getTime() - start.getTime()) / 86400000)
+    setSelectedDay(diff >= 0 && diff <= 2 ? diff + 1 : 1)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedEventId])
 
   /* ── Load existing data whenever event+day changes ── */
   useEffect(() => {
