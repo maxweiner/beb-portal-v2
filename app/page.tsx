@@ -56,6 +56,28 @@ export default function Home() {
     return () => window.removeEventListener('beb:brand-switched', onSwitched)
   }, [])
 
+  // Deep-link from email: `?report=<id>` opens the Expenses tab and asks
+  // it to surface that report. Strips the param so a refresh doesn't keep
+  // re-opening it. Applied once `user` is available so the auth gate
+  // doesn't swallow the link.
+  useEffect(() => {
+    if (!user) return
+    const params = new URLSearchParams(window.location.search)
+    const reportId = params.get('report')
+    if (reportId) {
+      rawSetNav('expenses')
+      // Defer so Expenses is mounted before we ask it to open a report.
+      setTimeout(() => window.dispatchEvent(
+        new CustomEvent('beb:open-expense-report', { detail: { reportId } }),
+      ), 0)
+    }
+    if (params.has('report')) {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('report')
+      window.history.replaceState({}, '', url.toString())
+    }
+  }, [user])
+
   const ConnectionBanner = () => connectionError ? (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
