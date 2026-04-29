@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import { canEditEvent } from '@/lib/permissions'
+import { isEventCurrent } from '@/lib/eventDates'
+import { searchEvents } from '@/lib/eventSearch'
 import EventNotesNudge from '@/components/events/EventNotesNudge'
 import Checkbox from '@/components/ui/Checkbox'
 
@@ -58,6 +60,10 @@ export default function DayEntry() {
 
   const [selectedEventId, setSelectedEventId] = useState('')
   const [selectedDay, setSelectedDay] = useState(1)
+  // Free-text search across the picker. Empty = "current events only";
+  // any value = "all events matching this query" (overrides current
+  // filter, mirroring the Events page search box).
+  const [eventSearch, setEventSearch] = useState('')
 
   // Form state — matches event_days columns
   const [customers, setCustomers] = useState('')
@@ -363,6 +369,27 @@ export default function DayEntry() {
   })
   const removeCheck = (i: number) => setChecks(p => p.filter((_, idx) => idx !== i))
 
+  /* ── Picker: current events by default, full-text override on search ── */
+  // The vast majority of Day Entry use is logging today's data, so the
+  // picker hides everything but in-progress events until the user types.
+  const currentEvents = useMemo(
+    () => myEvents.filter(isEventCurrent),
+    [myEvents],
+  )
+  const pickerResults = useMemo(
+    () => eventSearch.trim()
+      ? searchEvents(myEvents, eventSearch, stores)
+      : currentEvents,
+    [eventSearch, myEvents, currentEvents, stores],
+  )
+  // Auto-select the single current event so the buyer doesn't have to
+  // tap once just to land on the only option.
+  useEffect(() => {
+    if (selectedEventId || eventSearch || currentEvents.length !== 1) return
+    setSelectedEventId(currentEvents[0].id)
+    setSelectedDay(1)
+  }, [currentEvents, selectedEventId, eventSearch])
+
   /* ── Render ── */
   const selectedEvent = myEvents.find(e => e.id === selectedEventId)
   const selectedStore = selectedEvent ? stores.find(s => s.id === selectedEvent.store_id) : undefined
@@ -387,15 +414,24 @@ export default function DayEntry() {
       {/* Event + Day selector */}
       <div className="card mb-5">
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <div className="field" style={{ flex: 2, minWidth: 200 }}>
+          <div className="field" style={{ flex: 2, minWidth: 240 }}>
             <label className="fl">Event</label>
-            <select value={selectedEventId}
-              onChange={e => { setSelectedEventId(e.target.value); setSelectedDay(1) }}>
-              <option value="">Select event…</option>
-              {myEvents.map(ev => (
-                <option key={ev.id} value={ev.id}>{ev.store_name} — {fmt(ev.start_date)}</option>
-              ))}
-            </select>
+            <div style={{ position: 'relative' }}>
+              <input value={eventSearch}
+                onChange={e => setEventSearch(e.target.value)}
+                placeholder="Search by store, city, or state…"
+                style={{ paddingRight: eventSearch ? 30 : 12 }} />
+              {eventSearch && (
+                <button onClick={() => setEventSearch('')}
+                  aria-label="Clear search"
+                  style={{
+                    position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--mist)', fontSize: 16, padding: '0 6px',
+                    lineHeight: 1, fontFamily: 'inherit',
+                  }}>×</button>
+              )}
+            </div>
           </div>
           <div className="field">
             <label className="fl">Day</label>
@@ -409,6 +445,61 @@ export default function DayEntry() {
             <button className="btn-outline btn-sm" onClick={() => setCreatingPastEvent(true)}>
               + Create past event
             </button>
+          )}
+        </div>
+        {/* Picker list */}
+        <div style={{ marginTop: 14 }}>
+          <div style={{
+            fontSize: 11, fontWeight: 800, color: 'var(--mist)',
+            textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8,
+          }}>
+            {eventSearch ? `Search results (${pickerResults.length})` : 'Current events'}
+          </div>
+          {pickerResults.length === 0 ? (
+            <div style={{
+              padding: '14px 16px', fontSize: 13, color: 'var(--mist)',
+              background: 'var(--cream2)', borderRadius: 'var(--r)',
+            }}>
+              {eventSearch
+                ? 'No events match that search.'
+                : 'No events are currently in progress. Search for an event below.'}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {pickerResults.map(ev => {
+                const store = stores.find(s => s.id === ev.store_id)
+                const isSel = ev.id === selectedEventId
+                return (
+                  <button key={ev.id}
+                    onClick={() => { setSelectedEventId(ev.id); setSelectedDay(1) }}
+                    style={{
+                      width: '100%', textAlign: 'left', cursor: 'pointer',
+                      padding: '10px 14px', fontFamily: 'inherit',
+                      background: isSel ? 'var(--green-pale)' : '#fff',
+                      border: `1px solid ${isSel ? 'var(--green3)' : 'var(--pearl)'}`,
+                      borderRadius: 'var(--r)',
+                      display: 'flex', alignItems: 'center', gap: 10,
+                    }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: 14, fontWeight: 700, color: 'var(--ink)',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {ev.store_name}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>
+                        {fmt(ev.start_date)}{store?.city ? ` · ${store.city}${store.state ? ', ' + store.state : ''}` : ''}
+                      </div>
+                    </div>
+                    {isSel && (
+                      <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--green-dark)' }}>
+                        ✓ Selected
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
           )}
         </div>
         {isSuperAdmin && creatingPastEvent && (
