@@ -38,8 +38,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: 'Report is not awaiting review' }, { status: 409 })
   }
 
-  const url = new URL(req.url)
-  const portalBaseUrl = `${url.protocol}//${url.host}`
+  const portalBaseUrl =
+    process.env.NEXT_PUBLIC_BOOKING_BASE_URL
+    || process.env.NEXT_PUBLIC_APP_URL
+    || 'https://beb-portal-v2.vercel.app'
   try {
     const result = await notifyPartnersOfSubmission(params.id, { portalBaseUrl })
     return NextResponse.json(result)
