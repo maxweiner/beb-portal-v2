@@ -26,6 +26,29 @@ import ManifestViewerModal from '@/components/shipping/ManifestViewerModal'
 type Filter = 'thisweek' | 'active' | 'all' | 'current' | 'past' | 'future' | 'days30' | 'days60'
 type Sort = 'date-desc' | 'date-asc' | 'name-asc'
 
+// ── 3-day window math for conflict detection ──
+function eventDayKeys(ev: { start_date?: string | null }): string[] {
+  if (!ev.start_date) return []
+  return [0, 1, 2].map(i => {
+    const d = new Date(ev.start_date + 'T12:00:00')
+    d.setDate(d.getDate() + i)
+    return d.toISOString().slice(0, 10)
+  })
+}
+
+/** Other events where this buyer is already a worker AND the 3-day
+ *  window overlaps `currentEv`. Empty array = no conflict. */
+function findBuyerConflicts(buyerId: string, currentEv: Event, allEvents: Event[]): Event[] {
+  const days = eventDayKeys(currentEv)
+  if (days.length === 0) return []
+  return allEvents.filter(other => {
+    if (other.id === currentEv.id) return false
+    if (!(other.workers || []).some(w => w.id === buyerId)) return false
+    const otherDays = eventDayKeys(other)
+    return days.some(d => otherDays.includes(d))
+  })
+}
+
 // ── Timeout wrapper: prevents permanent UI hangs from supabase deadlocks ──
 // Accepts Supabase query builders (PromiseLike) as well as native Promises
 const withTimeout = (promise: PromiseLike<any>, ms = 10000): Promise<any> => {
@@ -723,14 +746,18 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                         markup so desktop and mobile stay in sync. */}
                     {wOpen && (
                       <div className="m-3 p-3 rounded-xl" style={{ background: 'var(--cream2)', border: '1px solid var(--pearl)' }} onClick={e => e.stopPropagation()}>
-                        <div className="fl">Who Worked This Event{!isAdmin && ' (read only)'}</div>
+                        <div className="fl">Buyers{!isAdmin && ' (read only)'}</div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
                           {(isAdmin ? buyers : buyers.filter(b => evWorkers.some((w: any) => w.id === b.id))).map(b => {
                             const on = evWorkers.some((w: any) => w.id === b.id)
                             const isLead = on && evWorkers[0]?.id === b.id
+                            const conflicts = findBuyerConflicts(b.id, ev, events)
+                            const hasConflict = conflicts.length > 0
+                            const conflictHint = hasConflict ? conflicts.map(c => c.store_name).join(', ') : ''
                             return (
                               <div key={b.id}
-                                style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, padding: '6px 0', minHeight: 36 }}>
+                                title={hasConflict ? `Already on overlapping event(s): ${conflictHint}` : undefined}
+                                style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, padding: '6px 0', minHeight: 36, opacity: hasConflict && !on ? 0.5 : 1 }}>
                                 <div onClick={isAdmin ? () => toggleWorker(ev, b.id, b.name) : undefined}
                                   style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: isAdmin ? 'pointer' : 'default', flex: 1, minWidth: 0 }}>
                                   {isAdmin && (
@@ -742,7 +769,14 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                                       {on && <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 12.5 C6 12.5, 8 17, 9.5 19 C12 14, 16 8, 20 5" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                                     </div>
                                   )}
-                                  <span style={{ fontWeight: on ? 700 : 400, color: on ? 'var(--green-dark)' : 'var(--ash)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</span>
+                                  <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                                    <span style={{ fontWeight: on ? 700 : 400, color: on ? 'var(--green-dark)' : 'var(--ash)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</span>
+                                    {hasConflict && (
+                                      <span style={{ fontSize: 10, color: 'var(--mist)', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        ⚠ overlaps {conflictHint}
+                                      </span>
+                                    )}
+                                  </span>
                                 </div>
                                 {on && isLead && (
                                   <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: 'var(--green)', padding: '3px 8px', borderRadius: 10, letterSpacing: '.04em' }}>⭐ LEAD</span>
@@ -784,7 +818,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                       borderTop: '1px solid var(--cream2)',
                     }} onClick={e => e.stopPropagation()}>
                       {[
-                        { id: 'workers', icon: '👤', label: 'Who worked', onTap: () => setWorkersOpen(wOpen ? null : ev.id) },
+                        { id: 'workers', icon: '👤', label: 'Buyers', onTap: () => setWorkersOpen(wOpen ? null : ev.id) },
                         ...(store?.hold_time_days ? [{ id: 'shipping', icon: '📦', label: 'Shipping', onTap: () => setShippingOpen(shippingOpen === ev.id ? null : ev.id) }] : []),
                         { id: 'manifest', icon: '📷',
                           label: (manifestsByEvent[ev.id]?.length ?? 0) > 0 ? `Manifest (${manifestsByEvent[ev.id]!.length})` : 'Manifest',
@@ -1013,14 +1047,18 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                   {wOpen && (
                     <div onClick={e => e.stopPropagation()} style={{ padding: '14px 20px 0' }}>
                       <div style={{ background: 'var(--cream)', border: '1px solid var(--pearl)', borderRadius: 10, padding: 14 }}>
-                        <div className="fl">Who Worked This Event{!isAdmin && ' (read only)'}</div>
+                        <div className="fl">Buyers{!isAdmin && ' (read only)'}</div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginTop: 8 }}>
                           {(isAdmin ? buyers : buyers.filter(b => evWorkers.some(w => w.id === b.id))).map(b => {
                             const on = evWorkers.some(w => w.id === b.id)
                             const isLead = on && evWorkers[0]?.id === b.id
+                            const conflicts = findBuyerConflicts(b.id, ev, events)
+                            const hasConflict = conflicts.length > 0
+                            const conflictHint = hasConflict ? conflicts.map(c => c.store_name).join(', ') : ''
                             return (
                               <div key={b.id}
-                                style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, padding: '4px 0' }}>
+                                title={hasConflict ? `Already on overlapping event(s): ${conflictHint}` : undefined}
+                                style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, padding: '4px 0', opacity: hasConflict && !on ? 0.5 : 1 }}>
                                 <div onClick={isAdmin ? () => toggleWorker(ev, b.id, b.name) : undefined}
                                   style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: isAdmin ? 'pointer' : 'default', flex: 1, minWidth: 0 }}>
                                   {isAdmin && (
@@ -1032,7 +1070,14 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                                       {on && <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 12.5 C6 12.5, 8 17, 9.5 19 C12 14, 16 8, 20 5" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                                     </div>
                                   )}
-                                  <span style={{ fontWeight: on ? 700 : 400, color: on ? 'var(--green-dark)' : 'var(--ash)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</span>
+                                  <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                                    <span style={{ fontWeight: on ? 700 : 400, color: on ? 'var(--green-dark)' : 'var(--ash)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</span>
+                                    {hasConflict && (
+                                      <span style={{ fontSize: 10, color: 'var(--mist)', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        ⚠ overlaps {conflictHint}
+                                      </span>
+                                    )}
+                                  </span>
                                 </div>
                                 {on && isLead && (
                                   <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: 'var(--green)', padding: '3px 8px', borderRadius: 10, letterSpacing: '.04em' }}>⭐ LEAD</span>
@@ -1076,7 +1121,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                     display: 'flex',
                   }} onClick={e => e.stopPropagation()}>
                     {[
-                      { id: 'workers', icon: '👤', label: 'Who worked', onTap: () => setWorkersOpen(wOpen ? null : ev.id) },
+                      { id: 'workers', icon: '👤', label: 'Buyers', onTap: () => setWorkersOpen(wOpen ? null : ev.id) },
                       ...(store?.hold_time_days ? [{ id: 'shipping', icon: '📦', label: 'Shipping', onTap: () => setShippingOpen(shippingOpen === ev.id ? null : ev.id) }] : []),
                       { id: 'manifest', icon: '📷',
                         label: (manifestsByEvent[ev.id]?.length ?? 0) > 0 ? `Manifest (${manifestsByEvent[ev.id]!.length})` : 'Manifest',
@@ -1281,7 +1326,7 @@ function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
 
           {(ev.workers || []).length > 0 && (
             <div className="card card-accent" style={{ margin: 0 }}>
-              <div className="card-title">Who Worked</div>
+              <div className="card-title">Buyers</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {(ev.workers || []).map((w: any) => (
                   <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>

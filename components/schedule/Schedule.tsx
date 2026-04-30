@@ -968,7 +968,7 @@ function DetailModal({ ev, stores, onClose, isNarrow }: { ev: Event; stores: any
           {/* Workers */}
           {(ev.workers||[]).length > 0 && (
             <div className="card card-accent" style={{ margin: 0 }}>
-              <div className="card-title">Who Worked</div>
+              <div className="card-title">Buyers</div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {(ev.workers||[]).map((w:any) => (
                   <span key={w.id} className="badge badge-jade">{w.name}</span>
