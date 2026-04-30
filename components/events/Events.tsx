@@ -16,6 +16,11 @@ import UnderstaffedBadge from './UnderstaffedBadge'
 import { eventStaffing } from '@/lib/eventStaffing'
 import { eventDisplayName } from '@/lib/eventName'
 import { searchEvents } from '@/lib/eventSearch'
+import {
+  fetchManifestsForEvents, type ShippingManifest,
+} from '@/lib/shipping/manifests'
+import ManifestCaptureModal from '@/components/shipping/ManifestCaptureModal'
+import ManifestViewerModal from '@/components/shipping/ManifestViewerModal'
 
 type Filter = 'thisweek' | 'active' | 'all' | 'current' | 'past' | 'future' | 'days30' | 'days60'
 type Sort = 'date-desc' | 'date-asc' | 'name-asc'
@@ -70,6 +75,11 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   // fight with optimistic re-renders while the partner is typing.
   const [buyersNeededEdits, setBuyersNeededEdits] = useState<Record<string, string>>({})
   const [shippingOpen, setShippingOpen] = useState<string | null>(null)
+  // Manifest photo state — which event's capture or viewer is open,
+  // and a per-event cache of the manifest list (for the count badge).
+  const [manifestCaptureFor, setManifestCaptureFor] = useState<Event | null>(null)
+  const [manifestViewerFor,  setManifestViewerFor]  = useState<Event | null>(null)
+  const [manifestsByEvent,   setManifestsByEvent]   = useState<Record<string, ShippingManifest[]>>({})
   // Force-include the most recently created event in the filtered list
   // (and auto-expand it) regardless of the active filter, so the user
   // can immediately add buyers. Cleared when they change filter/search.
@@ -158,6 +168,29 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   useEffect(() => {
     fetchEvents()
   }, [fetchEvents])
+
+  /* ── Manifest counts for the badge — refresh whenever the events
+       list changes. Best-effort; failure leaves the cache empty. ── */
+  useEffect(() => {
+    if (events.length === 0) return
+    let cancelled = false
+    fetchManifestsForEvents(events.map(e => e.id))
+      .then(rows => {
+        if (cancelled) return
+        const grouped: Record<string, ShippingManifest[]> = {}
+        for (const m of rows) (grouped[m.event_id] ||= []).push(m)
+        setManifestsByEvent(grouped)
+      })
+      .catch(() => { /* silent */ })
+    return () => { cancelled = true }
+  }, [events])
+
+  const refreshEventManifests = async (eventId: string) => {
+    try {
+      const rows = await fetchManifestsForEvents([eventId])
+      setManifestsByEvent(prev => ({ ...prev, [eventId]: rows }))
+    } catch { /* silent */ }
+  }
 
   /* ── Filter & sort events ── */
   const filtered = events.filter(ev => {
@@ -744,6 +777,12 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                       {[
                         { id: 'workers', icon: '👤', label: 'Who worked', onTap: () => setWorkersOpen(wOpen ? null : ev.id) },
                         ...(store?.hold_time_days ? [{ id: 'shipping', icon: '📦', label: 'Shipping', onTap: () => setShippingOpen(shippingOpen === ev.id ? null : ev.id) }] : []),
+                        { id: 'manifest', icon: '📷',
+                          label: (manifestsByEvent[ev.id]?.length ?? 0) > 0 ? `Manifest (${manifestsByEvent[ev.id]!.length})` : 'Manifest',
+                          onTap: () => {
+                            const has = (manifestsByEvent[ev.id] || []).length > 0
+                            if (has) setManifestViewerFor(ev); else setManifestCaptureFor(ev)
+                          } },
                         ...(isAdmin ? [{ id: 'spend', icon: '💰', label: 'Ad spend', onTap: () => setSpendOpen(spendOpen === ev.id ? null : ev.id) }] : []),
                         { id: 'notes',   icon: '📝', label: 'Notes',      onTap: () => setNotesEvent(ev) },
                         { id: 'pdf',     icon: '⤓',  label: 'Download PDF', onTap: () => downloadPdf(ev) },
@@ -1076,6 +1115,40 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
           store={stores.find(s => s.id === notesEvent.store_id)}
           onClose={() => setNotesEvent(null)}
           onNotesChanged={() => setNoteCountsTick(t => t + 1)}
+        />
+      )}
+
+      {/* Manifest capture / viewer — event-scoped; one set rendered for
+          whichever event is open (mutually exclusive). */}
+      {manifestCaptureFor && (
+        <ManifestCaptureModal
+          boxId={manifestCaptureFor.id}
+          boxLabel={eventDisplayName(manifestCaptureFor, stores)}
+          onClose={() => setManifestCaptureFor(null)}
+          onUploaded={() => {
+            const ev = manifestCaptureFor
+            if (ev) refreshEventManifests(ev.id)
+          }}
+        />
+      )}
+      {manifestViewerFor && (
+        <ManifestViewerModal
+          boxLabel={eventDisplayName(manifestViewerFor, stores)}
+          manifests={manifestsByEvent[manifestViewerFor.id] || []}
+          onClose={() => setManifestViewerFor(null)}
+          onAddAnother={() => {
+            const ev = manifestViewerFor
+            setManifestViewerFor(null)
+            if (ev) setManifestCaptureFor(ev)
+          }}
+          onDeleted={(id) => {
+            const ev = manifestViewerFor
+            if (!ev) return
+            setManifestsByEvent(prev => ({
+              ...prev,
+              [ev.id]: (prev[ev.id] || []).filter(x => x.id !== id),
+            }))
+          }}
         />
       )}
     </div>

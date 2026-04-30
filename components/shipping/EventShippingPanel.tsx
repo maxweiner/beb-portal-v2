@@ -150,7 +150,8 @@ export default function EventShippingPanel({
     setShipment(shipRow)
     setDraftJewelry(shipRow.jewelry_box_count)
     setDraftSilver(shipRow.silver_box_count)
-    setBoxes(((b || []) as unknown as BoxRow[]).filter(x => x.shipment_id === shipRow.id))
+    const filteredBoxes = ((b || []) as unknown as BoxRow[]).filter(x => x.shipment_id === shipRow.id)
+    setBoxes(filteredBoxes)
     setLoaded(true)
   }
   useEffect(() => { reload() /* eslint-disable-next-line */ }, [eventId])
@@ -443,14 +444,18 @@ function BoxSection({
           <BoxRowItem key={b.id} box={b} canMutate={canMutate}
             busy={busyBoxId === b.id} refreshing={refreshingBoxId === b.id}
             onAdvance={() => onAdvance(b)} onSetTracking={() => onSetTracking(b)}
-            onRefresh={() => onRefresh(b)} />
+            onRefresh={() => onRefresh(b)}
+          />
         ))}
       </div>
     </div>
   )
 }
 
-function BoxRowItem({ box, canMutate, busy, refreshing, onAdvance, onSetTracking, onRefresh }: {
+function BoxRowItem({
+  box, canMutate, busy, refreshing,
+  onAdvance, onSetTracking, onRefresh,
+}: {
   box: BoxRow
   canMutate: boolean
   busy: boolean
@@ -494,7 +499,7 @@ function BoxRowItem({ box, canMutate, busy, refreshing, onAdvance, onSetTracking
             <span style={{ fontStyle: 'italic' }}>no tracking</span>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           {liveTrackable && (
             <button className="btn-outline btn-xs" disabled={refreshing} onClick={onRefresh}
               title="Refresh carrier status now">{refreshing ? '…' : '↻'}</button>
