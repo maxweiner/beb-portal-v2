@@ -11,6 +11,7 @@ import type { MarketingCampaign, Event } from '@/types'
 import PhaseTimeline from './PhaseTimeline'
 import VDPPlanningSection from './VDPPlanningSection'
 import PostcardPlanningSection from './PostcardPlanningSection'
+import ProofingSection from './ProofingSection'
 
 const FLOW_LABELS = {
   vdp: '📬 VDP Mailers',
@@ -201,10 +202,17 @@ export default function CampaignDetail({ campaign, onBack, onChanged, onDeleted 
         </div>
       )}
 
-      {/* Proofing / Payment / Done — Phases 6–8 */}
-      <div className="card" style={{ padding: 18, color: 'var(--mist)', textAlign: 'center', fontSize: 13, marginTop: 14 }}>
-        Proofing, payment, and done phases ship in Phases 6–8.
-      </div>
+      {/* Proofing — only after planning has been approved */}
+      {(campaign.status === 'proofing' || campaign.status === 'payment' || campaign.status === 'done') && (
+        <ProofingSection campaign={campaign} onChanged={onChanged} />
+      )}
+
+      {/* Payment / Done — Phases 7–8 */}
+      {(campaign.status === 'payment' || campaign.status === 'done') && (
+        <div className="card" style={{ padding: 18, color: 'var(--mist)', textAlign: 'center', fontSize: 13, marginTop: 14 }}>
+          Payment + Done phases ship in Phases 7–8.
+        </div>
+      )}
     </div>
   )
 }

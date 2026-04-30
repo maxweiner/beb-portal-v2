@@ -28,18 +28,22 @@ export interface SendEmailArgs {
   html: string
   from?: string
   attachments?: EmailAttachment[]
+  /** Override the Reply-To header. Used by marketing proof notifications
+   *  to route replies into the inbound webhook. */
+  replyTo?: string
 }
 
 /**
  * Send a transactional email via Resend. Silent no-op if no API key is
  * configured. Returns the Resend message id on success or throws on error.
  */
-export async function sendEmail({ to, subject, html, from, attachments }: SendEmailArgs): Promise<string | null> {
+export async function sendEmail({ to, subject, html, from, attachments, replyTo }: SendEmailArgs): Promise<string | null> {
   const key = await loadKey()
   if (!key) return null
 
   const body: Record<string, unknown> = { from: from || DEFAULT_FROM, to, subject, html }
   if (attachments && attachments.length > 0) body.attachments = attachments
+  if (replyTo) body.reply_to = replyTo
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
