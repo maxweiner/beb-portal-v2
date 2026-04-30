@@ -369,6 +369,25 @@ export default function DayEntry() {
     { enabled: hydratedRef.current && !!selectedEventId && !saving, delay: 1000 },
   )
 
+  // "Submitted" means the row exists AND has meaningful day data — not
+  // just an empty autosaved row. Drives the button label + the resend
+  // confirm prompt.
+  const isSubmitted = !!existingRow && (
+    (Number(existingRow.customers) || 0)
+    + (Number(existingRow.purchases) || 0)
+    + (Number(existingRow.dollars10) || 0)
+    + (Number(existingRow.dollars5)  || 0)
+  ) > 0
+
+  const handleSubmitClick = async () => {
+    if (saving) return
+    // Re-submission: confirm before re-firing. Wording per user request.
+    if (isSubmitted && !window.confirm('Are you sure you want to resend results, they have already been sent')) {
+      return
+    }
+    await submit()
+  }
+
   const submit = async () => {
     if (saving) return
     if (!selectedEventId) return
@@ -989,8 +1008,12 @@ export default function DayEntry() {
               {/* Submit */}
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                 <AutosaveIndicator status={autosaveStatus} />
-                <button className="btn-primary" onClick={submit} disabled={saving} style={{ flex: 1 }}>
-                  {saving ? 'Submitting…' : existingRow ? `✓ Re-Submit Day ${selectedDay}` : `✓ Submit Day ${selectedDay}`}
+                <button className="btn-primary" onClick={handleSubmitClick} disabled={saving} style={{ flex: 1 }}>
+                  {saving
+                    ? 'Submitting…'
+                    : isSubmitted
+                      ? `✓ Submitted Day ${selectedDay}`
+                      : `Submit Day ${selectedDay}`}
                 </button>
               </div>
             </>

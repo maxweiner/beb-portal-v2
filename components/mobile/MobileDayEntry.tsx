@@ -420,6 +420,16 @@ export default function MobileDayEntry() {
     { enabled: !!selectedEventId && hydratedRef.current && !saving, delay: 1000 }
   )
 
+  // Wraps handleSubmit with a confirm-resend prompt when the day has
+  // already been submitted. Wording per user request.
+  const onSubmitClick = async () => {
+    if (saving) return
+    if (submitted && !window.confirm('Are you sure you want to resend results, they have already been sent')) {
+      return
+    }
+    await handleSubmit()
+  }
+
   const handleSubmit = async () => {
     if (saving) return              // guard against rapid double-taps
     if (!selectedEventId) return
@@ -1004,7 +1014,7 @@ export default function MobileDayEntry() {
       }}>
         <div style={{ maxWidth: 540, margin: '0 auto', display: 'flex', gap: 10, alignItems: 'center' }}>
           <div style={{ flexShrink: 0 }}><AutosaveIndicator status={autosaveStatus} /></div>
-          <button onClick={handleSubmit} disabled={saving || !selectedEventId} style={{
+          <button onClick={onSubmitClick} disabled={saving || !selectedEventId} style={{
             flex: 1, minHeight: 52, borderRadius: 14, border: 'none',
             background: saving ? 'var(--mist)' : 'var(--gradient-primary)', color: '#FFF',
             fontWeight: 900, fontSize: 16, cursor: saving ? 'default' : 'pointer',
@@ -1014,10 +1024,8 @@ export default function MobileDayEntry() {
             {saving
               ? 'Saving…'
               : submitted
-                ? `✓ Re-Submit Day ${selectedDay}`
-                : existingEntry
-                  ? `✓ Submit Day ${selectedDay}`
-                  : `✓ Submit Day ${selectedDay}`}
+                ? `✓ Submitted Day ${selectedDay}`
+                : `Submit Day ${selectedDay}`}
           </button>
         </div>
       </div>
