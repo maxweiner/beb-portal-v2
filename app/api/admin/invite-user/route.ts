@@ -22,7 +22,7 @@ import { getAuthedUser } from '@/lib/expenses/serverAuth'
 
 export const dynamic = 'force-dynamic'
 
-const ALLOWED_ROLES = ['buyer', 'admin', 'superadmin', 'pending', 'marketing'] as const
+const ALLOWED_ROLES = ['buyer', 'admin', 'superadmin', 'pending', 'marketing', 'accounting'] as const
 type AllowedRole = typeof ALLOWED_ROLES[number]
 
 function admin() {
