@@ -549,6 +549,20 @@ function GCalSyncSettings({ brand }: { brand: 'beb' | 'liberty' }) {
   const [syncResult, setSyncResult] = useState<string | null>(null)
   const [activity, setActivity] = useState<any[]>([])
   const [failedCount, setFailedCount] = useState(0)
+  // Recent activity is long; collapsed by default. Per-brand persistence
+  // via localStorage so each card remembers its state independently.
+  const [activityOpen, setActivityOpen] = useState(false)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`gcal-activity-open-${brand}`)
+      if (saved === '1') setActivityOpen(true)
+    } catch { /* ignore */ }
+  }, [brand])
+  function toggleActivity() {
+    const next = !activityOpen
+    setActivityOpen(next)
+    try { localStorage.setItem(`gcal-activity-open-${brand}`, next ? '1' : '0') } catch { /* ignore */ }
+  }
 
   const reload = async () => {
     const [{ data: settings }, { data: recent }, { count: failed }] = await Promise.all([
@@ -686,36 +700,53 @@ function GCalSyncSettings({ brand }: { brand: 'beb' | 'liberty' }) {
       </div>
 
       <div style={{ borderTop: '1px solid var(--cream2)', paddingTop: 10, marginTop: 10 }}>
-        <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
+        <button onClick={toggleActivity} style={{
+          display: 'block', width: '100%', textAlign: 'left',
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          padding: 0, fontFamily: 'inherit',
+          fontSize: 11, fontWeight: 800, color: 'var(--ash)',
+          textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6,
+          whiteSpace: 'normal',
+        }}>
+          <span style={{
+            display: 'inline-block', width: 10, marginRight: 4,
+            transition: 'transform .15s ease',
+            transform: activityOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+          }}>▶</span>
           Recent activity
-        </div>
-        {activity.length === 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--mist)' }}>No syncs yet.</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {activity.map(r => (
-              <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '4px 0' }}>
-                <span style={{
-                  display: 'inline-block', minWidth: 64, textAlign: 'center',
-                  padding: '1px 6px', borderRadius: 4, fontSize: 10, fontWeight: 800,
-                  background: STATUS_BG[r.status] || 'var(--cream2)',
-                  color: STATUS_FG[r.status] || 'var(--mist)',
-                  textTransform: 'uppercase',
-                }}>{r.status}</span>
-                <span style={{ minWidth: 60, color: 'var(--mist)', textTransform: 'uppercase', fontSize: 10, fontWeight: 700 }}>{r.action}</span>
-                <span style={{ flex: 1, minWidth: 0, color: 'var(--ash)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {r.last_error || ''}
-                </span>
-                <span style={{ color: 'var(--mist)', fontSize: 10 }}>{fmtRel(r.processed_at || r.created_at)}</span>
-                {r.status === 'failed' && (
-                  <button onClick={() => retryRow(r.id)} style={{
-                    background: 'transparent', border: 'none', color: 'var(--green-dark)',
-                    cursor: 'pointer', fontSize: 11, fontWeight: 700, textDecoration: 'underline',
-                  }}>Retry</button>
-                )}
-              </div>
-            ))}
-          </div>
+          <span style={{ marginLeft: 6, fontWeight: 600, color: 'var(--mist)' }}>
+            ({activity.length}{failedCount > 0 ? `, ${failedCount} failed` : ''})
+          </span>
+        </button>
+        {activityOpen && (
+          activity.length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--mist)' }}>No syncs yet.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {activity.map(r => (
+                <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '4px 0' }}>
+                  <span style={{
+                    display: 'inline-block', minWidth: 64, textAlign: 'center',
+                    padding: '1px 6px', borderRadius: 4, fontSize: 10, fontWeight: 800,
+                    background: STATUS_BG[r.status] || 'var(--cream2)',
+                    color: STATUS_FG[r.status] || 'var(--mist)',
+                    textTransform: 'uppercase',
+                  }}>{r.status}</span>
+                  <span style={{ minWidth: 60, color: 'var(--mist)', textTransform: 'uppercase', fontSize: 10, fontWeight: 700 }}>{r.action}</span>
+                  <span style={{ flex: 1, minWidth: 0, color: 'var(--ash)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {r.last_error || ''}
+                  </span>
+                  <span style={{ color: 'var(--mist)', fontSize: 10 }}>{fmtRel(r.processed_at || r.created_at)}</span>
+                  {r.status === 'failed' && (
+                    <button onClick={() => retryRow(r.id)} style={{
+                      background: 'transparent', border: 'none', color: 'var(--green-dark)',
+                      cursor: 'pointer', fontSize: 11, fontWeight: 700, textDecoration: 'underline',
+                    }}>Retry</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )
         )}
       </div>
     </div>
