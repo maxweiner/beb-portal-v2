@@ -829,10 +829,11 @@ export default function MobileDayEntry() {
                         style={{ ...compactInputStyle, paddingLeft: 18 }} />
                     </div>
 
-                    {/* Rate pills: 5% / 0%. 10% is implicit when neither is on. */}
+                    {/* Rate pills: 5% / 0%, stacked vertically to save horizontal
+                        space on narrow phones. 10% is implicit when neither is on. */}
                     <div style={{
                       gridRow: 1, gridColumn: amountCol + 1,
-                      display: 'flex', gap: 4,
+                      display: 'flex', flexDirection: 'column', gap: 3,
                     }}>
                       <button onClick={() => setRate(c.commission_rate === 5 ? 10 : 5)}
                         title="5% commission rate"
