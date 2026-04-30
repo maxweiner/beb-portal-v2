@@ -11,6 +11,7 @@ import type { MarketingCampaign, Event } from '@/types'
 import PhaseTimeline from './PhaseTimeline'
 import VDPPlanningSection from './VDPPlanningSection'
 import PostcardPlanningSection from './PostcardPlanningSection'
+import NewspaperPlanningSection from './NewspaperPlanningSection'
 import ProofingSection from './ProofingSection'
 import PaymentSection from './PaymentSection'
 import DoneSection from './DoneSection'
@@ -201,9 +202,7 @@ export default function CampaignDetail({ campaign, onBack, onChanged, onDeleted 
         <PostcardPlanningSection campaign={campaign} onChanged={onChanged} />
       )}
       {campaign.flow_type === 'newspaper' && (
-        <div className="card" style={{ padding: 18, color: 'var(--mist)', textAlign: 'center', fontSize: 13 }}>
-          Newspaper flow is out of scope for v1.
-        </div>
+        <NewspaperPlanningSection campaign={campaign} onChanged={onChanged} />
       )}
 
       {/* Proofing — only after planning has been approved */}

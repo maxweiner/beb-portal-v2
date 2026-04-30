@@ -114,6 +114,22 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       selected_filter_max_proximity_miles: maxProx,
     }, { onConflict: 'campaign_id' })
     if (detErr) return NextResponse.json({ error: detErr.message }, { status: 500 })
+  } else if (campaign.flow_type === 'newspaper') {
+    // Newspaper planning is just the publication name. Approval flow
+    // is the same single-approver loop as VDP/Postcard.
+    const publication = (body?.publication_name ?? '').toString().trim()
+    if (!publication) {
+      return NextResponse.json({ error: 'publication_name is required.' }, { status: 400 })
+    }
+    const { error: detErr } = await sb.from('newspaper_campaign_details').upsert({
+      campaign_id: campaign.id,
+      publication_name: publication,
+      submitted_at: nowIso,
+      submitted_by: actor.userId ?? null,
+      approved_at: null,
+      approved_by: null,
+    }, { onConflict: 'campaign_id' })
+    if (detErr) return NextResponse.json({ error: detErr.message }, { status: 500 })
   } else {
     return NextResponse.json({ error: `Submit not implemented for flow_type=${campaign.flow_type}` }, { status: 400 })
   }
