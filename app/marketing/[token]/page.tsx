@@ -122,6 +122,24 @@ export default function MagicCampaignPage({ params }: { params: { token: string 
         }}>{actionResult}</div>
       )}
 
+      {/* Planning input — shown when the campaign is awaiting submission
+          for a flow that has a magic-link planning UI. */}
+      {(c.status === 'setup' || (c.status === 'planning' && c.sub_status === 'awaiting_planning_submission')) && (
+        <PlanningInput campaign={c} token={token} onSubmitted={async () => {
+          setActionResult('✓ Submitted for approval.')
+          await load()
+        }} />
+      )}
+
+      {c.status === 'planning' && c.sub_status === 'awaiting_planning_approval' && (
+        <div style={{
+          background: '#fff', border: '1px solid #e8e0d0', borderRadius: 12, padding: 14,
+          marginBottom: 14, fontSize: 13, color: '#444', textAlign: 'center',
+        }}>
+          📤 Submitted — awaiting approval from the BEB team. You'll get an email once they decide.
+        </div>
+      )}
+
       {/* Mark as Paid is the most common Collected-via-magic-link
           action. Show it prominently when applicable. */}
       {c.status === 'payment' && c.sub_status === 'awaiting_paid_mark' && (
@@ -185,12 +203,12 @@ export default function MagicCampaignPage({ params }: { params: { token: string 
         <MarketingQrSection campaignId={c.id} magicToken={token} />
       </div>
 
-      {/* Always-visible footer note about additional actions */}
+      {/* Always-visible footer note about portal-only actions */}
       <div style={{
         background: '#fff', border: '1px solid #e8e0d0', borderRadius: 12, padding: 14,
         fontSize: 12, color: '#666', marginTop: 8,
       }}>
-        Need to upload proofs, submit planning, or comment? Open the BEB Portal directly — magic-link uploads land in a follow-up. Approver actions (Approve / Request Revision / Authorize Payment) require a portal login.
+        Proof uploads + comments still require a portal login. Approver actions (Approve / Request Revision / Authorize Payment) require a portal login too.
       </div>
 
       <div style={{ marginTop: 24, textAlign: 'center', color: '#888', fontSize: 11 }}>
@@ -303,6 +321,157 @@ function PhaseDots({ status, subStatus }: { status: string; subStatus: string | 
           borderRadius: 6, textAlign: 'center',
           fontSize: 13, fontWeight: 800,
         }}>🎉 All set to Buy, Win Win Deals for All</div>
+      )}
+    </div>
+  )
+}
+
+function PlanningInput({ campaign, token, onSubmitted }: {
+  campaign: any
+  token: string
+  onSubmitted: () => Promise<void> | void
+}) {
+  const [vdpCount, setVdpCount] = useState('')
+  const [zips, setZips] = useState('')
+  const [publication, setPublication] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  function parseZips(raw: string): string[] {
+    return Array.from(new Set(
+      (raw || '').split(/[\s,;\r\n\t]+/).map(z => z.trim()).filter(z => /^\d{5}$/.test(z))
+    ))
+  }
+
+  async function submit(body: Record<string, unknown>) {
+    setBusy(true); setError(null)
+    try {
+      const res = await fetch(`/api/marketing/campaigns/${campaign.id}/submit-planning`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, magic_token: token }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(json.error || `Failed (${res.status})`)
+      } else {
+        await onSubmitted()
+      }
+    } catch (e: any) {
+      setError(e?.message || 'Network error')
+    }
+    setBusy(false)
+  }
+
+  const flow = campaign.flow_type
+  const reviewerComment = campaign.sub_status === 'awaiting_planning_submission'
+    // sub_status sticks at "submission" after a request-changes; the
+    // reviewer comment lives on the details row, not the campaign,
+    // so we surface a hint rather than the full comment here.
+    ? 'BEB asked for changes — adjust below and re-submit.'
+    : null
+
+  const FLOW_LABELS: Record<string, string> = { vdp: 'VDP', postcard: 'Postcard', newspaper: 'Newspaper' }
+  const flowLabel = FLOW_LABELS[flow] || flow
+
+  return (
+    <div style={{
+      background: '#fff', border: '1px solid #e8e0d0', borderRadius: 12, padding: 18, marginBottom: 14,
+    }}>
+      <div style={{ fontSize: 16, fontWeight: 900, color: '#1a1a1a', marginBottom: 4 }}>
+        Submit Planning — {flowLabel}
+      </div>
+      <div style={{ fontSize: 13, color: '#666', marginBottom: 14 }}>
+        Fill in the planning details below and submit for BEB approval.
+      </div>
+
+      {reviewerComment && (
+        <div style={{
+          background: '#fef9c3', color: '#854d0e', border: '1px solid #fde68a',
+          borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 14,
+        }}>{reviewerComment}</div>
+      )}
+
+      {error && (
+        <div style={{
+          background: '#fef2f2', color: '#7f1d1d', border: '1px solid #fecaca',
+          borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 14,
+        }}>{error}</div>
+      )}
+
+      {flow === 'vdp' && (
+        <>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#666', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+              # of VDPs to mail
+            </label>
+            <input type="number" min={0} value={vdpCount}
+              onChange={e => setVdpCount(e.target.value)} placeholder="0"
+              style={{ width: 200, padding: '8px 12px', fontSize: 14, border: '1.5px solid #e8e0d0', borderRadius: 6 }} />
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#666', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+              Zip codes (comma, space, or new-line separated)
+            </label>
+            <textarea rows={5} value={zips} onChange={e => setZips(e.target.value)}
+              placeholder="68106, 68107, 68108"
+              style={{ width: '100%', padding: '8px 12px', fontSize: 14, border: '1.5px solid #e8e0d0', borderRadius: 6, fontFamily: 'inherit' }} />
+            <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+              {parseZips(zips).length} valid 5-digit zip code(s)
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              const count = Number(vdpCount)
+              if (!Number.isFinite(count) || count < 0) { setError('Enter a non-negative VDP count.'); return }
+              const list = parseZips(zips)
+              if (list.length === 0) { setError('Enter at least one valid 5-digit zip code.'); return }
+              submit({ vdp_count: count, zip_codes: list })
+            }}
+            disabled={busy}
+            style={{
+              background: busy ? '#888' : '#2D3B2D', color: '#fff',
+              padding: '10px 22px', borderRadius: 8, border: 'none',
+              fontWeight: 700, fontSize: 14, cursor: busy ? 'wait' : 'pointer',
+              fontFamily: 'inherit',
+            }}>
+            {busy ? 'Submitting…' : '📤 Submit for Approval'}
+          </button>
+        </>
+      )}
+
+      {flow === 'newspaper' && (
+        <>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#666', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+              Publication name
+            </label>
+            <input type="text" value={publication} onChange={e => setPublication(e.target.value)}
+              placeholder='e.g. "Omaha World-Herald — Sunday edition"'
+              style={{ width: '100%', padding: '8px 12px', fontSize: 14, border: '1.5px solid #e8e0d0', borderRadius: 6 }} />
+          </div>
+          <button
+            onClick={() => {
+              if (!publication.trim()) { setError('Publication name is required.'); return }
+              submit({ publication_name: publication.trim() })
+            }}
+            disabled={busy || !publication.trim()}
+            style={{
+              background: busy || !publication.trim() ? '#888' : '#2D3B2D', color: '#fff',
+              padding: '10px 22px', borderRadius: 8, border: 'none',
+              fontWeight: 700, fontSize: 14, cursor: busy ? 'wait' : 'pointer',
+              fontFamily: 'inherit',
+            }}>
+            {busy ? 'Submitting…' : '📤 Submit for Approval'}
+          </button>
+        </>
+      )}
+
+      {flow === 'postcard' && (
+        <div style={{ fontSize: 13, color: '#666', lineHeight: 1.5 }}>
+          Postcard planning needs the address-list CSV uploaded against the store's master list.
+          The CSV upload requires a portal login. Please log in to the BEB Portal to handle this campaign,
+          or contact your BEB rep to send a portal invite.
+        </div>
       )}
     </div>
   )
