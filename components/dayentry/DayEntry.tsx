@@ -978,32 +978,69 @@ export default function DayEntry() {
               </div>
 
               {/* Day-3 only: Store commission check (record-only — never totaled) */}
-              {selectedDay === 3 && (
-                <div className="card card-accent mb-4" style={{ margin: 0 }}>
-                  <div className="card-title" style={{ marginBottom: 4 }}>Store Commission Check</div>
-                  <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 14 }}>
-                    Record-only — not added to any totals. Shows on the Event Recap PDF.
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(140px, 200px) minmax(140px, 220px)', gap: 14 }}>
-                    <div>
-                      <label className="fl">Check #</label>
-                      <input type="text" value={storeCommCheckNum}
-                        onChange={e => setStoreCommCheckNum(e.target.value)}
-                        placeholder="—" />
+              {selectedDay === 3 && (() => {
+                // Event-wide totals: days 1+2 from saved DB rows, day 3 from
+                // the in-form values so the totals stay live as the buyer types.
+                const otherDays = (selectedEvent?.days || []).filter(d => d.day_number !== 3)
+                const sum10 = otherDays.reduce((s, d) => s + (Number(d.dollars10) || 0), 0) + nF(dollars10)
+                const sum5  = otherDays.reduce((s, d) => s + (Number(d.dollars5)  || 0), 0) + nF(dollars5)
+                const eventSpend = sum10 + sum5
+                const eventCommission = sum10 * 0.10 + sum5 * 0.05
+                const fmtMoney = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                return (
+                  <div className="card card-accent mb-4" style={{ margin: 0 }}>
+                    <div className="card-title" style={{ marginBottom: 4 }}>Store Commission Check</div>
+                    <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 14 }}>
+                      Record-only — not added to any totals. Shows on the Event Recap PDF.
                     </div>
-                    <div>
-                      <label className="fl">Amount</label>
-                      <div style={{ position: 'relative' }}>
-                        <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)' }}>$</span>
-                        <input type="number" min="0" step="0.01" value={storeCommCheckAmt}
-                          onChange={e => setStoreCommCheckAmt(e.target.value)}
-                          placeholder="0.00"
-                          style={{ paddingLeft: 22 }} />
+
+                    {/* Event totals reference */}
+                    <div style={{
+                      background: 'var(--cream2)', border: '1px solid var(--pearl)', borderRadius: 8,
+                      padding: '10px 14px', marginBottom: 14,
+                      display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14,
+                    }}>
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                          Total Event Spend
+                        </div>
+                        <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--ink)' }}>{fmtMoney(eventSpend)}</div>
+                        <div style={{ fontSize: 10, color: 'var(--mist)' }}>
+                          $@10% {fmtMoney(sum10)} · $@5% {fmtMoney(sum5)}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                          Commission Due
+                        </div>
+                        <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--green-dark)' }}>{fmtMoney(eventCommission)}</div>
+                        <div style={{ fontSize: 10, color: 'var(--mist)' }}>
+                          10% + 5% bands · 0% excluded
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(140px, 200px) minmax(140px, 220px)', gap: 14 }}>
+                      <div>
+                        <label className="fl">Check #</label>
+                        <input type="text" value={storeCommCheckNum}
+                          onChange={e => setStoreCommCheckNum(e.target.value)}
+                          placeholder="—" />
+                      </div>
+                      <div>
+                        <label className="fl">Amount</label>
+                        <div style={{ position: 'relative' }}>
+                          <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)' }}>$</span>
+                          <input type="number" min="0" step="0.01" value={storeCommCheckAmt}
+                            onChange={e => setStoreCommCheckAmt(e.target.value)}
+                            placeholder="0.00"
+                            style={{ paddingLeft: 22 }} />
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )
+              })()}
 
               {/* Submit */}
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
