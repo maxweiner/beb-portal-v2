@@ -1,4 +1,4 @@
-export type Role = 'buyer' | 'admin' | 'superadmin' | 'pending'
+export type Role = 'buyer' | 'admin' | 'superadmin' | 'pending' | 'marketing_partner'
 
 export interface User {
   id: string

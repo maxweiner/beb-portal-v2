@@ -43,6 +43,16 @@ export default function Home() {
   const setNav = (n: NavPage) => { rawSetNav(n); setNavKey(k => k + 1) }
   const [isMobile, setIsMobile] = useState(false)
 
+  // External Collected accounts (marketing_partner role) are scoped to
+  // the Marketing module only. Force nav=marketing on every render so
+  // direct deep-links to other sections can't bypass the sidebar
+  // restriction.
+  useEffect(() => {
+    if (user?.role === 'marketing_partner' && nav !== 'marketing') {
+      rawSetNav('marketing')
+    }
+  }, [user?.role, nav])
+
   useEffect(() => {
     setIsMobile(shouldUseMobile())
   }, [])

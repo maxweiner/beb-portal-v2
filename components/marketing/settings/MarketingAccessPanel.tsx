@@ -9,7 +9,7 @@
 // let superadmins update other users' rows. The existing AdminPanel
 // pattern proves that's already the case.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { User } from '@/types'
 
@@ -113,9 +113,104 @@ export default function MarketingAccessPanel() {
       </div>
 
       <div style={{ marginTop: 10, fontSize: 11, color: 'var(--mist)', fontStyle: 'italic' }}>
-        Tip: external Collected Concepts users get marketing access without any other portal permissions.
-        Create their account first (Admin Panel → Users), then toggle them on here.
+        Existing users above can be granted access with a single toggle. To create a brand-new external Collected account, use Invite below.
       </div>
+
+      <InvitePartnerCard onInvited={() => {
+        // Reload users so the new account appears in the list.
+        ;(async () => {
+          const { data } = await supabase.from('users')
+            .select('id, name, email, role, active, marketing_access')
+            .eq('active', true).order('name')
+          setUsers((data ?? []) as User[])
+        })()
+      }} />
+    </div>
+  )
+}
+
+function InvitePartnerCard({ onInvited }: { onInvited: () => void }) {
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const formRef = useRef<HTMLDivElement>(null)
+
+  async function invite() {
+    setBusy(true); setError(null); setResult(null)
+    try {
+      const { data: sess } = await supabase.auth.getSession()
+      const token = sess.session?.access_token
+      const res = await fetch('/api/marketing/users/invite-partner', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ name: name.trim(), email: email.trim() }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(json.error || `Failed (${res.status})`)
+      } else {
+        if (json.upgraded) {
+          setResult(`✓ ${email} already had an account — upgraded to marketing_partner with marketing access.`)
+        } else {
+          setResult(`✓ Invite sent to ${email}. They'll receive a "set your password" email from Supabase.`)
+        }
+        setName(''); setEmail('')
+        onInvited()
+      }
+    } catch (e: any) { setError(e?.message || 'Network error') }
+    setBusy(false)
+  }
+
+  return (
+    <div ref={formRef} style={{
+      marginTop: 16, padding: 14,
+      background: 'var(--cream2)', border: '1px solid var(--pearl)', borderRadius: 8,
+    }}>
+      <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink)', marginBottom: 4 }}>
+        Invite a marketing partner
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--mist)', marginBottom: 10 }}>
+        Sends a Supabase "set your password" invite. The new account gets <code>role=marketing_partner</code> and only sees the Marketing module — no Day Entry, no Events, no other portal sections.
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'end' }}>
+        <div>
+          <label className="fl">Name</label>
+          <input type="text" value={name} onChange={e => setName(e.target.value)}
+            placeholder='e.g. "Joe at Collected"' style={{ fontSize: 13 }} />
+        </div>
+        <div>
+          <label className="fl">Email</label>
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+            placeholder="joe@collectedconcepts.com" style={{ fontSize: 13 }} />
+        </div>
+        <button className="btn-primary btn-sm" onClick={invite}
+          disabled={busy || !email.trim() || !name.trim()}>
+          {busy ? 'Inviting…' : '+ Invite'}
+        </button>
+      </div>
+
+      {result && (
+        <div style={{
+          marginTop: 10,
+          background: 'var(--green-pale)', color: 'var(--green-dark)',
+          border: '1px solid var(--green3)', borderRadius: 6,
+          padding: '8px 12px', fontSize: 12, fontWeight: 700,
+        }}>{result}</div>
+      )}
+      {error && (
+        <div style={{
+          marginTop: 10,
+          background: 'var(--red-pale)', color: '#7f1d1d',
+          border: '1px solid #fecaca', borderRadius: 6,
+          padding: '8px 12px', fontSize: 12,
+        }}>{error}</div>
+      )}
     </div>
   )
 }

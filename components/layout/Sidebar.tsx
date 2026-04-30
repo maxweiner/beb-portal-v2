@@ -95,9 +95,14 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
   const isSuperadmin = user?.role === 'superadmin'
   const isPartner = !!user?.is_partner
+  const isMarketingPartner = user?.role === 'marketing_partner'
   const hasLibertyAccess = user?.liberty_access === true
   const isLiberty = brand === 'liberty'
-  const NAV_ITEMS = isLiberty ? LIBERTY_NAV : BEB_NAV
+  // External Collected accounts (marketing_partner role) only see the
+  // Marketing nav item — every other module is hidden.
+  const NAV_ITEMS = isMarketingPartner
+    ? [{ id: 'marketing' as NavPage, label: 'Marketing', iconKey: 'marketing' }]
+    : (isLiberty ? LIBERTY_NAV : BEB_NAV)
 
   // Per-section collapse state, persisted to localStorage. Default = all open.
   const { count: pendingApprovalCount } = usePendingApprovals()
