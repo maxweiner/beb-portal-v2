@@ -23,6 +23,12 @@ interface Props {
   /** Box labels already used on this event (e.g. ["J1", "J2"]).
    *  Drives the smart-default + "next box" suggestion. */
   existingBoxLabels: string[]
+  /** Planned jewelry box count from the event's shipment row. The
+   *  picker shows J1..J{jewelry}. If 0 / undefined (no shipment row,
+   *  e.g. no-hold store), the picker falls back to J1-J5 so users
+   *  still have a starting point. We don't make manifests for silver
+   *  boxes, so silver is intentionally absent. */
+  plannedJewelryBoxes?: number
   /** Pre-fill the box label input. Used by "Add another" to default to
    *  the box the user was just viewing. */
   initialBoxLabel?: string | null
@@ -30,7 +36,26 @@ interface Props {
   onUploaded: (m: ShippingManifest) => void
 }
 
-const PRESET_LABELS = ['J1', 'J2', 'J3', 'J4', 'J5', 'S1', 'S2'] as const
+const FALLBACK_J = 5
+
+/** Build the preset pill set for the picker. Uses the event's planned
+ *  jewelry count when provided; otherwise falls back to J1-J5. Always
+ *  includes any labels already used on this event so out-of-range or
+ *  custom values stay visible in the pill row. Silver is intentionally
+ *  absent — buyers don't make manifests for silver boxes. */
+function buildPresetLabels(opts: {
+  jewelry?: number
+  existing: string[]
+}): string[] {
+  const j = (opts.jewelry && opts.jewelry > 0) ? opts.jewelry : FALLBACK_J
+  const labels: string[] = []
+  for (let i = 1; i <= j; i++) labels.push('J' + i)
+  for (const e of opts.existing) {
+    const trimmed = e.trim()
+    if (trimmed && !labels.includes(trimmed)) labels.push(trimmed)
+  }
+  return labels
+}
 
 /** Suggest the next J box if no others are present, otherwise the
  *  highest-numbered J + 1. Falls back to "J1". */
@@ -46,8 +71,13 @@ function suggestNextLabel(existing: string[]): string {
 
 export default function ManifestCaptureModal({
   boxId, boxLabel, existingBoxLabels, initialBoxLabel,
+  plannedJewelryBoxes,
   onClose, onUploaded,
 }: Props) {
+  const presetLabels = buildPresetLabels({
+    jewelry: plannedJewelryBoxes,
+    existing: existingBoxLabels,
+  })
   const inputRef = useRef<HTMLInputElement>(null)
   const isNarrow = useIsNarrow()
   const [scanStyle, setScanStyle] = useState(true)
@@ -152,7 +182,7 @@ export default function ManifestCaptureModal({
             textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6,
           }}>Box</label>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
-            {PRESET_LABELS.map(l => {
+            {presetLabels.map(l => {
               const sel = labelDraft.trim().toUpperCase() === l
               const used = existingBoxLabels.some(x => x.toUpperCase() === l)
               return (

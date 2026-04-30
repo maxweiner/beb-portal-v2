@@ -22,6 +22,30 @@ export interface ShippingManifest {
 
 const COLS = 'id, event_id, box_id, box_label, file_path, file_size_bytes, is_scan_style, uploaded_by, uploaded_at, deleted_at'
 
+export interface EventBoxCounts { jewelry: number; silver: number }
+
+/**
+ * Per-event jewelry / silver box counts, sourced from event_shipments.
+ * Events without a shipment row (typically "no hold" stores) are
+ * absent from the result map — callers should treat that as 0 / 0.
+ */
+export async function fetchEventBoxCounts(eventIds: string[]): Promise<Record<string, EventBoxCounts>> {
+  if (eventIds.length === 0) return {}
+  const { data, error } = await supabase
+    .from('event_shipments')
+    .select('event_id, jewelry_box_count, silver_box_count')
+    .in('event_id', eventIds)
+  if (error) throw error
+  const out: Record<string, EventBoxCounts> = {}
+  for (const r of (data || []) as Array<{ event_id: string; jewelry_box_count: number; silver_box_count: number }>) {
+    out[r.event_id] = {
+      jewelry: Math.max(0, Math.floor(r.jewelry_box_count || 0)),
+      silver:  Math.max(0, Math.floor(r.silver_box_count  || 0)),
+    }
+  }
+  return out
+}
+
 /** All live (non-deleted) manifests across a list of event ids. */
 export async function fetchManifestsForEvents(eventIds: string[]): Promise<ShippingManifest[]> {
   if (eventIds.length === 0) return []

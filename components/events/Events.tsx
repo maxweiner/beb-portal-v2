@@ -17,7 +17,8 @@ import { eventStaffing } from '@/lib/eventStaffing'
 import { eventDisplayName } from '@/lib/eventName'
 import { searchEvents } from '@/lib/eventSearch'
 import {
-  fetchManifestsForEvents, type ShippingManifest,
+  fetchManifestsForEvents, fetchEventBoxCounts,
+  type ShippingManifest, type EventBoxCounts,
 } from '@/lib/shipping/manifests'
 import ManifestCaptureModal from '@/components/shipping/ManifestCaptureModal'
 import ManifestViewerModal from '@/components/shipping/ManifestViewerModal'
@@ -83,6 +84,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   const [manifestCapturePrefill, setManifestCapturePrefill] = useState<string | null>(null)
   const [manifestViewerFor,  setManifestViewerFor]  = useState<Event | null>(null)
   const [manifestsByEvent,   setManifestsByEvent]   = useState<Record<string, ShippingManifest[]>>({})
+  const [boxCountsByEvent,   setBoxCountsByEvent]   = useState<Record<string, EventBoxCounts>>({})
   // Force-include the most recently created event in the filtered list
   // (and auto-expand it) regardless of the active filter, so the user
   // can immediately add buyers. Cleared when they change filter/search.
@@ -172,19 +174,23 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
     fetchEvents()
   }, [fetchEvents])
 
-  /* ── Manifest counts for the badge — refresh whenever the events
-       list changes. Best-effort; failure leaves the cache empty. ── */
+  /* ── Manifest counts + per-event shipment box counts. Both feed
+       the Manifest action (count badge + box-label picker preset
+       list). Best-effort; failure leaves the cache empty. ── */
   useEffect(() => {
     if (events.length === 0) return
     let cancelled = false
-    fetchManifestsForEvents(events.map(e => e.id))
-      .then(rows => {
-        if (cancelled) return
-        const grouped: Record<string, ShippingManifest[]> = {}
-        for (const m of rows) (grouped[m.event_id] ||= []).push(m)
-        setManifestsByEvent(grouped)
-      })
-      .catch(() => { /* silent */ })
+    const eventIds = events.map(e => e.id)
+    Promise.all([
+      fetchManifestsForEvents(eventIds),
+      fetchEventBoxCounts(eventIds),
+    ]).then(([rows, counts]) => {
+      if (cancelled) return
+      const grouped: Record<string, ShippingManifest[]> = {}
+      for (const m of rows) (grouped[m.event_id] ||= []).push(m)
+      setManifestsByEvent(grouped)
+      setBoxCountsByEvent(counts)
+    }).catch(() => { /* silent */ })
     return () => { cancelled = true }
   }, [events])
 
@@ -1127,11 +1133,13 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
         const ev = manifestCaptureFor
         const existingLabels = (manifestsByEvent[ev.id] || [])
           .map(m => m.box_label || '').filter(Boolean)
+        const counts = boxCountsByEvent[ev.id]
         return (
           <ManifestCaptureModal
             boxId={ev.id}
             boxLabel={eventDisplayName(ev, stores)}
             existingBoxLabels={existingLabels}
+            plannedJewelryBoxes={counts?.jewelry}
             initialBoxLabel={manifestCapturePrefill}
             onClose={() => { setManifestCaptureFor(null); setManifestCapturePrefill(null) }}
             onUploaded={() => {
