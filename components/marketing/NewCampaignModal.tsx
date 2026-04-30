@@ -14,10 +14,13 @@ import { supabase } from '@/lib/supabase'
 import type { Event, MarketingFlowType } from '@/types'
 
 const FLOW_OPTIONS: { value: MarketingFlowType; label: string; emoji: string; description: string }[] = [
-  { value: 'vdp',      label: 'VDP',      emoji: '📬', description: 'Variable-data print mailers (zip targeted)' },
-  { value: 'postcard', label: 'Postcard', emoji: '📮', description: 'Address-list postcards (CSV upload)' },
+  { value: 'vdp',       label: 'VDP',       emoji: '📬', description: 'Variable-data print mailers (zip targeted)' },
+  { value: 'postcard',  label: 'Postcard',  emoji: '📮', description: 'Address-list postcards (CSV upload)' },
+  { value: 'newspaper', label: 'Newspaper', emoji: '📰', description: 'Print ad in a publication' },
 ]
-// Newspaper omitted from v1 picker per spec.
+// Note: newspaper campaigns reach Proofing / Payment / Done normally,
+// but the Planning section currently shows a "Newspaper flow is out of
+// scope for v1" placeholder until that flow's planning UI is built.
 
 export default function NewCampaignModal({
   open, onClose, onCreated,
@@ -37,28 +40,37 @@ export default function NewCampaignModal({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [existingId, setExistingId] = useState<string | null>(null)
+  const [eventSearch, setEventSearch] = useState('')
 
   useEffect(() => {
     if (open) {
       setEventId(lockedEvent?.id || '')
       setFlow(lockedFlow || 'vdp')
+      setEventSearch('')
       setError(null); setExistingId(null); setBusy(false)
     }
   }, [open, lockedEvent?.id, lockedFlow])
-
-  // Most recent first; cap to 50 to keep the dropdown usable.
-  const eventOptions = useMemo(() => {
-    return [...events]
-      .filter(e => !!e.start_date)
-      .sort((a, b) => (a.start_date < b.start_date ? 1 : -1))
-      .slice(0, 50)
-  }, [events])
 
   const eventLabel = (ev: Event) => {
     const store = stores.find(s => s.id === ev.store_id)
     const name = store?.name || ev.store_name || '(unknown)'
     return `${name} · ${ev.start_date}`
   }
+
+  // All events sorted newest first. Search box narrows the dropdown
+  // by store name; when empty, cap to 50 so the dropdown stays usable.
+  const eventOptions = useMemo(() => {
+    const sorted = [...events]
+      .filter(e => !!e.start_date)
+      .sort((a, b) => (a.start_date < b.start_date ? 1 : -1))
+    const q = eventSearch.trim().toLowerCase()
+    if (!q) return sorted.slice(0, 50)
+    return sorted.filter(ev => {
+      const store = stores.find(s => s.id === ev.store_id)
+      const name = (store?.name || ev.store_name || '').toLowerCase()
+      return name.includes(q)
+    }).slice(0, 100)
+  }, [events, stores, eventSearch])
 
   if (!open) return null
 
@@ -107,12 +119,24 @@ export default function NewCampaignModal({
         {!lockedEvent && (
           <div className="field" style={{ marginBottom: 14 }}>
             <label className="fl">Event</label>
+            <input type="text" value={eventSearch} onChange={e => setEventSearch(e.target.value)}
+              placeholder="Search store name…"
+              style={{ width: '100%', marginBottom: 6, fontSize: 13 }} />
             <select value={eventId} onChange={e => setEventId(e.target.value)} style={{ width: '100%' }}>
-              <option value="">Pick an event…</option>
+              <option value="">
+                {eventSearch.trim()
+                  ? `Pick from ${eventOptions.length} match${eventOptions.length === 1 ? '' : 'es'}…`
+                  : 'Pick an event…'}
+              </option>
               {eventOptions.map(ev => (
                 <option key={ev.id} value={ev.id}>{eventLabel(ev)}</option>
               ))}
             </select>
+            {eventSearch.trim() && eventOptions.length === 0 && (
+              <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4, fontStyle: 'italic' }}>
+                No events match "{eventSearch.trim()}".
+              </div>
+            )}
           </div>
         )}
         {lockedEvent && (
@@ -132,7 +156,7 @@ export default function NewCampaignModal({
         {!lockedFlow && (
           <div style={{ marginBottom: 16 }}>
             <div className="fl" style={{ marginBottom: 6 }}>Flow type</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
               {FLOW_OPTIONS.map(opt => {
                 const sel = flow === opt.value
                 return (
