@@ -15,6 +15,7 @@ import ProofingSection from './ProofingSection'
 import PaymentSection from './PaymentSection'
 import DoneSection from './DoneSection'
 import MarketingQrSection from './MarketingQrSection'
+import FilesArtifactsSection from './FilesArtifactsSection'
 
 const FLOW_LABELS = {
   vdp: '📬 VDP Mailers',
@@ -223,6 +224,14 @@ export default function CampaignDetail({ campaign, onBack, onChanged, onDeleted 
       {/* QR codes (read-only) — surfaced on every campaign page so
           marketing partners can grab the short URLs for proofs. */}
       <MarketingQrSection campaignId={campaign.id} />
+
+      {/* Unified Files & Artifacts — proofs, postcard CSV uploads,
+          accountant receipt PDF in one place. */}
+      <FilesArtifactsSection
+        campaignId={campaign.id}
+        flowType={campaign.flow_type}
+        accountantReceiptSentAt={campaign.accountant_receipt_sent_at}
+      />
     </div>
   )
 }

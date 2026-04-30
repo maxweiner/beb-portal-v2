@@ -33,6 +33,14 @@ const STATUS_LABELS: Record<MarketingStatus, { label: string; color: string }> =
 
 const AT_RISK_DAYS = 3 // mail_by - 3 days = warning threshold
 
+function isAtRisk(c: MarketingCampaign, today: Date): boolean {
+  if (!c.mail_by_date) return false
+  if (c.status === 'payment' || c.status === 'done') return false
+  const mailBy = new Date(c.mail_by_date + 'T12:00:00')
+  const diffDays = Math.round((mailBy.getTime() - today.getTime()) / 86400000)
+  return diffDays <= AT_RISK_DAYS
+}
+
 export default function CampaignsList() {
   const { events, stores } = useApp()
   const [campaigns, setCampaigns] = useState<MarketingCampaign[]>([])
@@ -82,15 +90,21 @@ export default function CampaignsList() {
         return true
       })
       .sort((a, b) => {
+        // At-risk campaigns float to the top; everything else sorts
+        // by event start_date desc (newest events first), then flow.
+        const aRisk = isAtRisk(a, today)
+        const bRisk = isAtRisk(b, today)
+        if (aRisk !== bRisk) return aRisk ? -1 : 1
         const evA = eventById.get(a.event_id)
         const evB = eventById.get(b.event_id)
-        // Sort by event start_date desc (newest events first)
         const da = evA?.start_date || ''
         const db = evB?.start_date || ''
         if (da !== db) return db.localeCompare(da)
         return a.flow_type.localeCompare(b.flow_type)
       })
   }, [campaigns, flow, status, search, today, eventById, storeById])
+
+  const atRiskCount = filtered.filter(c => isAtRisk(c, today)).length
 
   if (openId) {
     const c = campaigns.find(x => x.id === openId)
@@ -108,6 +122,25 @@ export default function CampaignsList() {
 
   return (
     <div>
+      {/* At-risk banner — only when filter isn't already at_risk */}
+      {atRiskCount > 0 && status !== 'at_risk' && (
+        <div style={{
+          background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8,
+          padding: '10px 14px', marginBottom: 12,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap',
+        }}>
+          <div style={{ fontSize: 13, color: '#991B1B', fontWeight: 700 }}>
+            ⚠ {atRiskCount} campaign{atRiskCount === 1 ? '' : 's'} at risk — within {AT_RISK_DAYS} days of mail-by date and not yet in Payment.
+          </div>
+          <button onClick={() => setStatus('at_risk')} style={{
+            background: '#7f1d1d', color: '#fff', border: 'none', borderRadius: 6,
+            padding: '5px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+          }}>
+            Show only at-risk →
+          </button>
+        </div>
+      )}
+
       {/* Filters */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14, alignItems: 'center' }}>
         <input value={search} onChange={e => setSearch(e.target.value)}
