@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
+import { useIsNarrow } from '@/components/expenses/useIsNarrow'
 import type { Event } from '@/types'
 
 export default function Marketing() {
@@ -66,6 +67,7 @@ type StatusFilter = 'all' | 'not_started' | 'in_progress' | 'complete' | 'untouc
 function CampaignsTab() {
   const { events, stores, user } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
+  const isNarrow = useIsNarrow()
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [selectedChannel, setSelectedChannel] = useState<Channel>('vdp')
   const [search, setSearch] = useState('')
@@ -129,6 +131,66 @@ function CampaignsTab() {
 
   const fmt = (ds: string) => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
+  // ── Mobile layout: full-width event list, swap to event view on tap ──
+  if (isNarrow) {
+    if (!selectedEvent) {
+      return (
+        <div style={{ minHeight: '100%', background: 'var(--cream)' }}>
+          <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--pearl)', background: 'var(--cream)', position: 'sticky', top: 0, zIndex: 5 }}>
+            <div style={{ fontWeight: 900, fontSize: 18, color: 'var(--ink)', marginBottom: 10 }}>📣 Marketing</div>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search events…" style={{ width: '100%', fontSize: 14 }} />
+          </div>
+          {filtered.length === 0 ? (
+            <div style={{ padding: 24, textAlign: 'center', color: 'var(--mist)', fontSize: 13 }}>
+              No events match your search.
+            </div>
+          ) : filtered.map(ev => {
+            const store = stores.find(s => s.id === ev.store_id)
+            return (
+              <div key={ev.id} onClick={() => setSelectedEvent(ev)}
+                style={{
+                  padding: '14px 16px', cursor: 'pointer',
+                  borderBottom: '1px solid var(--cream2)',
+                  background: '#fff',
+                }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--ink)' }}>◆ {ev.store_name}</div>
+                <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 2 }}>{store?.city}, {store?.state} · {fmt(ev.start_date)}</div>
+              </div>
+            )
+          })}
+        </div>
+      )
+    }
+    // Event picked: header with back, then the event view
+    return (
+      <div style={{ minHeight: '100%', background: 'var(--cream2)' }}>
+        <div style={{
+          padding: '12px 16px', background: 'var(--cream)',
+          borderBottom: '1px solid var(--pearl)',
+          position: 'sticky', top: 0, zIndex: 5,
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <button onClick={() => setSelectedEvent(null)} style={{
+            background: 'transparent', border: '1px solid var(--pearl)', borderRadius: 8,
+            padding: '6px 12px', cursor: 'pointer', fontSize: 13, fontWeight: 700,
+            color: 'var(--ash)', fontFamily: 'inherit',
+          }}>
+            ← Events
+          </button>
+          <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {selectedEvent.store_name}
+          </div>
+        </div>
+        <MarketingEventView
+          ev={selectedEvent} isAdmin={isAdmin}
+          selectedChannel={selectedChannel} setSelectedChannel={setSelectedChannel}
+          user={user}
+        />
+      </div>
+    )
+  }
+
+  // ── Desktop layout: side-by-side ──
   return (
     <div style={{ display: 'flex', height: 'calc(100vh - 60px)', overflow: 'hidden' }}>
       {/* Event list sidebar */}
@@ -246,6 +308,7 @@ function MarketingEventView({ ev, isAdmin, selectedChannel, setSelectedChannel, 
    *  sync after status changes (no full re-fetch). */
   onCampaignsChanged?: (c: Campaign[]) => void
 }) {
+  const isNarrow = useIsNarrow()
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [vendors, setVendors] = useState<Vendor[]>([])
   const [loading, setLoading] = useState(true)
@@ -324,7 +387,7 @@ function MarketingEventView({ ev, isAdmin, selectedChannel, setSelectedChannel, 
   if (loading) return <div style={{ padding: 40, color: 'var(--mist)' }}>Loading…</div>
 
   return (
-    <div style={{ padding: 24, maxWidth: 900, margin: '0 auto' }}>
+    <div style={{ padding: isNarrow ? 14 : 24, maxWidth: 900, margin: '0 auto' }}>
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', marginBottom: 4 }}>Marketing</div>
