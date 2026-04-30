@@ -62,11 +62,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: 'Campaign is not awaiting planning approval.' }, { status: 409 })
   }
 
-  const detailsTable = campaign.flow_type === 'vdp'
-    ? 'vdp_campaign_details'
-    : campaign.flow_type === 'postcard'
-      ? 'postcard_campaign_details'
-      : null
+  const detailsTable =
+    campaign.flow_type === 'vdp'       ? 'vdp_campaign_details'
+    : campaign.flow_type === 'postcard'  ? 'postcard_campaign_details'
+    : campaign.flow_type === 'newspaper' ? 'newspaper_campaign_details'
+    : null
   if (!detailsTable) {
     return NextResponse.json({ error: `Unsupported flow_type=${campaign.flow_type}` }, { status: 400 })
   }
