@@ -77,6 +77,10 @@ export default function DayEntry() {
   // Per-buyer purchase counts. Keys are user_ids; missing key = blank input
   // (semantically distinct from "0 entered"). Stored in event_days.purchases_by_buyer.
   const [purchasesByBuyer, setPurchasesByBuyer] = useState<Record<string, string>>({})
+  // Day-3 only: store commission check the buyer hands to the store at
+  // end-of-event. Record-only — NEVER summed into any totals.
+  const [storeCommCheckNum, setStoreCommCheckNum] = useState('')
+  const [storeCommCheckAmt, setStoreCommCheckAmt] = useState('')
   // 5% commission is rare — collapsed behind a + link unless the existing
   // row already has a non-zero value saved.
   const [show5pct, setShow5pct] = useState(false)
@@ -209,6 +213,12 @@ export default function DayEntry() {
       setPurchasesByBuyer(
         Object.fromEntries(Object.entries(pbb).map(([k, v]) => [k, String(v ?? '')]))
       )
+      setStoreCommCheckNum((rowData as any).store_commission_check_number ?? '')
+      setStoreCommCheckAmt(
+        (rowData as any).store_commission_check_amount != null
+          ? String((rowData as any).store_commission_check_amount)
+          : ''
+      )
     } else {
       setExistingRow(null)
       rowIdRef.current = null
@@ -217,6 +227,8 @@ export default function DayEntry() {
       setPurchasesByBuyer({})
       setShow5pct(false)
       setShow0pct(false)
+      setStoreCommCheckNum('')
+      setStoreCommCheckAmt('')
     }
     setChecks(checkRows && checkRows.length > 0
       ? checkRows.map((c: any) => ({
@@ -294,6 +306,15 @@ export default function DayEntry() {
         entered_by_name: user.name,
         entered_at: new Date().toISOString(),
       }
+      // Day-3 only: store commission check (record-only, never totaled).
+      // Day 1/2 saves leave these columns alone so a previously-saved
+      // value isn't silently nulled out by editing an earlier day.
+      if (selectedDay === 3) {
+        payload.store_commission_check_number = storeCommCheckNum.trim() || null
+        payload.store_commission_check_amount = storeCommCheckAmt.trim() !== ''
+          ? (parseFloat(storeCommCheckAmt) || 0)
+          : null
+      }
 
       // Fresh-existing check — belt-and-braces against races.
       let rowId = rowIdRef.current
@@ -343,7 +364,7 @@ export default function DayEntry() {
   }
 
   const autosaveStatus = useAutosave(
-    { customers, purchases, dollars10, dollars5, dollars0, sources, checks, purchasesByBuyer },
+    { customers, purchases, dollars10, dollars5, dollars0, sources, checks, purchasesByBuyer, storeCommCheckNum, storeCommCheckAmt },
     async () => { await persist() },
     { enabled: hydratedRef.current && !!selectedEventId && !saving, delay: 1000 },
   )
@@ -936,6 +957,34 @@ export default function DayEntry() {
                   )}
                 </div>
               </div>
+
+              {/* Day-3 only: Store commission check (record-only — never totaled) */}
+              {selectedDay === 3 && (
+                <div className="card card-accent mb-4" style={{ margin: 0 }}>
+                  <div className="card-title" style={{ marginBottom: 4 }}>Store Commission Check</div>
+                  <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 14 }}>
+                    Record-only — not added to any totals. Shows on the Event Recap PDF.
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(140px, 200px) minmax(140px, 220px)', gap: 14 }}>
+                    <div>
+                      <label className="fl">Check #</label>
+                      <input type="text" value={storeCommCheckNum}
+                        onChange={e => setStoreCommCheckNum(e.target.value)}
+                        placeholder="—" />
+                    </div>
+                    <div>
+                      <label className="fl">Amount</label>
+                      <div style={{ position: 'relative' }}>
+                        <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)' }}>$</span>
+                        <input type="number" min="0" step="0.01" value={storeCommCheckAmt}
+                          onChange={e => setStoreCommCheckAmt(e.target.value)}
+                          placeholder="0.00"
+                          style={{ paddingLeft: 22 }} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Submit */}
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>

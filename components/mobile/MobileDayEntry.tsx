@@ -85,6 +85,10 @@ export default function MobileDayEntry() {
   // Per-buyer purchase counts. Missing key = blank input (≠ 0). Persisted
   // to event_days.purchases_by_buyer (JSONB).
   const [purchasesByBuyer, setPurchasesByBuyer] = useState<Record<string, string>>({})
+  // Day-3 only: store commission check the buyer hands the store at
+  // end-of-event. Record-only — NEVER summed into any totals.
+  const [storeCommCheckNum, setStoreCommCheckNum] = useState('')
+  const [storeCommCheckAmt, setStoreCommCheckAmt] = useState('')
   // 5% commission is rare — collapsed behind a + link unless the row
   // already has a non-zero value saved.
   const [show5pct, setShow5pct] = useState(false)
@@ -253,6 +257,12 @@ export default function MobileDayEntry() {
       setPurchasesByBuyer(
         Object.fromEntries(Object.entries(pbb).map(([k, v]) => [k, String(v ?? '')]))
       )
+      setStoreCommCheckNum((current as any).store_commission_check_number ?? '')
+      setStoreCommCheckAmt(
+        (current as any).store_commission_check_amount != null
+          ? String((current as any).store_commission_check_amount)
+          : ''
+      )
       setSubmitted(hasData(current))
     } else {
       setExistingEntry(null)
@@ -262,6 +272,8 @@ export default function MobileDayEntry() {
       setShow0pct(false)
       setSources(Object.fromEntries(LEAD_SOURCES.map(s => [s.key, ''])))
       setPurchasesByBuyer({})
+      setStoreCommCheckNum('')
+      setStoreCommCheckAmt('')
       setSubmitted(false)
     }
     // Day-level checks — matched by (event_id, day_number), no entry_id.
@@ -346,6 +358,14 @@ export default function MobileDayEntry() {
         entered_by_name: user.name,
         entered_at: new Date().toISOString(),
       }
+      // Day-3 only: store commission check (record-only — never totaled).
+      // Day 1/2 saves leave these columns alone.
+      if (selectedDay === 3) {
+        payload.store_commission_check_number = storeCommCheckNum.trim() || null
+        payload.store_commission_check_amount = storeCommCheckAmt.trim() !== ''
+          ? (parseFloat(storeCommCheckAmt) || 0)
+          : null
+      }
 
       // Fresh-existing lookup guards stale-null races (two tabs, etc.).
       let rowId = entryIdRef.current
@@ -395,7 +415,7 @@ export default function MobileDayEntry() {
   }
 
   const autosaveStatus = useAutosave(
-    { customers, purchases, tenPct, fivePct, zeroPct, sources, checks, purchasesByBuyer },
+    { customers, purchases, tenPct, fivePct, zeroPct, sources, checks, purchasesByBuyer, storeCommCheckNum, storeCommCheckAmt },
     async () => { await persist(false) },
     { enabled: !!selectedEventId && hydratedRef.current && !saving, delay: 1000 }
   )
@@ -921,6 +941,57 @@ export default function MobileDayEntry() {
               }}>BETA</span>
             </button>
           </div>
+
+          {/* Day-3 only: Store commission check (record-only — never totaled) */}
+          {selectedDay === 3 && (
+            <div style={cardStyle}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+                <SectionLabel>Store Commission Check</SectionLabel>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--mist)', marginBottom: 12, lineHeight: 1.4 }}>
+                Record-only — not added to any totals.
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <label style={{
+                    fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase',
+                    color: 'var(--mist)', display: 'block', marginBottom: 4,
+                  }}>Check #</label>
+                  <input type="text" inputMode="numeric" value={storeCommCheckNum}
+                    onChange={e => setStoreCommCheckNum(e.target.value)}
+                    placeholder="—" style={{
+                      width: '100%', minHeight: 44, padding: '0 10px',
+                      fontSize: 18, fontWeight: 700,
+                      borderRadius: 10, border: '1.5px solid var(--pearl)',
+                      background: 'var(--cream)', color: 'var(--ink)',
+                      outline: 'none', fontFamily: 'inherit',
+                    }} />
+                </div>
+                <div>
+                  <label style={{
+                    fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase',
+                    color: 'var(--mist)', display: 'block', marginBottom: 4,
+                  }}>Amount</label>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{
+                      position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
+                      color: 'var(--mist)', fontSize: 16, fontWeight: 700, pointerEvents: 'none',
+                    }}>$</span>
+                    <input type="text" inputMode="decimal"
+                      value={formatMoneyInput(storeCommCheckAmt)}
+                      onChange={e => setStoreCommCheckAmt(parseMoneyInput(e.target.value))}
+                      placeholder="0.00" style={{
+                        width: '100%', minHeight: 44, padding: '0 10px 0 24px',
+                        fontSize: 18, fontWeight: 700,
+                        borderRadius: 10, border: '1.5px solid var(--pearl)',
+                        background: 'var(--cream)', color: 'var(--ink)',
+                        outline: 'none', fontFamily: 'inherit',
+                      }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

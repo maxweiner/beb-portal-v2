@@ -176,6 +176,11 @@ export interface EventDay {
   entered_by?: string
   entered_by_name?: string
   entered_at?: string
+  /** Day-3 only. Store commission check the buyer hands the store at end-of-event.
+   *  Record-only — never folded into purchases / dollars10 / dollars5 / dollars0
+   *  / customers totals. Surfaces on the Event Recap PDF. */
+  store_commission_check_number?: string | null
+  store_commission_check_amount?: number | null
 }
 
 export interface Event {
