@@ -27,10 +27,12 @@ const COLORS = {
 const styles = StyleSheet.create({
   page:       { padding: 36, fontSize: 10, fontFamily: 'Helvetica', color: COLORS.ink },
   hRow:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  // Wordmark logo aspect ratio after cropping internal whitespace is
-  // roughly 1093×505 (~2.16:1).
-  logoLg:     { width: 170, height: 79, objectFit: 'contain' },
-  logoSm:     { width: 90, height: 42, objectFit: 'contain' },
+  // Logo box. Wide enough for a 2.16:1 wordmark AND tall enough for a
+  // square emblem (Liberty's logo is ~1:1) — objectFit: contain keeps
+  // both undistorted. objectPosition pins to the left so a square logo
+  // doesn't float in centered whitespace inside a wide box.
+  logoLg:     { width: 220, height: 110, objectFit: 'contain', objectPosition: 'left center' },
+  logoSm:     { width: 120, height: 60,  objectFit: 'contain', objectPosition: 'left center' },
   brandSub:   { fontSize: 9, color: COLORS.mist, marginTop: 4 },
   hMetaLine:  { fontSize: 9, color: COLORS.mist },
   title:      { fontSize: 22, fontWeight: 700, color: COLORS.greenDark, marginBottom: 8 },
