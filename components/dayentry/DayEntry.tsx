@@ -982,8 +982,12 @@ export default function DayEntry() {
                 // Day-3 spend reflects only the current day's inputs.
                 // Total Commission Due covers the FULL event — days 1+2
                 // come from the saved DB rows, day 3 from in-form values.
-                const day10 = nF(dollars10)
-                const day5  = nF(dollars5)
+                // When checks are present they take priority over the
+                // raw dollars10/dollars5 inputs (matches persist's
+                // override logic), so live totals reflect what's about
+                // to be saved as the buyer adds check rows.
+                const day10 = hasValidChecks ? derived10 : nF(dollars10)
+                const day5  = hasValidChecks ? derived5  : nF(dollars5)
                 const daySpend = day10 + day5
                 const otherDays = (selectedEvent?.days || []).filter(d => d.day_number !== 3)
                 const eventSum10 = otherDays.reduce((s, d) => s + (Number(d.dollars10) || 0), 0) + day10

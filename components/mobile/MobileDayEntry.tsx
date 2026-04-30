@@ -958,8 +958,11 @@ export default function MobileDayEntry() {
             // Day-3 spend reflects only the current day's inputs.
             // Total Commission Due covers the FULL event — days 1+2
             // come from the saved DB rows, day 3 from in-form values.
-            const day10 = nF(tenPct)
-            const day5  = nF(fivePct)
+            // When checks are present they take priority over the raw
+            // tenPct/fivePct inputs (matches persist's override logic),
+            // so live totals update as the buyer adds check rows.
+            const day10 = hasValidChecks ? derived10 : nF(tenPct)
+            const day5  = hasValidChecks ? derived5  : nF(fivePct)
             const daySpend = day10 + day5
             const otherDays = (selectedEvent?.days || []).filter(d => d.day_number !== 3)
             const eventSum10 = otherDays.reduce((s, d) => s + (Number(d.dollars10) || 0), 0) + day10
