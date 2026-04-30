@@ -8,6 +8,7 @@ import type { Theme, BuyerVacation } from '@/types'
 import AvatarPicker from './AvatarPicker'
 import Checkbox from '@/components/ui/Checkbox'
 import AddressAutocompleteInput from '@/components/ui/AddressAutocompleteInput'
+import CollapsibleCard from '@/components/ui/CollapsibleCard'
 import { getCenterModeOverride, setCenterModeOverride, type CenterModeOverride } from '@/lib/centerButtonMode'
 import TripTemplatesSettings from '@/components/expenses/TripTemplatesSettings'
 
@@ -151,11 +152,12 @@ export default function Settings() {
       <h1 className="text-2xl font-black" style={{ color: 'var(--ink)' }}>Settings</h1>
 
       {/* Profile */}
-      <div className="card">
-        <div className="card-title" style={{ display: 'flex', alignItems: 'center' }}>
-          Profile
-          <AutosaveIndicator status={profileStatus} />
-        </div>
+      <CollapsibleCard
+        storageKey="settings-profile"
+        title="Profile"
+        titleAccessory={<AutosaveIndicator status={profileStatus} />}
+        defaultOpen
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
           <div style={{ position: 'relative', cursor: 'pointer' }} onClick={() => setShowAvatarPicker(true)}>
             {photoUrl ? (
@@ -196,7 +198,7 @@ export default function Settings() {
             Used by the mileage calculator (home → store → home). Pick from the suggestions to lock in a clean, geocodable address.
           </div>
         </div>
-      </div>
+      </CollapsibleCard>
 
       {showAvatarPicker && (
         <AvatarPicker
@@ -208,17 +210,16 @@ export default function Settings() {
       )}
 
       {/* Vacation Dates */}
-      <div className="card">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <div>
-            <div className="card-title" style={{ margin: 0 }}>Vacation Dates</div>
-            <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 2 }}>You won't be assigned to events on these days</div>
-          </div>
+      <CollapsibleCard
+        storageKey="settings-vacations"
+        title="Vacation Dates"
+        subtitle="You won't be assigned to events on these days"
+        headerExtra={
           <button className="btn-outline btn-xs" onClick={() => setShowVacForm(!showVacForm)}>
             {showVacForm ? 'Cancel' : '+ Add Dates'}
           </button>
-        </div>
-
+        }
+      >
         {showVacForm && (
           <div style={{ padding: 14, background: 'var(--cream2)', borderRadius: 'var(--r)', marginBottom: 14 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
@@ -264,13 +265,14 @@ export default function Settings() {
             <button className="btn-danger btn-xs" onClick={() => removeVacation(v.id)}>Remove</button>
           </div>
         ))}
-      </div>
+      </CollapsibleCard>
 
       {/* Notifications */}
-      <div className="card">
-        <div className="card-title">Email Notifications</div>
-        <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 20 }}>Receive email reports when buyers submit day data.</p>
-
+      <CollapsibleCard
+        storageKey="settings-email-notifications"
+        title="Email Notifications"
+        subtitle="Receive email reports when buyers submit day data."
+      >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, paddingBottom: 20, borderBottom: '1px solid var(--cream2)' }}>
           <div>
             <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--ink)' }}>All Notifications</div>
@@ -304,13 +306,14 @@ export default function Settings() {
             })}
           </div>
         )}
-      </div>
+      </CollapsibleCard>
 
       {/* SMS Notifications */}
-      <div className="card">
-        <div className="card-title">SMS Notifications</div>
-        <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 20 }}>Receive text message alerts when events are active.</p>
-
+      <CollapsibleCard
+        storageKey="settings-sms-notifications"
+        title="SMS Notifications"
+        subtitle="Receive text message alerts when events are active."
+      >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--ink)' }}>Text Alerts</div>
@@ -325,11 +328,10 @@ export default function Settings() {
             <div style={{ position: 'absolute', top: 4, width: 16, height: 16, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.2)', transition: 'left .2s', left: notifySms ? 28 : 4 }} />
           </button>
         </div>
-      </div>
+      </CollapsibleCard>
 
       {/* Theme */}
-      <div className="card">
-        <div className="card-title">Appearance</div>
+      <CollapsibleCard storageKey="settings-appearance" title="Appearance">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
           {THEMES.map(t => (
             <button key={t.id} onClick={() => setTheme(t.id)}
@@ -340,7 +342,7 @@ export default function Settings() {
             </button>
           ))}
         </div>
-      </div>
+      </CollapsibleCard>
 
       {/* Active brand — synced across devices */}
       {user?.liberty_access && <ActiveBrandNote />}
@@ -418,15 +420,12 @@ function ExpenseSettings() {
   if (loading) return null
 
   return (
-    <div className="card">
-      <div className="card-title" style={{ display: 'flex', alignItems: 'center' }}>
-        🧾 Expense Settings
-        <AutosaveIndicator status={status} />
-      </div>
-      <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 16, lineHeight: 1.6 }}>
-        Settings used by the Expenses & Invoicing module.
-      </p>
-
+    <CollapsibleCard
+      storageKey="settings-expense"
+      title="🧾 Expense Settings"
+      titleAccessory={<AutosaveIndicator status={status} />}
+      subtitle="Settings used by the Expenses & Invoicing module."
+    >
       <div className="field">
         <label className="fl">Accountant Email</label>
         <input type="email" value={accountantEmail}
@@ -446,7 +445,7 @@ function ExpenseSettings() {
           Used by the mileage calculator. The 2025 IRS standard rate is $0.67/mi.
         </div>
       </div>
-    </div>
+    </CollapsibleCard>
   )
 }
 
@@ -485,16 +484,12 @@ function PostmarkSettings() {
   if (loading) return null
 
   return (
-    <div className="card">
-      <div className="card-title" style={{ display: 'flex', alignItems: 'center' }}>
-        ✈️ Travel Email Integration (Postmark)
-        <AutosaveIndicator status={status} />
-      </div>
-      <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 16, lineHeight: 1.6 }}>
-        Forward travel confirmation emails to <strong>travel@bebllp.com</strong> and they'll be automatically parsed and added to the right event.
-        Sign up at <a href="https://postmarkapp.com" target="_blank" rel="noreferrer" style={{ color: 'var(--green)' }}>postmarkapp.com</a> (~$15/mo).
-      </p>
-
+    <CollapsibleCard
+      storageKey="settings-postmark"
+      title="✈️ Travel Email Integration (Postmark)"
+      titleAccessory={<AutosaveIndicator status={status} />}
+      subtitle={<>Forward travel confirmation emails to <strong>travel@bebllp.com</strong> and they'll be automatically parsed and added to the right event. Sign up at <a href="https://postmarkapp.com" target="_blank" rel="noreferrer" style={{ color: 'var(--green)' }}>postmarkapp.com</a> (~$15/mo).</>}
+    >
       <div className="field">
         <label className="fl">Postmark Server API Token</label>
         <input type="password" value={serverToken} onChange={e => setServerToken(e.target.value)}
@@ -530,7 +525,7 @@ function PostmarkSettings() {
         </ol>
       </div>
 
-    </div>
+    </CollapsibleCard>
   )
 }
 
@@ -643,21 +638,19 @@ function GCalSyncSettings({ brand }: { brand: 'beb' | 'liberty' }) {
   const STATUS_FG: Record<string, string> = { done: 'var(--green-dark)', pending: '#92400E', processing: '#3730A3', failed: '#991B1B' }
 
   return (
-    <div className="card" style={{ marginTop: 18, borderTop: `4px solid ${accent}` }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-        <div>
-          <div className="card-title" style={{ margin: 0 }}>📅 Google Calendar Sync — {brandLabel}</div>
-          <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 2 }}>
-            Pushes every {brandLabel} event into a single Google Calendar (one-way).
-          </div>
-        </div>
+    <CollapsibleCard
+      storageKey={`settings-gcal-${brand}`}
+      title={`📅 Google Calendar Sync — ${brandLabel}`}
+      subtitle={`Pushes every ${brandLabel} event into a single Google Calendar (one-way).`}
+      topAccent={accent}
+      headerExtra={
         <Checkbox
           checked={enabled}
           onChange={setEnabled}
           label={<span style={{ fontWeight: 700, color: enabled ? 'var(--green-dark)' : 'var(--mist)' }}>{enabled ? 'Enabled' : 'Disabled'}</span>}
         />
-      </div>
-
+      }
+    >
       <div className="field" style={{ marginTop: 12 }}>
         <label className="fl">Calendar ID</label>
         <input value={calendarId} onChange={e => setCalendarId(e.target.value)}
@@ -749,7 +742,7 @@ function GCalSyncSettings({ brand }: { brand: 'beb' | 'liberty' }) {
           )
         )}
       </div>
-    </div>
+    </CollapsibleCard>
   )
 }
 
@@ -770,11 +763,11 @@ function CenterButtonSetting() {
   ]
 
   return (
-    <div className="card" style={{ marginTop: 18 }}>
-      <div className="card-title">📱 Mobile center button</div>
-      <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 14 }}>
-        Choose what the center button does. Auto switches to Scan during events you're working.
-      </p>
+    <CollapsibleCard
+      storageKey="settings-center-button"
+      title="📱 Mobile center button"
+      subtitle="Choose what the center button does. Auto switches to Scan during events you're working."
+    >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {options.map(opt => {
           const sel = mode === opt.v
@@ -818,7 +811,7 @@ function CenterButtonSetting() {
           )
         })}
       </div>
-    </div>
+    </CollapsibleCard>
   )
 }
 
@@ -828,9 +821,12 @@ function ActiveBrandNote() {
   const label = brand === 'liberty' ? 'Liberty' : 'Beneficial'
   const accent = brand === 'liberty' ? '#3B82F6' : '#1D6B44'
   return (
-    <div className="card" style={{ marginTop: 18, borderTop: `4px solid ${accent}` }}>
-      <div className="card-title">Active brand</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6 }}>
+    <CollapsibleCard
+      storageKey="settings-active-brand"
+      title="Active brand"
+      topAccent={accent}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <span style={{
           fontSize: 12, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase',
           padding: '6px 12px', borderRadius: 999, background: accent, color: '#fff',
@@ -842,6 +838,6 @@ function ActiveBrandNote() {
       <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 10 }}>
         🔗 This selection is synced across all your devices — when you switch on one device the others follow on next load.
       </div>
-    </div>
+    </CollapsibleCard>
   )
 }
