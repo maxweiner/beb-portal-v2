@@ -23,12 +23,12 @@ interface Props {
   /** Box labels already used on this event (e.g. ["J1", "J2"]).
    *  Drives the smart-default + "next box" suggestion. */
   existingBoxLabels: string[]
-  /** Planned box counts from the event's shipment row. The picker
-   *  shows J1..J{jewelry} + S1..S{silver}. If both are 0 (no
-   *  shipment row, e.g. no-hold store), the picker falls back to
-   *  J1-J5 + S1-S2 so users still have a starting point. */
+  /** Planned jewelry box count from the event's shipment row. The
+   *  picker shows J1..J{jewelry}. If 0 / undefined (no shipment row,
+   *  e.g. no-hold store), the picker falls back to J1-J5 so users
+   *  still have a starting point. We don't make manifests for silver
+   *  boxes, so silver is intentionally absent. */
   plannedJewelryBoxes?: number
-  plannedSilverBoxes?: number
   /** Pre-fill the box label input. Used by "Add another" to default to
    *  the box the user was just viewing. */
   initialBoxLabel?: string | null
@@ -37,24 +37,19 @@ interface Props {
 }
 
 const FALLBACK_J = 5
-const FALLBACK_S = 2
 
-/** Build the preset pill set for the picker. Uses planned counts when
- *  provided; otherwise falls back to a sensible default. Always
- *  includes any labels already used on this event so they're visible
- *  even if shipment counts haven't been adjusted yet. */
+/** Build the preset pill set for the picker. Uses the event's planned
+ *  jewelry count when provided; otherwise falls back to J1-J5. Always
+ *  includes any labels already used on this event so out-of-range or
+ *  custom values stay visible in the pill row. Silver is intentionally
+ *  absent — buyers don't make manifests for silver boxes. */
 function buildPresetLabels(opts: {
   jewelry?: number
-  silver?: number
   existing: string[]
 }): string[] {
-  const j = (opts.jewelry && opts.jewelry > 0) ? opts.jewelry : (opts.silver && opts.silver > 0) ? 0 : FALLBACK_J
-  const s = (opts.silver && opts.silver > 0) ? opts.silver : (opts.jewelry && opts.jewelry > 0) ? 0 : FALLBACK_S
+  const j = (opts.jewelry && opts.jewelry > 0) ? opts.jewelry : FALLBACK_J
   const labels: string[] = []
   for (let i = 1; i <= j; i++) labels.push('J' + i)
-  for (let i = 1; i <= s; i++) labels.push('S' + i)
-  // Surface any custom / out-of-range labels already used on this event
-  // so they're not lost from the picker.
   for (const e of opts.existing) {
     const trimmed = e.trim()
     if (trimmed && !labels.includes(trimmed)) labels.push(trimmed)
@@ -76,12 +71,11 @@ function suggestNextLabel(existing: string[]): string {
 
 export default function ManifestCaptureModal({
   boxId, boxLabel, existingBoxLabels, initialBoxLabel,
-  plannedJewelryBoxes, plannedSilverBoxes,
+  plannedJewelryBoxes,
   onClose, onUploaded,
 }: Props) {
   const presetLabels = buildPresetLabels({
     jewelry: plannedJewelryBoxes,
-    silver: plannedSilverBoxes,
     existing: existingBoxLabels,
   })
   const inputRef = useRef<HTMLInputElement>(null)

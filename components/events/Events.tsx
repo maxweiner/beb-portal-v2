@@ -1140,7 +1140,6 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
             boxLabel={eventDisplayName(ev, stores)}
             existingBoxLabels={existingLabels}
             plannedJewelryBoxes={counts?.jewelry}
-            plannedSilverBoxes={counts?.silver}
             initialBoxLabel={manifestCapturePrefill}
             onClose={() => { setManifestCaptureFor(null); setManifestCapturePrefill(null) }}
             onUploaded={() => {
