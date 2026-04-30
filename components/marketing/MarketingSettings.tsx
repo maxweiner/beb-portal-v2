@@ -35,9 +35,11 @@ export default function MarketingSettings() {
           return (
             <button key={id} onClick={() => setSection(id)} style={{
               // Fill the 220px nav column so the description text wraps
-              // inside the card instead of overflowing into the right
-              // panel. Buttons default to inline-block; force block + 100%.
+              // inside the card. Globals.css sets `button { white-space:
+              // nowrap }` globally which is INHERITED by inner divs,
+              // so we explicitly normalize it here.
               display: 'block', width: '100%',
+              whiteSpace: 'normal',
               textAlign: 'left', padding: '10px 12px', borderRadius: 8,
               border: '1px solid var(--pearl)',
               background: sel ? 'var(--green-pale)' : '#fff',
