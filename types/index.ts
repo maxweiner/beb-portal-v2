@@ -68,6 +68,9 @@ export interface ExpenseReport {
   /** Per-trip compensation rate (Option A). DB trigger sums into
    *  total_compensation + grand_total whenever this changes. */
   comp_rate: number
+  /** Partner-granted bonus pay. Adds to grand_total. Buyer cannot edit. */
+  bonus_amount: number
+  bonus_note: string | null
   grand_total: number
   pdf_url: string | null
   template_id: string | null
