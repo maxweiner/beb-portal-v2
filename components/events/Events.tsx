@@ -1078,6 +1078,12 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                     {[
                       { id: 'workers', icon: '👤', label: 'Who worked', onTap: () => setWorkersOpen(wOpen ? null : ev.id) },
                       ...(store?.hold_time_days ? [{ id: 'shipping', icon: '📦', label: 'Shipping', onTap: () => setShippingOpen(shippingOpen === ev.id ? null : ev.id) }] : []),
+                      { id: 'manifest', icon: '📷',
+                        label: (manifestsByEvent[ev.id]?.length ?? 0) > 0 ? `Manifest (${manifestsByEvent[ev.id]!.length})` : 'Manifest',
+                        onTap: () => {
+                          const has = (manifestsByEvent[ev.id] || []).length > 0
+                          if (has) setManifestViewerFor(ev); else setManifestCaptureFor(ev)
+                        } },
                       ...(isAdmin ? [{ id: 'spend', icon: '💰', label: 'Ad spend', onTap: () => setSpendOpen(spendOpen === ev.id ? null : ev.id) }] : []),
                       { id: 'notes',   icon: '📝', label: 'Notes',      onTap: () => setNotesEvent(ev) },
                       { id: 'pdf',     icon: '⤓',  label: 'Download PDF', onTap: () => downloadPdf(ev) },
