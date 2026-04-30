@@ -363,8 +363,8 @@ export default function Settings() {
         </CollapsibleCard>
       )}
 
-      {/* Role Manager (max@bebll.com only — DB-side gate via can_manage_roles()) */}
-      {user?.email?.toLowerCase() === 'max@bebll.com' && (
+      {/* Role Manager (max@bebllp.com only — DB-side gate via can_manage_roles()) */}
+      {user?.email?.toLowerCase() === 'max@bebllp.com' && (
         <CollapsibleCard
           storageKey="settings-role-manager"
           title="🛡️ Role Manager"
