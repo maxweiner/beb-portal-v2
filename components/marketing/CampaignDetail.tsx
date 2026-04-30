@@ -9,6 +9,7 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { MarketingCampaign, Event } from '@/types'
 import PhaseTimeline from './PhaseTimeline'
+import VDPPlanningSection from './VDPPlanningSection'
 
 const FLOW_LABELS = {
   vdp: '📬 VDP Mailers',
@@ -186,9 +187,24 @@ export default function CampaignDetail({ campaign, onBack, onChanged, onDeleted 
         </div>
       )}
 
-      {/* Future phases placeholder */}
-      <div className="card" style={{ padding: 18, color: 'var(--mist)', textAlign: 'center', fontSize: 13 }}>
-        Planning, proofing, payment, and done phases ship in Phases 4–8.
+      {/* Planning phase — flow-specific */}
+      {campaign.flow_type === 'vdp' && (
+        <VDPPlanningSection campaign={campaign} onChanged={onChanged} />
+      )}
+      {campaign.flow_type === 'postcard' && (
+        <div className="card" style={{ padding: 18, color: 'var(--mist)', textAlign: 'center', fontSize: 13 }}>
+          Postcard planning (master list + CSV upload + dedup) ships in Phase 5.
+        </div>
+      )}
+      {campaign.flow_type === 'newspaper' && (
+        <div className="card" style={{ padding: 18, color: 'var(--mist)', textAlign: 'center', fontSize: 13 }}>
+          Newspaper flow is out of scope for v1.
+        </div>
+      )}
+
+      {/* Proofing / Payment / Done — Phases 6–8 */}
+      <div className="card" style={{ padding: 18, color: 'var(--mist)', textAlign: 'center', fontSize: 13, marginTop: 14 }}>
+        Proofing, payment, and done phases ship in Phases 6–8.
       </div>
     </div>
   )
