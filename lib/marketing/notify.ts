@@ -2,7 +2,6 @@
 // route handlers thin and consistent — every approver-notification
 // email looks the same and applies the marketing-* report template.
 
-import { createClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email'
 
 interface SbClient { from: (table: string) => any; auth: any; storage: any }
@@ -70,6 +69,10 @@ export async function notifyApprovers(opts: {
   templateId: string
   vars: ApproverEmailVars
   ctaLabel?: string
+  /** When set, every email is sent with a Reply-To pointing here.
+   *  Used by proof notifications so approvers can reply "approve" and
+   *  the inbound webhook can route it back to the right proof. */
+  replyTo?: string
 }): Promise<{ sent: number; failed: number; errors: string[] }> {
   const errors: string[] = []
   let sent = 0
@@ -106,7 +109,7 @@ export async function notifyApprovers(opts: {
 
   for (const email of emails) {
     try {
-      await sendEmail({ to: email, subject, html })
+      await sendEmail({ to: email, subject, html, replyTo: opts.replyTo })
       sent++
     } catch (err: any) {
       failed++
