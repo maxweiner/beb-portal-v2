@@ -21,7 +21,8 @@ import Marketing from '@/components/marketing/Marketing'
 import TodoPage from '@/components/todo/TodoPage'
 import Calendar from '@/components/calendar/Calendar'
 import AppointmentsAdmin from '@/components/appointments-admin/AppointmentsAdmin'
-import { RoleGuard } from '@/components/ui/RoleGuard'
+import { ModuleGuard } from '@/components/ui/ModuleGuard'
+import { useRoleModules } from '@/lib/useRoleModules'
 import LibertyAdminPanel from '@/components/admin/LibertyAdminPanel'
 import NotificationTemplatesAdmin from '@/components/admin/NotificationTemplatesAdmin'
 import DataResearch from '@/components/admin/DataResearch'
@@ -43,21 +44,23 @@ export default function Home() {
   const setNav = (n: NavPage) => { rawSetNav(n); setNavKey(k => k + 1) }
   const [isMobile, setIsMobile] = useState(false)
 
-  // Role-scoped nav guards. Marketing = Calendar + Marketing only.
-  // Accounting = Calendar + Travel + Staff + Expenses only. Force
-  // nav back to an allowed section so deep-links can't bypass the
-  // sidebar restriction.
+  // Generic deep-link guard: if the current nav target isn't in the
+  // user's role_modules, redirect to the first granted page. Settings
+  // is always allowed (gear icon stays accessible to every role).
+  // Replaces the old marketing/accounting-specific branches.
+  const { modules: grantedModules, loaded: modulesLoaded } = useRoleModules()
   useEffect(() => {
-    if (user?.role === 'marketing' && nav !== 'marketing' && nav !== 'calendar') {
-      rawSetNav('marketing')
-    }
-    if (user?.role === 'accounting'
-        && nav !== 'calendar' && nav !== 'travel'
-        && nav !== 'staff'    && nav !== 'expenses'
-        && nav !== 'settings') {
-      rawSetNav('calendar')
-    }
-  }, [user?.role, nav])
+    if (!modulesLoaded || !user) return
+    if (nav === 'settings') return
+    if (grantedModules.has(nav)) return
+    const fallbackOrder: NavPage[] = [
+      'dashboard', 'calendar', 'marketing', 'expenses',
+      'events', 'schedule', 'travel', 'staff', 'shipping',
+      'reports', 'todo',
+    ]
+    const next = fallbackOrder.find(p => grantedModules.has(p))
+    rawSetNav(next ?? 'settings')
+  }, [modulesLoaded, grantedModules, nav, user])
 
   useEffect(() => {
     setIsMobile(shouldUseMobile())
@@ -158,9 +161,9 @@ export default function Home() {
           {nav === 'marketing' && <Marketing key={navKey} />}
           {nav === 'todo'      && <TodoPage key={navKey} />}
           {nav === 'settings'  && <Settings key={navKey} />}
-          {nav === 'admin'     && <RoleGuard roles={["admin", "superadmin"]}><AdminPanel key={navKey} /></RoleGuard>}
-          {nav === 'libertyadmin' && <RoleGuard roles={["admin", "superadmin"]}><LibertyAdminPanel key={navKey} /></RoleGuard>}
-          {nav === 'stores'    && <RoleGuard roles={["admin", "superadmin"]}><Stores key={navKey} /></RoleGuard>}
+          {nav === 'admin'     && <ModuleGuard moduleId="admin"><AdminPanel key={navKey} /></ModuleGuard>}
+          {nav === 'libertyadmin' && <ModuleGuard moduleId="libertyadmin"><LibertyAdminPanel key={navKey} /></ModuleGuard>}
+          {nav === 'stores'    && <ModuleGuard moduleId="stores"><Stores key={navKey} /></ModuleGuard>}
         </MobileLayout>
       </>
     )
@@ -207,29 +210,29 @@ export default function Home() {
         {nav === 'travel'     && <Travel key={navKey} />}
         {nav === 'marketing'  && <Marketing key={navKey} />}
         {nav === 'admin' && (
-          <RoleGuard roles={['admin', 'superadmin']}>
+          <ModuleGuard moduleId="admin">
             <AdminPanel key={navKey} />
-          </RoleGuard>
+          </ModuleGuard>
         )}
         {nav === 'libertyadmin' && (
-          <RoleGuard roles={['admin', 'superadmin']}>
+          <ModuleGuard moduleId="libertyadmin">
             <LibertyAdminPanel key={navKey} />
-          </RoleGuard>
+          </ModuleGuard>
         )}
         {nav === 'stores' && (
-          <RoleGuard roles={['admin', 'superadmin']}>
+          <ModuleGuard moduleId="stores">
             <Stores key={navKey} />
-          </RoleGuard>
+          </ModuleGuard>
         )}
         {nav === 'notification-templates' && (
-          <RoleGuard roles={['superadmin']}>
+          <ModuleGuard moduleId="notification-templates">
             <NotificationTemplatesAdmin key={navKey} />
-          </RoleGuard>
+          </ModuleGuard>
         )}
         {nav === 'data-research' && (
-          <RoleGuard roles={['admin', 'superadmin']}>
+          <ModuleGuard moduleId="data-research">
             <DataResearch key={navKey} />
-          </RoleGuard>
+          </ModuleGuard>
         )}
       </main>
     </div>
