@@ -241,6 +241,7 @@ function UsersTab() {
                   <option value="buyer">Buyer</option>
                   <option value="admin">Admin</option>
                   {isSuperAdmin && <option value="superadmin">Superadmin</option>}
+                  <option value="marketing">Marketing</option>
                 </select>
               )}
 
@@ -371,6 +372,7 @@ function InviteTab() {
               <option value="buyer">Buyer</option>
               <option value="admin">Admin</option>
               {isSuperAdmin && <option value="superadmin">Superadmin</option>}
+              <option value="marketing">Marketing</option>
             </select>
           </div>
           <button type="submit" disabled={saving}
