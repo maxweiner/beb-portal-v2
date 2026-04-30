@@ -233,6 +233,15 @@ select {
   cursor: pointer;
 }
 input:focus, select:focus, textarea:focus { border-color: var(--green); }
+/* Strip the up/down spinners from number inputs everywhere — they look
+   noisy in dollar-amount fields (Day Entry checks, expenses, etc.) and
+   nobody uses them. */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] { -moz-appearance: textfield; }
 .field { margin-bottom: 14px; }
 .fl { display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--mist); margin-bottom: 6px; }
 
