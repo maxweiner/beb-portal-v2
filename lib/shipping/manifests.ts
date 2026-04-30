@@ -7,7 +7,8 @@ import { supabase } from '@/lib/supabase'
 
 export interface ShippingManifest {
   id: string
-  box_id: string
+  event_id: string
+  box_id: string | null   // optional — kept for future per-box pinning
   file_path: string
   file_size_bytes: number
   is_scan_style: boolean
@@ -16,15 +17,15 @@ export interface ShippingManifest {
   deleted_at: string | null
 }
 
-const COLS = 'id, box_id, file_path, file_size_bytes, is_scan_style, uploaded_by, uploaded_at, deleted_at'
+const COLS = 'id, event_id, box_id, file_path, file_size_bytes, is_scan_style, uploaded_by, uploaded_at, deleted_at'
 
-/** All live (non-deleted) manifests across a list of box ids. */
-export async function fetchManifestsForBoxes(boxIds: string[]): Promise<ShippingManifest[]> {
-  if (boxIds.length === 0) return []
+/** All live (non-deleted) manifests across a list of event ids. */
+export async function fetchManifestsForEvents(eventIds: string[]): Promise<ShippingManifest[]> {
+  if (eventIds.length === 0) return []
   const { data, error } = await supabase
     .from('shipping_manifests')
     .select(COLS)
-    .in('box_id', boxIds)
+    .in('event_id', eventIds)
     .is('deleted_at', null)
     .order('uploaded_at', { ascending: false })
   if (error) throw error
@@ -54,7 +55,7 @@ export async function softDeleteManifest(id: string): Promise<void> {
  * Returns the new row.
  */
 export async function uploadManifest(input: {
-  boxId: string
+  eventId: string
   blob: Blob
   isScanStyle: boolean
 }): Promise<ShippingManifest> {
@@ -63,7 +64,7 @@ export async function uploadManifest(input: {
   const fd = new FormData()
   fd.append('file', input.blob, 'manifest.jpg')
   fd.append('is_scan_style', String(input.isScanStyle))
-  const res = await fetch(`/api/shipping/boxes/${input.boxId}/manifests/upload`, {
+  const res = await fetch(`/api/shipping/events/${input.eventId}/manifests/upload`, {
     method: 'POST',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: fd,

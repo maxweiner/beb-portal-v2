@@ -15,6 +15,9 @@ import type { ShippingManifest } from '@/lib/shipping/manifests'
 import { useIsNarrow } from '@/components/expenses/useIsNarrow'
 
 interface Props {
+  /** The event to attach the manifest to. Prop name is `boxId` purely
+   *  for source-history continuity; semantically it's the event id now
+   *  that manifests are event-scoped. Future renames OK. */
   boxId: string
   boxLabel: string
   onClose: () => void
@@ -80,7 +83,7 @@ export default function ManifestCaptureModal({
     setBusy('uploading')
     setError(null)
     try {
-      const m = await uploadManifest({ boxId, blob: processedBlob, isScanStyle: scanStyle })
+      const m = await uploadManifest({ eventId: boxId, blob: processedBlob, isScanStyle: scanStyle })
       onUploaded(m)
       onClose()
     } catch (err: any) {

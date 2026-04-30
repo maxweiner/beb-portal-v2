@@ -10,9 +10,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
-import { fetchManifestsForBoxes, type ShippingManifest } from '@/lib/shipping/manifests'
-import ManifestCaptureModal from './ManifestCaptureModal'
-import ManifestViewerModal from './ManifestViewerModal'
 
 type BoxType = 'jewelry' | 'silver'
 type BoxStatus = 'pending' | 'labels_sent' | 'shipped' | 'received' | 'cancelled'
@@ -132,12 +129,6 @@ export default function EventShippingPanel({
   const [shipment, setShipment] = useState<ShipmentRow | null>(null)
   const [boxes, setBoxes] = useState<BoxRow[]>([])
   const [loaded, setLoaded] = useState(false)
-  // Manifest photos keyed by box_id. Loaded once with the boxes;
-  // mutated locally on upload / delete to avoid re-fetching.
-  const [manifestsByBox, setManifestsByBox] = useState<Record<string, ShippingManifest[]>>({})
-  // Which box's capture or viewer modal is open (mutually exclusive).
-  const [captureBoxId, setCaptureBoxId] = useState<string | null>(null)
-  const [viewerBoxId, setViewerBoxId] = useState<string | null>(null)
   const [savingCounts, setSavingCounts] = useState(false)
   const [draftJewelry, setDraftJewelry] = useState<number>(0)
   const [draftSilver, setDraftSilver] = useState<number>(0)
@@ -161,28 +152,12 @@ export default function EventShippingPanel({
     setDraftSilver(shipRow.silver_box_count)
     const filteredBoxes = ((b || []) as unknown as BoxRow[]).filter(x => x.shipment_id === shipRow.id)
     setBoxes(filteredBoxes)
-    // Manifest photos for these boxes (silent failure — feature is best-effort).
-    try {
-      const manifests = await fetchManifestsForBoxes(filteredBoxes.map(x => x.id))
-      const grouped: Record<string, ShippingManifest[]> = {}
-      for (const m of manifests) (grouped[m.box_id] ||= []).push(m)
-      setManifestsByBox(grouped)
-    } catch { setManifestsByBox({}) }
     setLoaded(true)
   }
   useEffect(() => { reload() /* eslint-disable-next-line */ }, [eventId])
 
   const jewelryBoxes = useMemo(() => boxes.filter(b => b.type === 'jewelry').sort((a, b) => a.number - b.number), [boxes])
   const silverBoxes  = useMemo(() => boxes.filter(b => b.type === 'silver').sort((a, b) => a.number - b.number),  [boxes])
-  const manifestCounts = useMemo(() => {
-    const out: Record<string, number> = {}
-    for (const [boxId, list] of Object.entries(manifestsByBox)) out[boxId] = list.length
-    return out
-  }, [manifestsByBox])
-  const openManifestForBox = (b: BoxRow) => {
-    if ((manifestsByBox[b.id] || []).length > 0) setViewerBoxId(b.id)
-    else setCaptureBoxId(b.id)
-  }
 
   const anyMovement = boxes.some(b => b.status !== 'pending' && b.status !== 'cancelled')
   const countsLocked = anyMovement
@@ -384,8 +359,6 @@ export default function EventShippingPanel({
         onBulkAdvance={(s) => bulkAdvance('jewelry', s)}
         onSetTracking={setManualTracking}
         onRefresh={refreshTracking}
-        manifestCounts={manifestCounts}
-        onOpenManifest={openManifestForBox}
       />
 
       <div style={{ height: 12 }} />
@@ -401,49 +374,11 @@ export default function EventShippingPanel({
         onBulkAdvance={(s) => bulkAdvance('silver', s)}
         onSetTracking={setManualTracking}
         onRefresh={refreshTracking}
-        manifestCounts={manifestCounts}
-        onOpenManifest={openManifestForBox}
       />
 
       <div style={{ marginTop: 14, padding: 10, background: 'var(--cream)', borderRadius: 6, fontSize: 12, color: 'var(--mist)' }}>
         🧪 Scanner integration ships in a follow-up PR. For now, enter tracking numbers manually with the "Tracking" button on each box.
       </div>
-
-      {captureBoxId && (() => {
-        const b = boxes.find(x => x.id === captureBoxId)
-        if (!b) return null
-        return (
-          <ManifestCaptureModal
-            boxId={b.id}
-            boxLabel={b.identifier}
-            onClose={() => setCaptureBoxId(null)}
-            onUploaded={(m) => {
-              setManifestsByBox(prev => ({
-                ...prev,
-                [b.id]: [m, ...(prev[b.id] || [])],
-              }))
-            }}
-          />
-        )
-      })()}
-      {viewerBoxId && (() => {
-        const b = boxes.find(x => x.id === viewerBoxId)
-        if (!b) return null
-        return (
-          <ManifestViewerModal
-            boxLabel={b.identifier}
-            manifests={manifestsByBox[b.id] || []}
-            onClose={() => setViewerBoxId(null)}
-            onAddAnother={() => { setViewerBoxId(null); setCaptureBoxId(b.id) }}
-            onDeleted={(id) => {
-              setManifestsByBox(prev => ({
-                ...prev,
-                [b.id]: (prev[b.id] || []).filter(x => x.id !== id),
-              }))
-            }}
-          />
-        )
-      })()}
     </div>
   )
 }
@@ -451,7 +386,6 @@ export default function EventShippingPanel({
 function BoxSection({
   title, boxes, canMutate, bulkBusy, busyBoxId, refreshingBoxId,
   onAdvance, onBulkAdvance, onSetTracking, onRefresh,
-  manifestCounts, onOpenManifest,
 }: {
   title: string
   boxes: BoxRow[]
@@ -463,8 +397,6 @@ function BoxSection({
   onBulkAdvance: (fromStatus: BoxStatus) => void
   onSetTracking: (b: BoxRow) => void
   onRefresh: (b: BoxRow) => void
-  manifestCounts: Record<string, number>
-  onOpenManifest: (b: BoxRow) => void
 }) {
   if (boxes.length === 0) {
     return (
@@ -513,8 +445,6 @@ function BoxSection({
             busy={busyBoxId === b.id} refreshing={refreshingBoxId === b.id}
             onAdvance={() => onAdvance(b)} onSetTracking={() => onSetTracking(b)}
             onRefresh={() => onRefresh(b)}
-            manifestCount={manifestCounts[b.id] ?? 0}
-            onOpenManifest={() => onOpenManifest(b)}
           />
         ))}
       </div>
@@ -525,7 +455,6 @@ function BoxSection({
 function BoxRowItem({
   box, canMutate, busy, refreshing,
   onAdvance, onSetTracking, onRefresh,
-  manifestCount, onOpenManifest,
 }: {
   box: BoxRow
   canMutate: boolean
@@ -534,8 +463,6 @@ function BoxRowItem({
   onAdvance: () => void
   onSetTracking: () => void
   onRefresh: () => void
-  manifestCount: number
-  onOpenManifest: () => void
 }) {
   const idx = STATUS_ORDER.indexOf(box.status)
   const next = STATUS_ORDER[idx + 1]
@@ -573,27 +500,6 @@ function BoxRowItem({
           )}
         </div>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          {/* Manifest photo button. Tap to capture (mobile) / pick (desktop)
-              when none exist; tap to view when there are some. Min 44px tap
-              target for mobile a11y. */}
-          {canMutate && (
-            <button onClick={onOpenManifest}
-              title={manifestCount > 0 ? `View ${manifestCount} manifest photo${manifestCount === 1 ? '' : 's'}` : 'Add manifest photo'}
-              aria-label={manifestCount > 0 ? `View manifest photos for ${box.identifier}` : `Add manifest photo for ${box.identifier}`}
-              style={{
-                background: manifestCount > 0 ? 'var(--green-pale)' : 'transparent',
-                border: '1px solid ' + (manifestCount > 0 ? 'var(--green3)' : 'var(--pearl)'),
-                borderRadius: 6, cursor: 'pointer',
-                minWidth: 44, minHeight: 44, padding: '4px 8px',
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-                fontSize: 16, fontFamily: 'inherit', color: 'var(--ink)',
-              }}>
-              <span aria-hidden>📷</span>
-              {manifestCount > 0 && (
-                <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--green-dark)' }}>{manifestCount}</span>
-              )}
-            </button>
-          )}
           {liveTrackable && (
             <button className="btn-outline btn-xs" disabled={refreshing} onClick={onRefresh}
               title="Refresh carrier status now">{refreshing ? '…' : '↻'}</button>

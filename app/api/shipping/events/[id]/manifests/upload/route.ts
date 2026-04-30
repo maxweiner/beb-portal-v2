@@ -1,13 +1,13 @@
-// POST /api/shipping/boxes/[id]/manifests/upload
+// POST /api/shipping/events/[id]/manifests/upload
 //
 // Body: multipart/form-data with `file` (image/jpeg) and
 // `is_scan_style` ("true" | "false"). Client compresses + scan-styles
 // the image before posting (lib/imageUtils.processImageForUpload).
 //
-// Validates the caller can write to the box (admin/superadmin OR a
-// worker on the parent event), uploads to the `manifests` bucket via
-// service role at {shipment_id}/{box_id}/{uuid}.jpg, then inserts a
-// shipping_manifests row. Returns the new row.
+// Validates the caller can write to the event (admin/superadmin OR a
+// worker on the event), uploads to the `manifests` bucket via service
+// role at events/{event_id}/{uuid}.jpg, then inserts a
+// shipping_manifests row scoped to the event. Returns the new row.
 
 import { NextResponse } from 'next/server'
 import crypto from 'crypto'
@@ -17,7 +17,7 @@ import { getAuthedUser, isAdminLike } from '@/lib/expenses/serverAuth'
 export const dynamic = 'force-dynamic'
 
 const BUCKET = 'manifests'
-const MAX_BYTES = 8 * 1024 * 1024 // 8 MB cap — scan-style outputs are usually <500 KB
+const MAX_BYTES = 8 * 1024 * 1024
 const ALLOWED = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp'])
 
 function admin() {
@@ -48,25 +48,24 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const isScanStyle = (form.get('is_scan_style') ?? 'true').toString() === 'true'
 
   const sb = admin()
-  // Look up the box + parent event to enforce access.
-  const { data: box, error: boxErr } = await sb
-    .from('event_shipment_boxes')
-    .select('id, shipment_id, event_shipments!inner(id, event_id, events!inner(workers))')
+  // Look up the event to enforce access — admin OR worker on event.
+  const { data: event, error: evErr } = await sb
+    .from('events')
+    .select('id, workers')
     .eq('id', params.id)
     .maybeSingle()
-  if (boxErr) return NextResponse.json({ error: boxErr.message }, { status: 500 })
-  if (!box) return NextResponse.json({ error: 'Box not found' }, { status: 404 })
+  if (evErr) return NextResponse.json({ error: evErr.message }, { status: 500 })
+  if (!event) return NextResponse.json({ error: 'Event not found' }, { status: 404 })
 
   const isAdmin = isAdminLike(me)
-  const workers = ((box as any).event_shipments?.events?.workers || []) as Array<{ id: string }>
+  const workers = ((event as any).workers || []) as Array<{ id: string }>
   const isWorker = workers.some(w => w.id === me.id)
   if (!isAdmin && !isWorker) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const shipmentId = (box as any).shipment_id as string
   const buffer = Buffer.from(await file.arrayBuffer())
-  const path = `${shipmentId}/${box.id}/${crypto.randomUUID()}.jpg`
+  const path = `events/${event.id}/${crypto.randomUUID()}.jpg`
 
   const { error: upErr } = await sb.storage.from(BUCKET).upload(path, buffer, {
     contentType: 'image/jpeg',
@@ -77,16 +76,15 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const { data: row, error: insErr } = await sb
     .from('shipping_manifests')
     .insert({
-      box_id: box.id,
+      event_id: event.id,
       file_path: path,
       file_size_bytes: buffer.length,
       is_scan_style: isScanStyle,
       uploaded_by: me.id,
     })
-    .select('id, box_id, file_path, file_size_bytes, is_scan_style, uploaded_by, uploaded_at, deleted_at')
+    .select('id, event_id, box_id, file_path, file_size_bytes, is_scan_style, uploaded_by, uploaded_at, deleted_at')
     .single()
   if (insErr || !row) {
-    // Best-effort: clean up the orphan storage object.
     await sb.storage.from(BUCKET).remove([path]).catch(() => {})
     return NextResponse.json({ error: insErr?.message || 'Insert failed' }, { status: 500 })
   }
