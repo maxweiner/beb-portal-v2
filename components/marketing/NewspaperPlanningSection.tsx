@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { MarketingCampaign } from '@/types'
+import RoleLabel from './RoleLabel'
 
 interface NewspaperDetails {
   publication_name: string | null
@@ -112,7 +113,7 @@ export default function NewspaperPlanningSection({ campaign, onChanged }: {
   return (
     <div className="card" style={{ padding: 18, marginBottom: 14 }}>
       <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)', marginBottom: 4 }}>
-        2. Planning — Newspaper
+        2. Planning — Newspaper <RoleLabel>(Marketing Team)</RoleLabel>
       </div>
       <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 14 }}>
         {isInputMode && 'Enter the publication name and submit for approval.'}

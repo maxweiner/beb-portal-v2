@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { MarketingCampaign } from '@/types'
+import RoleLabel from './RoleLabel'
 
 interface Proof {
   id: string
@@ -128,7 +129,7 @@ export default function ProofingSection({ campaign, onChanged }: {
   return (
     <div className="card" style={{ padding: 18, marginBottom: 14 }}>
       <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)', marginBottom: 4 }}>
-        3. Proofing
+        3. Proofing <RoleLabel>(Marketing Team)</RoleLabel>
       </div>
       <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 14 }}>
         Upload one or more proof files (front + back of mailer). Approvers can review here or by replying "approve" to the notification email.

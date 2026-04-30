@@ -15,6 +15,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { MarketingCampaign } from '@/types'
+import RoleLabel from './RoleLabel'
 
 interface VdpDetails {
   vdp_count: number | null
@@ -160,7 +161,7 @@ export default function VDPPlanningSection({ campaign, onChanged }: {
   return (
     <div className="card" style={{ padding: 18, marginBottom: 14 }}>
       <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)', marginBottom: 4 }}>
-        2. Planning — VDP
+        2. Planning — VDP <RoleLabel>(Marketing Team)</RoleLabel>
       </div>
       <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 14 }}>
         {isInputMode && 'Enter the number of VDPs to mail and the zip codes to target. Submit for approval when ready.'}

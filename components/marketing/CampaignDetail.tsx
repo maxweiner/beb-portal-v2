@@ -17,6 +17,7 @@ import PaymentSection from './PaymentSection'
 import DoneSection from './DoneSection'
 import MarketingQrSection from './MarketingQrSection'
 import FilesArtifactsSection from './FilesArtifactsSection'
+import RoleLabel from './RoleLabel'
 
 const FLOW_LABELS = {
   vdp: '📬 VDP Mailers',
@@ -140,7 +141,7 @@ export default function CampaignDetail({ campaign, onBack, onChanged, onDeleted 
       {/* Setup phase: budget + notify */}
       <div className="card" style={{ padding: 18, marginBottom: 14 }}>
         <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)', marginBottom: 4 }}>
-          1. Setup
+          1. Setup <RoleLabel>(Buyers)</RoleLabel>
         </div>
         <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 14 }}>
           Set the marketing budget for this campaign, then notify the team to start planning.
@@ -149,7 +150,7 @@ export default function CampaignDetail({ campaign, onBack, onChanged, onDeleted 
         {/* Budget */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, alignItems: 'end', marginBottom: 14 }}>
           <div>
-            <label className="fl">Marketing Budget</label>
+            <label className="fl">Marketing Budget <RoleLabel>(Buyers)</RoleLabel></label>
             <div style={{ position: 'relative' }}>
               <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)', fontWeight: 700 }}>$</span>
               <input type="number" min={0} step="0.01" value={budgetInput}
