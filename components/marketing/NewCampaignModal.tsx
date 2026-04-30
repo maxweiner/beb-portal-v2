@@ -120,21 +120,41 @@ export default function NewCampaignModal({
           <div className="field" style={{ marginBottom: 14 }}>
             <label className="fl">Event</label>
             <input type="text" value={eventSearch} onChange={e => setEventSearch(e.target.value)}
-              placeholder="Search store name…"
-              style={{ width: '100%', marginBottom: 6, fontSize: 13 }} />
-            <select value={eventId} onChange={e => setEventId(e.target.value)} style={{ width: '100%' }}>
-              <option value="">
-                {eventSearch.trim()
-                  ? `Pick from ${eventOptions.length} match${eventOptions.length === 1 ? '' : 'es'}…`
-                  : 'Pick an event…'}
-              </option>
-              {eventOptions.map(ev => (
-                <option key={ev.id} value={ev.id}>{eventLabel(ev)}</option>
-              ))}
-            </select>
-            {eventSearch.trim() && eventOptions.length === 0 && (
+              placeholder="Search store name… (or scroll the list below)"
+              style={{ width: '100%', fontSize: 13 }} />
+            <div style={{
+              marginTop: 6, maxHeight: 220, overflowY: 'auto',
+              border: '1px solid var(--pearl)', borderRadius: 8,
+              background: '#fff',
+            }}>
+              {eventOptions.length === 0 ? (
+                <div style={{ padding: 12, fontSize: 12, color: 'var(--mist)', textAlign: 'center', fontStyle: 'italic' }}>
+                  {eventSearch.trim() ? `No events match "${eventSearch.trim()}".` : 'No events found.'}
+                </div>
+              ) : eventOptions.map((ev, i) => {
+                const sel = eventId === ev.id
+                return (
+                  <button key={ev.id} type="button" onClick={() => setEventId(ev.id)} style={{
+                    display: 'block', width: '100%', textAlign: 'left',
+                    whiteSpace: 'normal',
+                    padding: '8px 12px',
+                    border: 'none',
+                    borderBottom: i < eventOptions.length - 1 ? '1px solid var(--cream2)' : 'none',
+                    borderRadius: 0,
+                    background: sel ? 'var(--green-pale)' : '#fff',
+                    color: sel ? 'var(--green-dark)' : 'var(--ink)',
+                    fontWeight: sel ? 800 : 500,
+                    cursor: 'pointer', fontFamily: 'inherit', fontSize: 13,
+                  }}>
+                    {sel && <span style={{ marginRight: 6 }}>✓</span>}
+                    {eventLabel(ev)}
+                  </button>
+                )
+              })}
+            </div>
+            {!eventSearch.trim() && eventOptions.length === 50 && (
               <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4, fontStyle: 'italic' }}>
-                No events match "{eventSearch.trim()}".
+                Showing 50 most recent. Type to search older events.
               </div>
             )}
           </div>
