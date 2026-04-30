@@ -7,6 +7,7 @@ import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import type { Theme, BuyerVacation } from '@/types'
 import AvatarPicker from './AvatarPicker'
 import BrandLogosPanel from './BrandLogosPanel'
+import RoleManagerPanel from './RoleManagerPanel'
 import Checkbox from '@/components/ui/Checkbox'
 import AddressAutocompleteInput from '@/components/ui/AddressAutocompleteInput'
 import CollapsibleCard from '@/components/ui/CollapsibleCard'
@@ -359,6 +360,17 @@ export default function Settings() {
           subtitle="Upload a logo for each brand. Used on the Expense Report PDF (and other branded surfaces over time)."
         >
           <BrandLogosPanel />
+        </CollapsibleCard>
+      )}
+
+      {/* Role Manager (max@bebll.com only — DB-side gate via can_manage_roles()) */}
+      {user?.email?.toLowerCase() === 'max@bebll.com' && (
+        <CollapsibleCard
+          storageKey="settings-role-manager"
+          title="🛡️ Role Manager"
+          subtitle="Create roles and choose which modules each one unlocks. Drives the sidebar + page guards (PRs C/D in this initiative wire them in)."
+        >
+          <RoleManagerPanel />
         </CollapsibleCard>
       )}
 
