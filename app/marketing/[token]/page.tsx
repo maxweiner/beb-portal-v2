@@ -336,6 +336,10 @@ function PlanningInput({ campaign, token, onSubmitted }: {
   const [publication, setPublication] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Tracks the post-success "Submitted ✓" button state. The parent
+  // page reload happens after a brief delay so the user sees the
+  // confirmation before the form swaps to the awaiting-approval banner.
+  const [submitted, setSubmitted] = useState(false)
 
   function parseZips(raw: string): string[] {
     return Array.from(new Set(
@@ -354,7 +358,13 @@ function PlanningInput({ campaign, token, onSubmitted }: {
       if (!res.ok) {
         setError(json.error || `Failed (${res.status})`)
       } else {
-        await onSubmitted()
+        // Show "Submitted ✓" briefly so the click feels confirmed, then
+        // let the parent reload state (which swaps the form for the
+        // awaiting-approval banner).
+        setSubmitted(true)
+        setBusy(false)
+        setTimeout(() => onSubmitted(), 800)
+        return
       }
     } catch (e: any) {
       setError(e?.message || 'Network error')
@@ -427,14 +437,14 @@ function PlanningInput({ campaign, token, onSubmitted }: {
               if (list.length === 0) { setError('Enter at least one valid 5-digit zip code.'); return }
               submit({ vdp_count: count, zip_codes: list })
             }}
-            disabled={busy}
+            disabled={busy || submitted}
             style={{
-              background: busy ? '#888' : '#2D3B2D', color: '#fff',
+              background: submitted ? '#16a34a' : (busy ? '#888' : '#2D3B2D'), color: '#fff',
               padding: '10px 22px', borderRadius: 8, border: 'none',
-              fontWeight: 700, fontSize: 14, cursor: busy ? 'wait' : 'pointer',
+              fontWeight: 700, fontSize: 14, cursor: (busy || submitted) ? 'default' : 'pointer',
               fontFamily: 'inherit',
             }}>
-            {busy ? 'Submitting…' : '📤 Submit for Approval'}
+            {submitted ? '✓ Submitted' : busy ? 'Submitting…' : '📤 Submit for Approval'}
           </button>
         </>
       )}
@@ -454,14 +464,14 @@ function PlanningInput({ campaign, token, onSubmitted }: {
               if (!publication.trim()) { setError('Publication name is required.'); return }
               submit({ publication_name: publication.trim() })
             }}
-            disabled={busy || !publication.trim()}
+            disabled={busy || submitted || !publication.trim()}
             style={{
-              background: busy || !publication.trim() ? '#888' : '#2D3B2D', color: '#fff',
+              background: submitted ? '#16a34a' : (busy || !publication.trim() ? '#888' : '#2D3B2D'), color: '#fff',
               padding: '10px 22px', borderRadius: 8, border: 'none',
-              fontWeight: 700, fontSize: 14, cursor: busy ? 'wait' : 'pointer',
+              fontWeight: 700, fontSize: 14, cursor: (busy || submitted) ? 'default' : 'pointer',
               fontFamily: 'inherit',
             }}>
-            {busy ? 'Submitting…' : '📤 Submit for Approval'}
+            {submitted ? '✓ Submitted' : busy ? 'Submitting…' : '📤 Submit for Approval'}
           </button>
         </>
       )}
