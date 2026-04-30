@@ -74,20 +74,44 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       if (zErr) return NextResponse.json({ error: zErr.message }, { status: 500 })
     }
   } else if (campaign.flow_type === 'postcard') {
-    // Phase 5 expands postcard planning with the master list flow.
-    // For Phase 4 we accept a count if provided so the workflow can
-    // be exercised end-to-end without blocking.
-    const count = Number(body?.postcard_count)
-    if (!Number.isFinite(count) || count < 0) {
-      return NextResponse.json({ error: 'postcard_count must be a non-negative number' }, { status: 400 })
+    // Phase 5 postcard planning: filter settings drive the recipient
+    // count from the store's master list. Body:
+    //   { max_age_days?: number, max_proximity_miles?: number }
+    const maxAge = body?.max_age_days != null ? Number(body.max_age_days) : null
+    const maxProx = body?.max_proximity_miles != null ? Number(body.max_proximity_miles) : null
+    if (maxAge != null && (!Number.isFinite(maxAge) || maxAge < 0)) {
+      return NextResponse.json({ error: 'max_age_days must be a non-negative number' }, { status: 400 })
     }
+    if (maxProx != null && (!Number.isFinite(maxProx) || maxProx < 0)) {
+      return NextResponse.json({ error: 'max_proximity_miles must be a non-negative number' }, { status: 400 })
+    }
+
+    // Resolve store + count matching addresses with the same filter logic
+    // the UI uses for the live preview.
+    const { data: ev } = await sb.from('events').select('store_id').eq('id', campaign.event_id).maybeSingle()
+    const storeId = ev?.store_id
+    if (!storeId) return NextResponse.json({ error: 'Event has no store' }, { status: 400 })
+
+    let q = sb.from('store_postcard_lists').select('id', { count: 'exact', head: true }).eq('store_id', storeId)
+    if (maxAge != null) {
+      const cutoff = new Date(Date.now() - maxAge * 24 * 60 * 60 * 1000).toISOString()
+      q = q.gte('created_at', cutoff)
+    }
+    // Proximity intentionally unenforced server-side in v1 — needs
+    // geocoded lat/lng on store_postcard_lists which we haven't shipped
+    // yet. Selected value still persists for future use.
+    const { count, error: countErr } = await q
+    if (countErr) return NextResponse.json({ error: countErr.message }, { status: 500 })
+
     const { error: detErr } = await sb.from('postcard_campaign_details').upsert({
       campaign_id: campaign.id,
-      postcard_count: count,
+      postcard_count: count ?? 0,
       submitted_at: nowIso,
       submitted_by: me.id,
       approved_at: null,
       approved_by: null,
+      selected_filter_max_record_age_days: maxAge,
+      selected_filter_max_proximity_miles: maxProx,
     }, { onConflict: 'campaign_id' })
     if (detErr) return NextResponse.json({ error: detErr.message }, { status: 500 })
   } else {
