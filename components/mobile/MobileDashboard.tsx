@@ -10,6 +10,7 @@ import { eventDisplayName } from '@/lib/eventName'
 import { fmtMoney } from '@/lib/format'
 import { isAdmin as roleIsAdmin, isWorkerAssigned } from '@/lib/permissions'
 import { weekRange, eventOverlapsWeek, daysWorkedOnEvent } from '@/lib/eventDates'
+import { eventSpend, dayHasData } from '@/lib/eventSpend'
 import UnderstaffedBadge from '@/components/events/UnderstaffedBadge'
 import NextEventCard from '@/components/dashboard/NextEventCard'
 import MyUpcomingEventsList from '@/components/dashboard/MyUpcomingEventsList'
@@ -22,12 +23,8 @@ const TIERS: Record<number, { label: string; icon: string; color: string }> = {
 
 const INELIGIBLE = ['joe', 'max', 'rich']
 
-const eventSpend = (ev: any) =>
-  (ev.days || []).reduce((s: number, d: any) => s + (Number(d.dollars10) || 0) + (Number(d.dollars5) || 0), 0)
 const eventDayStatus = (ev: any) => {
-  const entered = (ev.days || []).filter((d: any) =>
-    (Number(d.purchases) || 0) > 0 || (Number(d.dollars10) || 0) > 0 || (Number(d.dollars5) || 0) > 0
-  ).length
+  const entered = (ev.days || []).filter(dayHasData).length
   return entered === 0 ? '' : `Day ${entered} of 3`
 }
 

@@ -7,6 +7,7 @@ import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import { isMobileDevice } from '@/lib/mobile'
 import { canEditEvent, isAdmin as roleIsAdmin, isWorkerAssigned } from '@/lib/permissions'
 import { fmtMoney } from '@/lib/format'
+import { eventSpend, eventCommission, daySpend, dayHasData } from '@/lib/eventSpend'
 import type { Event, BuyerVacation } from '@/types'
 import type { NavPage } from '@/app/page'
 import EventNotesPanel from './EventNotesPanel'
@@ -557,7 +558,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
         {filtered.map(ev => {
           const cur = isCurrent(ev)
           const purchases = ev.days.reduce((s, d) => s + (d.purchases || 0), 0)
-          const dollars = ev.days.reduce((s, d) => s + (d.dollars10 || 0) + (d.dollars5 || 0), 0)
+          const dollars = eventSpend(ev)
           const store = stores.find(s => s.id === ev.store_id)
           const evWorkers = ev.workers || []
           const wOpen = workersOpen === ev.id
@@ -708,7 +709,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                       style={{ padding: '10px 14px 0', display: 'flex', gap: 6, cursor: 'pointer' }}>
                       {[1, 2, 3].map(d => {
                         const day = (ev.days || []).find((x: any) => x.day_number === d)
-                        const dayDollars = day ? (Number(day.dollars10) || 0) + (Number(day.dollars5) || 0) : 0
+                        const dayDollars = day ? daySpend(day) : 0
                         const dayPurch = day ? (Number(day.purchases) || 0) : 0
                         const hasData = !!day && (dayDollars > 0 || dayPurch > 0 || (Number(day.customers) || 0) > 0)
                         const dayDate = new Date(ev.start_date + 'T12:00:00')
@@ -908,7 +909,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                 <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
                   {[1, 2, 3].map(d => {
                     const day = ev.days.find((x: any) => x.day_number === d)
-                    const has = !!day && ((day.purchases || 0) > 0 || (day.dollars10 || 0) > 0 || (day.dollars5 || 0) > 0)
+                    const has = dayHasData(day)
                     return (
                       <span key={d} aria-hidden style={{
                         width: 8, height: 8, borderRadius: '50%',
@@ -1238,8 +1239,8 @@ function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
   const days = [...(ev.days || [])].sort((a, b) => a.day_number - b.day_number)
   const totalPurchases = days.reduce((s, d) => s + (d.purchases || 0), 0)
   const totalCustomers = days.reduce((s, d) => s + (d.customers || 0), 0)
-  const totalDollars = days.reduce((s, d) => s + (d.dollars10 || 0) + (d.dollars5 || 0), 0)
-  const totalCommission = days.reduce((s, d) => s + (d.dollars10 || 0) * 0.10 + (d.dollars5 || 0) * 0.05, 0)
+  const totalDollars = eventSpend(ev)
+  const totalCommission = eventCommission(ev)
   const closeRate = totalCustomers > 0 ? Math.round(totalPurchases / totalCustomers * 100) : 0
 
   const fmt = (ds: string) => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
@@ -1287,7 +1288,7 @@ function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
                 const dayDate = new Date(ev.start_date + 'T12:00:00')
                 dayDate.setDate(dayDate.getDate() + d.day_number - 1)
                 const dayDateStr = isNaN(dayDate.getTime()) ? '' : dayDate.toISOString().slice(0, 10)
-                const dayDollars = (d.dollars10 || 0) + (d.dollars5 || 0)
+                const dayDollars = daySpend(d)
                 const dayCR = d.customers > 0 ? Math.round(d.purchases / d.customers * 100) : 0
                 return (
                   <div key={d.day_number} style={{ paddingBottom: 16, marginBottom: 16, borderBottom: '1px solid var(--cream2)' }}>
