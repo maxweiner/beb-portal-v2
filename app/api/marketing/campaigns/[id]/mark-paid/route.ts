@@ -12,7 +12,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getAuthedUser } from '@/lib/expenses/serverAuth'
+import { resolveMarketingActor } from '@/lib/marketing/auth'
 import { sendMarketingReceiptForCampaign } from '@/lib/marketing/sendAccountantReceipt'
 
 export const dynamic = 'force-dynamic'
@@ -27,14 +27,14 @@ function admin() {
 }
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const me = await getAuthedUser(req)
-  if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
   const sb = admin()
-  const { data: meRow } = await sb.from('users').select('marketing_access').eq('id', me.id).maybeSingle()
-  if (!(meRow as any)?.marketing_access) {
-    return NextResponse.json({ error: 'Marketing access required' }, { status: 403 })
+
+  const auth = await resolveMarketingActor(req, params.id)
+  if (auth.reason) {
+    const status = auth.reason === 'no_auth' ? 401 : 403
+    return NextResponse.json({ error: auth.reason }, { status })
   }
+  const actor = auth.actor
 
   const { data: campaign } = await sb.from('marketing_campaigns')
     .select('id, status, sub_status, payment_method_label').eq('id', params.id).maybeSingle()
@@ -52,7 +52,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     status: 'done',
     sub_status: 'complete',
     paid_at: new Date().toISOString(),
-    paid_by: me.id,
+    // Magic-link Mark as Paid leaves paid_by null — we know who from
+    // the token's email (captured at notify-team time) but not a
+    // canonical user_id. The PDF receipt uses displayName fallback.
+    paid_by: actor.userId ?? null,
   }).eq('id', campaign.id)
 
   // Best-effort: generate the accountant PDF + email it. Failure

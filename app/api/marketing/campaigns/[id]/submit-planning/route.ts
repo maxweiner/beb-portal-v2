@@ -9,7 +9,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getAuthedUser } from '@/lib/expenses/serverAuth'
+import { resolveMarketingActor } from '@/lib/marketing/auth'
 import { notifyApprovers, fmtDateRange, appBaseUrl } from '@/lib/marketing/notify'
 
 export const dynamic = 'force-dynamic'
@@ -23,14 +23,14 @@ function admin() {
 }
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const me = await getAuthedUser(req)
-  if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
   const sb = admin()
-  const { data: meRow } = await sb.from('users').select('marketing_access').eq('id', me.id).maybeSingle()
-  if (!(meRow as any)?.marketing_access) {
-    return NextResponse.json({ error: 'Marketing access required' }, { status: 403 })
+
+  const auth = await resolveMarketingActor(req, params.id)
+  if (auth.reason) {
+    const status = auth.reason === 'no_auth' ? 401 : 403
+    return NextResponse.json({ error: auth.reason }, { status })
   }
+  const actor = auth.actor
 
   let body: any
   try { body = await req.json() }
@@ -60,7 +60,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       campaign_id: campaign.id,
       vdp_count: vdpCount,
       submitted_at: nowIso,
-      submitted_by: me.id,
+      submitted_by: actor.userId ?? null,
       approved_at: null,
       approved_by: null,
     }, { onConflict: 'campaign_id' })
@@ -107,7 +107,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       campaign_id: campaign.id,
       postcard_count: count ?? 0,
       submitted_at: nowIso,
-      submitted_by: me.id,
+      submitted_by: actor.userId ?? null,
       approved_at: null,
       approved_by: null,
       selected_filter_max_record_age_days: maxAge,

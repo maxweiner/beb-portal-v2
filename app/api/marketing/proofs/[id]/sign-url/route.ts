@@ -10,7 +10,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getAuthedUser } from '@/lib/expenses/serverAuth'
+import { resolveMarketingActor } from '@/lib/marketing/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,23 +25,24 @@ function admin() {
 }
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const me = await getAuthedUser(req)
-  if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
   const sb = admin()
-  const { data: meRow } = await sb.from('users').select('marketing_access').eq('id', me.id).maybeSingle()
-  if (!(meRow as any)?.marketing_access) {
-    return NextResponse.json({ error: 'Marketing access required' }, { status: 403 })
+
+  // Look up the proof first so we can scope the auth check to its
+  // campaign (the magic token is per-campaign).
+  const { data: proof } = await sb.from('marketing_proofs')
+    .select('id, campaign_id, file_urls').eq('id', params.id).maybeSingle()
+  if (!proof) return NextResponse.json({ error: 'Proof not found' }, { status: 404 })
+
+  const auth = await resolveMarketingActor(req, proof.campaign_id)
+  if (auth.reason) {
+    const status = auth.reason === 'no_auth' ? 401 : 403
+    return NextResponse.json({ error: auth.reason }, { status })
   }
 
   let body: any
   try { body = await req.json() }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
   const fileIndex = Number(body?.file_index ?? 0)
-
-  const { data: proof } = await sb.from('marketing_proofs')
-    .select('id, file_urls').eq('id', params.id).maybeSingle()
-  if (!proof) return NextResponse.json({ error: 'Proof not found' }, { status: 404 })
 
   const paths: string[] = (proof as any).file_urls || []
   if (fileIndex < 0 || fileIndex >= paths.length) {
