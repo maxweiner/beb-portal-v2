@@ -8,7 +8,7 @@ const sb = createClient(
 
 export async function POST(req: NextRequest) {
   try {
-    const { event_id, vendor_ids, message } = await req.json()
+    const { event_id, vendor_ids, message, sent_by } = await req.json()
 
     // Get event and token
     const { data: ev } = await sb.from('events')
@@ -18,9 +18,10 @@ export async function POST(req: NextRequest) {
 
     if (!ev) return NextResponse.json({ error: 'Event not found' }, { status: 404 })
 
-    // Get vendors
+    // Get vendors — pull id too so the log row can FK back when the
+    // vendor still exists.
     const { data: vendors } = await sb.from('marketing_vendors')
-      .select('name, email')
+      .select('id, name, email')
       .in('id', vendor_ids)
 
     if (!vendors?.length) return NextResponse.json({ error: 'No vendors found' }, { status: 400 })
@@ -78,7 +79,31 @@ export async function POST(req: NextRequest) {
         })
       })
 
-      results.push({ vendor: vendor.name, status: res.ok ? 'sent' : 'failed' })
+      const status: 'sent' | 'failed' = res.ok ? 'sent' : 'failed'
+      let errorMessage: string | null = null
+      if (!res.ok) {
+        try { const j = await res.json(); errorMessage = j?.message || j?.error || `HTTP ${res.status}` }
+        catch { errorMessage = `HTTP ${res.status}` }
+      }
+
+      // Log the send. Best-effort — failures here don't fail the request
+      // since the email already went out (or didn't, which we record).
+      try {
+        await sb.from('marketing_emails_sent').insert({
+          event_id,
+          vendor_id: vendor.id,
+          vendor_name: vendor.name,
+          vendor_email: vendor.email,
+          message: message || null,
+          sent_by: sent_by || null,
+          status,
+          error_message: errorMessage,
+        })
+      } catch (logErr) {
+        console.error('Failed to log marketing email send', logErr)
+      }
+
+      results.push({ vendor: vendor.name, status })
     }
 
     return NextResponse.json({ success: true, results })

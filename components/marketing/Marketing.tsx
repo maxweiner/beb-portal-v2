@@ -43,6 +43,16 @@ interface Proof {
   file_name: string; status: string; notes: string; created_at: string
 }
 interface Vendor { id: string; name: string; email: string; type: string; active: boolean }
+interface EmailSendLog {
+  id: string
+  vendor_name: string | null
+  vendor_email: string | null
+  message: string | null
+  sent_by: string | null
+  status: 'sent' | 'failed'
+  error_message: string | null
+  created_at: string
+}
 
 // Per-event rollup of campaign progress. The 6 status values collapse
 // into 3 buckets that fit nicely as small pills next to each event in
@@ -315,6 +325,9 @@ function MarketingEventView({ ev, isAdmin, selectedChannel, setSelectedChannel, 
   const [sendingEmail, setSendingEmail] = useState(false)
   const [selectedVendors, setSelectedVendors] = useState<string[]>([])
   const [showVendorPicker, setShowVendorPicker] = useState(false)
+  // Recent vendor email sends for this event. Populated alongside the
+  // campaign + vendor load and refreshed after each successful send.
+  const [emailLog, setEmailLog] = useState<EmailSendLog[]>([])
 
   useEffect(() => {
     loadData()
@@ -326,11 +339,21 @@ function MarketingEventView({ ev, isAdmin, selectedChannel, setSelectedChannel, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaigns])
 
+  const loadEmailLog = async () => {
+    const { data } = await supabase.from('marketing_emails_sent')
+      .select('id, vendor_name, vendor_email, message, sent_by, status, error_message, created_at')
+      .eq('event_id', ev.id)
+      .order('created_at', { ascending: false })
+      .limit(25)
+    setEmailLog((data ?? []) as EmailSendLog[])
+  }
+
   const loadData = async () => {
     setLoading(true)
     const [{ data: camps }, { data: vends }] = await Promise.all([
       supabase.from('marketing_campaigns').select('*').eq('event_id', ev.id),
       supabase.from('marketing_vendors').select('*').eq('active', true).order('name'),
+      loadEmailLog(),
     ])
     let campList = camps || []
 
@@ -362,12 +385,15 @@ function MarketingEventView({ ev, isAdmin, selectedChannel, setSelectedChannel, 
           event_id: ev.id,
           vendor_ids: selectedVendors,
           message: emailMessage,
+          sent_by: user?.name || null,
         })
       })
       const data = await res.json()
       if (data.success) {
         const sent = data.results.filter((r: any) => r.status === 'sent').length
         alert(`✅ Email sent to ${sent} vendor${sent !== 1 ? 's' : ''}!`)
+        // Refresh the activity strip so the new send shows up immediately.
+        await loadEmailLog()
       } else {
         alert('Error sending email: ' + (data.error || 'Unknown error'))
       }
@@ -408,6 +434,9 @@ function MarketingEventView({ ev, isAdmin, selectedChannel, setSelectedChannel, 
         </div>
         <div style={{ fontSize: 13, color: 'var(--mist)', marginTop: 2 }}>{ev.start_date}</div>
       </div>
+
+      {/* Recent vendor email activity */}
+      {isAdmin && <VendorEmailActivity log={emailLog} />}
 
       {/* Vendor email picker */}
       {showVendorPicker && (
@@ -924,4 +953,98 @@ function ProofRow({ proof, isAdmin, onUpdate }: {
       )}
     </div>
   )
+}
+
+// ── Vendor email activity strip ───────────────────────────
+// Compact "Last reached out N days ago" hint with a click-to-expand
+// list of recent sends (vendor, status, sent_by, optional message).
+function VendorEmailActivity({ log }: { log: EmailSendLog[] }) {
+  const [expanded, setExpanded] = useState(false)
+  if (log.length === 0) {
+    return (
+      <div style={{
+        marginBottom: 16, padding: '10px 14px',
+        background: 'var(--cream)', border: '1px solid var(--pearl)',
+        borderRadius: 'var(--r)', fontSize: 12, color: 'var(--mist)',
+      }}>
+        📭 No vendor emails sent yet. Use <strong>Email Vendors</strong> above to share the portal link.
+      </div>
+    )
+  }
+
+  const latest = log[0]
+  const sentCount = log.filter(l => l.status === 'sent').length
+  const failedCount = log.filter(l => l.status === 'failed').length
+  const ago = formatRelative(latest.created_at)
+
+  return (
+    <div style={{
+      marginBottom: 16, padding: '10px 14px',
+      background: 'var(--cream)', border: '1px solid var(--pearl)',
+      borderRadius: 'var(--r)', fontSize: 12,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ color: 'var(--ash)' }}>
+          📧 Last reached out <strong>{ago}</strong>
+          {' · '}{sentCount} sent
+          {failedCount > 0 && <span style={{ color: 'var(--red)', fontWeight: 700 }}> · {failedCount} failed</span>}
+        </div>
+        <button onClick={() => setExpanded(e => !e)} style={{
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          color: 'var(--green-dark)', fontWeight: 700, fontSize: 11,
+          textDecoration: 'underline', fontFamily: 'inherit', padding: 0,
+        }}>
+          {expanded ? 'Hide history' : `Show history (${log.length})`}
+        </button>
+      </div>
+      {expanded && (
+        <div style={{
+          marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--pearl)',
+          display: 'flex', flexDirection: 'column', gap: 6,
+        }}>
+          {log.map(l => (
+            <div key={l.id} style={{
+              display: 'grid', gridTemplateColumns: '90px 1fr auto', gap: 8, alignItems: 'baseline',
+              fontSize: 12, color: 'var(--ash)',
+            }}>
+              <div style={{ color: 'var(--mist)' }}>{formatRelative(l.created_at)}</div>
+              <div>
+                <strong style={{ color: 'var(--ink)' }}>{l.vendor_name || l.vendor_email || '(unknown)'}</strong>
+                {l.sent_by && <span style={{ color: 'var(--mist)' }}> · by {l.sent_by}</span>}
+                {l.message && (
+                  <div style={{ fontSize: 11, color: 'var(--mist)', fontStyle: 'italic', marginTop: 2 }}>
+                    "{l.message.length > 120 ? l.message.slice(0, 120) + '…' : l.message}"
+                  </div>
+                )}
+                {l.status === 'failed' && l.error_message && (
+                  <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 2 }}>
+                    Failed: {l.error_message}
+                  </div>
+                )}
+              </div>
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 99,
+                background: l.status === 'sent' ? 'var(--green-pale)' : '#FEE2E2',
+                color: l.status === 'sent' ? 'var(--green-dark)' : '#991B1B',
+              }}>{l.status}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function formatRelative(iso: string): string {
+  const then = new Date(iso).getTime()
+  const now = Date.now()
+  const diffMin = Math.round((now - then) / 60000)
+  if (diffMin < 1) return 'just now'
+  if (diffMin < 60) return `${diffMin}m ago`
+  const diffH = Math.round(diffMin / 60)
+  if (diffH < 24) return `${diffH}h ago`
+  const diffD = Math.round(diffH / 24)
+  if (diffD === 1) return 'yesterday'
+  if (diffD < 14) return `${diffD}d ago`
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
