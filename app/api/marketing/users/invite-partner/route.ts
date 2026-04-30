@@ -4,7 +4,7 @@
 //
 // Superadmin-only. Creates a Supabase Auth user via the admin invite
 // flow (sends a magic-link "set your password" email) AND ensures
-// the public.users row has role='marketing_partner', marketing_access
+// the public.users row has role='marketing', marketing_access
 // = true, active=true. The two together = an external Collected
 // account that only sees the Marketing module.
 
@@ -70,7 +70,7 @@ export async function POST(req: Request) {
   if (existing) {
     await sb.from('users').update({
       name,
-      role: 'marketing_partner',
+      role: 'marketing',
       marketing_access: true,
       active: true,
     }).eq('id', existing.id)
@@ -78,7 +78,7 @@ export async function POST(req: Request) {
     await sb.from('users').insert({
       email,
       name,
-      role: 'marketing_partner',
+      role: 'marketing',
       marketing_access: true,
       active: true,
       // The auth_id link is established when the user actually signs up

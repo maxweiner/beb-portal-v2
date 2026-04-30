@@ -155,7 +155,7 @@ function InvitePartnerCard({ onInvited }: { onInvited: () => void }) {
         setError(json.error || `Failed (${res.status})`)
       } else {
         if (json.upgraded) {
-          setResult(`✓ ${email} already had an account — upgraded to marketing_partner with marketing access.`)
+          setResult(`✓ ${email} already had an account — upgraded to the marketing role.`)
         } else {
           setResult(`✓ Invite sent to ${email}. They'll receive a "set your password" email from Supabase.`)
         }
@@ -172,10 +172,10 @@ function InvitePartnerCard({ onInvited }: { onInvited: () => void }) {
       background: 'var(--cream2)', border: '1px solid var(--pearl)', borderRadius: 8,
     }}>
       <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink)', marginBottom: 4 }}>
-        Invite a marketing partner
+        Invite a Marketing Team member
       </div>
       <div style={{ fontSize: 11, color: 'var(--mist)', marginBottom: 10 }}>
-        Sends a Supabase "set your password" invite. The new account gets <code>role=marketing_partner</code> and only sees the Marketing module — no Day Entry, no Events, no other portal sections.
+        Sends a Supabase "set your password" invite. The new account gets <code>role=marketing</code> and only sees Calendar + Marketing in the sidebar — no Day Entry, no Events, no other portal sections.
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'end' }}>

@@ -19,7 +19,10 @@ type Tab = 'campaigns' | 'settings'
 export default function Marketing() {
   const { user } = useApp()
   const isSuperAdmin = user?.role === 'superadmin'
-  const hasMarketingAccess = !!user?.marketing_access
+  // Role-based shortcut so marketing-role users don't also need the
+  // marketing_access flag toggled separately.
+  const isMarketingRole = user?.role === 'marketing'
+  const hasMarketingAccess = !!user?.marketing_access || isMarketingRole
   const [tab, setTab] = useState<Tab>('campaigns')
 
   // Hard gate: anyone without marketing_access AND not superadmin

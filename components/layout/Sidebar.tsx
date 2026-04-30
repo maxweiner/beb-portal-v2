@@ -95,13 +95,16 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
   const isSuperadmin = user?.role === 'superadmin'
   const isPartner = !!user?.is_partner
-  const isMarketingPartner = user?.role === 'marketing_partner'
+  const isMarketing = user?.role === 'marketing'
   const hasLibertyAccess = user?.liberty_access === true
   const isLiberty = brand === 'liberty'
-  // External Collected accounts (marketing_partner role) only see the
-  // Marketing nav item — every other module is hidden.
-  const NAV_ITEMS = isMarketingPartner
-    ? [{ id: 'marketing' as NavPage, label: 'Marketing', iconKey: 'marketing' }]
+  // Marketing-role users (internal team + external Collected) see only
+  // Calendar + Marketing in the sidebar; nothing else from the portal.
+  const NAV_ITEMS = isMarketing
+    ? [
+        { id: 'calendar' as NavPage,  label: 'Calendar',  iconKey: 'calendar' },
+        { id: 'marketing' as NavPage, label: 'Marketing', iconKey: 'marketing' },
+      ]
     : (isLiberty ? LIBERTY_NAV : BEB_NAV)
 
   // Per-section collapse state, persisted to localStorage. Default = all open.
