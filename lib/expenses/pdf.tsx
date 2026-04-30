@@ -33,7 +33,23 @@ const styles = StyleSheet.create({
   // doesn't float in centered whitespace inside a wide box.
   logoLg:     { width: 220, height: 110, objectFit: 'contain', objectPosition: 'left center' },
   logoSm:     { width: 120, height: 60,  objectFit: 'contain', objectPosition: 'left center' },
-  brandSub:   { fontSize: 9, color: COLORS.mist, marginTop: 4 },
+
+  // Diagonal "PAID" rubber stamp. Centered on a LETTER page (612×792pt)
+  // with a hard rotation. The double border + ALL-CAPS text + spaced
+  // letters mimic a real ink stamp.
+  paidStamp:  {
+    position: 'absolute',
+    top: 320, left: 96, width: 420, height: 160,
+    borderWidth: 6, borderColor: '#C0392B', borderStyle: 'solid',
+    padding: 18, transform: 'rotate(-22deg)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  paidStampText: {
+    fontSize: 88, fontWeight: 700, color: '#C0392B',
+    letterSpacing: 12, textAlign: 'center',
+    fontFamily: 'Helvetica-Bold',
+  },
+  brandSub:   { fontSize: 14, fontWeight: 700, color: COLORS.ink, marginTop: 8, letterSpacing: 0.5 },
   hMetaLine:  { fontSize: 9, color: COLORS.mist },
   title:      { fontSize: 22, fontWeight: 700, color: COLORS.greenDark, marginBottom: 8 },
   meta:       { marginTop: 12 },
@@ -97,6 +113,8 @@ const fmtDate = (iso: string) =>
   new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 const fmtDateLong = (iso: string) =>
   new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+const titleCase = (s: string) =>
+  s.split(' ').map(w => w ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w).join(' ')
 
 export interface PdfReceipt {
   id: string
@@ -138,16 +156,24 @@ export function ExpenseReportPdf({ report, expenses, event, owner, receipts, sig
     }))
     .filter(r => r.total > 0)
 
+  const isPaid = report.status === 'paid'
+  const PaidStamp = () => (
+    <View style={styles.paidStamp} fixed>
+      <Text style={styles.paidStampText}>PAID</Text>
+    </View>
+  )
+
   return (
     <Document title={`Expense report — ${owner.name} — ${event?.store_name ?? 'event'}`}>
       {/* COVER PAGE */}
       <Page size="LETTER" style={styles.page}>
+        {isPaid && <PaidStamp />}
         <View style={styles.hRow}>
           <View>
             {logo
               ? <Image style={styles.logoLg} src={{ data: logo, format: 'png' }} />
               : <Text style={{ fontSize: 13, fontWeight: 700, color: COLORS.greenDark, letterSpacing: 1 }}>BENEFICIAL ESTATE BUYERS</Text>}
-            <Text style={styles.brandSub}>Expense report</Text>
+            <Text style={styles.brandSub}>Expense Report</Text>
           </View>
           <View>
             <Text style={{ fontSize: 9, color: COLORS.mist, textAlign: 'right' }}>
@@ -164,7 +190,7 @@ export function ExpenseReportPdf({ report, expenses, event, owner, receipts, sig
           {event?.start_date && (
             <View style={styles.metaRow}><Text style={styles.metaLabel}>Event date</Text><Text style={styles.metaValue}>{fmtDateLong(event.start_date)}</Text></View>
           )}
-          <View style={styles.metaRow}><Text style={styles.metaLabel}>Status</Text><Text style={styles.metaValue}>{report.status.replace(/_/g, ' ')}</Text></View>
+          <View style={styles.metaRow}><Text style={styles.metaLabel}>Status</Text><Text style={styles.metaValue}>{titleCase(report.status.replace(/_/g, ' '))}</Text></View>
           {report.submitted_at && (
             <View style={styles.metaRow}><Text style={styles.metaLabel}>Submitted</Text><Text style={styles.metaValue}>{fmtDateLong(report.submitted_at.slice(0, 10))}</Text></View>
           )}
@@ -208,6 +234,7 @@ export function ExpenseReportPdf({ report, expenses, event, owner, receipts, sig
 
       {/* ITEMIZED PAGE */}
       <Page size="LETTER" style={styles.page}>
+        {isPaid && <PaidStamp />}
         <View style={styles.hRow}>
           {logo
             ? <Image style={styles.logoSm} src={{ data: logo, format: 'png' }} />
@@ -255,6 +282,7 @@ export function ExpenseReportPdf({ report, expenses, event, owner, receipts, sig
       {/* RECEIPT APPENDIX (only when receipts exist) */}
       {receipts.length > 0 && (
         <Page size="LETTER" style={styles.page} wrap>
+          {isPaid && <PaidStamp />}
           <View style={styles.hRow}>
             {logo
               ? <Image style={styles.logoSm} src={{ data: logo, format: 'png' }} />
