@@ -326,27 +326,50 @@ function InviteTab() {
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(false)
 
+  const [doneMsg, setDoneMsg] = useState<string>('')
+
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.name || !form.email) return
     setSaving(true)
-    const { error } = await supabase.from('users').insert({
-      name: form.name, email: form.email.toLowerCase(), role: form.role, active: true, notify: false, phone: ''
-    })
+    try {
+      const { data: sess } = await supabase.auth.getSession()
+      const token = sess.session?.access_token
+      const res = await fetch('/api/admin/invite-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          name: form.name, email: form.email, role: form.role,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setSaving(false)
+        alert(json.error || `Invite failed (${res.status})`)
+        return
+      }
+      setDoneMsg(json.upgraded
+        ? `${form.email} already had an account — role + access updated.`
+        : `Sent invite email to ${form.email}. They'll get a Supabase "set your password" link to finish setup.`)
+      setDone(true)
+      reload()
+    } catch (err: any) {
+      alert(err?.message || 'Network error')
+    }
     setSaving(false)
-    if (error) { alert(error.message); return }
-    setDone(true)
-    reload()
   }
 
   if (done) return (
     <div className="rounded-xl p-8 text-center" style={{ background: 'var(--card-bg)', border: '1px solid var(--pearl)' }}>
-      <div className="text-4xl mb-3">✅</div>
-      <div className="font-bold text-lg mb-2" style={{ color: 'var(--ink)' }}>User added!</div>
-      <p className="text-sm mb-6" style={{ color: 'var(--mist)' }}>They can now sign in with {form.email}</p>
-      <button onClick={() => { setDone(false); setForm({ name: '', email: '', role: 'buyer' }) }}
+      <div className="text-4xl mb-3">✉️</div>
+      <div className="font-bold text-lg mb-2" style={{ color: 'var(--ink)' }}>Invite sent</div>
+      <p className="text-sm mb-6" style={{ color: 'var(--mist)' }}>{doneMsg}</p>
+      <button onClick={() => { setDone(false); setDoneMsg(''); setForm({ name: '', email: '', role: 'buyer' }) }}
         className="btn-primary"
-        >Add Another</button>
+        >Invite Another</button>
     </div>
   )
 
