@@ -19,7 +19,11 @@ interface Campaign {
 
 interface Proof {
   id: string; campaign_id: string; version: number
-  file_url: string; file_name: string; status: string; notes: string; created_at: string
+  /** Legacy data URL (old uploads) — null for new Storage-backed rows. */
+  file_url: string | null
+  /** New: object key in the marketing-proofs Storage bucket. Resolved via the sign-url API. */
+  storage_path: string | null
+  file_name: string; status: string; notes: string; created_at: string
 }
 
 interface EventData {
@@ -82,34 +86,27 @@ export default function VendorPortal({ params }: { params: { token: string } }) 
   const uploadProof = async (file: File, campaignId: string) => {
     setUploading(true)
     setUploaded(false)
-    const reader = new FileReader()
-    reader.onload = async (e) => {
-      const dataUrl = e.target?.result as string
-      const campProofs = proofs[campaignId] || []
-      const nextVersion = (campProofs[campProofs.length - 1]?.version || 0) + 1
-
-      const { data } = await supabase.from('marketing_proofs').insert({
-        campaign_id: campaignId,
-        version: nextVersion,
-        file_url: dataUrl,
-        file_name: file.name,
-        status: 'pending',
-      }).select().single()
-
-      if (data) {
-        setProofs(p => ({ ...p, [campaignId]: [...(p[campaignId] || []), data] }))
-        // Update campaign status to proof_pending
-        await supabase.from('marketing_campaigns')
-          .update({ status: 'proof_pending' })
-          .eq('id', campaignId)
-        setCampaigns(p => p.map(c => c.id === campaignId ? { ...c, status: 'proof_pending' } : c))
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('campaign_id', campaignId)
+      // Vendor flow: include the token so the route knows we're not
+      // an authed admin and can verify campaign access.
+      fd.append('token', params.token)
+      const res = await fetch('/api/marketing-proofs/upload', { method: 'POST', body: fd })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.proof) {
+        alert(`Upload failed: ${json.error || res.status}`)
+        return
       }
-
-      setUploading(false)
+      setProofs(p => ({ ...p, [campaignId]: [...(p[campaignId] || []), json.proof] }))
+      // The upload route bumps status server-side — mirror locally.
+      setCampaigns(p => p.map(c => c.id === campaignId ? { ...c, status: 'proof_pending' } : c))
       setUploaded(true)
       setTimeout(() => setUploaded(false), 4000)
+    } finally {
+      setUploading(false)
     }
-    reader.readAsDataURL(file)
   }
 
   const campaign = campaigns.find(c => c.channel === selectedChannel)
@@ -292,18 +289,9 @@ export default function VendorPortal({ params }: { params: { token: string } }) 
                         {proof.notes}
                       </div>
                     )}
-                    {proof.file_url && (
+                    {(proof.file_url || proof.storage_path) && (
                       <div style={{ marginTop: 8 }}>
-                        {proof.file_url.startsWith('data:image') ? (
-                          <img src={proof.file_url} alt={proof.file_name}
-                            style={{ maxWidth: '100%', maxHeight: 200, objectFit: 'contain', borderRadius: 8, border: '1px solid #e8e0d0', cursor: 'pointer' }}
-                            onClick={() => window.open(proof.file_url, '_blank')} />
-                        ) : (
-                          <a href={proof.file_url} target="_blank" rel="noreferrer"
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: '#f5f0e8', border: '1px solid #e8e0d0', color: '#1a1a1a', fontWeight: 600, fontSize: 13, textDecoration: 'none' }}>
-                            📄 View PDF
-                          </a>
-                        )}
+                        <ProofPreview proof={proof} token={params.token} />
                       </div>
                     )}
                   </div>
@@ -319,5 +307,50 @@ export default function VendorPortal({ params }: { params: { token: string } }) 
         Beneficial Estate Buyers · Vendor Portal · Questions? Contact your BEB representative.
       </div>
     </div>
+  )
+}
+
+// Resolves a proof's display URL — legacy data URLs are inlined; new
+// Storage-backed rows fetch a short-lived signed URL via the vendor
+// token. Renders an <img> for image extensions, a download link
+// otherwise.
+function ProofPreview({ proof, token }: { proof: Proof; token: string }) {
+  const [url, setUrl] = useState<string | null>(() =>
+    proof.file_url?.startsWith('data:') ? proof.file_url : null
+  )
+  useEffect(() => {
+    let cancelled = false
+    if (proof.file_url?.startsWith('data:')) { setUrl(proof.file_url); return }
+    if (!proof.storage_path) { setUrl(null); return }
+    ;(async () => {
+      const res = await fetch('/api/marketing-proofs/sign-url', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ proof_id: proof.id, token }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (cancelled) return
+      setUrl(json.url || null)
+    })()
+    return () => { cancelled = true }
+  }, [proof.id, proof.storage_path, proof.file_url, token])
+
+  if (!url) {
+    return <span style={{ fontSize: 12, color: '#888', fontStyle: 'italic' }}>Loading…</span>
+  }
+  const isImage = url.startsWith('data:image')
+    || /\.(png|jpe?g|gif|webp)(\?|$)/i.test(url)
+    || /\.(png|jpe?g|gif|webp)$/i.test(proof.file_name || '')
+  if (isImage) {
+    return (
+      <img src={url} alt={proof.file_name}
+        style={{ maxWidth: '100%', maxHeight: 200, objectFit: 'contain', borderRadius: 8, border: '1px solid #e8e0d0', cursor: 'pointer' }}
+        onClick={() => window.open(url, '_blank')} />
+    )
+  }
+  return (
+    <a href={url} target="_blank" rel="noreferrer"
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: '#f5f0e8', border: '1px solid #e8e0d0', color: '#1a1a1a', fontWeight: 600, fontSize: 13, textDecoration: 'none' }}>
+      📄 View File
+    </a>
   )
 }
