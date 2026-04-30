@@ -13,8 +13,10 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthedUser } from '@/lib/expenses/serverAuth'
+import { sendMarketingReceiptForCampaign } from '@/lib/marketing/sendAccountantReceipt'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 function admin() {
   return createClient(
@@ -53,5 +55,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     paid_by: me.id,
   }).eq('id', campaign.id)
 
-  return NextResponse.json({ ok: true })
+  // Best-effort: generate the accountant PDF + email it. Failure
+  // doesn't block the Mark as Paid action — the user can re-fire from
+  // the Done card via /send-receipt.
+  let receiptResult: any = null
+  try {
+    receiptResult = await sendMarketingReceiptForCampaign(params.id)
+  } catch (err: any) {
+    console.error('marketing accountant receipt failed', err)
+    receiptResult = { ok: false, error: err?.message || 'unknown' }
+  }
+
+  return NextResponse.json({ ok: true, receipt: receiptResult })
 }
