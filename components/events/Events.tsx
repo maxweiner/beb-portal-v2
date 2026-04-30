@@ -10,6 +10,7 @@ import { fmtMoney } from '@/lib/format'
 import { eventSpend, eventCommission, daySpend, dayHasData } from '@/lib/eventSpend'
 import type { Event, BuyerVacation } from '@/types'
 import type { NavPage } from '@/app/page'
+import NewCampaignModal from '@/components/marketing/NewCampaignModal'
 import EventNotesPanel from './EventNotesPanel'
 import NotificationStatusBadge from '@/components/notifications/NotificationStatusBadge'
 import EventShippingPanel from '@/components/shipping/EventShippingPanel'
@@ -113,6 +114,10 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   // (and auto-expand it) regardless of the active filter, so the user
   // can immediately add buyers. Cleared when they change filter/search.
   const [justCreatedEventId, setJustCreatedEventId] = useState<string | null>(null)
+  // Post-create marketing prompt — shown right after a new event is
+  // saved. Yes opens NewCampaignModal pre-filled with the event.
+  const [marketingPromptEvent, setMarketingPromptEvent] = useState<Event | null>(null)
+  const [marketingModalEvent, setMarketingModalEvent] = useState<Event | null>(null)
   const [spendOpen, setSpendOpen] = useState<string | null>(null)
   const [detail, setDetail] = useState<Event | null>(null)
   const [notesEvent, setNotesEvent] = useState<Event | null>(null)
@@ -322,6 +327,10 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
           const el = document.getElementById(`event-card-${data.id}`)
           if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
         }, 50)
+        // Surface the marketing-campaign prompt after the scroll
+        // settles so the modal lands on a stable layout.
+        const created = (data as any) as Event
+        setTimeout(() => setMarketingPromptEvent(created), 350)
       }
     } catch (err: any) {
       alert('Error creating event: ' + (err?.message || 'unknown'))
@@ -1224,6 +1233,62 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
           }}
         />
       )}
+
+      {/* Post-event-create marketing prompt */}
+      {marketingPromptEvent && (
+        <MarketingCampaignPrompt
+          ev={marketingPromptEvent}
+          onYes={() => {
+            setMarketingModalEvent(marketingPromptEvent)
+            setMarketingPromptEvent(null)
+          }}
+          onNo={() => setMarketingPromptEvent(null)}
+        />
+      )}
+      {marketingModalEvent && (
+        <NewCampaignModal
+          open
+          onClose={() => setMarketingModalEvent(null)}
+          onCreated={() => {
+            setMarketingModalEvent(null)
+            // Optional: jump to Marketing tab. Skipped for now —
+            // user stays on Events; campaign is created in the
+            // background and visible next time they open Marketing.
+          }}
+          lockedEvent={marketingModalEvent}
+        />
+      )}
+    </div>
+  )
+}
+
+function MarketingCampaignPrompt({ ev, onYes, onNo }: {
+  ev: Event
+  onYes: () => void
+  onNo: () => void
+}) {
+  return (
+    <div onClick={onNo} style={{
+      position: 'fixed', inset: 0, zIndex: 1000,
+      background: 'rgba(0,0,0,.45)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: '#fff', borderRadius: 12, maxWidth: 440, width: '100%',
+        padding: 22, textAlign: 'center', boxShadow: '0 16px 48px rgba(0,0,0,.25)',
+      }}>
+        <div style={{ fontSize: 36, marginBottom: 8 }}>📣</div>
+        <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--ink)', marginBottom: 6 }}>
+          Would you like to add a Marketing Campaign now?
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 18 }}>
+          Event created for <strong>{ev.store_name}</strong>. You can set up VDP or Postcard marketing right now or come back to it later.
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+          <button className="btn-outline btn-sm" onClick={onNo}>No, later</button>
+          <button className="btn-primary btn-sm" onClick={onYes}>Yes, add now</button>
+        </div>
+      </div>
     </div>
   )
 }
