@@ -78,6 +78,9 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   // Manifest photo state — which event's capture or viewer is open,
   // and a per-event cache of the manifest list (for the count badge).
   const [manifestCaptureFor, setManifestCaptureFor] = useState<Event | null>(null)
+  // When the viewer kicks off "Add another", we pre-fill the capture
+  // modal's box label with whatever the user was just looking at.
+  const [manifestCapturePrefill, setManifestCapturePrefill] = useState<string | null>(null)
   const [manifestViewerFor,  setManifestViewerFor]  = useState<Event | null>(null)
   const [manifestsByEvent,   setManifestsByEvent]   = useState<Record<string, ShippingManifest[]>>({})
   // Force-include the most recently created event in the filtered list
@@ -1120,26 +1123,36 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
 
       {/* Manifest capture / viewer — event-scoped; one set rendered for
           whichever event is open (mutually exclusive). */}
-      {manifestCaptureFor && (
-        <ManifestCaptureModal
-          boxId={manifestCaptureFor.id}
-          boxLabel={eventDisplayName(manifestCaptureFor, stores)}
-          onClose={() => setManifestCaptureFor(null)}
-          onUploaded={() => {
-            const ev = manifestCaptureFor
-            if (ev) refreshEventManifests(ev.id)
-          }}
-        />
-      )}
+      {manifestCaptureFor && (() => {
+        const ev = manifestCaptureFor
+        const existingLabels = (manifestsByEvent[ev.id] || [])
+          .map(m => m.box_label || '').filter(Boolean)
+        return (
+          <ManifestCaptureModal
+            boxId={ev.id}
+            boxLabel={eventDisplayName(ev, stores)}
+            existingBoxLabels={existingLabels}
+            initialBoxLabel={manifestCapturePrefill}
+            onClose={() => { setManifestCaptureFor(null); setManifestCapturePrefill(null) }}
+            onUploaded={() => {
+              refreshEventManifests(ev.id)
+              setManifestCapturePrefill(null)
+            }}
+          />
+        )
+      })()}
       {manifestViewerFor && (
         <ManifestViewerModal
           boxLabel={eventDisplayName(manifestViewerFor, stores)}
           manifests={manifestsByEvent[manifestViewerFor.id] || []}
           onClose={() => setManifestViewerFor(null)}
-          onAddAnother={() => {
+          onAddAnother={(currentBoxLabel) => {
             const ev = manifestViewerFor
             setManifestViewerFor(null)
-            if (ev) setManifestCaptureFor(ev)
+            if (ev) {
+              setManifestCapturePrefill(currentBoxLabel)
+              setManifestCaptureFor(ev)
+            }
           }}
           onDeleted={(id) => {
             const ev = manifestViewerFor

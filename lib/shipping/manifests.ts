@@ -8,7 +8,10 @@ import { supabase } from '@/lib/supabase'
 export interface ShippingManifest {
   id: string
   event_id: string
-  box_id: string | null   // optional — kept for future per-box pinning
+  box_id: string | null     // legacy, kept for future per-box pinning
+  /** Handwritten box label the buyer associated this photo with
+   *  (e.g. "J1", "S2", "J3"). Free-form so custom labels are OK. */
+  box_label: string | null
   file_path: string
   file_size_bytes: number
   is_scan_style: boolean
@@ -17,7 +20,7 @@ export interface ShippingManifest {
   deleted_at: string | null
 }
 
-const COLS = 'id, event_id, box_id, file_path, file_size_bytes, is_scan_style, uploaded_by, uploaded_at, deleted_at'
+const COLS = 'id, event_id, box_id, box_label, file_path, file_size_bytes, is_scan_style, uploaded_by, uploaded_at, deleted_at'
 
 /** All live (non-deleted) manifests across a list of event ids. */
 export async function fetchManifestsForEvents(eventIds: string[]): Promise<ShippingManifest[]> {
@@ -58,12 +61,14 @@ export async function uploadManifest(input: {
   eventId: string
   blob: Blob
   isScanStyle: boolean
+  boxLabel: string
 }): Promise<ShippingManifest> {
   const { data: session } = await supabase.auth.getSession()
   const token = session.session?.access_token
   const fd = new FormData()
   fd.append('file', input.blob, 'manifest.jpg')
   fd.append('is_scan_style', String(input.isScanStyle))
+  fd.append('box_label', input.boxLabel)
   const res = await fetch(`/api/shipping/events/${input.eventId}/manifests/upload`, {
     method: 'POST',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
