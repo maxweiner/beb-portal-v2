@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import type { NavPage } from '@/app/page'
 import { usePendingApprovals } from '@/components/expenses/usePendingApprovals'
 import TodoNotificationsBell from '@/components/todo/TodoNotificationsBell'
+import { useRoleModules } from '@/lib/useRoleModules'
 
 const COLLAPSE_KEY = 'beb-sidebar-collapsed'
 
@@ -90,29 +91,18 @@ interface SidebarProps {
 
 export default function Sidebar({ nav, setNav }: SidebarProps) {
   const { user, brand, setBrand } = useApp()
+  // Pinned-reports loader still uses an isAdmin guard; replaced when
+  // PR D sweeps page-level guards. Sidebar item visibility now flows
+  // entirely through role_modules below.
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
-  const isSuperadmin = user?.role === 'superadmin'
-  const isPartner = !!user?.is_partner
-  const isMarketing = user?.role === 'marketing'
-  const isAccounting = user?.role === 'accounting'
   const hasLibertyAccess = user?.liberty_access === true
   const isLiberty = brand === 'liberty'
-  // Role-scoped nav lists. Marketing = Calendar + Marketing only.
-  // Accounting = Calendar + Travel + Staff + Expenses only. Everyone
-  // else gets the full BEB or LIBERTY list.
-  const NAV_ITEMS = isMarketing
-    ? [
-        { id: 'calendar' as NavPage,  label: 'Calendar',  iconKey: 'calendar' },
-        { id: 'marketing' as NavPage, label: 'Marketing', iconKey: 'marketing' },
-      ]
-    : isAccounting
-      ? [
-          { id: 'calendar' as NavPage, label: 'Calendar',     iconKey: 'calendar' },
-          { id: 'travel'   as NavPage, label: 'Travel Share', iconKey: 'travel' },
-          { id: 'staff'    as NavPage, label: 'Staff',        iconKey: 'staff' },
-          { id: 'expenses' as NavPage, label: 'Expenses',     iconKey: 'expenses' },
-        ]
-      : (isLiberty ? LIBERTY_NAV : BEB_NAV)
+  // Sidebar items come from the brand's full nav list; access is then
+  // filtered against role_modules (DB-driven). Marketing / accounting
+  // roles' tiny sidebars come "for free" because their seeded modules
+  // only include those few entries.
+  const { modules: grantedModules, loaded: modulesLoaded } = useRoleModules()
+  const NAV_ITEMS = isLiberty ? LIBERTY_NAV : BEB_NAV
 
   // Per-section collapse state, persisted to localStorage. Default = all open.
   const { count: pendingApprovalCount } = usePendingApprovals()
@@ -205,6 +195,19 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
       {/* Nav */}
       <nav className="sidebar-nav">
         {(() => {
+          // Pre-compute which sections have at least one granted item
+          // so we can skip empty section headers (e.g. marketing role
+          // shouldn't see an empty "Admin" header).
+          const sectionsWithGrants = new Set<string>()
+          {
+            let cur: string | null = null
+            for (const it of NAV_ITEMS) {
+              if (it.section) { cur = it.label; continue }
+              if (cur && it.id && grantedModules.has(it.id)) {
+                sectionsWithGrants.add(cur)
+              }
+            }
+          }
           // Walk the flat list, tracking the current section. Items only
           // render when their section is open. Section headers are buttons
           // that toggle the open/closed state.
@@ -214,6 +217,7 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
             if (item.section) {
               currentSection = item.label
               currentOpen = !collapsed.has(item.label)
+              if (modulesLoaded && !sectionsWithGrants.has(item.label)) return null
               return (
                 <button
                   key={`section-${i}`}
@@ -235,9 +239,10 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
                 </button>
               )
             }
-            if (item.adminOnly && !isAdmin) return null
-            if (item.superadminOnly && !isSuperadmin) return null
-            if (item.partnerOnly && !isPartner) return null
+            // role_modules drives access. Hold render until the modules
+            // have loaded so we don't briefly flash the full nav list.
+            if (!modulesLoaded) return null
+            if (item.id && !grantedModules.has(item.id)) return null
             if (currentSection && !currentOpen) return null
             const showExpensesBadge = item.id === 'expenses' && pendingApprovalCount > 0
             const navBtn = (

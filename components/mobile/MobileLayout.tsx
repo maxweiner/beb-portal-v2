@@ -8,6 +8,7 @@ import type { NavPage } from '@/app/page'
 import LicenseScanner from '@/components/scan/LicenseScanner'
 import { useCenterButtonMode } from '@/lib/centerButtonMode'
 import { usePendingApprovals } from '@/components/expenses/usePendingApprovals'
+import { useRoleModules } from '@/lib/useRoleModules'
 
 /* ── ICONS ── */
 
@@ -195,9 +196,12 @@ interface Props {
 export default function MobileLayout({ nav, setNav, children }: Props) {
   const { user, brand, setBrand, events, stores } = useApp()
   const centerMode = useCenterButtonMode(events, user?.id)
+  // Still used by getMyEvents() to pick "all events" for admins;
+  // PR D will replace with a more granular permission check.
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
   const hasLibertyAccess = user?.liberty_access === true
   const isLiberty = brand === 'liberty'
+  const { modules: grantedModules, loaded: modulesLoaded } = useRoleModules()
   const [menuOpen, setMenuOpen] = useState(false)
   const { count: pendingApprovalCount } = usePendingApprovals()
   const [scannerOpen, setScannerOpen] = useState(false)
@@ -277,8 +281,7 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
     ? { id: 'travel', label: 'Travel Share', icon: '✈️' }
     : { id: 'dashboard' as NavPage, label: 'Scan ID', icon: '📷', isScan: true }
 
-  const isPartner = !!user?.is_partner
-  const ALL_PAGES: { id: NavPage; label: string; icon: string; adminOnly?: boolean; partnerOnly?: boolean; isScan?: boolean }[] = [
+  const ALL_PAGES: { id: NavPage; label: string; icon: string; isScan?: boolean }[] = [
     { id: 'dashboard',    label: 'Dashboard',      icon: '⌂' },
     { id: 'events',       label: 'Events',         icon: '◆' },
     { id: 'dayentry',     label: 'Enter Day Data', icon: '📝' },
@@ -289,16 +292,18 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
     { id: 'shipping',     label: 'Shipping',       icon: '📦' },
     { id: 'reports',      label: 'Reports',        icon: '📊' },
     { id: 'expenses',     label: 'Expenses',       icon: '🧾' },
-    { id: 'financials',   label: 'Financials',     icon: '💼', partnerOnly: true },
+    { id: 'financials',   label: 'Financials',     icon: '💼' },
     { id: 'marketing',    label: 'Marketing',      icon: '📣' },
     { id: 'settings',     label: 'Settings',       icon: '⚙️' },
-    { id: isLiberty ? 'libertyadmin' : 'admin', label: isLiberty ? 'LEB Admin' : 'Admin', icon: '🔧', adminOnly: true },
-    { id: 'stores',       label: 'Stores',         icon: '🏪', adminOnly: true },
+    { id: isLiberty ? 'libertyadmin' : 'admin', label: isLiberty ? 'LEB Admin' : 'Admin', icon: '🔧' },
+    { id: 'stores',       label: 'Stores',         icon: '🏪' },
   ]
 
-  const visiblePages = ALL_PAGES.filter(p =>
-    (!p.adminOnly || isAdmin) && (!p.partnerOnly || isPartner),
-  )
+  // role_modules drives access. Hide everything until modules load
+  // so we don't briefly flash an over-permissive list.
+  const visiblePages = modulesLoaded
+    ? ALL_PAGES.filter(p => grantedModules.has(p.id))
+    : []
 
   return (
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--page-bg)' }}>
