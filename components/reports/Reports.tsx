@@ -1,10 +1,20 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import ReportEditView, { type ReportDef } from './ReportEditView'
 import CustomReportsListLazy from './CustomReportsList'
 import NotificationTemplatesAdmin from '@/components/admin/NotificationTemplatesAdmin'
+
+// Reports that need an event picker before they can render. The tile
+// surfaces an inline "Quick view" picker so the user can jump straight
+// to the standalone preview without opening the editor first.
+const EVENT_SCOPED_REPORT_IDS = new Set(['event-recap', 'checks-issued'])
+function previewUrlFor(reportId: string, eventId: string): string {
+  if (reportId === 'event-recap') return `/api/event-recap/preview?event_id=${encodeURIComponent(eventId)}`
+  if (reportId === 'checks-issued') return `/api/checks-issued/preview?event_id=${encodeURIComponent(eventId)}`
+  return ''
+}
 
 const TODAY = new Date()
 const fmtToday = TODAY.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
@@ -104,11 +114,26 @@ const REPORTS: (ReportDef & { Icon: React.FC<{ size?: number; color?: string }>;
 ]
 
 export default function Reports() {
-  const { user } = useApp()
+  const { user, events, stores } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
   const isSuperAdmin = user?.role === 'superadmin'
   const [activeId, setActiveId] = useState<string | null>(null)
   const [tab, setTab] = useState<'templates' | 'custom' | 'notifications'>('templates')
+  // Which tile has its inline Quick-view picker expanded. Null = none.
+  const [quickViewOpenId, setQuickViewOpenId] = useState<string | null>(null)
+
+  // Most recent ~50 events, newest first — same shape the editor uses.
+  const recentEvents = useMemo(() => {
+    return [...events]
+      .filter(e => !!e.start_date)
+      .sort((a, b) => (a.start_date < b.start_date ? 1 : -1))
+      .slice(0, 50)
+  }, [events])
+  function eventLabel(ev: typeof events[number]): string {
+    const store = stores.find(s => s.id === ev.store_id)
+    const name = store?.name || (ev as any).store_name || '(unknown store)'
+    return `${name} · ${ev.start_date}`
+  }
 
   if (!isAdmin) {
     return (
@@ -172,44 +197,111 @@ export default function Reports() {
       {tab === 'custom' && <CustomReportsListLazy />}
       {tab === 'templates' && (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
-        {REPORTS.map(t => (
-          <button key={t.id}
-            onClick={() => setActiveId(t.id)}
-            style={{
-              background: '#fff',
-              border: `1px solid var(--pearl)`,
-              borderRadius: 14,
-              padding: 18,
-              textAlign: 'left',
-              cursor: 'pointer',
-              display: 'flex', flexDirection: 'column', gap: 10,
-              transition: 'transform .12s ease, box-shadow .12s ease',
-              boxShadow: '0 2px 8px rgba(0,0,0,.04)',
-              minWidth: 0, whiteSpace: 'normal', overflowWrap: 'anywhere',
-              fontFamily: 'inherit',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.transform = 'translateY(-2px)'
-              e.currentTarget.style.boxShadow = `0 8px 18px ${t.accent}22`
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.transform = 'none'
-              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,.04)'
-            }}>
-            <div style={{
-              width: 44, height: 44, borderRadius: 12,
-              background: `${t.accent}1F`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: t.accent, flexShrink: 0,
-            }}>
-              <t.Icon size={24} color={t.accent} />
+        {REPORTS.map(t => {
+          const isEventScoped = EVENT_SCOPED_REPORT_IDS.has(t.id)
+          const quickOpen = quickViewOpenId === t.id
+          return (
+            <div key={t.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => setActiveId(t.id)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveId(t.id) } }}
+              style={{
+                background: '#fff',
+                border: `1px solid var(--pearl)`,
+                borderRadius: 14,
+                padding: 18,
+                textAlign: 'left',
+                cursor: 'pointer',
+                display: 'flex', flexDirection: 'column', gap: 10,
+                transition: 'transform .12s ease, box-shadow .12s ease',
+                boxShadow: '0 2px 8px rgba(0,0,0,.04)',
+                minWidth: 0, whiteSpace: 'normal', overflowWrap: 'anywhere',
+                fontFamily: 'inherit',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.transform = 'translateY(-2px)'
+                e.currentTarget.style.boxShadow = `0 8px 18px ${t.accent}22`
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = 'none'
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,.04)'
+              }}>
+              <div style={{
+                width: 44, height: 44, borderRadius: 12,
+                background: `${t.accent}1F`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: t.accent, flexShrink: 0,
+              }}>
+                <t.Icon size={24} color={t.accent} />
+              </div>
+              <div style={{ width: '100%', minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)', wordBreak: 'break-word' }}>{t.title}</div>
+                <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 4, lineHeight: 1.4, wordBreak: 'break-word' }}>{t.description}</div>
+              </div>
+
+              {/* Quick view: inline event picker so user can open the standalone
+                  preview without going through the editor. Event-scoped reports only. */}
+              {isEventScoped && (
+                <div onClick={e => e.stopPropagation()}
+                  style={{
+                    borderTop: '1px solid var(--cream2)',
+                    paddingTop: 10, marginTop: 4,
+                    display: 'flex', flexDirection: 'column', gap: 8,
+                  }}>
+                  {!quickOpen ? (
+                    <button onClick={e => {
+                        e.stopPropagation()
+                        setQuickViewOpenId(t.id)
+                      }}
+                      style={{
+                        background: 'transparent', border: '1.5px solid var(--pearl)',
+                        borderRadius: 8, padding: '6px 10px',
+                        fontSize: 12, fontWeight: 700, color: 'var(--green-dark)',
+                        cursor: 'pointer', fontFamily: 'inherit',
+                        alignSelf: 'flex-start',
+                      }}>
+                      ▶ Quick view
+                    </button>
+                  ) : recentEvents.length === 0 ? (
+                    <div style={{ fontSize: 12, color: 'var(--mist)' }}>No events found.</div>
+                  ) : (
+                    <>
+                      <select
+                        defaultValue=""
+                        onChange={e => {
+                          const id = e.target.value
+                          if (!id) return
+                          const url = previewUrlFor(t.id, id)
+                          if (url) window.open(url, '_blank', 'noopener')
+                          // Reset so picking the same event again still fires.
+                          e.target.value = ''
+                        }}
+                        onClick={e => e.stopPropagation()}
+                        style={{ width: '100%', fontSize: 13 }}>
+                        <option value="" disabled>Pick an event…</option>
+                        {recentEvents.map(ev => (
+                          <option key={ev.id} value={ev.id}>{eventLabel(ev)}</option>
+                        ))}
+                      </select>
+                      <button onClick={e => {
+                          e.stopPropagation()
+                          setQuickViewOpenId(null)
+                        }}
+                        style={{
+                          background: 'transparent', border: 'none',
+                          fontSize: 11, color: 'var(--mist)', cursor: 'pointer',
+                          alignSelf: 'flex-start', padding: 0, fontFamily: 'inherit',
+                        }}>
+                        Cancel
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
-            <div style={{ width: '100%', minWidth: 0 }}>
-              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)', wordBreak: 'break-word' }}>{t.title}</div>
-              <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 4, lineHeight: 1.4, wordBreak: 'break-word' }}>{t.description}</div>
-            </div>
-          </button>
-        ))}
+          )
+        })}
       </div>
       )}
     </div>
