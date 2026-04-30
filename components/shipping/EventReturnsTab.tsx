@@ -141,7 +141,7 @@ export default function EventReturnsTab() {
   return (
     <div className="p-6" style={{ maxWidth: 1280, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)' }}>📦 Event Returns</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)' }}>📦 Shipping Portal</h1>
         <div style={{ fontSize: 12, color: 'var(--mist)' }}>{filtered.length} of {rows.length} shipments</div>
       </div>
 
