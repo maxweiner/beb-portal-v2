@@ -119,26 +119,32 @@ export default function Home() {
           setTimeout(() => window.dispatchEvent(new CustomEvent('beb:open-expense-report', { detail: { reportId: id } })), 0)
         }} />
         <MobileLayout nav={nav} setNav={setNav}>
-          {nav === 'dashboard' && <MobileDashboard setNav={setNav} />}
-          {nav === 'dayentry'  && <MobileDayEntry />}
-          {nav === 'events'    && <Events setNav={setNav} />}
+          {/* `key={navKey}` on every section forces a fresh remount when
+              the user clicks any sidebar nav link — internal state (open
+              detail views, filters, search, expanded cards, etc.) resets
+              to the section's landing page. setNav() bumps navKey on
+              every click; rawSetNav() (used by deep-link / brand-switch
+              handlers) does not, preserving those flows. */}
+          {nav === 'dashboard' && <MobileDashboard key={navKey} setNav={setNav} />}
+          {nav === 'dayentry'  && <MobileDayEntry key={navKey} />}
+          {nav === 'events'    && <Events key={navKey} setNav={setNav} />}
           {nav === 'calendar'  && <AppointmentsAdmin key={navKey} />}
-          {nav === 'schedule'  && <Schedule />}
-          {nav === 'travel'    && <MobileTravel />}
-          {nav === 'staff'     && <MobileStaff />}
-          {nav === 'shipping'  && <Shipping />}
-          {nav === 'reports'   && <Reports />}
-          {nav === 'expenses'  && <Expenses />}
-          {nav === 'financials' && <PartnerFinancials onOpenReport={(id) => {
+          {nav === 'schedule'  && <Schedule key={navKey} />}
+          {nav === 'travel'    && <MobileTravel key={navKey} />}
+          {nav === 'staff'     && <MobileStaff key={navKey} />}
+          {nav === 'shipping'  && <Shipping key={navKey} />}
+          {nav === 'reports'   && <Reports key={navKey} />}
+          {nav === 'expenses'  && <Expenses key={navKey} />}
+          {nav === 'financials' && <PartnerFinancials key={navKey} onOpenReport={(id) => {
             setNav('expenses')
             setTimeout(() => window.dispatchEvent(new CustomEvent('beb:open-expense-report', { detail: { reportId: id } })), 0)
           }} />}
-          {nav === 'marketing' && <Marketing />}
-          {nav === 'todo'      && <TodoPage />}
-          {nav === 'settings'  && <Settings />}
-          {nav === 'admin'     && <RoleGuard roles={["admin", "superadmin"]}><AdminPanel /></RoleGuard>}
-          {nav === 'libertyadmin' && <RoleGuard roles={["admin", "superadmin"]}><LibertyAdminPanel /></RoleGuard>}
-          {nav === 'stores'    && <RoleGuard roles={["admin", "superadmin"]}><Stores /></RoleGuard>}
+          {nav === 'marketing' && <Marketing key={navKey} />}
+          {nav === 'todo'      && <TodoPage key={navKey} />}
+          {nav === 'settings'  && <Settings key={navKey} />}
+          {nav === 'admin'     && <RoleGuard roles={["admin", "superadmin"]}><AdminPanel key={navKey} /></RoleGuard>}
+          {nav === 'libertyadmin' && <RoleGuard roles={["admin", "superadmin"]}><LibertyAdminPanel key={navKey} /></RoleGuard>}
+          {nav === 'stores'    && <RoleGuard roles={["admin", "superadmin"]}><Stores key={navKey} /></RoleGuard>}
         </MobileLayout>
       </>
     )
@@ -161,46 +167,52 @@ export default function Home() {
         setTimeout(() => window.dispatchEvent(new CustomEvent('beb:open-expense-report', { detail: { reportId: id } })), 0)
       }} />
       <main className="flex-1 overflow-y-auto">
-        {nav === 'dashboard'  && <Dashboard setNav={setNav} />}
+        {/* `key={navKey}` on every section forces a fresh remount when
+            the user clicks any sidebar nav link — internal state (open
+            detail views, filters, search, expanded cards, etc.) resets
+            to the section's landing page. setNav() bumps navKey on
+            every click; rawSetNav() (used by deep-link / brand-switch
+            handlers) does not, preserving those flows. */}
+        {nav === 'dashboard'  && <Dashboard key={navKey} setNav={setNav} />}
         {nav === 'calendar'   && <AppointmentsAdmin key={navKey} />}
-        {nav === 'events'     && <Events setNav={setNav} />}
-        {nav === 'dayentry'   && <DayEntry />}
-        {nav === 'shipping'   && <Shipping />}
-        {nav === 'reports'    && <Reports />}
-        {nav === 'expenses'   && <Expenses />}
-        {nav === 'financials' && <PartnerFinancials onOpenReport={(id) => {
+        {nav === 'events'     && <Events key={navKey} setNav={setNav} />}
+        {nav === 'dayentry'   && <DayEntry key={navKey} />}
+        {nav === 'shipping'   && <Shipping key={navKey} />}
+        {nav === 'reports'    && <Reports key={navKey} />}
+        {nav === 'expenses'   && <Expenses key={navKey} />}
+        {nav === 'financials' && <PartnerFinancials key={navKey} onOpenReport={(id) => {
           setNav('expenses')
           setTimeout(() => window.dispatchEvent(new CustomEvent('beb:open-expense-report', { detail: { reportId: id } })), 0)
         }} />}
-        {nav === 'todo'       && <TodoPage />}
-        {nav === 'settings'   && <Settings />}
-        {nav === 'staff'      && <Staff />}
-        {nav === 'schedule'   && <Schedule />}
-        {nav === 'travel'     && <Travel />}
-        {nav === 'marketing'  && <Marketing />}
+        {nav === 'todo'       && <TodoPage key={navKey} />}
+        {nav === 'settings'   && <Settings key={navKey} />}
+        {nav === 'staff'      && <Staff key={navKey} />}
+        {nav === 'schedule'   && <Schedule key={navKey} />}
+        {nav === 'travel'     && <Travel key={navKey} />}
+        {nav === 'marketing'  && <Marketing key={navKey} />}
         {nav === 'admin' && (
           <RoleGuard roles={['admin', 'superadmin']}>
-            <AdminPanel />
+            <AdminPanel key={navKey} />
           </RoleGuard>
         )}
         {nav === 'libertyadmin' && (
           <RoleGuard roles={['admin', 'superadmin']}>
-            <LibertyAdminPanel />
+            <LibertyAdminPanel key={navKey} />
           </RoleGuard>
         )}
         {nav === 'stores' && (
           <RoleGuard roles={['admin', 'superadmin']}>
-            <Stores />
+            <Stores key={navKey} />
           </RoleGuard>
         )}
         {nav === 'notification-templates' && (
           <RoleGuard roles={['superadmin']}>
-            <NotificationTemplatesAdmin />
+            <NotificationTemplatesAdmin key={navKey} />
           </RoleGuard>
         )}
         {nav === 'data-research' && (
           <RoleGuard roles={['admin', 'superadmin']}>
-            <DataResearch />
+            <DataResearch key={navKey} />
           </RoleGuard>
         )}
       </main>
