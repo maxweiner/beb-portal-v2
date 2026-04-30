@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import type { Theme, BuyerVacation } from '@/types'
 import AvatarPicker from './AvatarPicker'
+import BrandLogosPanel from './BrandLogosPanel'
 import Checkbox from '@/components/ui/Checkbox'
 import AddressAutocompleteInput from '@/components/ui/AddressAutocompleteInput'
 import CollapsibleCard from '@/components/ui/CollapsibleCard'
@@ -349,6 +350,17 @@ export default function Settings() {
 
       {/* Mobile center button — visible to everyone since it's a per-user UI pref */}
       <CenterButtonSetting />
+
+      {/* Brand Logos (superadmin only) */}
+      {user?.role === 'superadmin' && (
+        <CollapsibleCard
+          storageKey="settings-brand-logos"
+          title="🏷️ Brand Logos"
+          subtitle="Upload a logo for each brand. Used on the Expense Report PDF (and other branded surfaces over time)."
+        >
+          <BrandLogosPanel />
+        </CollapsibleCard>
+      )}
 
       {/* Google Calendar Sync (superadmin only) */}
       {user?.role === 'superadmin' && (

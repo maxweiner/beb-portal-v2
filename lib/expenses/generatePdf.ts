@@ -14,11 +14,23 @@ import type { Expense, ExpenseReport } from '@/types'
 // Wordmark logo for the PDF header. Cached on first read so subsequent
 // renders within the same warm function instance skip the disk hit.
 const LOGO_PATH = path.join(process.cwd(), 'public', 'beb-wordmark.png')
-let logoBuf: Buffer | null = null
-async function loadLogo(): Promise<Buffer | null> {
-  if (logoBuf) return logoBuf
-  try { logoBuf = await readFile(LOGO_PATH); return logoBuf }
+let bundledLogoBuf: Buffer | null = null
+async function loadBundledLogo(): Promise<Buffer | null> {
+  if (bundledLogoBuf) return bundledLogoBuf
+  try { bundledLogoBuf = await readFile(LOGO_PATH); return bundledLogoBuf }
   catch { return null }  // Fall back to text wordmark if the asset is missing.
+}
+
+// Per-brand uploaded logo (Settings → Brand Logos). Falls back to the
+// bundled wordmark when no upload exists for the resolved brand.
+async function loadBrandLogo(sb: SupabaseClient, brand: 'beb' | 'liberty' | null): Promise<Buffer | null> {
+  if (!brand) return loadBundledLogo()
+  const { data } = await sb.from('brand_logos').select('logo_path').eq('brand', brand).maybeSingle()
+  const logoPath = (data as any)?.logo_path
+  if (!logoPath) return loadBundledLogo()
+  const { data: file, error } = await sb.storage.from('brand-logos').download(logoPath)
+  if (error || !file) return loadBundledLogo()
+  return Buffer.from(await file.arrayBuffer())
 }
 
 const RECEIPTS_BUCKET = 'expense-receipts'
@@ -48,13 +60,14 @@ export async function generateAndStoreReportPdf(reportId: string): Promise<{
     sb.from('expenses').select('*').eq('expense_report_id', reportId)
       .order('expense_date', { ascending: true }).order('created_at', { ascending: true }),
     sb.from('events').select('store_name, start_date').eq('id', report.event_id).maybeSingle(),
-    sb.from('users').select('name, signature_url').eq('id', report.user_id).maybeSingle(),
+    sb.from('users').select('name, signature_url, last_active_brand').eq('id', report.user_id).maybeSingle(),
   ])
 
   const expenses = (expensesRaw ?? []) as Expense[]
   const event = eventRaw ? { store_name: eventRaw.store_name, start_date: eventRaw.start_date } : null
   const owner = { name: (ownerRaw as any)?.name ?? '(unknown)' }
   const signatureUrl = (ownerRaw as any)?.signature_url ?? null
+  const ownerBrand = ((ownerRaw as any)?.last_active_brand ?? 'beb') as 'beb' | 'liberty'
 
   // Sign receipt URLs in batch — only those with an actual receipt_url.
   const receiptExpenses = expenses.filter(e => !!e.receipt_url)
@@ -87,7 +100,7 @@ export async function generateAndStoreReportPdf(reportId: string): Promise<{
     owner,
     receipts,
     signatureUrl,
-    logo: await loadLogo(),
+    logo: await loadBrandLogo(sb, ownerBrand),
   }
 
   const buffer = await renderToBuffer(ExpenseReportPdf(data) as any)
