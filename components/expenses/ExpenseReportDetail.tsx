@@ -210,7 +210,7 @@ export default function ExpenseReportDetail({
 
   async function sendToAccountant() {
     if (!report) return
-    if (!confirm('Generate the PDF and email it to the accountant now?')) return
+    if (!confirm('Re-send the PDF to the accountant now?')) return
     setEmailBusy(true); setError(null); setEmailMsg(null)
     try {
       const res = await authedFetch(`/api/expense-reports/${report.id}/send-to-accountant`, { method: 'POST' })
@@ -452,11 +452,14 @@ export default function ExpenseReportDetail({
             title={expenses.length === 0 ? 'Add an expense first.' : ''}>
             {pdfBusy ? 'Generating…' : 'View PDF'}
           </button>
-          {isAdmin && (
+          {/* Approve already auto-emails the accountant. This button is a
+              re-send affordance only — visible after the report is
+              approved/paid in case the original email got lost. */}
+          {isAdmin && (report.status === 'approved' || report.status === 'paid') && (
             <button className="btn-outline btn-sm"
-              onClick={sendToAccountant} disabled={emailBusy || expenses.length === 0}
-              title={expenses.length === 0 ? 'Add an expense first.' : 'Email this report to the configured accountant.'}>
-              {emailBusy ? 'Sending…' : 'Send to Accountant'}
+              onClick={sendToAccountant} disabled={emailBusy}
+              title="Re-send the PDF to the configured accountant.">
+              {emailBusy ? 'Sending…' : 'Re-send to Accountant'}
             </button>
           )}
           {emailMsg && <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--green)' }}>{emailMsg}</span>}
