@@ -17,6 +17,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { MarketingCampaign } from '@/types'
+import RoleLabel from './RoleLabel'
 
 interface PaymentMethod {
   id: string
@@ -137,7 +138,7 @@ export default function PaymentSection({ campaign, onChanged }: {
   return (
     <div className="card" style={{ padding: 18, marginBottom: 14 }}>
       <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)', marginBottom: 4 }}>
-        4. Payment
+        4. Payment <RoleLabel>(Marketing Team)</RoleLabel>
       </div>
       <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 14 }}>
         {isAwaitingRequest && 'Proof approved. Request payment when you\'re ready to charge.'}
