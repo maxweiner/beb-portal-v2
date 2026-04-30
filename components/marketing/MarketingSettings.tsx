@@ -34,6 +34,10 @@ export default function MarketingSettings() {
           const sel = section === id
           return (
             <button key={id} onClick={() => setSection(id)} style={{
+              // Fill the 220px nav column so the description text wraps
+              // inside the card instead of overflowing into the right
+              // panel. Buttons default to inline-block; force block + 100%.
+              display: 'block', width: '100%',
               textAlign: 'left', padding: '10px 12px', borderRadius: 8,
               border: '1px solid var(--pearl)',
               background: sel ? 'var(--green-pale)' : '#fff',
@@ -41,7 +45,10 @@ export default function MarketingSettings() {
               cursor: 'pointer', fontFamily: 'inherit',
             }}>
               <div style={{ fontWeight: 800, fontSize: 13 }}>{label}</div>
-              <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2, lineHeight: 1.3 }}>
+              <div style={{
+                fontSize: 11, color: 'var(--mist)', marginTop: 2, lineHeight: 1.3,
+                wordBreak: 'break-word',
+              }}>
                 {desc}
               </div>
             </button>
