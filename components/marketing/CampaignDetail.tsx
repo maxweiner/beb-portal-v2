@@ -35,6 +35,7 @@ export default function CampaignDetail({ campaign, onBack, onChanged, onDeleted 
   const event = useMemo(() => events.find(e => e.id === campaign.event_id), [events, campaign.event_id])
   const store = useMemo(() => stores.find(s => s.id === event?.store_id), [stores, event?.store_id])
   const storeName = store?.name || event?.store_name || '(unknown store)'
+  const isMarketingRole = user?.role === 'marketing'
 
   // Local edit state for budget
   const [budgetInput, setBudgetInput] = useState<string>(
@@ -144,48 +145,76 @@ export default function CampaignDetail({ campaign, onBack, onChanged, onDeleted 
           1. Setup <RoleLabel>(Buyers)</RoleLabel>
         </div>
         <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 14 }}>
-          Set the marketing budget for this campaign, then notify the team to start planning.
+          {isMarketingRole
+            ? 'The buyer sets the budget here and notifies your team. Read-only for the marketing team.'
+            : 'Set the marketing budget for this campaign, then notify the team to start planning.'}
         </div>
 
-        {/* Budget */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, alignItems: 'end', marginBottom: 14 }}>
-          <div>
-            <label className="fl">Marketing Budget <RoleLabel>(Buyers)</RoleLabel></label>
-            <div style={{ position: 'relative' }}>
-              <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)', fontWeight: 700 }}>$</span>
-              <input type="number" min={0} step="0.01" value={budgetInput}
-                onChange={e => setBudgetInput(e.target.value)}
-                placeholder="0.00" style={{ paddingLeft: 24 }} />
+        {isMarketingRole ? (
+          <div style={{
+            background: 'var(--cream2)', border: '1px solid var(--pearl)', borderRadius: 8,
+            padding: '10px 14px',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8,
+          }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.05em' }}>
+                Marketing budget
+              </div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--ink)' }}>
+                {hasBudget
+                  ? `$${Number(campaign.marketing_budget).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : 'Not set yet'}
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--mist)', textAlign: 'right' }}>
+              {campaign.team_notified_at
+                ? <>✓ Notified {new Date(campaign.team_notified_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}</>
+                : 'Not notified yet'}
             </div>
           </div>
-          <button className="btn-primary btn-sm" onClick={saveBudget} disabled={savingBudget}>
-            {savingBudget ? 'Saving…' : 'Save Budget'}
-          </button>
-          {campaign.budget_set_at && (
-            <div style={{ fontSize: 11, color: 'var(--mist)' }}>
-              Last set {new Date(campaign.budget_set_at).toLocaleDateString()}
+        ) : (
+          <>
+            {/* Budget */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, alignItems: 'end', marginBottom: 14 }}>
+              <div>
+                <label className="fl">Marketing Budget <RoleLabel>(Buyers)</RoleLabel></label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)', fontWeight: 700 }}>$</span>
+                  <input type="number" min={0} step="0.01" value={budgetInput}
+                    onChange={e => setBudgetInput(e.target.value)}
+                    placeholder="0.00" style={{ paddingLeft: 24 }} />
+                </div>
+              </div>
+              <button className="btn-primary btn-sm" onClick={saveBudget} disabled={savingBudget}>
+                {savingBudget ? 'Saving…' : 'Save Budget'}
+              </button>
+              {campaign.budget_set_at && (
+                <div style={{ fontSize: 11, color: 'var(--mist)' }}>
+                  Last set {new Date(campaign.budget_set_at).toLocaleDateString()}
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        {/* Notify Marketing Team */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <button className="btn-primary btn-sm"
-            onClick={notifyTeam}
-            disabled={!hasBudget || notifying}
-            title={!hasBudget ? 'Set a marketing budget first.' : ''}
-            style={!hasBudget ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}>
-            {notifying ? 'Sending…' : campaign.team_notified_at ? '↻ Re-notify Marketing Team' : '📧 Notify Marketing Team'}
-          </button>
-          {campaign.team_notified_at && (
-            <span style={{ fontSize: 12, color: 'var(--mist)' }}>
-              Last notified {new Date(campaign.team_notified_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
-            </span>
-          )}
-          {notifyResult && (
-            <span style={{ fontSize: 12, color: 'var(--green-dark)', fontWeight: 700 }}>{notifyResult}</span>
-          )}
-        </div>
+            {/* Notify Marketing Team */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <button className="btn-primary btn-sm"
+                onClick={notifyTeam}
+                disabled={!hasBudget || notifying}
+                title={!hasBudget ? 'Set a marketing budget first.' : ''}
+                style={!hasBudget ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}>
+                {notifying ? 'Sending…' : campaign.team_notified_at ? '↻ Re-notify Marketing Team' : '📧 Notify Marketing Team'}
+              </button>
+              {campaign.team_notified_at && (
+                <span style={{ fontSize: 12, color: 'var(--mist)' }}>
+                  Last notified {new Date(campaign.team_notified_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
+                </span>
+              )}
+              {notifyResult && (
+                <span style={{ fontSize: 12, color: 'var(--green-dark)', fontWeight: 700 }}>{notifyResult}</span>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Mail-by date */}
