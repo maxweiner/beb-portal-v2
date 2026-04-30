@@ -14,6 +14,8 @@ interface DayRow {
   dollars10: number | null
   dollars5: number | null
   dollars0: number | null
+  store_commission_check_number?: string | null
+  store_commission_check_amount?: number | null
 }
 
 interface BuyerEntryRow {
@@ -122,6 +124,16 @@ export async function buildEventRecap(opts: BuildOpts): Promise<EventRecapResult
     storeNoCommTotal += amt
   }
 
+  // Day-3 store commission check (record-only, not summed). Surfaces
+  // on the recap so the accountant sees it; never affects show totals.
+  const day3 = days.find(d => d.day_number === 3)
+  const commissionCheck = day3 && Number(day3.store_commission_check_amount) > 0
+    ? {
+        number: (day3.store_commission_check_number || '').trim(),
+        amount: Number(day3.store_commission_check_amount),
+      }
+    : null
+
   const perBuyer = new Map<string, { name: string; purchases: number; dollars: number; days: number }>()
   for (const e of entries) {
     const key = e.buyer_id || 'unknown'
@@ -148,6 +160,7 @@ export async function buildEventRecap(opts: BuildOpts): Promise<EventRecapResult
     storeName, eventDateStr,
     perDay, grand, buyerRows,
     storeNoCommByDay, storeNoCommTotal,
+    commissionCheck,
   })
 
   return {
@@ -170,6 +183,7 @@ function recapBody(opts: {
   buyerRows: { name: string; purchases: number; dollars: number; days: number }[]
   storeNoCommByDay: Map<number, number>
   storeNoCommTotal: number
+  commissionCheck: { number: string; amount: number } | null
 }): string {
   const dayRows = opts.perDay.map(d => `
     <tr>
@@ -234,6 +248,25 @@ function recapBody(opts: {
     </section>
 
     ${storeNoCommSection}
+
+    ${opts.commissionCheck ? `
+    <section style="background:#fff;border:1px solid #d8d3ca;border-radius:12px;padding:16px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:800;color:#737368;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">
+        Store commission check
+      </div>
+      <div style="font-size:11px;color:#9CA3AF;margin-bottom:10px">
+        Paid to the store at end-of-event. Record-only — not part of show totals.
+      </div>
+      <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;border-collapse:collapse">
+        <tbody>
+          <tr>
+            <td style="padding:6px 10px;font-weight:700">Check #${opts.commissionCheck.number ? ' ' + escapeHtml(opts.commissionCheck.number) : ' —'}</td>
+            <td style="padding:6px 10px;text-align:right;font-weight:900;color:#1F2937">${money(opts.commissionCheck.amount)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+    ` : ''}
 
     <footer style="margin-top:24px;text-align:center;font-size:12px;color:#a8a89a">${escapeHtml(opts.footer)}</footer>
   `
