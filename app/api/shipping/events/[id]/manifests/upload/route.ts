@@ -46,6 +46,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (file.size > MAX_BYTES) return NextResponse.json({ error: `File too large (max ${MAX_BYTES} bytes)` }, { status: 413 })
 
   const isScanStyle = (form.get('is_scan_style') ?? 'true').toString() === 'true'
+  const rawLabel = (form.get('box_label') ?? '').toString().trim()
+  if (!rawLabel) return NextResponse.json({ error: 'Missing box_label' }, { status: 400 })
+  // Cap absurdly-long labels but otherwise let the buyer's exact text through.
+  const boxLabel = rawLabel.slice(0, 24)
 
   const sb = admin()
   // Look up the event to enforce access — admin OR worker on event.
@@ -77,12 +81,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     .from('shipping_manifests')
     .insert({
       event_id: event.id,
+      box_label: boxLabel,
       file_path: path,
       file_size_bytes: buffer.length,
       is_scan_style: isScanStyle,
       uploaded_by: me.id,
     })
-    .select('id, event_id, box_id, file_path, file_size_bytes, is_scan_style, uploaded_by, uploaded_at, deleted_at')
+    .select('id, event_id, box_id, box_label, file_path, file_size_bytes, is_scan_style, uploaded_by, uploaded_at, deleted_at')
     .single()
   if (insErr || !row) {
     await sb.storage.from(BUCKET).remove([path]).catch(() => {})

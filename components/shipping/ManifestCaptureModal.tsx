@@ -15,21 +15,45 @@ import type { ShippingManifest } from '@/lib/shipping/manifests'
 import { useIsNarrow } from '@/components/expenses/useIsNarrow'
 
 interface Props {
-  /** The event to attach the manifest to. Prop name is `boxId` purely
-   *  for source-history continuity; semantically it's the event id now
-   *  that manifests are event-scoped. Future renames OK. */
+  /** The event to attach the manifest to. Named `boxId` for source-
+   *  history continuity; semantically it's the event id. */
   boxId: string
+  /** Event display name for the modal header. */
   boxLabel: string
+  /** Box labels already used on this event (e.g. ["J1", "J2"]).
+   *  Drives the smart-default + "next box" suggestion. */
+  existingBoxLabels: string[]
+  /** Pre-fill the box label input. Used by "Add another" to default to
+   *  the box the user was just viewing. */
+  initialBoxLabel?: string | null
   onClose: () => void
   onUploaded: (m: ShippingManifest) => void
 }
 
+const PRESET_LABELS = ['J1', 'J2', 'J3', 'J4', 'J5', 'S1', 'S2'] as const
+
+/** Suggest the next J box if no others are present, otherwise the
+ *  highest-numbered J + 1. Falls back to "J1". */
+function suggestNextLabel(existing: string[]): string {
+  const jNums = existing
+    .map(l => /^J(\d+)$/i.exec(l)?.[1])
+    .filter(Boolean)
+    .map(n => parseInt(n!, 10))
+    .filter(Number.isFinite)
+  if (jNums.length === 0) return 'J1'
+  return 'J' + (Math.max(...jNums) + 1)
+}
+
 export default function ManifestCaptureModal({
-  boxId, boxLabel, onClose, onUploaded,
+  boxId, boxLabel, existingBoxLabels, initialBoxLabel,
+  onClose, onUploaded,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const isNarrow = useIsNarrow()
   const [scanStyle, setScanStyle] = useState(true)
+  const [labelDraft, setLabelDraft] = useState<string>(
+    initialBoxLabel || suggestNextLabel(existingBoxLabels),
+  )
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [processedBlob, setProcessedBlob] = useState<Blob | null>(null)
   const [busy, setBusy] = useState<'processing' | 'uploading' | null>(null)
@@ -80,10 +104,18 @@ export default function ManifestCaptureModal({
 
   async function doUpload() {
     if (!processedBlob) return
+    const trimmed = labelDraft.trim()
+    if (!trimmed) {
+      setError('Pick or type a box label first.')
+      return
+    }
     setBusy('uploading')
     setError(null)
     try {
-      const m = await uploadManifest({ eventId: boxId, blob: processedBlob, isScanStyle: scanStyle })
+      const m = await uploadManifest({
+        eventId: boxId, blob: processedBlob, isScanStyle: scanStyle,
+        boxLabel: trimmed,
+      })
       onUploaded(m)
       onClose()
     } catch (err: any) {
@@ -111,6 +143,54 @@ export default function ManifestCaptureModal({
             background: 'transparent', border: 'none', cursor: 'pointer',
             color: 'var(--mist)', fontSize: 22, padding: '0 6px',
           }}>×</button>
+        </div>
+
+        {/* Box label picker */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={{
+            display: 'block', fontSize: 11, fontWeight: 800, color: 'var(--mist)',
+            textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6,
+          }}>Box</label>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
+            {PRESET_LABELS.map(l => {
+              const sel = labelDraft.trim().toUpperCase() === l
+              const used = existingBoxLabels.some(x => x.toUpperCase() === l)
+              return (
+                <button key={l} onClick={() => setLabelDraft(l)}
+                  style={{
+                    padding: '6px 10px', minHeight: 36, borderRadius: 6,
+                    cursor: 'pointer', fontFamily: 'inherit',
+                    fontSize: 12, fontWeight: 800,
+                    background: sel ? 'var(--green-pale)' : 'transparent',
+                    border: '1px solid ' + (sel ? 'var(--green3)' : 'var(--pearl)'),
+                    color: sel ? 'var(--green-dark)' : 'var(--ash)',
+                    position: 'relative',
+                  }}>
+                  {l}
+                  {used && (
+                    <span aria-hidden style={{
+                      position: 'absolute', top: -3, right: -3,
+                      background: '#F59E0B', color: '#fff',
+                      fontSize: 9, fontWeight: 800,
+                      padding: '0 4px', borderRadius: 6, lineHeight: '12px',
+                    }} title="Already has photos">·</span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+          <input
+            value={labelDraft}
+            onChange={e => setLabelDraft(e.target.value)}
+            placeholder="…or type a custom label"
+            maxLength={24}
+            style={{
+              width: '100%', padding: '8px 10px', fontSize: 13,
+              border: '1px solid var(--pearl)', borderRadius: 6,
+              background: '#fff', color: 'var(--ink)',
+              fontFamily: 'inherit', outline: 'none',
+            }}
+          />
         </div>
 
         {/* Style toggle */}

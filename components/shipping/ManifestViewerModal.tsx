@@ -12,33 +12,60 @@ import {
 } from '@/lib/shipping/manifests'
 
 interface Props {
+  /** Event display name shown in the header. */
   boxLabel: string
   manifests: ShippingManifest[]
   onClose: () => void
-  onAddAnother: () => void
+  /** Receives the box label the user was looking at, so the capture
+   *  modal can default to it. */
+  onAddAnother: (currentBoxLabel: string | null) => void
   onDeleted: (id: string) => void
 }
+
+const UNLABELED = '— Unlabeled —'
 
 export default function ManifestViewerModal({
   boxLabel, manifests, onClose, onAddAnother, onDeleted,
 }: Props) {
   const { users } = useApp()
+  // Group photos by box label. Each tab is one box ("J1", "J2", etc.);
+  // legacy / unlabeled rows fall into a single bucket.
+  const grouped = useMemo(() => {
+    const m = new Map<string, ShippingManifest[]>()
+    for (const x of manifests) {
+      const key = (x.box_label || '').trim() || UNLABELED
+      if (!m.has(key)) m.set(key, [])
+      m.get(key)!.push(x)
+    }
+    // Stable order: numerics inside J/S grouped & sorted, custom labels
+    // alphabetical, unlabeled last.
+    const keys = Array.from(m.keys()).sort((a, b) => {
+      if (a === UNLABELED) return 1
+      if (b === UNLABELED) return -1
+      return a.localeCompare(b, undefined, { numeric: true })
+    })
+    return keys.map(k => ({ label: k, items: m.get(k)! }))
+  }, [manifests])
+  const [activeBox, setActiveBox] = useState<string>(() => grouped[0]?.label ?? UNLABELED)
+  const activeItems = grouped.find(g => g.label === activeBox)?.items ?? []
   const [activeIdx, setActiveIdx] = useState(0)
+  // Re-clamp the photo cursor when the active box (or its size) changes.
+  useEffect(() => { setActiveIdx(0) }, [activeBox])
   // Cache signed URLs for each manifest path so we don't re-sign per click.
   const [urls, setUrls] = useState<Record<string, string>>({})
 
   // Soft warning when a single box has lots of attached photos.
-  const overLimit = manifests.length > 10
+  const overLimit = activeItems.length > 10
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
-      if (e.key === 'ArrowRight') setActiveIdx(i => Math.min(i + 1, manifests.length - 1))
+      if (e.key === 'ArrowRight') setActiveIdx(i => Math.min(i + 1, activeItems.length - 1))
       if (e.key === 'ArrowLeft')  setActiveIdx(i => Math.max(i - 1, 0))
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose, manifests.length])
+  }, [onClose, activeItems.length])
 
   // Lazily resolve signed URLs for the manifests we actually render.
   useEffect(() => {
@@ -61,12 +88,12 @@ export default function ManifestViewerModal({
 
   // Clamp activeIdx if the list shrinks (e.g. delete).
   useEffect(() => {
-    if (activeIdx > manifests.length - 1) {
-      setActiveIdx(Math.max(0, manifests.length - 1))
+    if (activeIdx > activeItems.length - 1) {
+      setActiveIdx(Math.max(0, activeItems.length - 1))
     }
-  }, [manifests.length, activeIdx])
+  }, [activeItems.length, activeIdx])
 
-  const active = manifests[activeIdx]
+  const active = activeItems[activeIdx]
   const activeUrl = active ? urls[active.id] : null
   const uploader = useMemo(() => {
     if (!active?.uploaded_by) return null
@@ -97,10 +124,10 @@ export default function ManifestViewerModal({
       }}>
         <div>
           <div style={{ fontSize: 14, fontWeight: 800 }}>{boxLabel} · Manifests</div>
-          {manifests.length > 0 && (
+          {activeItems.length > 0 && (
             <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>
-              {activeIdx + 1} of {manifests.length}
-              {overLimit && ' · ⚠ over 10 photos for one box'}
+              Box <strong>{activeBox}</strong> · {activeIdx + 1} of {activeItems.length}
+              {overLimit && ' · ⚠ over 10 photos'}
             </div>
           )}
         </div>
@@ -109,6 +136,34 @@ export default function ManifestViewerModal({
           color: '#fff', fontSize: 24, padding: '0 6px',
         }}>×</button>
       </div>
+
+      {/* Box-label tabs */}
+      {grouped.length > 1 && (
+        <div onClick={e => e.stopPropagation()} style={{
+          display: 'flex', gap: 4, padding: '8px 16px',
+          borderBottom: '1px solid rgba(255,255,255,.1)',
+          overflowX: 'auto',
+        }}>
+          {grouped.map(g => {
+            const sel = g.label === activeBox
+            return (
+              <button key={g.label} onClick={() => setActiveBox(g.label)}
+                style={{
+                  padding: '6px 12px', borderRadius: 6, cursor: 'pointer',
+                  background: sel ? 'rgba(255,255,255,.18)' : 'transparent',
+                  border: '1px solid ' + (sel ? 'rgba(255,255,255,.4)' : 'rgba(255,255,255,.15)'),
+                  color: '#fff', fontSize: 12, fontWeight: 700,
+                  fontFamily: 'inherit', whiteSpace: 'nowrap',
+                }}>
+                {g.label}
+                <span style={{ marginLeft: 6, opacity: 0.65, fontWeight: 600 }}>
+                  {g.items.length}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* Photo */}
       <div onClick={e => e.stopPropagation()} style={{
@@ -128,14 +183,14 @@ export default function ManifestViewerModal({
           }} />
         )}
 
-        {manifests.length > 1 && (
+        {activeItems.length > 1 && (
           <>
             <button onClick={() => setActiveIdx(i => Math.max(0, i - 1))}
               disabled={activeIdx === 0}
               aria-label="Previous"
               style={navBtn('left')}>‹</button>
-            <button onClick={() => setActiveIdx(i => Math.min(manifests.length - 1, i + 1))}
-              disabled={activeIdx === manifests.length - 1}
+            <button onClick={() => setActiveIdx(i => Math.min(activeItems.length - 1, i + 1))}
+              disabled={activeIdx === activeItems.length - 1}
               aria-label="Next"
               style={navBtn('right')}>›</button>
           </>
@@ -160,7 +215,7 @@ export default function ManifestViewerModal({
             </div>
           </div>
         )}
-        <button onClick={onAddAnother} style={{
+        <button onClick={() => onAddAnother(activeBox === UNLABELED ? null : activeBox)} style={{
           padding: '8px 14px', minHeight: 44,
           background: 'rgba(255,255,255,.10)', color: '#fff',
           border: '1px solid rgba(255,255,255,.25)', borderRadius: 6,
