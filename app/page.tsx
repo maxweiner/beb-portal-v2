@@ -43,12 +43,19 @@ export default function Home() {
   const setNav = (n: NavPage) => { rawSetNav(n); setNavKey(k => k + 1) }
   const [isMobile, setIsMobile] = useState(false)
 
-  // Marketing-role users are scoped to Calendar + Marketing only.
-  // Force nav back to an allowed section so deep-links can't bypass
-  // the sidebar restriction.
+  // Role-scoped nav guards. Marketing = Calendar + Marketing only.
+  // Accounting = Calendar + Travel + Staff + Expenses only. Force
+  // nav back to an allowed section so deep-links can't bypass the
+  // sidebar restriction.
   useEffect(() => {
     if (user?.role === 'marketing' && nav !== 'marketing' && nav !== 'calendar') {
       rawSetNav('marketing')
+    }
+    if (user?.role === 'accounting'
+        && nav !== 'calendar' && nav !== 'travel'
+        && nav !== 'staff'    && nav !== 'expenses'
+        && nav !== 'settings') {
+      rawSetNav('calendar')
     }
   }, [user?.role, nav])
 

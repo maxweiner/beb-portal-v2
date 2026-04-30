@@ -94,16 +94,25 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
   const isSuperadmin = user?.role === 'superadmin'
   const isPartner = !!user?.is_partner
   const isMarketing = user?.role === 'marketing'
+  const isAccounting = user?.role === 'accounting'
   const hasLibertyAccess = user?.liberty_access === true
   const isLiberty = brand === 'liberty'
-  // Marketing-role users (internal team + external Collected) see only
-  // Calendar + Marketing in the sidebar; nothing else from the portal.
+  // Role-scoped nav lists. Marketing = Calendar + Marketing only.
+  // Accounting = Calendar + Travel + Staff + Expenses only. Everyone
+  // else gets the full BEB or LIBERTY list.
   const NAV_ITEMS = isMarketing
     ? [
         { id: 'calendar' as NavPage,  label: 'Calendar',  iconKey: 'calendar' },
         { id: 'marketing' as NavPage, label: 'Marketing', iconKey: 'marketing' },
       ]
-    : (isLiberty ? LIBERTY_NAV : BEB_NAV)
+    : isAccounting
+      ? [
+          { id: 'calendar' as NavPage, label: 'Calendar',     iconKey: 'calendar' },
+          { id: 'travel'   as NavPage, label: 'Travel Share', iconKey: 'travel' },
+          { id: 'staff'    as NavPage, label: 'Staff',        iconKey: 'staff' },
+          { id: 'expenses' as NavPage, label: 'Expenses',     iconKey: 'expenses' },
+        ]
+      : (isLiberty ? LIBERTY_NAV : BEB_NAV)
 
   // Per-section collapse state, persisted to localStorage. Default = all open.
   const { count: pendingApprovalCount } = usePendingApprovals()
