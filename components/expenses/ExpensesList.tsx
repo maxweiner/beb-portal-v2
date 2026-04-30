@@ -10,6 +10,7 @@
 // auto-create a report.
 
 import { useEffect, useMemo, useState } from 'react'
+import { useIsNarrow } from './useIsNarrow'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { Event, ExpenseReport, ExpenseReportStatus, ExpenseReportTemplate, User } from '@/types'
@@ -37,6 +38,7 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
   // Per policy: every user (including regular admins) sees only their own
   // reports. Only superadmins get the "see everyone" dropdown filter.
   const isSuperAdmin = user?.role === 'superadmin'
+  const isNarrow = useIsNarrow()
 
   const [rows, setRows] = useState<ReportRow[]>([])
   const [users, setUsers] = useState<Pick<User, 'id' | 'name'>[]>([])
@@ -181,7 +183,52 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
         </div>
       )}
 
-      {/* Table */}
+      {/* Table — switches to a stacked card list on narrow viewports
+          since the User column + buttons run off the side on phones. */}
+      {isNarrow ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {!loaded ? (
+            <div className="card" style={{ padding: 30, textAlign: 'center', color: 'var(--mist)' }}>Loading…</div>
+          ) : filtered.length === 0 ? (
+            <div className="card" style={{ padding: 30, textAlign: 'center', color: 'var(--mist)' }}>
+              {rows.length === 0 ? 'No reports yet — create one with "+ New Report".' : 'No reports match the current filters.'}
+            </div>
+          ) : filtered.map(r => {
+            const sc = STATUS_COLOR[r.status]
+            return (
+              <button key={r.id} onClick={() => onOpen(r.id)} className="card"
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  padding: 12, cursor: 'pointer', fontFamily: 'inherit',
+                  background: '#fff',
+                }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink)', marginBottom: 2 }}>
+                      {r.event_name}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--mist)' }}>
+                      {r.event_start ? formatDateLong(r.event_start) : '—'}
+                      {isSuperAdmin && r.user_name ? ` · ${r.user_name}` : ''}
+                    </div>
+                  </div>
+                  <span style={{
+                    background: sc.bg, color: sc.fg,
+                    padding: '2px 10px', borderRadius: 999,
+                    fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap',
+                  }}>{STATUS_LABEL[r.status]}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 8 }}>
+                  <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)' }}>
+                    {formatCurrency(r.grand_total)}
+                  </span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--green-dark)' }}>Open →</span>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      ) : (
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -233,6 +280,7 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
           </table>
         </div>
       </div>
+      )}
 
       {/* New-report picker */}
       {pickerOpen && (

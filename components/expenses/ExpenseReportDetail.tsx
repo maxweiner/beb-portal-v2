@@ -574,7 +574,7 @@ function AddExpenseForm({ onAdd }: { onAdd: (d: NewExpenseDraft) => Promise<void
       <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>
         Add expense
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(110px, 130px) minmax(140px, 1fr) minmax(140px, 1fr) minmax(110px, 130px) auto', gap: 8, alignItems: 'end' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, alignItems: 'end' }}>
         <div>
           <label style={lbl}>Date</label>
           <input type="date" value={draft.expense_date}
@@ -682,7 +682,7 @@ function ExpenseRow({ expense, canMutate, onUpdate, onDelete }: {
           }}>{sourceBadge.label}</span>
         </div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(110px, 130px) minmax(140px, 1fr) minmax(140px, 1fr) minmax(110px, 130px) auto', gap: 8, alignItems: 'end' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, alignItems: 'end' }}>
         <div>
           <label style={lbl}>Date</label>
           <input type="date" value={local.expense_date} disabled={!canMutate}
