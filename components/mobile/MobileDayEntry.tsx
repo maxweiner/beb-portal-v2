@@ -955,12 +955,16 @@ export default function MobileDayEntry() {
 
           {/* Day-3 only: Store commission check (record-only — never totaled) */}
           {selectedDay === 3 && (() => {
-            // Day-3 only totals — live from the in-form values. Days 1
-            // and 2 are not summed in; this card reflects only Day 3.
-            const sum10 = nF(tenPct)
-            const sum5  = nF(fivePct)
-            const daySpend = sum10 + sum5
-            const dayCommission = sum10 * 0.10 + sum5 * 0.05
+            // Day-3 spend reflects only the current day's inputs.
+            // Total Commission Due covers the FULL event — days 1+2
+            // come from the saved DB rows, day 3 from in-form values.
+            const day10 = nF(tenPct)
+            const day5  = nF(fivePct)
+            const daySpend = day10 + day5
+            const otherDays = (selectedEvent?.days || []).filter(d => d.day_number !== 3)
+            const eventSum10 = otherDays.reduce((s, d) => s + (Number(d.dollars10) || 0), 0) + day10
+            const eventSum5  = otherDays.reduce((s, d) => s + (Number(d.dollars5)  || 0), 0) + day5
+            const eventCommission = eventSum10 * 0.10 + eventSum5 * 0.05
             const fmtMoney = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
             return (
             <div style={cardStyle}>
@@ -971,7 +975,7 @@ export default function MobileDayEntry() {
                 Record-only — not added to any totals.
               </div>
 
-              {/* Day-3 totals reference */}
+              {/* Day-3 spend + event-wide commission */}
               <div style={{
                 background: 'var(--cream2)', border: '1px solid var(--pearl)', borderRadius: 10,
                 padding: '10px 12px', marginBottom: 12,
@@ -983,15 +987,15 @@ export default function MobileDayEntry() {
                   </div>
                   <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--ink)' }}>{fmtMoney(daySpend)}</div>
                   <div style={{ fontSize: 9, color: 'var(--mist)' }}>
-                    10% {fmtMoney(sum10)} · 5% {fmtMoney(sum5)}
+                    10% {fmtMoney(day10)} · 5% {fmtMoney(day5)}
                   </div>
                 </div>
                 <div>
                   <div style={{ fontSize: 9, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-                    Day 3 Commission Due
+                    Total Commission Due
                   </div>
-                  <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--green-dark)' }}>{fmtMoney(dayCommission)}</div>
-                  <div style={{ fontSize: 9, color: 'var(--mist)' }}>0% excluded</div>
+                  <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--green-dark)' }}>{fmtMoney(eventCommission)}</div>
+                  <div style={{ fontSize: 9, color: 'var(--mist)' }}>All 3 days · 0% excluded</div>
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>

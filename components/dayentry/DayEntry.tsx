@@ -979,13 +979,16 @@ export default function DayEntry() {
 
               {/* Day-3 only: Store commission check (record-only — never totaled) */}
               {selectedDay === 3 && (() => {
-                // Day-3 only totals — pulled live from the in-form values
-                // so the numbers update as the buyer types. Days 1 + 2 are
-                // not summed in here; the commission check covers day 3.
-                const sum10 = nF(dollars10)
-                const sum5  = nF(dollars5)
-                const daySpend = sum10 + sum5
-                const dayCommission = sum10 * 0.10 + sum5 * 0.05
+                // Day-3 spend reflects only the current day's inputs.
+                // Total Commission Due covers the FULL event — days 1+2
+                // come from the saved DB rows, day 3 from in-form values.
+                const day10 = nF(dollars10)
+                const day5  = nF(dollars5)
+                const daySpend = day10 + day5
+                const otherDays = (selectedEvent?.days || []).filter(d => d.day_number !== 3)
+                const eventSum10 = otherDays.reduce((s, d) => s + (Number(d.dollars10) || 0), 0) + day10
+                const eventSum5  = otherDays.reduce((s, d) => s + (Number(d.dollars5)  || 0), 0) + day5
+                const eventCommission = eventSum10 * 0.10 + eventSum5 * 0.05
                 const fmtMoney = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                 return (
                   <div className="card card-accent mb-4" style={{ margin: 0 }}>
@@ -994,7 +997,7 @@ export default function DayEntry() {
                       Record-only — not added to any totals. Shows on the Event Recap PDF.
                     </div>
 
-                    {/* Day-3 totals reference */}
+                    {/* Day-3 spend + event-wide commission */}
                     <div style={{
                       background: 'var(--cream2)', border: '1px solid var(--pearl)', borderRadius: 8,
                       padding: '10px 14px', marginBottom: 14,
@@ -1006,16 +1009,16 @@ export default function DayEntry() {
                         </div>
                         <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--ink)' }}>{fmtMoney(daySpend)}</div>
                         <div style={{ fontSize: 10, color: 'var(--mist)' }}>
-                          $@10% {fmtMoney(sum10)} · $@5% {fmtMoney(sum5)}
+                          $@10% {fmtMoney(day10)} · $@5% {fmtMoney(day5)}
                         </div>
                       </div>
                       <div>
                         <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-                          Day 3 Commission Due
+                          Total Commission Due
                         </div>
-                        <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--green-dark)' }}>{fmtMoney(dayCommission)}</div>
+                        <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--green-dark)' }}>{fmtMoney(eventCommission)}</div>
                         <div style={{ fontSize: 10, color: 'var(--mist)' }}>
-                          10% + 5% bands · 0% excluded
+                          All 3 days · 10% + 5% bands · 0% excluded
                         </div>
                       </div>
                     </div>
