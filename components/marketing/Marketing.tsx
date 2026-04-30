@@ -33,7 +33,14 @@ interface Campaign {
 }
 
 interface Zip { id: string; campaign_id: string; zip_code: string; city: string; state: string; household_count: number }
-interface Proof { id: string; campaign_id: string; version: number; file_url: string; file_name: string; status: string; notes: string; created_at: string }
+interface Proof {
+  id: string; campaign_id: string; version: number
+  /** Legacy column — populated for old base64 data-URL rows; null for new Storage-backed rows. */
+  file_url: string | null
+  /** New: object key inside the marketing-proofs Storage bucket. Resolved to a signed URL on demand. */
+  storage_path: string | null
+  file_name: string; status: string; notes: string; created_at: string
+}
 interface Vendor { id: string; name: string; email: string; type: string; active: boolean }
 
 function CampaignsTab() {
@@ -351,22 +358,32 @@ function ChannelView({ campaign, channel, ev, isAdmin, user, vendors, onUpdate }
   }
 
   const uploadProof = async (file: File) => {
-    const reader = new FileReader()
-    reader.onload = async (e) => {
-      const dataUrl = e.target?.result as string
-      const nextVersion = (proofs[proofs.length - 1]?.version || 0) + 1
-      const { data } = await supabase.from('marketing_proofs').insert({
-        campaign_id: campaign.id, version: nextVersion,
-        file_url: dataUrl, file_name: file.name, status: 'pending',
-      }).select().single()
-      if (data) {
-        setProofs(p => [...p, data])
-        const { data: updated } = await supabase.from('marketing_campaigns')
-          .update({ status: 'proof_pending' }).eq('id', campaign.id).select().single()
-        if (updated) onUpdate(updated)
+    setSaving('proof')
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('campaign_id', campaign.id)
+      // Admin flow: include the session JWT so the route can verify
+      // the caller is an admin.
+      const { data: sess } = await supabase.auth.getSession()
+      const token = sess.session?.access_token
+      const res = await fetch('/api/marketing-proofs/upload', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: fd,
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.proof) {
+        alert(`Upload failed: ${json.error || res.status}`)
+        return
       }
+      setProofs(p => [...p, json.proof])
+      // The upload route already bumps the campaign to proof_pending —
+      // mirror that locally so the badge updates without a refetch.
+      onUpdate({ ...campaign, status: 'proof_pending' })
+    } finally {
+      setSaving(null)
     }
-    reader.readAsDataURL(file)
   }
 
   const updateProof = async (proofId: string, status: string, proofNotes: string) => {
@@ -525,26 +542,67 @@ function ChannelView({ campaign, channel, ev, isAdmin, user, vendors, onUpdate }
       </div>
 
       {/* Final approved proof pinned */}
-      {approvedProof && (
-        <div className="card" style={{ margin: 0, border: '2px solid var(--green)', background: 'var(--green-pale)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-            <div style={{ fontSize: 18 }}>✅</div>
-            <div style={{ fontWeight: 900, color: 'var(--green-dark)' }}>Final Approved Proof — v{approvedProof.version}</div>
-          </div>
-          {approvedProof.file_url.startsWith('data:image') ? (
-            <img src={approvedProof.file_url} alt="Approved proof"
-              style={{ maxWidth: '100%', borderRadius: 'var(--r)', border: '1px solid var(--green3)', cursor: 'pointer' }}
-              onClick={() => window.open(approvedProof.file_url, '_blank')} />
-          ) : (
-            <a href={approvedProof.file_url} target="_blank" rel="noreferrer"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 'var(--r)', background: 'var(--green)', color: '#fff', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
-              📄 View Approved PDF
-            </a>
-          )}
-        </div>
+      {approvedProof && <ApprovedProofCard proof={approvedProof} />}
+    </div>
+  )
+}
+
+function ApprovedProofCard({ proof }: { proof: Proof }) {
+  const url = useProofUrl(proof)
+  const isImage = (url || '').startsWith('data:image')
+    || /\.(png|jpe?g|gif|webp)(\?|$)/i.test(url || '')
+    || /\.(png|jpe?g|gif|webp)$/i.test(proof.file_name || '')
+  return (
+    <div className="card" style={{ margin: 0, border: '2px solid var(--green)', background: 'var(--green-pale)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <div style={{ fontSize: 18 }}>✅</div>
+        <div style={{ fontWeight: 900, color: 'var(--green-dark)' }}>Final Approved Proof — v{proof.version}</div>
+      </div>
+      {!url ? (
+        <div style={{ fontSize: 12, color: 'var(--mist)', fontStyle: 'italic' }}>Loading…</div>
+      ) : isImage ? (
+        <img src={url} alt="Approved proof"
+          style={{ maxWidth: '100%', borderRadius: 'var(--r)', border: '1px solid var(--green3)', cursor: 'pointer' }}
+          onClick={() => window.open(url, '_blank')} />
+      ) : (
+        <a href={url} target="_blank" rel="noreferrer"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 'var(--r)', background: 'var(--green)', color: '#fff', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
+          📄 View Approved File
+        </a>
       )}
     </div>
   )
+}
+
+// Resolves a proof's display URL. Legacy rows had a base64 data URL
+// in file_url; new rows live in Supabase Storage and need a freshly
+// signed URL fetched from the API. Returns null while loading.
+function useProofUrl(proof: Proof, opts?: { token?: string }): string | null {
+  const [url, setUrl] = useState<string | null>(() =>
+    proof.file_url?.startsWith('data:') ? proof.file_url : null
+  )
+  useEffect(() => {
+    let cancelled = false
+    if (proof.file_url?.startsWith('data:')) { setUrl(proof.file_url); return }
+    if (!proof.storage_path) { setUrl(null); return }
+    ;(async () => {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (!opts?.token) {
+        const { data: sess } = await supabase.auth.getSession()
+        const t = sess.session?.access_token
+        if (t) headers.Authorization = `Bearer ${t}`
+      }
+      const res = await fetch('/api/marketing-proofs/sign-url', {
+        method: 'POST', headers,
+        body: JSON.stringify({ proof_id: proof.id, ...(opts?.token ? { token: opts.token } : {}) }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (cancelled) return
+      setUrl(json.url || null)
+    })()
+    return () => { cancelled = true }
+  }, [proof.id, proof.storage_path, proof.file_url, opts?.token])
+  return url
 }
 
 function ProofRow({ proof, isAdmin, onUpdate }: {
@@ -554,6 +612,10 @@ function ProofRow({ proof, isAdmin, onUpdate }: {
   const [notes, setNotes] = useState(proof.notes || '')
   const [expanded, setExpanded] = useState(proof.status === 'pending')
   const [saving, setSaving] = useState(false)
+  const displayUrl = useProofUrl(proof)
+  const isImage = (displayUrl || '').startsWith('data:image')
+    || /\.(png|jpe?g|gif|webp)(\?|$)/i.test(displayUrl || '')
+    || /\.(png|jpe?g|gif|webp)$/i.test(proof.file_name || '')
 
   const statusColors: Record<string, string> = {
     pending: '#f59e0b', needs_edits: '#ef4444', approved: 'var(--green)'
@@ -586,20 +648,24 @@ function ProofRow({ proof, isAdmin, onUpdate }: {
       {expanded && (
         <div style={{ padding: 14 }}>
           {/* Preview */}
-          {proof.file_url.startsWith('data:image') ? (
-            <div style={{ marginBottom: 14 }}>
-              <img src={proof.file_url} alt={proof.file_name}
-                style={{ maxWidth: '100%', maxHeight: 300, objectFit: 'contain', borderRadius: 'var(--r)', border: '1px solid var(--pearl)', cursor: 'pointer' }}
-                onClick={() => window.open(proof.file_url, '_blank')} />
+          {!displayUrl ? (
+            <div style={{ marginBottom: 14, fontSize: 12, color: 'var(--mist)', fontStyle: 'italic' }}>
+              Loading preview…
             </div>
-          ) : proof.file_url ? (
+          ) : isImage ? (
             <div style={{ marginBottom: 14 }}>
-              <a href={proof.file_url} target="_blank" rel="noreferrer"
+              <img src={displayUrl} alt={proof.file_name}
+                style={{ maxWidth: '100%', maxHeight: 300, objectFit: 'contain', borderRadius: 'var(--r)', border: '1px solid var(--pearl)', cursor: 'pointer' }}
+                onClick={() => window.open(displayUrl, '_blank')} />
+            </div>
+          ) : (
+            <div style={{ marginBottom: 14 }}>
+              <a href={displayUrl} target="_blank" rel="noreferrer"
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 'var(--r)', background: 'var(--cream2)', border: '1px solid var(--pearl)', color: 'var(--ink)', fontWeight: 600, fontSize: 13, textDecoration: 'none' }}>
                 📄 {proof.file_name}
               </a>
             </div>
-          ) : null}
+          )}
 
           {/* Existing notes */}
           {proof.notes && (
