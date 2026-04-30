@@ -12,6 +12,7 @@ import PhaseTimeline from './PhaseTimeline'
 import VDPPlanningSection from './VDPPlanningSection'
 import PostcardPlanningSection from './PostcardPlanningSection'
 import ProofingSection from './ProofingSection'
+import PaymentSection from './PaymentSection'
 
 const FLOW_LABELS = {
   vdp: '📬 VDP Mailers',
@@ -207,10 +208,15 @@ export default function CampaignDetail({ campaign, onBack, onChanged, onDeleted 
         <ProofingSection campaign={campaign} onChanged={onChanged} />
       )}
 
-      {/* Payment / Done — Phases 7–8 */}
+      {/* Payment — when proof is approved through done */}
       {(campaign.status === 'payment' || campaign.status === 'done') && (
+        <PaymentSection campaign={campaign} onChanged={onChanged} />
+      )}
+
+      {/* Done — Phase 8 (PDF receipt + accountant email) */}
+      {campaign.status === 'done' && (
         <div className="card" style={{ padding: 18, color: 'var(--mist)', textAlign: 'center', fontSize: 13, marginTop: 14 }}>
-          Payment + Done phases ship in Phases 7–8.
+          Accountant receipt PDF + email ship in Phase 8.
         </div>
       )}
     </div>
