@@ -74,6 +74,15 @@ const REPORTS: (ReportDef & { Icon: React.FC<{ size?: number; color?: string }>;
     sampleVars: { storeName: 'Sample Store Name', eventDate: 'Sat, Apr 27' },
   },
   {
+    id: 'checks-issued',
+    title: 'Checks Issued',
+    description: 'Per-check breakdown for an event: number, amount, day, payment type. Filter by check # or amount, then view, download, or email.',
+    Icon: ChecksIcon, accent: '#06B6D4',
+    sendEndpoint: '/api/checks-issued',
+    varHint: '{{storeName}} and {{eventDate}} for the event being reported',
+    sampleVars: { storeName: 'Sample Store Name', eventDate: 'Sat, Apr 27' },
+  },
+  {
     // Transactional template: fired by the daily expense-submit-reminder
     // cron, one email per active report whose event has ended. No
     // broadcast schedule or recipient list — sendEndpoint=null causes
@@ -246,6 +255,15 @@ function DocumentIcon({ size = 22, color = 'currentColor' }: { size?: number; co
       <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
       <path d="M14 3v5h5" />
       <path d="M9 13h6M9 17h4" />
+    </svg>
+  )
+}
+function ChecksIcon({ size = 22, color = 'currentColor' }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="6" width="18" height="12" rx="2" />
+      <path d="M7 10h10M7 14h6" />
+      <circle cx="17" cy="14" r="1.5" fill={color} />
     </svg>
   )
 }
