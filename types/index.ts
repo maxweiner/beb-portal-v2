@@ -29,6 +29,9 @@ export interface User {
   /** Partner = approves financials + gets the partner default rate.
    *  Distinct from role=superadmin; only Max/Joe/Rich have this. */
   is_partner?: boolean
+  /** Marketing module access. Per-user gate granted independently of role.
+   *  External Collected Concepts users get this without other portal access. */
+  marketing_access?: boolean
 }
 
 // ── Expenses & Invoicing module ──────────────────────────────
