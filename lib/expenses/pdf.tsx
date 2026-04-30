@@ -182,6 +182,14 @@ export function ExpenseReportPdf({ report, expenses, event, owner, receipts, sig
             <Text style={styles.totalsLabel}>Compensation</Text>
             <Text style={styles.totalsValue}>{fmt$(report.total_compensation)}</Text>
           </View>
+          {Number(report.bonus_amount || 0) > 0 && (
+            <View style={styles.totalsRow}>
+              <Text style={styles.totalsLabel}>
+                Bonus{report.bonus_note ? ` — ${report.bonus_note}` : ''}
+              </Text>
+              <Text style={styles.totalsValue}>{fmt$(report.bonus_amount)}</Text>
+            </View>
+          )}
           <View style={styles.grandRow}>
             <Text style={styles.grandLabel}>Grand Total</Text>
             <Text style={styles.grandValue}>{fmt$(report.grand_total)}</Text>

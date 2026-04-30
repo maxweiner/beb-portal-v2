@@ -51,7 +51,9 @@ export default function ExpenseReportDetail({
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
   const isPartner = !!user?.is_partner
   const canMutate = (isOwner && report?.status === 'active') || isAdmin
-  const hasContent = expenses.length > 0 || Number(report?.comp_rate || 0) > 0
+  const hasContent = expenses.length > 0
+    || Number(report?.comp_rate || 0) > 0
+    || Number(report?.bonus_amount || 0) > 0
   const canSubmit = isOwner && report?.status === 'active' && hasContent
   const canApprove = isPartner && report?.status === 'submitted_pending_review'
   const canRecall  = isOwner && report?.status === 'submitted_pending_review'
@@ -97,7 +99,8 @@ export default function ExpenseReportDetail({
     if (!report) return
     const totalExpenses = next.reduce((sum, e) => sum + Number(e.amount || 0), 0)
     const comp = Number(report.comp_rate || 0)
-    const grand = totalExpenses + comp
+    const bonus = Number(report.bonus_amount || 0)
+    const grand = totalExpenses + comp + bonus
     if (
       Number(report.total_expenses) === totalExpenses &&
       Number(report.grand_total) === grand
@@ -125,9 +128,39 @@ export default function ExpenseReportDetail({
       ...p,
       comp_rate: newRate,
       total_compensation: newRate,
-      grand_total: Number(p.total_expenses || 0) + newRate,
+      grand_total: Number(p.total_expenses || 0) + newRate + Number(p.bonus_amount || 0),
     } : p)
     flashSaved()
+  }
+
+  // Partner-only. Routes through the dedicated server endpoint so the
+  // is_partner gate is enforced on the server, not just the UI.
+  async function updateBonus(amount: number, note: string) {
+    if (!isPartner || !report) return
+    setSaveState('saving'); setError(null)
+    try {
+      const res = await authedFetch(`/api/expense-reports/${report.id}/bonus`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount, note }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.report) {
+        setSaveState('error'); setError(json.error || 'Could not save bonus.'); return
+      }
+      const r = json.report as Partial<ExpenseReport>
+      setReport(p => p ? {
+        ...p,
+        bonus_amount: Number(r.bonus_amount ?? amount),
+        bonus_note: (r.bonus_note ?? null) as string | null,
+        total_expenses: Number(r.total_expenses ?? p.total_expenses),
+        total_compensation: Number(r.total_compensation ?? p.total_compensation),
+        grand_total: Number(r.grand_total ?? p.grand_total),
+      } : p)
+      flashSaved()
+    } catch (err: any) {
+      setSaveState('error'); setError(err?.message || 'Network error')
+    }
   }
 
   async function addExpense(draft: NewExpenseDraft) {
@@ -365,7 +398,9 @@ export default function ExpenseReportDetail({
 
         <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {totalsByCategory.length === 0 && Number(report.comp_rate || 0) === 0 ? (
+            {totalsByCategory.length === 0
+              && Number(report.comp_rate || 0) === 0
+              && Number(report.bonus_amount || 0) === 0 ? (
               <span style={{ color: 'var(--mist)', fontSize: 12, fontStyle: 'italic' }}>No expenses or compensation yet.</span>
             ) : (
               <>
@@ -385,6 +420,15 @@ export default function ExpenseReportDetail({
                     fontSize: 12, fontWeight: 700,
                   }}>
                     💼 Compensation · {formatCurrency(report.comp_rate)}
+                  </span>
+                )}
+                {Number(report.bonus_amount || 0) > 0 && (
+                  <span style={{
+                    padding: '3px 9px', borderRadius: 6,
+                    background: '#FEF3C7', color: '#92400E',
+                    fontSize: 12, fontWeight: 700,
+                  }}>
+                    🎁 Bonus · {formatCurrency(report.bonus_amount)}
                   </span>
                 )}
               </>
@@ -407,6 +451,17 @@ export default function ExpenseReportDetail({
         canMutate={canMutate}
         onSave={updateCompRate}
       />
+
+      {/* Partner-only bonus card. Hidden for non-partners unless a bonus
+          has been granted (then read-only display). */}
+      {(isPartner || Number(report.bonus_amount || 0) > 0) && (
+        <BonusCard
+          amount={Number(report.bonus_amount || 0)}
+          note={report.bonus_note}
+          canEdit={isPartner}
+          onSave={updateBonus}
+        />
+      )}
 
       {error && (
         <div style={{ padding: 10, marginBottom: 10, background: '#FEE2E2', color: '#991B1B', borderRadius: 6, fontSize: 13 }}>
@@ -752,6 +807,71 @@ function ExpenseRow({ expense, canMutate, onUpdate, onDelete }: {
 const lbl: React.CSSProperties = {
   display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
   letterSpacing: '.05em', color: 'var(--mist)', marginBottom: 4,
+}
+
+// ── Bonus card (partner-only) ────────────────────────────
+// Single bonus per report. Editable for partners; non-partners only
+// see this card when a bonus already exists (read-only display so the
+// buyer knows how much was granted and why).
+function BonusCard({
+  amount, note, canEdit, onSave,
+}: {
+  amount: number
+  note: string | null
+  canEdit: boolean
+  onSave: (amount: number, note: string) => Promise<void>
+}) {
+  const [localAmt, setLocalAmt] = useState<string>(String(amount || ''))
+  const [localNote, setLocalNote] = useState<string>(note ?? '')
+  useEffect(() => { setLocalAmt(String(amount || '')) }, [amount])
+  useEffect(() => { setLocalNote(note ?? '') }, [note])
+
+  function commit() {
+    if (!canEdit) return
+    const n = Number(localAmt)
+    if (!Number.isFinite(n) || n < 0) {
+      setLocalAmt(String(amount || '')); return
+    }
+    if (n === Number(amount) && (localNote.trim() === (note ?? '').trim())) return
+    void onSave(n, localNote)
+  }
+
+  if (!canEdit && !(amount > 0)) return null
+
+  return (
+    <div className="card" style={{ padding: 12, marginBottom: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr minmax(160px, 200px)', gap: 12, alignItems: 'end' }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>
+            🎁 Bonus {canEdit ? '(partner-only)' : ''}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--mist)' }}>
+            {canEdit
+              ? 'Optional bonus pay for this report. Adds to the grand total.'
+              : 'Bonus granted by a partner.'}
+          </div>
+        </div>
+        <div>
+          <label style={lbl}>Amount</label>
+          <input type="number" step="0.01" min="0" value={localAmt}
+            disabled={!canEdit}
+            onChange={e => setLocalAmt(e.target.value)}
+            onBlur={commit}
+            onKeyDown={e => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur() }}
+            placeholder="0.00" />
+        </div>
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <label style={lbl}>Note (optional)</label>
+        <input type="text" value={localNote}
+          disabled={!canEdit}
+          maxLength={500}
+          placeholder="e.g. Q4 incentive, long drive home"
+          onChange={e => setLocalNote(e.target.value)}
+          onBlur={commit} />
+      </div>
+    </div>
+  )
 }
 
 // ── Compensation card (Option A: per-trip rate) ──────────
