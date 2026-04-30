@@ -35,9 +35,6 @@ interface NavItem {
   label: string
   iconKey?: string
   section?: boolean
-  adminOnly?: boolean
-  superadminOnly?: boolean
-  partnerOnly?: boolean
 }
 
 const BEB_NAV: NavItem[] = [
@@ -50,11 +47,11 @@ const BEB_NAV: NavItem[] = [
   { id: 'dayentry',     label: 'Enter Day Data', iconKey: 'dayentry' },
   { id: 'staff',        label: 'Staff',          iconKey: 'staff' },
   { label: 'Admin', section: true },
-  { id: 'admin',        label: 'Admin Panel',    iconKey: 'admin',      adminOnly: true },
-  { id: 'stores',       label: 'Stores',         iconKey: 'stores',     adminOnly: true },
-  { id: 'data-research', label: 'Data Research', iconKey: 'reports',    adminOnly: true },
-  { id: 'reports',      label: 'Reports & Notify', iconKey: 'reports' },
-  { id: 'financials',   label: 'Financials',     iconKey: 'financials', partnerOnly: true },
+  { id: 'admin',         label: 'Admin Panel',     iconKey: 'admin' },
+  { id: 'stores',        label: 'Stores',          iconKey: 'stores' },
+  { id: 'data-research', label: 'Data Research',   iconKey: 'reports' },
+  { id: 'reports',       label: 'Reports & Notify', iconKey: 'reports' },
+  { id: 'financials',    label: 'Financials',      iconKey: 'financials' },
   { label: 'Tools', section: true },
   { id: 'marketing',    label: 'Marketing',      iconKey: 'marketing' },
   { id: 'shipping',     label: 'Shipping',       iconKey: 'shipping' },
@@ -72,11 +69,11 @@ const LIBERTY_NAV: NavItem[] = [
   { id: 'dayentry',     label: 'Enter Day Data', iconKey: 'dayentry' },
   { id: 'staff',        label: 'Staff',          iconKey: 'staff' },
   { label: 'Admin', section: true },
-  { id: 'libertyadmin', label: 'Liberty Admin',  iconKey: 'admin',      adminOnly: true },
-  { id: 'stores',       label: 'Stores',         iconKey: 'stores',     adminOnly: true },
-  { id: 'data-research', label: 'Data Research', iconKey: 'reports',    adminOnly: true },
-  { id: 'reports',      label: 'Reports & Notify', iconKey: 'reports' },
-  { id: 'financials',   label: 'Financials',     iconKey: 'financials', partnerOnly: true },
+  { id: 'libertyadmin',  label: 'Liberty Admin',   iconKey: 'admin' },
+  { id: 'stores',        label: 'Stores',          iconKey: 'stores' },
+  { id: 'data-research', label: 'Data Research',   iconKey: 'reports' },
+  { id: 'reports',       label: 'Reports & Notify', iconKey: 'reports' },
+  { id: 'financials',    label: 'Financials',      iconKey: 'financials' },
   { label: 'Tools', section: true },
   { id: 'marketing',    label: 'Marketing',      iconKey: 'marketing' },
   { id: 'shipping',     label: 'Shipping',       iconKey: 'shipping' },
