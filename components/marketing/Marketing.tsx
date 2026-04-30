@@ -12,6 +12,7 @@
 import { useState } from 'react'
 import { useApp } from '@/lib/context'
 import MarketingSettings from './MarketingSettings'
+import CampaignsList from './CampaignsList'
 
 type Tab = 'campaigns' | 'settings'
 
@@ -74,25 +75,8 @@ export default function Marketing() {
         ))}
       </div>
 
-      {tab === 'campaigns' && <CampaignsPlaceholder />}
+      {tab === 'campaigns' && <CampaignsList />}
       {tab === 'settings' && isSuperAdmin && <MarketingSettings />}
-    </div>
-  )
-}
-
-function CampaignsPlaceholder() {
-  return (
-    <div className="card" style={{ padding: 32, textAlign: 'center' }}>
-      <div style={{ fontSize: 40, marginBottom: 12 }}>🚧</div>
-      <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)', marginBottom: 6 }}>
-        Campaigns ship in Phase 3
-      </div>
-      <div style={{ fontSize: 13, color: 'var(--mist)', maxWidth: 460, margin: '0 auto' }}>
-        Per-event flow management — VDP zip targeting, Postcard list selection,
-        proof rounds, approvals, and payment — lands once admin settings are in
-        place. Use the <strong>Settings</strong> tab to seed approvers, payment
-        methods, and email templates first.
-      </div>
     </div>
   )
 }

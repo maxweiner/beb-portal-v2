@@ -245,6 +245,33 @@ export interface Appointment {
 
 export type LeadSource = 'vdp' | 'small' | 'wom' | 'repeat' | 'social' | 'unknown'
 
+// ── Marketing module ─────────────────────────────────────────
+export type MarketingFlowType = 'vdp' | 'postcard' | 'newspaper'
+export type MarketingStatus = 'setup' | 'planning' | 'proofing' | 'payment' | 'done'
+
+export interface MarketingCampaign {
+  id: string
+  event_id: string
+  flow_type: MarketingFlowType
+  status: MarketingStatus
+  /** Free-text finer-grained state within phase. */
+  sub_status: string | null
+  marketing_budget: number | null
+  budget_set_by: string | null
+  budget_set_at: string | null
+  team_notified_at: string | null
+  mail_by_date: string | null
+  payment_method_label: string | null
+  payment_method_note: string | null
+  payment_authorized_by: string | null
+  payment_authorized_at: string | null
+  paid_at: string | null
+  paid_by: string | null
+  accountant_receipt_sent_at: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface BuyerVacation {
   id: string
   user_id: string
