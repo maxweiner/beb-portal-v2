@@ -783,7 +783,7 @@ function CompensationCard({
             💼 Compensation (your time / event rate)
           </div>
           <div style={{ fontSize: 12, color: 'var(--mist)' }}>
-            Per-trip rate. Defaults to your role's standard rate; edit before submitting.
+            Per-trip rate.
           </div>
         </div>
         <div>
