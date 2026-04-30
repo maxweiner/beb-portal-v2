@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { Event } from '@/types'
@@ -36,31 +36,131 @@ interface Zip { id: string; campaign_id: string; zip_code: string; city: string;
 interface Proof { id: string; campaign_id: string; version: number; file_url: string; file_name: string; status: string; notes: string; created_at: string }
 interface Vendor { id: string; name: string; email: string; type: string; active: boolean }
 
+// Per-event rollup of campaign progress. The 6 status values collapse
+// into 3 buckets that fit nicely as small pills next to each event in
+// the sidebar, plus a "complete" count.
+type RollupBucket = 'not_started' | 'in_progress' | 'complete'
+function bucketForStatus(s: string): RollupBucket {
+  if (s === 'complete') return 'complete'
+  if (s === 'pending') return 'not_started'
+  return 'in_progress'  // zips_submitted, quote_approved, proof_pending, proof_approved
+}
+
+interface EventRollup {
+  notStarted: number
+  inProgress: number
+  complete: number
+  /** Total campaigns we have data for. 0 = never opened in marketing yet. */
+  total: number
+}
+
+type StatusFilter = 'all' | 'not_started' | 'in_progress' | 'complete' | 'untouched'
+
 function CampaignsTab() {
   const { events, stores, user } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [selectedChannel, setSelectedChannel] = useState<Channel>('vdp')
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  // Per-event rollup loaded once when Marketing mounts. Refreshed
+  // implicitly on every nav remount (sidebar reset PR #186).
+  const [rollups, setRollups] = useState<Record<string, EventRollup>>({})
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const { data } = await supabase
+        .from('marketing_campaigns')
+        .select('event_id, status')
+      if (cancelled || !data) return
+      const next: Record<string, EventRollup> = {}
+      for (const c of data as { event_id: string; status: string }[]) {
+        const r = next[c.event_id] || { notStarted: 0, inProgress: 0, complete: 0, total: 0 }
+        const b = bucketForStatus(c.status || 'pending')
+        if (b === 'not_started') r.notStarted++
+        else if (b === 'in_progress') r.inProgress++
+        else r.complete++
+        r.total++
+        next[c.event_id] = r
+      }
+      setRollups(next)
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   const today = new Date(); today.setHours(0,0,0,0)
   const sorted = [...events].sort((a, b) => b.start_date.localeCompare(a.start_date))
-  const filtered = sorted.filter(ev => ev.store_name?.toLowerCase().includes(search.toLowerCase()))
+  const searched = sorted.filter(ev => ev.store_name?.toLowerCase().includes(search.toLowerCase()))
+  // Apply the status filter on top of the search.
+  const filtered = searched.filter(ev => {
+    if (statusFilter === 'all') return true
+    const r = rollups[ev.id]
+    if (statusFilter === 'untouched') return !r || r.total === 0
+    if (!r) return false
+    if (statusFilter === 'not_started') return r.notStarted > 0
+    if (statusFilter === 'in_progress') return r.inProgress > 0
+    if (statusFilter === 'complete') return r.complete === r.total && r.total > 0
+    return true
+  })
+
+  // Counts shown on each filter chip — based on the current search,
+  // so chip counts shrink as the user narrows.
+  const chipCounts = useMemo(() => {
+    const c = { all: searched.length, not_started: 0, in_progress: 0, complete: 0, untouched: 0 }
+    for (const ev of searched) {
+      const r = rollups[ev.id]
+      if (!r || r.total === 0) c.untouched++
+      else {
+        if (r.notStarted > 0) c.not_started++
+        if (r.inProgress > 0) c.in_progress++
+        if (r.complete === r.total) c.complete++
+      }
+    }
+    return c
+  }, [searched, rollups])
 
   const fmt = (ds: string) => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
   return (
     <div style={{ display: 'flex', height: 'calc(100vh - 60px)', overflow: 'hidden' }}>
       {/* Event list sidebar */}
-      <div style={{ width: 260, flexShrink: 0, borderRight: '1px solid var(--pearl)', display: 'flex', flexDirection: 'column', background: 'var(--cream)' }}>
+      <div style={{ width: 280, flexShrink: 0, borderRight: '1px solid var(--pearl)', display: 'flex', flexDirection: 'column', background: 'var(--cream)' }}>
         <div style={{ padding: '16px 16px 8px', borderBottom: '1px solid var(--pearl)' }}>
           <div style={{ fontWeight: 900, fontSize: 16, color: 'var(--ink)', marginBottom: 10 }}>📣 Marketing</div>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search events…" style={{ width: '100%', fontSize: 13 }} />
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
+            {([
+              ['all',         'All',         chipCounts.all],
+              ['untouched',   'Untouched',   chipCounts.untouched],
+              ['not_started', 'Not started', chipCounts.not_started],
+              ['in_progress', 'In progress', chipCounts.in_progress],
+              ['complete',    'Complete',    chipCounts.complete],
+            ] as [StatusFilter, string, number][]).map(([k, label, n]) => {
+              const sel = statusFilter === k
+              return (
+                <button key={k} onClick={() => setStatusFilter(k)} style={{
+                  padding: '4px 8px', borderRadius: 99, border: '1px solid var(--pearl)',
+                  background: sel ? 'var(--sidebar-bg)' : 'var(--cream)',
+                  color: sel ? '#fff' : 'var(--ash)',
+                  fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                }}>
+                  {label} {n > 0 && <span style={{ opacity: .65 }}>({n})</span>}
+                </button>
+              )
+            })}
+          </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
+          {filtered.length === 0 && (
+            <div style={{ padding: '20px 16px', fontSize: 12, color: 'var(--mist)', fontStyle: 'italic' }}>
+              No events match the current filters.
+            </div>
+          )}
           {filtered.map(ev => {
             const store = stores.find(s => s.id === ev.store_id)
             const sel = selectedEvent?.id === ev.id
+            const r = rollups[ev.id]
             return (
               <div key={ev.id} onClick={() => setSelectedEvent(ev)}
                 style={{
@@ -70,6 +170,7 @@ function CampaignsTab() {
                 }}>
                 <div style={{ fontWeight: 700, fontSize: 13, color: sel ? 'var(--green-dark)' : 'var(--ink)' }}>◆ {ev.store_name}</div>
                 <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>{store?.city}, {store?.state} · {fmt(ev.start_date)}</div>
+                <RollupBar rollup={r} />
               </div>
             )
           })}
@@ -85,17 +186,58 @@ function CampaignsTab() {
             <div style={{ fontSize: 14 }}>Select an event to manage marketing</div>
           </div>
         ) : (
-          <MarketingEventView ev={selectedEvent} isAdmin={isAdmin} selectedChannel={selectedChannel} setSelectedChannel={setSelectedChannel} user={user} />
+          <MarketingEventView
+            ev={selectedEvent} isAdmin={isAdmin}
+            selectedChannel={selectedChannel} setSelectedChannel={setSelectedChannel}
+            user={user}
+            onCampaignsChanged={(campaigns) => {
+              const r: EventRollup = { notStarted: 0, inProgress: 0, complete: 0, total: campaigns.length }
+              for (const c of campaigns) {
+                const b = bucketForStatus(c.status || 'pending')
+                if (b === 'not_started') r.notStarted++
+                else if (b === 'in_progress') r.inProgress++
+                else r.complete++
+              }
+              setRollups(p => ({ ...p, [selectedEvent.id]: r }))
+            }}
+          />
         )}
       </div>
     </div>
   )
 }
 
-function MarketingEventView({ ev, isAdmin, selectedChannel, setSelectedChannel, user }: {
+function RollupBar({ rollup }: { rollup: EventRollup | undefined }) {
+  if (!rollup || rollup.total === 0) {
+    return (
+      <div style={{ marginTop: 6, fontSize: 10, color: 'var(--silver)', fontStyle: 'italic' }}>
+        No campaigns yet
+      </div>
+    )
+  }
+  const pill = (label: string, n: number, bg: string, fg: string) => n > 0 ? (
+    <span style={{
+      fontSize: 10, fontWeight: 700,
+      padding: '1px 6px', borderRadius: 99,
+      background: bg, color: fg,
+    }}>{label} {n}</span>
+  ) : null
+  return (
+    <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+      {pill('Done', rollup.complete, 'var(--green-pale)', 'var(--green-dark)')}
+      {pill('In progress', rollup.inProgress, '#FEF3C7', '#92400E')}
+      {pill('To do', rollup.notStarted, 'var(--cream2)', 'var(--mist)')}
+    </div>
+  )
+}
+
+function MarketingEventView({ ev, isAdmin, selectedChannel, setSelectedChannel, user, onCampaignsChanged }: {
   ev: Event; isAdmin: boolean
   selectedChannel: Channel; setSelectedChannel: (c: Channel) => void
   user: any
+  /** Bubbles the latest campaigns up so the sidebar rollup pills stay in
+   *  sync after status changes (no full re-fetch). */
+  onCampaignsChanged?: (c: Campaign[]) => void
 }) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [vendors, setVendors] = useState<Vendor[]>([])
@@ -107,6 +249,12 @@ function MarketingEventView({ ev, isAdmin, selectedChannel, setSelectedChannel, 
   useEffect(() => {
     loadData()
   }, [ev.id])
+
+  // Notify parent whenever campaigns change so the rollup stays fresh.
+  useEffect(() => {
+    if (campaigns.length > 0 && onCampaignsChanged) onCampaignsChanged(campaigns)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaigns])
 
   const loadData = async () => {
     setLoading(true)
