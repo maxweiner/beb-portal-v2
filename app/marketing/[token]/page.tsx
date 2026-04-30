@@ -18,6 +18,7 @@
 // through the portal or the email-reply-to-approve flow.
 
 import { useEffect, useRef, useState } from 'react'
+import MarketingQrSection from '@/components/marketing/MarketingQrSection'
 
 interface Resolved {
   campaign: any
@@ -178,6 +179,11 @@ export default function MagicCampaignPage({ params }: { params: { token: string 
           </div>
         </div>
       )}
+
+      {/* QR codes (read-only) for the campaign's store */}
+      <div style={{ marginTop: 14 }}>
+        <MarketingQrSection campaignId={c.id} magicToken={token} />
+      </div>
 
       {/* Always-visible footer note about additional actions */}
       <div style={{

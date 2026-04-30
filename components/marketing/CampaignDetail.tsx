@@ -14,6 +14,7 @@ import PostcardPlanningSection from './PostcardPlanningSection'
 import ProofingSection from './ProofingSection'
 import PaymentSection from './PaymentSection'
 import DoneSection from './DoneSection'
+import MarketingQrSection from './MarketingQrSection'
 
 const FLOW_LABELS = {
   vdp: '📬 VDP Mailers',
@@ -218,6 +219,10 @@ export default function CampaignDetail({ campaign, onBack, onChanged, onDeleted 
       {campaign.status === 'done' && (
         <DoneSection campaign={campaign} onChanged={onChanged} />
       )}
+
+      {/* QR codes (read-only) — surfaced on every campaign page so
+          marketing partners can grab the short URLs for proofs. */}
+      <MarketingQrSection campaignId={campaign.id} />
     </div>
   )
 }
