@@ -59,7 +59,6 @@ const BEB_NAV: NavItem[] = [
   { id: 'shipping',     label: 'Shipping',       iconKey: 'shipping' },
   { id: 'expenses',     label: 'Expenses',       iconKey: 'expenses' },
   { id: 'todo',         label: 'To-Do List',     iconKey: 'reports' },
-  { id: 'settings',     label: 'Settings',       iconKey: 'settings' },
 ]
 
 const LIBERTY_NAV: NavItem[] = [
@@ -82,7 +81,6 @@ const LIBERTY_NAV: NavItem[] = [
   { id: 'shipping',     label: 'Shipping',       iconKey: 'shipping' },
   { id: 'expenses',     label: 'Expenses',       iconKey: 'expenses' },
   { id: 'todo',         label: 'To-Do List',     iconKey: 'reports' },
-  { id: 'settings',     label: 'Settings',       iconKey: 'settings' },
 ]
 
 interface SidebarProps {
@@ -284,7 +282,30 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
         <div style={{ marginBottom: 6 }}>
           <TodoNotificationsBell setNav={setNav} />
         </div>
-        <div className="sidebar-user-name">{user?.name || user?.email}</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <div className="sidebar-user-name" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.name || user?.email}</div>
+          <button
+            type="button"
+            onClick={() => setNav('settings')}
+            aria-label="Settings"
+            title="Settings"
+            style={{
+              flexShrink: 0,
+              width: 28, height: 28, padding: 0,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              background: nav === 'settings' ? 'rgba(255,255,255,.18)' : 'transparent',
+              border: '1px solid rgba(255,255,255,.18)',
+              borderRadius: 6, cursor: 'pointer',
+              color: 'rgba(255,255,255,.85)',
+            }}
+          >
+            {/* macOS System Settings-style gear: 8 rounded teeth + center circle */}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
         <div className="sidebar-user-role">{user?.role?.replace('_', ' ')}</div>
         <button onClick={() => supabase.auth.signOut()} className="btn-outline btn-xs btn-full">Sign Out</button>
       </div>
