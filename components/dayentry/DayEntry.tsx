@@ -84,6 +84,10 @@ export default function DayEntry() {
   const [show0pct, setShow0pct] = useState(false)
   const [checks, setChecks] = useState<CheckRow[]>([emptyCheck()])
   const [inputMode, setInputMode] = useState<InputMode>('grid')
+  // Per-(user, store) preference. Mirrors mobile's
+  // `beb-form-no-{user_id}-{store_id}` localStorage key, falling back to
+  // stores.default_form_number_visible, then true.
+  const [formColVisible, setFormColVisible] = useState(true)
   const [existingRow, setExistingRow] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -141,6 +145,39 @@ export default function DayEntry() {
     loadExisting()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEventId, selectedDay])
+
+  /* ── Form # column preference (mirrors MobileDayEntry) ── */
+  useEffect(() => {
+    if (!user || !selectedEventId) return
+    const ev = myEvents.find(e => e.id === selectedEventId)
+    const storeId = ev?.store_id
+    if (!storeId) return
+    const lsKey = `beb-form-no-${user.id}-${storeId}`
+    let next: boolean
+    try {
+      const saved = localStorage.getItem(lsKey)
+      if (saved === '1') next = true
+      else if (saved === '0') next = false
+      else {
+        const store = stores.find(s => s.id === storeId)
+        next = store?.default_form_number_visible !== false
+      }
+    } catch { next = true }
+    setFormColVisible(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, selectedEventId, stores])
+
+  function toggleFormCol() {
+    if (!user) return
+    const ev = myEvents.find(e => e.id === selectedEventId)
+    const storeId = ev?.store_id
+    if (!storeId) return
+    const next = !formColVisible
+    setFormColVisible(next)
+    try {
+      localStorage.setItem(`beb-form-no-${user.id}-${storeId}`, next ? '1' : '0')
+    } catch { /* ignore */ }
+  }
 
   const loadExisting = async () => {
     setLoading(true)
@@ -738,16 +775,28 @@ export default function DayEntry() {
                       )}
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 4, background: 'var(--cream2)', padding: 3, borderRadius: 'var(--r)', border: '1px solid var(--pearl)' }}>
-                    {(['grid', 'card'] as InputMode[]).map(m => (
-                      <button key={m} onClick={() => setInputMode(m)} style={{
-                        padding: '4px 12px', borderRadius: 'calc(var(--r) - 2px)', border: 'none', cursor: 'pointer',
-                        background: inputMode === m ? 'var(--gradient-primary)' : 'transparent',
-                        color: inputMode === m ? '#fff' : 'var(--ash)', fontWeight: 700, fontSize: 12,
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button onClick={toggleFormCol}
+                      aria-label={formColVisible ? 'Hide Buy Form # column' : 'Show Buy Form # column'}
+                      style={{
+                        background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                        fontFamily: 'inherit',
+                        fontSize: 12, fontWeight: 700, color: 'var(--green-dark)',
+                        textDecoration: 'underline',
                       }}>
-                        {m === 'grid' ? '⊞ Grid' : '☰ Cards'}
-                      </button>
-                    ))}
+                      {formColVisible ? '− Hide form #' : '+ Show form #'}
+                    </button>
+                    <div style={{ display: 'flex', gap: 4, background: 'var(--cream2)', padding: 3, borderRadius: 'var(--r)', border: '1px solid var(--pearl)' }}>
+                      {(['grid', 'card'] as InputMode[]).map(m => (
+                        <button key={m} onClick={() => setInputMode(m)} style={{
+                          padding: '4px 12px', borderRadius: 'calc(var(--r) - 2px)', border: 'none', cursor: 'pointer',
+                          background: inputMode === m ? 'var(--gradient-primary)' : 'transparent',
+                          color: inputMode === m ? '#fff' : 'var(--ash)', fontWeight: 700, fontSize: 12,
+                        }}>
+                          {m === 'grid' ? '⊞ Grid' : '☰ Cards'}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -756,7 +805,7 @@ export default function DayEntry() {
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                       <thead>
                         <tr style={{ borderBottom: '2px solid var(--pearl)' }}>
-                          {['#', 'Type', 'Check #', 'Amount', 'Buy Form #', '5%', '0%', ''].map(h => (
+                          {(['#', 'Type', 'Check #', 'Amount', ...(formColVisible ? ['Buy Form #'] : []), '5%', '0%', ''] as string[]).map(h => (
                             <th key={h} style={{ padding: '6px 8px', textAlign: 'left', fontWeight: 700, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--mist)', whiteSpace: 'nowrap' }}>{h}</th>
                           ))}
                         </tr>
@@ -783,10 +832,12 @@ export default function DayEntry() {
                                   placeholder="0.00" style={{ paddingLeft: 20, width: '100%', fontSize: 13, padding: '4px 8px 4px 20px' }} />
                               </div>
                             </td>
-                            <td style={{ padding: '4px 8px' }}>
-                              <input type="text" value={c.buy_form_number} onChange={e => updateCheck(i, 'buy_form_number', e.target.value)}
-                                placeholder="—" style={{ width: 90, fontSize: 13, padding: '4px 8px' }} />
-                            </td>
+                            {formColVisible && (
+                              <td style={{ padding: '4px 8px' }}>
+                                <input type="text" value={c.buy_form_number} onChange={e => updateCheck(i, 'buy_form_number', e.target.value)}
+                                  placeholder="—" style={{ width: 90, fontSize: 13, padding: '4px 8px' }} />
+                              </td>
+                            )}
                             <td style={{ padding: '4px 8px', textAlign: 'center' }}>
                               <div style={{ display: 'inline-flex' }}>
                                 <Checkbox
@@ -837,10 +888,12 @@ export default function DayEntry() {
                               placeholder="0.00" style={{ paddingLeft: 20, width: 110 }} />
                           </div>
                         </div>
-                        <div>
-                          <label className="fl">Buy Form #</label>
-                          <input type="text" value={c.buy_form_number} onChange={e => updateCheck(i, 'buy_form_number', e.target.value)} placeholder="—" style={{ width: 100 }} />
-                        </div>
+                        {formColVisible && (
+                          <div>
+                            <label className="fl">Buy Form #</label>
+                            <input type="text" value={c.buy_form_number} onChange={e => updateCheck(i, 'buy_form_number', e.target.value)} placeholder="—" style={{ width: 100 }} />
+                          </div>
+                        )}
                         <Checkbox
                           checked={c.commission_rate === 5}
                           onChange={(next) => updateCheck(i, 'commission_rate', next ? 5 : 10)}
