@@ -83,6 +83,11 @@ function buildPreviewHtml(template: TemplateRow, vars: Record<string, string>): 
 export default function ReportEditView({ report, onBack }: { report: ReportDef; onBack: () => void }) {
   const { user, events, stores, brand } = useApp()
   const isEventRecap = report.id === 'event-recap'
+  const isChecksIssued = report.id === 'checks-issued'
+  // Treat both event-scoped reports as a single "needs an event picker
+  // + custom preview iframe" branch — they share UI shape (event
+  // dropdown → standalone preview, Download PDF, Email).
+  const isEventScoped = isEventRecap || isChecksIssued
   // Transactional templates (no broadcast send) — fired by their own
   // cron / trigger. Hide schedule, recipients, and broadcast-only fields.
   const isTransactional = report.sendEndpoint === null
@@ -208,44 +213,65 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
     setSending(false)
   }
 
-  // For event-recap: pick a specific event so the preview/send uses real data.
+  // For event-scoped reports (event-recap + checks-issued): pick a
+  // specific event so the preview/send uses real data.
   const recapEvents = useMemo(() => {
-    if (!isEventRecap) return []
+    if (!isEventScoped) return []
     // Most recent first; cap to last ~50 to keep the dropdown usable.
     return [...events]
       .filter(e => !!e.start_date)
       .sort((a, b) => (a.start_date < b.start_date ? 1 : -1))
       .slice(0, 50)
-  }, [events, isEventRecap])
+  }, [events, isEventScoped])
   const [recapEventId, setRecapEventId] = useState<string>('')
   useEffect(() => {
-    if (isEventRecap && !recapEventId && recapEvents[0]) setRecapEventId(recapEvents[0].id)
-  }, [isEventRecap, recapEventId, recapEvents])
+    if (isEventScoped && !recapEventId && recapEvents[0]) setRecapEventId(recapEvents[0].id)
+  }, [isEventScoped, recapEventId, recapEvents])
+
+  // Checks-issued only: filter by check number substring + exact amount.
+  const [checkNumberFilter, setCheckNumberFilter] = useState('')
+  const [amountFilter, setAmountFilter] = useState('')
 
   const previewHtml = useMemo(() => {
     if (!template) return ''
     return buildPreviewHtml(template, report.sampleVars)
   }, [template, report.sampleVars])
 
-  // Live PDF-ish preview URL for event-recap (server-rendered standalone page)
-  const recapPreviewUrl = isEventRecap && recapEventId
-    ? `/api/event-recap/preview?event_id=${encodeURIComponent(recapEventId)}`
-    : ''
+  // Live PDF-ish preview URL for event-scoped reports (server-rendered
+  // standalone page). Checks Issued appends its filter querystring so
+  // the preview iframe + PDF + email all reflect the same view.
+  const recapPreviewUrl = (() => {
+    if (!isEventScoped || !recapEventId) return ''
+    if (isEventRecap) {
+      return `/api/event-recap/preview?event_id=${encodeURIComponent(recapEventId)}`
+    }
+    // checks-issued
+    const params = new URLSearchParams({ event_id: recapEventId })
+    if (checkNumberFilter.trim()) params.set('check_number', checkNumberFilter.trim())
+    if (amountFilter.trim()) params.set('amount', amountFilter.trim())
+    return `/api/checks-issued/preview?${params.toString()}`
+  })()
   function downloadRecapPdf() {
     if (!recapEventId) return
-    window.open(`/api/event-recap/preview?event_id=${encodeURIComponent(recapEventId)}&print=1`, '_blank')
+    window.open(`${recapPreviewUrl}${recapPreviewUrl.includes('?') ? '&' : '?'}print=1`, '_blank')
   }
   async function sendRecap() {
     if (!recapEventId || selected.size === 0) return
     setSending(true); setSendResult(null)
     try {
-      const res = await fetch('/api/event-recap/send', {
+      const endpoint = isEventRecap ? '/api/event-recap/send' : '/api/checks-issued/send'
+      const body: Record<string, unknown> = { event_id: recapEventId, to: [...selected] }
+      if (isChecksIssued) {
+        if (checkNumberFilter.trim()) body.check_number = checkNumberFilter.trim()
+        if (amountFilter.trim()) body.amount = amountFilter.trim()
+      }
+      const res = await fetch(endpoint, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event_id: recapEventId, to: [...selected] }),
+        body: JSON.stringify(body),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) setSendResult(`✗ ${json.error || res.status}`)
-      else setSendResult(`✓ Sent recap to ${json.sent ?? selected.size} recipient${(json.sent ?? selected.size) === 1 ? '' : 's'}`)
+      else setSendResult(`✓ Sent to ${json.sent ?? selected.size} recipient${(json.sent ?? selected.size) === 1 ? '' : 's'}`)
     } catch (e: any) {
       setSendResult(`✗ ${e?.message || 'Network error'}`)
     }
@@ -408,7 +434,7 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
             </button>
           </div>
 
-          {isEventRecap && (
+          {isEventScoped && (
             <div className="card" style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)', marginBottom: 8 }}>Event</div>
               {recapEvents.length === 0 ? (
@@ -421,8 +447,43 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
                 </select>
               )}
               <p style={{ fontSize: 11, color: 'var(--mist)', marginTop: 6 }}>
-                Pick the event to recap. The preview, PDF, and email all use this event's real data (per-day totals + per-buyer breakdown).
+                {isEventRecap
+                  ? "Pick the event to recap. The preview, PDF, and email all use this event's real data (per-day totals + per-buyer breakdown)."
+                  : "Pick the event whose checks you want to list. Filters below narrow the result; the preview, PDF, and email all reflect the same view."}
               </p>
+
+              {isChecksIssued && (
+                <div style={{
+                  marginTop: 12, padding: 12,
+                  background: 'var(--cream2)', borderRadius: 'var(--r)',
+                  border: '1px solid var(--pearl)',
+                }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>
+                    Filters (optional)
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div>
+                      <label className="fl">Check #</label>
+                      <input type="text" value={checkNumberFilter}
+                        onChange={e => setCheckNumberFilter(e.target.value)}
+                        placeholder="contains…" />
+                    </div>
+                    <div>
+                      <label className="fl">Amount</label>
+                      <input type="number" min="0" step="0.01" value={amountFilter}
+                        onChange={e => setAmountFilter(e.target.value)}
+                        placeholder="exact, e.g. 250" />
+                    </div>
+                  </div>
+                  {(checkNumberFilter || amountFilter) && (
+                    <button onClick={() => { setCheckNumberFilter(''); setAmountFilter('') }}
+                      className="btn-outline btn-xs" style={{ marginTop: 8 }}>
+                      Clear filters
+                    </button>
+                  )}
+                </div>
+              )}
+
               <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                 <button onClick={downloadRecapPdf} disabled={!recapEventId} className="btn-outline btn-sm">
                   Download PDF
@@ -437,7 +498,7 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
           )}
 
           {/* Schedule (per-brand) — broadcast templates only */}
-          {schedule && !isEventRecap && !isTransactional && (
+          {schedule && !isEventScoped && !isTransactional && (
             <div className="card" style={{ marginBottom: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                 <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)' }}>
@@ -562,14 +623,16 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
             </div>
 
             <div style={{ display: 'flex', gap: 8, marginTop: 14, alignItems: 'center' }}>
-              {isEventRecap ? (
+              {isEventScoped ? (
                 <button
                   onClick={sendRecap}
                   disabled={sending || selected.size === 0 || !recapEventId}
                   className="btn-primary"
                   style={{ flex: 1 }}
                 >
-                  {sending ? 'Sending…' : `Send recap (${selected.size})`}
+                  {sending
+                    ? 'Sending…'
+                    : `Send ${isEventRecap ? 'recap' : 'report'} (${selected.size})`}
                 </button>
               ) : report.sendEndpoint && template.send_implemented ? (
                 <button
@@ -604,9 +667,9 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
           }}>
             Live preview
           </div>
-          {isEventRecap && recapPreviewUrl ? (
+          {isEventScoped && recapPreviewUrl ? (
             <iframe
-              title="event recap preview"
+              title={isEventRecap ? 'event recap preview' : 'checks issued preview'}
               src={recapPreviewUrl}
               style={{ width: '100%', height: 600, border: 'none', display: 'block', background: '#f5f0e8' }}
             />
