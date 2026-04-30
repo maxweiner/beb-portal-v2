@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase'
 import type { MarketingCampaign, Event } from '@/types'
 import PhaseTimeline from './PhaseTimeline'
 import VDPPlanningSection from './VDPPlanningSection'
+import PostcardPlanningSection from './PostcardPlanningSection'
 
 const FLOW_LABELS = {
   vdp: '📬 VDP Mailers',
@@ -192,9 +193,7 @@ export default function CampaignDetail({ campaign, onBack, onChanged, onDeleted 
         <VDPPlanningSection campaign={campaign} onChanged={onChanged} />
       )}
       {campaign.flow_type === 'postcard' && (
-        <div className="card" style={{ padding: 18, color: 'var(--mist)', textAlign: 'center', fontSize: 13 }}>
-          Postcard planning (master list + CSV upload + dedup) ships in Phase 5.
-        </div>
+        <PostcardPlanningSection campaign={campaign} onChanged={onChanged} />
       )}
       {campaign.flow_type === 'newspaper' && (
         <div className="card" style={{ padding: 18, color: 'var(--mist)', textAlign: 'center', fontSize: 13 }}>
