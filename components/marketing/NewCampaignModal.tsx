@@ -137,6 +137,10 @@ export default function NewCampaignModal({
                 const sel = flow === opt.value
                 return (
                   <button key={opt.value} onClick={() => setFlow(opt.value)} style={{
+                    // Override globals.css button defaults (inline-flex + nowrap)
+                    // so the description wraps below the label instead of
+                    // pushing the button width off the modal edge.
+                    display: 'block', width: '100%', whiteSpace: 'normal',
                     textAlign: 'left', padding: '10px 12px', borderRadius: 8,
                     border: `2px solid ${sel ? 'var(--green)' : 'var(--pearl)'}`,
                     background: sel ? 'var(--green-pale)' : '#fff',
