@@ -11,7 +11,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getAuthedUser } from '@/lib/expenses/serverAuth'
+import { resolveMarketingActor } from '@/lib/marketing/auth'
 import { notifyApprovers, fmtDateRange, appBaseUrl } from '@/lib/marketing/notify'
 
 export const dynamic = 'force-dynamic'
@@ -30,14 +30,14 @@ function safeFilename(name: string): string {
 }
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const me = await getAuthedUser(req)
-  if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
   const sb = admin()
-  const { data: meRow } = await sb.from('users').select('marketing_access').eq('id', me.id).maybeSingle()
-  if (!(meRow as any)?.marketing_access) {
-    return NextResponse.json({ error: 'Marketing access required' }, { status: 403 })
+
+  const auth = await resolveMarketingActor(req, params.id)
+  if (auth.reason) {
+    const status = auth.reason === 'no_auth' ? 401 : auth.reason === 'no_marketing_access' ? 403 : 403
+    return NextResponse.json({ error: auth.reason }, { status })
   }
+  const actor = auth.actor
 
   let form: FormData
   try { form = await req.formData() }
@@ -101,7 +101,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     campaign_id: campaign.id,
     version_number: nextVersion,
     is_latest: true,
-    uploaded_by: me.id,
+    // Magic-link uploads don't have a user_id — leave null + record the
+    // recipient email in a comment if needed later.
+    uploaded_by: actor.userId ?? null,
     file_urls: uploadedPaths,
     status: 'pending',
   }).select('*').single()
