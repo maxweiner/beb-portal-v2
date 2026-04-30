@@ -203,12 +203,15 @@ function EmptyState({ upcomingEvent, eventLabelFn, onQuickStart, onNewBlank }: {
           <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--ink)', marginBottom: 12 }}>
             {eventLabelFn(upcomingEvent)}
           </div>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
             <button className="btn-primary btn-sm" onClick={() => onQuickStart('vdp')}>
               📬 + VDP
             </button>
             <button className="btn-primary btn-sm" onClick={() => onQuickStart('postcard')}>
               📮 + Postcard
+            </button>
+            <button className="btn-primary btn-sm" onClick={() => onQuickStart('newspaper')}>
+              📰 + Newspaper
             </button>
           </div>
         </div>
