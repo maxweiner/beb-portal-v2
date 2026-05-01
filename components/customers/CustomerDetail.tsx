@@ -297,6 +297,9 @@ export default function CustomerDetail({ customer, tagDefs, storeName, onClose, 
           {/* Timeline (Phase 5): events + mailings + appointments */}
           <CustomerTimeline customer={customer} />
 
+          {/* Compliance — right-to-be-forgotten + data export. */}
+          <ComplianceSection customer={customer} onForgotten={onChanged} />
+
           {/* Footer actions */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, paddingTop: 8, borderTop: '1px solid var(--pearl)' }}>
             <button className="btn-danger btn-sm" onClick={softDelete} disabled={busy}>
@@ -313,6 +316,95 @@ export default function CustomerDetail({ customer, tagDefs, storeName, onClose, 
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── Compliance section (admin-only, danger zone) ────────── */
+function ComplianceSection({ customer, onForgotten }: {
+  customer: Customer
+  onForgotten: () => void
+}) {
+  const [busy, setBusy] = useState<'forget' | 'export' | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [exportResult, setExportResult] = useState<{ recipient: string; signedUrl: string | null } | null>(null)
+  const [forgetResult, setForgetResult] = useState<{ scheduledAt: string } | null>(null)
+
+  async function authedFetch(input: RequestInfo, init: RequestInit = {}) {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    return fetch(input, {
+      ...init,
+      headers: { ...(init.headers || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    })
+  }
+
+  async function forget() {
+    if (!confirm(`Right-to-be-forgotten for ${customer.first_name} ${customer.last_name}?\n\nThe customer is soft-deleted now and HARD-DELETED in 7 days, including all tags, mailings, events. This cannot be undone after the grace period. A compliance log entry stays for legal record.`)) return
+    setBusy('forget'); setError(null)
+    try {
+      const res = await authedFetch(`/api/customers/${customer.id}/forget`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) { setError(json.error || `Failed (${res.status})`); setBusy(null); return }
+      setForgetResult({ scheduledAt: json.scheduled_finalize_at })
+      onForgotten()  // Refresh parent list
+    } catch (e: any) {
+      setError(e?.message || 'Network error')
+    }
+    setBusy(null)
+  }
+
+  async function dataExport() {
+    if (!confirm(`Export all data for ${customer.first_name} ${customer.last_name}? A JSON dump will be uploaded to private storage and emailed to the configured recipient.`)) return
+    setBusy('export'); setError(null); setExportResult(null)
+    try {
+      const res = await authedFetch(`/api/customers/${customer.id}/data-export`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) { setError(json.error || `Failed (${res.status})`); setBusy(null); return }
+      setExportResult({ recipient: json.recipient, signedUrl: json.signed_url })
+    } catch (e: any) {
+      setError(e?.message || 'Network error')
+    }
+    setBusy(null)
+  }
+
+  return (
+    <div className="card" style={{
+      padding: 14,
+      background: '#FEF2F2', borderColor: '#FECACA',
+    }}>
+      <div className="card-title" style={{ color: '#7f1d1d' }}>⚠️ Compliance — Danger Zone</div>
+      <div style={{ fontSize: 12, color: '#7f1d1d', marginBottom: 12, lineHeight: 1.5 }}>
+        Right-to-be-forgotten and data-export request flows. Both actions are logged to <code>compliance_actions</code> for legal record-keeping.
+      </div>
+      {error && (
+        <div style={{ background: '#fff', color: '#7f1d1d', border: '1px solid #fecaca', borderRadius: 6, padding: '8px 10px', fontSize: 12, marginBottom: 10 }}>
+          {error}
+        </div>
+      )}
+      {forgetResult && (
+        <div style={{ background: '#fff', color: '#7f1d1d', border: '1px solid #fecaca', borderRadius: 6, padding: '8px 10px', fontSize: 12, marginBottom: 10 }}>
+          ✓ Right-to-be-forgotten initiated. Customer is soft-deleted and will be permanently purged on{' '}
+          <strong>{new Date(forgetResult.scheduledAt).toLocaleString()}</strong>.
+        </div>
+      )}
+      {exportResult && (
+        <div style={{ background: '#fff', color: 'var(--green-dark)', border: '1px solid var(--green3)', borderRadius: 6, padding: '8px 10px', fontSize: 12, marginBottom: 10 }}>
+          ✓ Data export emailed to <strong>{exportResult.recipient}</strong>.
+          {exportResult.signedUrl && (
+            <> · <a href={exportResult.signedUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--green-dark)' }}>Download now</a></>
+          )}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button className="btn-outline btn-sm" onClick={dataExport} disabled={busy != null}
+          style={{ borderColor: 'var(--green3)', color: 'var(--green-dark)' }}>
+          {busy === 'export' ? 'Exporting…' : '📦 Export all data'}
+        </button>
+        <button className="btn-danger btn-sm" onClick={forget} disabled={busy != null}>
+          {busy === 'forget' ? 'Initiating…' : '⛔ Delete & forget (7-day grace)'}
+        </button>
       </div>
     </div>
   )

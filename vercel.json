@@ -39,6 +39,10 @@
     {
       "path": "/api/cron/customers-engagement?secret=bebportal2024",
       "schedule": "23 4 * * *"
+    },
+    {
+      "path": "/api/cron/customers-compliance?secret=bebportal2024",
+      "schedule": "47 5 * * *"
     }
   ]
 }
