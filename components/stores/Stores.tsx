@@ -287,12 +287,11 @@ export default function Stores() {
                 <th>State</th>
                 <th>Events</th>
                 <th>💰 Amount Spent ({new Date().getFullYear()})</th>
-                <th style={{ width: 80 }}></th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--fog)' }}>No stores yet.</td></tr>
+                <tr><td colSpan={5} style={{ textAlign: 'center', padding: 40, color: 'var(--fog)' }}>No stores yet.</td></tr>
               )}
               {filtered.map(s => {
                 const ec = events.filter(e => e.store_id === s.id).length
@@ -310,9 +309,6 @@ export default function Stores() {
                         ? <span style={{ fontWeight: 700, color: 'var(--green)' }}>${Math.round(spent).toLocaleString()}</span>
                         : <span style={{ color: 'var(--silver)' }}>—</span>}
                     </td>
-                    <td onClick={e => e.stopPropagation()}>
-                      <button className="btn-danger btn-xs" onClick={() => deleteStore(s.id)}>Delete</button>
-                    </td>
                   </tr>
                 )
               })}
@@ -321,13 +317,20 @@ export default function Stores() {
         </div>
       </div>
 
-      {selected && <StoreModal store={selected} onClose={() => setSelected(null)} refetchStores={fetchStores} />}
+      {selected && <StoreModal store={selected} onClose={() => setSelected(null)} refetchStores={fetchStores} onDelete={() => deleteStore(selected.id)} />}
     </div>
   )
 }
 
 /* ── STORE DETAIL MODAL ── */
-function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: () => void; refetchStores: () => Promise<void> }) {
+function StoreModal({ store, onClose, refetchStores, onDelete }: {
+  store: Store
+  onClose: () => void
+  refetchStores: () => Promise<void>
+  /** Called when the user clicks the Delete button at the bottom of
+   *  the modal. Parent owns the confirm + DB delete + modal close. */
+  onDelete: () => void | Promise<void>
+}) {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [details, setDetails] = useState({ ...store })
   const [feedUrl, setFeedUrl] = useState(store.calendar_feed_url || '')
@@ -817,6 +820,21 @@ function StoreModal({ store, onClose, refetchStores }: { store: Store; onClose: 
                 )
               })()}
             </div>
+          </div>
+
+          {/* Danger zone — moved here from the inline list row so the
+              destructive action is gated behind opening the store. */}
+          <div style={{
+            marginTop: 8, paddingTop: 16,
+            borderTop: '1px solid var(--pearl)',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          }}>
+            <div style={{ fontSize: 12, color: 'var(--mist)' }}>
+              Permanently delete <strong>{store.name}</strong>. This can't be undone.
+            </div>
+            <button className="btn-danger btn-sm" onClick={() => onDelete()}>
+              Delete store
+            </button>
           </div>
 
         </div>
