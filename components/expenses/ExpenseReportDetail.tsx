@@ -50,6 +50,7 @@ export default function ExpenseReportDetail({
   const isOwner = !!user && !!report && user.id === report.user_id
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
   const isPartner = !!user?.is_partner
+  const isAccounting = user?.role === 'accounting'
   // Bonuses are for non-partner buyers only — partners (Max/Joe/Rich)
   // never receive a bonus on their own expense reports, regardless of
   // who's viewing.
@@ -61,7 +62,7 @@ export default function ExpenseReportDetail({
   const canSubmit = isOwner && report?.status === 'active' && hasContent
   const canApprove = isPartner && report?.status === 'submitted_pending_review'
   const canRecall  = isOwner && report?.status === 'submitted_pending_review'
-  const canMarkPaid = (isPartner || isOwner) && report?.status === 'approved'
+  const canMarkPaid = (isPartner || isOwner || isAccounting) && report?.status === 'approved'
 
   const event: Event | undefined = useMemo(
     () => events.find(e => e.id === report?.event_id),

@@ -1,7 +1,8 @@
 // POST /api/expense-reports/[id]/mark-paid
 //
 // Transitions an approved report to paid. Per spec: "approved → partner
-// or user marks 'Paid' → paid". Allows the report owner OR a partner.
+// or user marks 'Paid' → paid". Allows the report owner, a partner, or
+// an accounting user (AP records the payment).
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -28,8 +29,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (!report) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const isOwner = report.user_id === me.id
-  if (!isOwner && !me.is_partner) {
-    return NextResponse.json({ error: 'Only partners or the report owner can mark paid' }, { status: 403 })
+  const isAccounting = me.role === 'accounting'
+  if (!isOwner && !me.is_partner && !isAccounting) {
+    return NextResponse.json(
+      { error: 'Only partners, accounting, or the report owner can mark paid' },
+      { status: 403 },
+    )
   }
   if (report.status !== 'approved') {
     return NextResponse.json(

@@ -18,7 +18,7 @@ export interface AuthedUser {
   id: string
   name: string
   email: string
-  role: 'buyer' | 'admin' | 'superadmin' | 'pending'
+  role: 'buyer' | 'admin' | 'superadmin' | 'pending' | 'marketing' | 'accounting'
   is_partner: boolean
   active: boolean
 }
