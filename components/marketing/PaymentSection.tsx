@@ -265,17 +265,20 @@ export default function PaymentSection({ campaign, onChanged }: {
         </div>
       )}
 
-      {isAwaitingPaidMark && (
+      {isAwaitingPaidMark && isMT && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button className="btn-primary btn-sm" onClick={markPaid} disabled={busy}>
             {busy ? '…' : '✓ Mark as Paid'}
           </button>
-          {isMT && (
-            <button className="btn-outline btn-sm" onClick={requestPayment} disabled={busy}
-              title="Use a different card — re-notify approvers">
-              ↻ Card declined? Request new payment method
-            </button>
-          )}
+          <button className="btn-outline btn-sm" onClick={requestPayment} disabled={busy}
+            title="Use a different card — re-notify approvers">
+            ↻ Card declined? Request new payment method
+          </button>
+        </div>
+      )}
+      {isAwaitingPaidMark && !isMT && (
+        <div style={{ fontSize: 13, color: 'var(--mist)', fontStyle: 'italic' }}>
+          Waiting for the Marketing Team to run the card and mark this paid.
         </div>
       )}
     </div>
