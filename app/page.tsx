@@ -45,13 +45,20 @@ export default function Home() {
   const [isMobile, setIsMobile] = useState(false)
   const initialRoutedRef = useRef(false)
 
-  // Initial landing: every user should start on dashboard if they have
-  // it granted. Otherwise, first available page in the fallback list.
-  // Runs once after user + modules load — explicitly forces nav to a
-  // sensible landing target so cached/prior state can't sneak in.
-  // Skipped when an email deep-link (?report=…) is present so that
-  // path can do its own routing.
+  // Initial landing: every user starts on dashboard. If their role
+  // doesn't grant dashboard, fall through to the first granted page
+  // from the fallback list. ABSOLUTE final fallback is also dashboard
+  // (NOT settings) so even an empty role_modules read (RLS hiccup,
+  // stale session) lands users somewhere expected — Dashboard knows
+  // how to render an empty state. Runs once after user + modules load,
+  // tracked via useRef so it doesn't fight subsequent nav clicks.
+  // Skipped when an email deep-link (?report=…) is present.
   const { modules: grantedModules, loaded: modulesLoaded } = useRoleModules()
+  const FALLBACK_ORDER: NavPage[] = [
+    'dashboard', 'calendar', 'marketing', 'expenses',
+    'events', 'schedule', 'travel', 'staff', 'shipping',
+    'reports', 'todo',
+  ]
   useEffect(() => {
     if (!user || !modulesLoaded || initialRoutedRef.current) return
     if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('report')) {
@@ -59,31 +66,22 @@ export default function Home() {
       return
     }
     initialRoutedRef.current = true
-    const fallbackOrder: NavPage[] = [
-      'dashboard', 'calendar', 'marketing', 'expenses',
-      'events', 'schedule', 'travel', 'staff', 'shipping',
-      'reports', 'todo',
-    ]
-    const next = fallbackOrder.find(p => grantedModules.has(p))
-    if (next) rawSetNav(next)
-    // If literally nothing is granted, leave nav as-is (dashboard) and
-    // let the deep-link guard below decide.
+    const next = FALLBACK_ORDER.find(p => grantedModules.has(p)) ?? 'dashboard'
+    rawSetNav(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, modulesLoaded, grantedModules])
 
   // Generic deep-link guard: if the current nav target isn't in the
-  // user's role_modules, redirect to the first granted page. Settings
-  // is always allowed (gear icon stays accessible to every role).
+  // user's role_modules, redirect. Dashboard is the final fallback
+  // (not settings) so a role_modules read failure doesn't dump users
+  // into the gear-icon page. Settings stays reachable via the gear.
   useEffect(() => {
     if (!modulesLoaded || !user) return
-    if (nav === 'settings') return
+    if (nav === 'settings') return  // respect manual gear-icon clicks
     if (grantedModules.has(nav)) return
-    const fallbackOrder: NavPage[] = [
-      'dashboard', 'calendar', 'marketing', 'expenses',
-      'events', 'schedule', 'travel', 'staff', 'shipping',
-      'reports', 'todo',
-    ]
-    const next = fallbackOrder.find(p => grantedModules.has(p))
-    rawSetNav(next ?? 'settings')
+    const next = FALLBACK_ORDER.find(p => grantedModules.has(p)) ?? 'dashboard'
+    rawSetNav(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modulesLoaded, grantedModules, nav, user])
 
   useEffect(() => {
