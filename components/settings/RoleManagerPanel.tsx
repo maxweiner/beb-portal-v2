@@ -68,10 +68,28 @@ const MODULE_SECTIONS: ModuleSection[] = [
   },
 ]
 
+interface Grant {
+  granted: boolean
+  canWrite: boolean
+}
+type GrantsMap = Map<string, Map<ModuleId, Grant>>
+
+function getGrant(grants: GrantsMap, roleId: string, moduleId: ModuleId): Grant {
+  return grants.get(roleId)?.get(moduleId) ?? { granted: false, canWrite: true }
+}
+
+function setGrantInMap(prev: GrantsMap, roleId: string, moduleId: ModuleId, next: Grant): GrantsMap {
+  const m = new Map(prev)
+  const inner = new Map(m.get(roleId) ?? new Map())
+  if (!next.granted) inner.delete(moduleId)
+  else inner.set(moduleId, next)
+  m.set(roleId, inner)
+  return m
+}
+
 export default function RoleManagerPanel() {
   const [roles, setRoles] = useState<Role[]>([])
-  // Map<roleId, Set<moduleId>>
-  const [grants, setGrants] = useState<Map<string, Set<ModuleId>>>(new Map())
+  const [grants, setGrants] = useState<GrantsMap>(new Map())
   const [loading, setLoading] = useState(true)
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -82,16 +100,16 @@ export default function RoleManagerPanel() {
     try {
       const [{ data: rs, error: rErr }, { data: rms, error: rmErr }] = await Promise.all([
         supabase.from('roles').select('id, label, description, is_system').order('id'),
-        supabase.from('role_modules').select('role_id, module_id'),
+        supabase.from('role_modules').select('role_id, module_id, can_write'),
       ])
       if (rErr) throw rErr
       if (rmErr) throw rmErr
       setRoles((rs ?? []) as Role[])
-      const m = new Map<string, Set<ModuleId>>()
-      for (const row of (rms ?? []) as any[]) {
-        const set = m.get(row.role_id) ?? new Set<ModuleId>()
-        set.add(row.module_id as ModuleId)
-        m.set(row.role_id, set)
+      const m: GrantsMap = new Map()
+      for (const row of (rms ?? []) as { role_id: string; module_id: string; can_write: boolean | null }[]) {
+        const inner = m.get(row.role_id) ?? new Map<ModuleId, Grant>()
+        inner.set(row.module_id as ModuleId, { granted: true, canWrite: row.can_write !== false })
+        m.set(row.role_id, inner)
       }
       setGrants(m)
     } catch (e: any) {
@@ -103,26 +121,31 @@ export default function RoleManagerPanel() {
 
   async function toggleModule(roleId: string, moduleId: ModuleId, next: boolean) {
     setBusyKey(`${roleId}:${moduleId}`); setErr(null)
+    const prevGrant = getGrant(grants, roleId, moduleId)
     // Optimistic
-    setGrants(prev => {
-      const m = new Map(prev)
-      const s = new Set(m.get(roleId) ?? [])
-      if (next) s.add(moduleId); else s.delete(moduleId)
-      m.set(roleId, s); return m
-    })
+    setGrants(prev => setGrantInMap(prev, roleId, moduleId, { granted: next, canWrite: true }))
     const { error } = next
-      ? await supabase.from('role_modules').insert({ role_id: roleId, module_id: moduleId })
+      ? await supabase.from('role_modules').insert({ role_id: roleId, module_id: moduleId, can_write: true })
       : await supabase.from('role_modules').delete().eq('role_id', roleId).eq('module_id', moduleId)
     setBusyKey(null)
     if (error) {
       setErr(`${roleId} → ${moduleId}: ${error.message}`)
-      // Rollback
-      setGrants(prev => {
-        const m = new Map(prev)
-        const s = new Set(m.get(roleId) ?? [])
-        if (next) s.delete(moduleId); else s.add(moduleId)
-        m.set(roleId, s); return m
-      })
+      setGrants(prev => setGrantInMap(prev, roleId, moduleId, prevGrant))
+    }
+  }
+
+  async function toggleReadOnly(roleId: string, moduleId: ModuleId, readOnly: boolean) {
+    setBusyKey(`${roleId}:${moduleId}:ro`); setErr(null)
+    const prevGrant = getGrant(grants, roleId, moduleId)
+    const nextCanWrite = !readOnly
+    setGrants(prev => setGrantInMap(prev, roleId, moduleId, { granted: true, canWrite: nextCanWrite }))
+    const { error } = await supabase.from('role_modules')
+      .update({ can_write: nextCanWrite })
+      .eq('role_id', roleId).eq('module_id', moduleId)
+    setBusyKey(null)
+    if (error) {
+      setErr(`${roleId} → ${moduleId} read-only: ${error.message}`)
+      setGrants(prev => setGrantInMap(prev, roleId, moduleId, prevGrant))
     }
   }
 
@@ -170,7 +193,8 @@ export default function RoleManagerPanel() {
       )}
 
       {roles.map(r => {
-        const set = grants.get(r.id) ?? new Set<ModuleId>()
+        const inner = grants.get(r.id) ?? new Map<ModuleId, Grant>()
+        const grantedCount = inner.size
         const isOpen = expanded === r.id
         const totalCount = MODULE_SECTIONS.reduce((s, sec) => s + sec.modules.length, 0)
         return (
@@ -201,7 +225,7 @@ export default function RoleManagerPanel() {
                     textTransform: 'uppercase', letterSpacing: '.05em',
                   }}>{r.is_system ? 'System' : 'Custom'}</span>
                   <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--mist)' }}>
-                    {set.size}/{totalCount} modules
+                    {grantedCount}/{totalCount} modules
                   </span>
                 </div>
                 {r.description && (
@@ -237,34 +261,66 @@ export default function RoleManagerPanel() {
                     }}>{sec.label}</div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                       {sec.modules.map(m => {
-                        const granted = set.has(m.id)
-                        const busy = busyKey === `${r.id}:${m.id}`
+                        const grant = inner.get(m.id)
+                        const granted = !!grant
+                        const readOnly = !!grant && grant.canWrite === false
+                        const busy = busyKey === `${r.id}:${m.id}` || busyKey === `${r.id}:${m.id}:ro`
                         return (
-                          <label key={m.id}
+                          <div key={m.id}
                             style={{
-                              display: 'flex', alignItems: 'center', gap: 8,
+                              display: 'flex', flexDirection: 'column', gap: 6,
                               padding: '8px 10px', borderRadius: 6,
                               border: `1.5px solid ${granted ? 'var(--green)' : 'var(--pearl)'}`,
                               background: granted ? 'var(--green-pale)' : '#fff',
-                              cursor: busy ? 'wait' : 'pointer',
-                              position: 'relative',
+                              cursor: busy ? 'wait' : 'default',
                             }}>
-                            <input type="checkbox" checked={granted}
-                              disabled={busy}
-                              onChange={e => toggleModule(r.id, m.id, e.target.checked)}
-                              style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
-                            <span aria-hidden style={{
-                              width: 16, height: 16, flexShrink: 0, borderRadius: 4,
-                              border: `2px solid ${granted ? 'var(--green)' : 'var(--pearl)'}`,
-                              background: granted ? 'var(--green)' : '#fff',
-                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                              color: '#fff', fontSize: 11, fontWeight: 900, lineHeight: 1,
-                            }}>{granted ? '✓' : ''}</span>
-                            <span style={{
-                              fontSize: 12, fontWeight: 600,
-                              color: granted ? 'var(--green-dark)' : 'var(--ink)',
-                            }}>{m.label}</span>
-                          </label>
+                            {/* Granted toggle */}
+                            <label style={{
+                              display: 'flex', alignItems: 'center', gap: 8,
+                              cursor: busy ? 'wait' : 'pointer', position: 'relative',
+                            }}>
+                              <input type="checkbox" checked={granted}
+                                disabled={busy}
+                                onChange={e => toggleModule(r.id, m.id, e.target.checked)}
+                                style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
+                              <span aria-hidden style={{
+                                width: 16, height: 16, flexShrink: 0, borderRadius: 4,
+                                border: `2px solid ${granted ? 'var(--green)' : 'var(--pearl)'}`,
+                                background: granted ? 'var(--green)' : '#fff',
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                color: '#fff', fontSize: 11, fontWeight: 900, lineHeight: 1,
+                              }}>{granted ? '✓' : ''}</span>
+                              <span style={{
+                                fontSize: 12, fontWeight: 600,
+                                color: granted ? 'var(--green-dark)' : 'var(--ink)',
+                              }}>{m.label}</span>
+                            </label>
+                            {/* Read-only toggle — only when granted */}
+                            {granted && (
+                              <label style={{
+                                display: 'flex', alignItems: 'center', gap: 6,
+                                marginLeft: 24,
+                                cursor: busy ? 'wait' : 'pointer', position: 'relative',
+                              }}>
+                                <input type="checkbox" checked={readOnly}
+                                  disabled={busy}
+                                  onChange={e => toggleReadOnly(r.id, m.id, e.target.checked)}
+                                  style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
+                                <span aria-hidden style={{
+                                  width: 12, height: 12, flexShrink: 0, borderRadius: 3,
+                                  border: `1.5px solid ${readOnly ? 'var(--ash)' : 'var(--pearl)'}`,
+                                  background: readOnly ? 'var(--ash)' : '#fff',
+                                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                  color: '#fff', fontSize: 9, fontWeight: 900, lineHeight: 1,
+                                }}>{readOnly ? '✓' : ''}</span>
+                                <span style={{
+                                  fontSize: 10, fontWeight: 700, letterSpacing: '.04em',
+                                  textTransform: 'uppercase',
+                                  color: readOnly ? 'var(--ash)' : 'var(--mist)',
+                                }}>Read-only</span>
+                              </label>
+                            )}
+                          </div>
                         )
                       })}
                     </div>
