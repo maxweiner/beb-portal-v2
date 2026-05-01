@@ -20,8 +20,9 @@ import CustomerTrash from './CustomerTrash'
 import ImportTool from './ImportTool'
 import DedupReview from './DedupReview'
 import TagsAndEngagement from './TagsAndEngagement'
+import MarketingExport from './MarketingExport'
 
-type Tab = 'list' | 'import' | 'dedup' | 'tags' | 'trash'
+type Tab = 'list' | 'import' | 'dedup' | 'export' | 'tags' | 'trash'
 
 export default function Customers() {
   const { user, stores } = useApp()
@@ -105,11 +106,12 @@ export default function Customers() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
-        {(['list', 'import', 'dedup', 'tags', 'trash'] as const).map(t => {
+        {(['list', 'import', 'dedup', 'export', 'tags', 'trash'] as const).map(t => {
           const active = tab === t
           const label = t === 'list' ? 'All Customers'
                       : t === 'import' ? '📥 Import'
                       : t === 'dedup' ? '⚖️ Dedup Review'
+                      : t === 'export' ? '📨 Marketing Export'
                       : t === 'tags' ? '🏷️ Tags & Engagement'
                       : '🗑️ Trash'
           return (
@@ -243,6 +245,10 @@ export default function Customers() {
 
       {tab === 'dedup' && (
         <DedupReview storeId={storeId} />
+      )}
+
+      {tab === 'export' && (
+        <MarketingExport stores={stores} storeId={storeId} setStoreId={setStoreId} />
       )}
 
       {tab === 'tags' && (
