@@ -22,6 +22,7 @@ import TodoPage from '@/components/todo/TodoPage'
 import Calendar from '@/components/calendar/Calendar'
 import AppointmentsAdmin from '@/components/appointments-admin/AppointmentsAdmin'
 import { ModuleGuard } from '@/components/ui/ModuleGuard'
+import ModuleWriteGate from '@/components/ui/ModuleWriteGate'
 import { useRoleModules } from '@/lib/useRoleModules'
 import LibertyAdminPanel from '@/components/admin/LibertyAdminPanel'
 import NotificationTemplatesAdmin from '@/components/admin/NotificationTemplatesAdmin'
@@ -166,26 +167,26 @@ export default function Home() {
               to the section's landing page. setNav() bumps navKey on
               every click; rawSetNav() (used by deep-link / brand-switch
               handlers) does not, preserving those flows. */}
-          {nav === 'dashboard' && <MobileDashboard key={navKey} setNav={setNav} />}
-          {nav === 'dayentry'  && <MobileDayEntry key={navKey} />}
-          {nav === 'events'    && <Events key={navKey} setNav={setNav} />}
-          {nav === 'calendar'  && <AppointmentsAdmin key={navKey} />}
-          {nav === 'schedule'  && <Schedule key={navKey} />}
-          {nav === 'travel'    && <MobileTravel key={navKey} />}
-          {nav === 'staff'     && <MobileStaff key={navKey} />}
-          {nav === 'shipping'  && <Shipping key={navKey} />}
-          {nav === 'reports'   && <Reports key={navKey} />}
-          {nav === 'expenses'  && <Expenses key={navKey} />}
-          {nav === 'financials' && <PartnerFinancials key={navKey} onOpenReport={(id) => {
+          {nav === 'dashboard' && <ModuleWriteGate moduleId="dashboard"><MobileDashboard key={navKey} setNav={setNav} /></ModuleWriteGate>}
+          {nav === 'dayentry'  && <ModuleWriteGate moduleId="dayentry"><MobileDayEntry key={navKey} /></ModuleWriteGate>}
+          {nav === 'events'    && <ModuleWriteGate moduleId="events"><Events key={navKey} setNav={setNav} /></ModuleWriteGate>}
+          {nav === 'calendar'  && <ModuleWriteGate moduleId="calendar"><AppointmentsAdmin key={navKey} /></ModuleWriteGate>}
+          {nav === 'schedule'  && <ModuleWriteGate moduleId="schedule"><Schedule key={navKey} /></ModuleWriteGate>}
+          {nav === 'travel'    && <ModuleWriteGate moduleId="travel"><MobileTravel key={navKey} /></ModuleWriteGate>}
+          {nav === 'staff'     && <ModuleWriteGate moduleId="staff"><MobileStaff key={navKey} /></ModuleWriteGate>}
+          {nav === 'shipping'  && <ModuleWriteGate moduleId="shipping"><Shipping key={navKey} /></ModuleWriteGate>}
+          {nav === 'reports'   && <ModuleWriteGate moduleId="reports"><Reports key={navKey} /></ModuleWriteGate>}
+          {nav === 'expenses'  && <ModuleWriteGate moduleId="expenses"><Expenses key={navKey} /></ModuleWriteGate>}
+          {nav === 'financials' && <ModuleWriteGate moduleId="financials"><PartnerFinancials key={navKey} onOpenReport={(id) => {
             setNav('expenses')
             setTimeout(() => window.dispatchEvent(new CustomEvent('beb:open-expense-report', { detail: { reportId: id } })), 0)
-          }} />}
-          {nav === 'marketing' && <Marketing key={navKey} />}
-          {nav === 'todo'      && <TodoPage key={navKey} />}
+          }} /></ModuleWriteGate>}
+          {nav === 'marketing' && <ModuleWriteGate moduleId="marketing"><Marketing key={navKey} /></ModuleWriteGate>}
+          {nav === 'todo'      && <ModuleWriteGate moduleId="todo"><TodoPage key={navKey} /></ModuleWriteGate>}
           {nav === 'settings'  && <Settings key={navKey} />}
-          {nav === 'admin'     && <ModuleGuard moduleId="admin"><AdminPanel key={navKey} /></ModuleGuard>}
-          {nav === 'libertyadmin' && <ModuleGuard moduleId="libertyadmin"><LibertyAdminPanel key={navKey} /></ModuleGuard>}
-          {nav === 'stores'    && <ModuleGuard moduleId="stores"><Stores key={navKey} /></ModuleGuard>}
+          {nav === 'admin'     && <ModuleGuard moduleId="admin"><ModuleWriteGate moduleId="admin"><AdminPanel key={navKey} /></ModuleWriteGate></ModuleGuard>}
+          {nav === 'libertyadmin' && <ModuleGuard moduleId="libertyadmin"><ModuleWriteGate moduleId="libertyadmin"><LibertyAdminPanel key={navKey} /></ModuleWriteGate></ModuleGuard>}
+          {nav === 'stores'    && <ModuleGuard moduleId="stores"><ModuleWriteGate moduleId="stores"><Stores key={navKey} /></ModuleWriteGate></ModuleGuard>}
         </MobileLayout>
       </>
     )
@@ -214,46 +215,56 @@ export default function Home() {
             to the section's landing page. setNav() bumps navKey on
             every click; rawSetNav() (used by deep-link / brand-switch
             handlers) does not, preserving those flows. */}
-        {nav === 'dashboard'  && <Dashboard key={navKey} setNav={setNav} />}
-        {nav === 'calendar'   && <AppointmentsAdmin key={navKey} />}
-        {nav === 'events'     && <Events key={navKey} setNav={setNav} />}
-        {nav === 'dayentry'   && <DayEntry key={navKey} />}
-        {nav === 'shipping'   && <Shipping key={navKey} />}
-        {nav === 'reports'    && <Reports key={navKey} />}
-        {nav === 'expenses'   && <Expenses key={navKey} />}
-        {nav === 'financials' && <PartnerFinancials key={navKey} onOpenReport={(id) => {
+        {nav === 'dashboard'  && <ModuleWriteGate moduleId="dashboard"><Dashboard key={navKey} setNav={setNav} /></ModuleWriteGate>}
+        {nav === 'calendar'   && <ModuleWriteGate moduleId="calendar"><AppointmentsAdmin key={navKey} /></ModuleWriteGate>}
+        {nav === 'events'     && <ModuleWriteGate moduleId="events"><Events key={navKey} setNav={setNav} /></ModuleWriteGate>}
+        {nav === 'dayentry'   && <ModuleWriteGate moduleId="dayentry"><DayEntry key={navKey} /></ModuleWriteGate>}
+        {nav === 'shipping'   && <ModuleWriteGate moduleId="shipping"><Shipping key={navKey} /></ModuleWriteGate>}
+        {nav === 'reports'    && <ModuleWriteGate moduleId="reports"><Reports key={navKey} /></ModuleWriteGate>}
+        {nav === 'expenses'   && <ModuleWriteGate moduleId="expenses"><Expenses key={navKey} /></ModuleWriteGate>}
+        {nav === 'financials' && <ModuleWriteGate moduleId="financials"><PartnerFinancials key={navKey} onOpenReport={(id) => {
           setNav('expenses')
           setTimeout(() => window.dispatchEvent(new CustomEvent('beb:open-expense-report', { detail: { reportId: id } })), 0)
-        }} />}
-        {nav === 'todo'       && <TodoPage key={navKey} />}
+        }} /></ModuleWriteGate>}
+        {nav === 'todo'       && <ModuleWriteGate moduleId="todo"><TodoPage key={navKey} /></ModuleWriteGate>}
         {nav === 'settings'   && <Settings key={navKey} />}
-        {nav === 'staff'      && <Staff key={navKey} />}
-        {nav === 'schedule'   && <Schedule key={navKey} />}
-        {nav === 'travel'     && <Travel key={navKey} />}
-        {nav === 'marketing'  && <Marketing key={navKey} />}
+        {nav === 'staff'      && <ModuleWriteGate moduleId="staff"><Staff key={navKey} /></ModuleWriteGate>}
+        {nav === 'schedule'   && <ModuleWriteGate moduleId="schedule"><Schedule key={navKey} /></ModuleWriteGate>}
+        {nav === 'travel'     && <ModuleWriteGate moduleId="travel"><Travel key={navKey} /></ModuleWriteGate>}
+        {nav === 'marketing'  && <ModuleWriteGate moduleId="marketing"><Marketing key={navKey} /></ModuleWriteGate>}
         {nav === 'admin' && (
           <ModuleGuard moduleId="admin">
-            <AdminPanel key={navKey} />
+            <ModuleWriteGate moduleId="admin">
+              <AdminPanel key={navKey} />
+            </ModuleWriteGate>
           </ModuleGuard>
         )}
         {nav === 'libertyadmin' && (
           <ModuleGuard moduleId="libertyadmin">
-            <LibertyAdminPanel key={navKey} />
+            <ModuleWriteGate moduleId="libertyadmin">
+              <LibertyAdminPanel key={navKey} />
+            </ModuleWriteGate>
           </ModuleGuard>
         )}
         {nav === 'stores' && (
           <ModuleGuard moduleId="stores">
-            <Stores key={navKey} />
+            <ModuleWriteGate moduleId="stores">
+              <Stores key={navKey} />
+            </ModuleWriteGate>
           </ModuleGuard>
         )}
         {nav === 'notification-templates' && (
           <ModuleGuard moduleId="notification-templates">
-            <NotificationTemplatesAdmin key={navKey} />
+            <ModuleWriteGate moduleId="notification-templates">
+              <NotificationTemplatesAdmin key={navKey} />
+            </ModuleWriteGate>
           </ModuleGuard>
         )}
         {nav === 'data-research' && (
           <ModuleGuard moduleId="data-research">
-            <DataResearch key={navKey} />
+            <ModuleWriteGate moduleId="data-research">
+              <DataResearch key={navKey} />
+            </ModuleWriteGate>
           </ModuleGuard>
         )}
       </main>
