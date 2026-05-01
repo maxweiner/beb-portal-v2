@@ -62,7 +62,10 @@ export default function CollapsibleCard({
           aria-expanded={open}
           style={{
             flex: 1, minWidth: 0,
-            display: 'flex', alignItems: 'center', gap: 8,
+            // Explicit justifyContent overrides the global `button {
+            // justify-content: center }` rule in globals.css that
+            // would otherwise center the chevron + title pair.
+            display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 8,
             background: 'transparent', border: 'none', padding: 0, margin: 0,
             cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
             whiteSpace: 'normal',
