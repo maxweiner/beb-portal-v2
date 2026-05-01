@@ -50,6 +50,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   ].filter((x): x is File => x instanceof File)
   if (files.length === 0) return NextResponse.json({ error: 'Attach at least one file.' }, { status: 400 })
 
+  // Optional per-upload note from the marketing team.
+  const uploadNoteRaw = form.get('note')
+  const uploadNote = typeof uploadNoteRaw === 'string' && uploadNoteRaw.trim()
+    ? uploadNoteRaw.trim().slice(0, 2000)
+    : null
+
   const { data: campaign } = await sb.from('marketing_campaigns')
     .select('id, event_id, flow_type, status, sub_status').eq('id', params.id).maybeSingle()
   if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
@@ -105,6 +111,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     // recipient email in a comment if needed later.
     uploaded_by: actor.userId ?? null,
     file_urls: uploadedPaths,
+    upload_note: uploadNote,
     status: 'pending',
   }).select('*').single()
   if (insErr || !proofRow) {

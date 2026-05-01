@@ -22,6 +22,7 @@ interface Proof {
   uploaded_by: string | null
   uploaded_at: string
   file_urls: string[]
+  upload_note: string | null
   status: 'pending' | 'approved' | 'revision_requested'
   approved_by: string | null
   approved_at: string | null
@@ -49,6 +50,11 @@ export default function ProofingSection({ campaign, onChanged }: {
   const [showHistory, setShowHistory] = useState(false)
   const [isApprover, setIsApprover] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  // Per-upload note + overall campaign-wide note from the marketing team.
+  const [uploadNote, setUploadNote] = useState('')
+  const [overallNote, setOverallNote] = useState(campaign.marketing_team_notes || '')
+  const [overallSaveStatus, setOverallSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const overallSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const userById = useMemo(() => new Map(users.map(u => [u.id, u])), [users])
 
@@ -97,6 +103,7 @@ export default function ProofingSection({ campaign, onChanged }: {
     setUploading(true); setError(null)
     const fd = new FormData()
     for (let i = 0; i < files.length; i++) fd.append('files', files[i])
+    if (uploadNote.trim()) fd.append('note', uploadNote.trim())
     try {
       const res = await authedFetch(`/api/marketing/campaigns/${campaign.id}/proofs/upload`, {
         method: 'POST', body: fd,
@@ -105,6 +112,7 @@ export default function ProofingSection({ campaign, onChanged }: {
       if (!res.ok) {
         setError(json.error || `Upload failed (${res.status})`)
       } else {
+        setUploadNote('')
         // Refresh
         await load()
         // Reflect campaign status update
@@ -118,6 +126,33 @@ export default function ProofingSection({ campaign, onChanged }: {
     setUploading(false)
     if (fileRef.current) fileRef.current.value = ''
   }
+
+  // Autosave the overall note: 800ms debounce, only fires when value
+  // actually differs from the campaign's stored value (so the initial
+  // hydrate doesn't immediately fire a save).
+  useEffect(() => {
+    if (overallNote === (campaign.marketing_team_notes || '')) return
+    if (overallSaveTimer.current) clearTimeout(overallSaveTimer.current)
+    setOverallSaveStatus('saving')
+    overallSaveTimer.current = setTimeout(async () => {
+      const { data, error: upErr } = await supabase.from('marketing_campaigns')
+        .update({ marketing_team_notes: overallNote.trim() || null })
+        .eq('id', campaign.id)
+        .select('*').single()
+      if (upErr) {
+        setOverallSaveStatus('error')
+        setError(`Saving notes: ${upErr.message}`)
+        return
+      }
+      setOverallSaveStatus('saved')
+      if (data) onChanged(data as MarketingCampaign)
+      setTimeout(() => setOverallSaveStatus('idle'), 1200)
+    }, 800)
+    return () => {
+      if (overallSaveTimer.current) { clearTimeout(overallSaveTimer.current); overallSaveTimer.current = null }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overallNote, campaign.id])
 
   const latest = proofs[0]  // ordered desc, so first is newest
   const earlier = proofs.slice(1)
@@ -143,20 +178,47 @@ export default function ProofingSection({ campaign, onChanged }: {
         }}>{error}</div>
       )}
 
+      {/* Overall campaign-wide notes from the marketing team. Optional. */}
+      <div style={{ marginBottom: 14 }}>
+        <label className="fl" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+          Overall notes from the marketing team (optional)
+          {overallSaveStatus === 'saving' && (
+            <span style={{ fontSize: 10, color: 'var(--mist)', fontWeight: 600 }}>Saving…</span>
+          )}
+          {overallSaveStatus === 'saved' && (
+            <span style={{ fontSize: 10, color: 'var(--green-dark)', fontWeight: 700 }}>✓ Saved</span>
+          )}
+          {overallSaveStatus === 'error' && (
+            <span style={{ fontSize: 10, color: '#7f1d1d', fontWeight: 700 }}>Save failed</span>
+          )}
+        </label>
+        <textarea rows={2} value={overallNote} onChange={e => setOverallNote(e.target.value)}
+          placeholder="e.g. Approvers: front before back. Back is our standard template."
+          style={{ width: '100%', fontSize: 13, fontFamily: 'inherit' }} />
+      </div>
+
       {/* Upload widget */}
       <div style={{
         background: 'var(--cream)', border: '1px solid var(--pearl)', borderRadius: 8,
         padding: 12, marginBottom: 14,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap',
+        display: 'flex', flexDirection: 'column', gap: 10,
       }}>
-        <div style={{ fontSize: 13, color: 'var(--ash)' }}>
-          {latest
-            ? <>Latest proof: <strong>v{latest.version_number}</strong> ({latest.file_urls.length} file{latest.file_urls.length === 1 ? '' : 's'})</>
-            : <>No proofs uploaded yet.</>}
+        <div>
+          <label className="fl" style={{ fontSize: 11 }}>Note for this upload (optional)</label>
+          <textarea rows={2} value={uploadNote} onChange={e => setUploadNote(e.target.value)}
+            placeholder='e.g. "v2 — fixed offer headline and bumped contrast on the CTA"'
+            style={{ width: '100%', fontSize: 13, fontFamily: 'inherit' }} />
         </div>
-        <button className="btn-primary btn-sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
-          {uploading ? 'Uploading…' : latest ? '⬆️ Upload Revision' : '⬆️ Upload Proof'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 13, color: 'var(--ash)' }}>
+            {latest
+              ? <>Latest proof: <strong>v{latest.version_number}</strong> ({latest.file_urls.length} file{latest.file_urls.length === 1 ? '' : 's'})</>
+              : <>No proofs uploaded yet.</>}
+          </div>
+          <button className="btn-primary btn-sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
+            {uploading ? 'Uploading…' : latest ? '⬆️ Upload Revision' : '⬆️ Upload Proof'}
+          </button>
+        </div>
         <input ref={fileRef} type="file" multiple accept="image/*,.pdf" style={{ display: 'none' }}
           onChange={e => { if (e.target.files) uploadFiles(e.target.files) }} />
       </div>
@@ -249,6 +311,20 @@ function ProofCard({ proof, comments, isLatest, isApprover, userById, onAfterAct
           </span>
         </div>
       </div>
+
+      {/* Per-upload note from the marketing team. */}
+      {proof.upload_note && (
+        <div style={{
+          background: 'var(--cream)', border: '1px solid var(--pearl)', borderRadius: 8,
+          padding: '8px 12px', marginBottom: 10,
+          fontSize: 12, color: 'var(--ink)',
+        }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>
+            Marketing team note
+          </div>
+          <div style={{ whiteSpace: 'pre-wrap' }}>{proof.upload_note}</div>
+        </div>
+      )}
 
       {/* File previews */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, marginBottom: 10 }}>
