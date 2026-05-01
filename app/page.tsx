@@ -35,6 +35,7 @@ import MobileTravel from '@/components/mobile/MobileTravel'
 import MobileStaff from '@/components/mobile/MobileStaff'
 import BrandSwitchOverlay from '@/components/layout/BrandSwitchOverlay'
 import { shouldUseMobile, setMobilePreference } from '@/lib/mobile'
+import TodoNotificationsBell from '@/components/todo/TodoNotificationsBell'
 
 export type NavPage = 'dashboard' | 'calendar' | 'events' | 'schedule' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'libertyadmin' | 'recipients' | 'notification-templates' | 'data-research' | 'expenses' | 'financials' | 'todo'
 
@@ -160,6 +161,9 @@ export default function Home() {
           setNav('expenses')
           setTimeout(() => window.dispatchEvent(new CustomEvent('beb:open-expense-report', { detail: { reportId: id } })), 0)
         }} />
+        {/* Floating notifications bell — sits above the mobile bottom-nav
+            (72px tall + safe area). */}
+        <TodoNotificationsBell setNav={setNav} bottom={92} right={16} />
         <MobileLayout nav={nav} setNav={setNav}>
           {/* `key={navKey}` on every section forces a fresh remount when
               the user clicks any sidebar nav link — internal state (open
@@ -197,9 +201,12 @@ export default function Home() {
     <ConnectionBanner />
     <BrandSwitchOverlay />
     <div className="flex h-screen overflow-hidden" style={{ background: 'var(--page-bg)' }}>
-      {/* Switch to mobile button */}
+      {/* Floating notifications bell. The Mobile-switch button sits
+          to its left so they don't overlap. */}
+      <TodoNotificationsBell setNav={setNav} bottom={16} right={16} />
+      {/* Switch to mobile button — shifted left of the floating bell. */}
       <button onClick={() => { setMobilePreference(true); window.location.reload() }}
-        style={{ position: 'fixed', bottom: 16, right: 16, zIndex: 50, background: 'var(--sidebar-bg)', color: '#fff', border: 'none', borderRadius: 99, padding: '6px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,.2)', opacity: 0.7 }}>
+        style={{ position: 'fixed', bottom: 22, right: 80, zIndex: 50, background: 'var(--sidebar-bg)', color: '#fff', border: 'none', borderRadius: 99, padding: '6px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,.2)', opacity: 0.7 }}>
         📱 Mobile
       </button>
       <Sidebar nav={nav} setNav={setNav} />
