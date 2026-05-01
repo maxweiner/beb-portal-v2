@@ -11,7 +11,7 @@
 // the same store the first time the user opens this section on a fresh
 // campaign.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { MarketingCampaign } from '@/types'
@@ -48,6 +48,8 @@ export default function VDPPlanningSection({ campaign, onChanged }: {
   const [isApprover, setIsApprover] = useState(false)
   const [reviewComment, setReviewComment] = useState('')
   const [prefilledFromPriorAt, setPrefilledFromPriorAt] = useState<string | null>(null)
+  const [csvImportInfo, setCsvImportInfo] = useState<string | null>(null)
+  const csvFileRef = useRef<HTMLInputElement>(null)
 
   // Load details + zips + approver status + prefill source
   useEffect(() => {
@@ -128,6 +130,34 @@ export default function VDPPlanningSection({ campaign, onChanged }: {
       setError(e?.message || 'Network error')
     }
     setBusy(false)
+  }
+
+  async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''  // reset so picking the same file re-fires
+    if (!file) return
+    setCsvImportInfo(null); setError(null)
+    if (file.size > 2 * 1024 * 1024) {
+      setError('CSV too large (max 2MB).'); return
+    }
+    try {
+      const text = await file.text()
+      // Pull every 5-digit run from the file. Works for single-column,
+      // multi-column, with or without a header — we just hunt for zips.
+      const found = Array.from(new Set(
+        (text.match(/\b\d{5}\b/g) || []),
+      ))
+      if (found.length === 0) {
+        setError(`No 5-digit zip codes found in "${file.name}".`); return
+      }
+      const existing = parseZips(zipInput)
+      const merged = Array.from(new Set([...existing, ...found]))
+      const added = merged.length - existing.length
+      setZipInput(merged.join(', '))
+      setCsvImportInfo(`Imported ${found.length} zip${found.length === 1 ? '' : 's'} from ${file.name} · ${added} new`)
+    } catch (err: any) {
+      setError(`CSV parse failed: ${err?.message || 'unknown'}`)
+    }
   }
 
   async function review(decision: 'approve' | 'request_changes') {
@@ -215,12 +245,29 @@ export default function VDPPlanningSection({ campaign, onChanged }: {
             </div>
           </div>
           <div className="field">
-            <label className="fl">Zip Codes (comma, space, or new-line separated)</label>
-            <textarea rows={5} value={zipInput} onChange={e => setZipInput(e.target.value)}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+              <label className="fl" style={{ marginBottom: 0 }}>Zip Codes (comma, space, or new-line separated)</label>
+              <button type="button" className="btn-outline btn-xs"
+                onClick={() => csvFileRef.current?.click()}
+                title="Import zip codes from a CSV file. Any 5-digit numbers in the file will be added to the list (deduped).">
+                📂 Import CSV
+              </button>
+              <input ref={csvFileRef} type="file" accept=".csv,text/csv,text/plain"
+                style={{ display: 'none' }} onChange={handleCsvUpload} />
+            </div>
+            <textarea rows={5} value={zipInput} onChange={e => { setZipInput(e.target.value); setCsvImportInfo(null) }}
               placeholder="68106, 68107, 68108" />
             <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
               {parseZips(zipInput).length} valid 5-digit zip code(s)
             </div>
+            {csvImportInfo && (
+              <div style={{
+                marginTop: 6, fontSize: 11,
+                background: 'var(--green-pale)', color: 'var(--green-dark)',
+                border: '1px solid var(--green3)', borderRadius: 6,
+                padding: '6px 10px', fontWeight: 700,
+              }}>✓ {csvImportInfo}</div>
+            )}
           </div>
           <button className="btn-primary btn-sm" onClick={submit} disabled={busy}>
             {busy ? 'Submitting…' : '📤 Submit for Approval'}
