@@ -9,7 +9,9 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import {
   SOURCES, allColumns, TYPE_OPERATORS, OPERATOR_LABELS, DATE_PRESETS,
+  AGG_LABELS, aggregateKey, aggregateLabel,
   type ReportConfig, type ReportFilter, type ReportSort, type Operator, type ColumnDef,
+  type AggregateColumn, type AggregateOp,
 } from '@/lib/reports/schema'
 
 type Visibility = 'global' | 'store' | 'private'
@@ -38,6 +40,8 @@ export default function CustomReportBuilder({ reportId, onCancel, onSaved }: {
   const [columns, setColumns] = useState<string[]>([])
   const [filters, setFilters] = useState<ReportFilter[]>([])
   const [sort, setSort] = useState<ReportSort[]>([])
+  const [groupBy, setGroupBy] = useState<string[]>([])
+  const [aggregates, setAggregates] = useState<AggregateColumn[]>([])
   const [visibility, setVisibility] = useState<Visibility>('global')
   const [storeId, setStoreId] = useState<string>('')
   const [loaded, setLoaded] = useState(reportId === null)
@@ -60,6 +64,8 @@ export default function CustomReportBuilder({ reportId, onCancel, onSaved }: {
         setColumns(cfg.columns || [])
         setFilters(cfg.filters || [])
         setSort(cfg.sort || [])
+        setGroupBy(cfg.groupBy || [])
+        setAggregates(cfg.aggregates || [])
         setLoaded(true)
       })
   }, [reportId])
@@ -97,14 +103,68 @@ export default function CustomReportBuilder({ reportId, onCancel, onSaved }: {
     setFilters(p => p.map((f, idx) => idx === i ? { ...f, ...patch } : f))
   const removeFilter = (i: number) => setFilters(p => p.filter((_, idx) => idx !== i))
 
-  const addSort = () => setSort(p => [...p, { field: columns[0] || colCatalog[0]?.column.key || '', direction: 'asc' }])
+  // ── Sort options change with grouping. Ungrouped → all source cols.
+  // Grouped → groupBy keys + aggregate keys (with friendly labels).
+  const isGrouped = groupBy.length > 0
+  const sortOptions = useMemo<{ key: string; label: string }[]>(() => {
+    if (!isGrouped) {
+      return colCatalog.map(c => ({ key: c.column.key, label: `${c.groupLabel} → ${c.column.label}` }))
+    }
+    const out: { key: string; label: string }[] = []
+    for (const gk of groupBy) {
+      const cd = colByKey.get(gk)
+      out.push({ key: gk, label: cd ? `${cd.groupLabel} → ${cd.column.label}` : gk })
+    }
+    aggregates.forEach((a, i) => {
+      const fl = a.field ? colByKey.get(a.field)?.column.label : undefined
+      out.push({ key: aggregateKey(i), label: aggregateLabel(a, fl) })
+    })
+    return out
+  }, [isGrouped, colCatalog, groupBy, aggregates, colByKey])
+
+  const defaultSortKey = sortOptions[0]?.key || ''
+  const addSort = () => setSort(p => [...p, { field: defaultSortKey, direction: 'asc' }])
   const updateSort = (i: number, patch: Partial<ReportSort>) =>
     setSort(p => p.map((s, idx) => idx === i ? { ...s, ...patch } : s))
   const removeSort = (i: number) => setSort(p => p.filter((_, idx) => idx !== i))
 
+  // ── Group by ──────────────────────────────────────────
+  const addGroupBy = (k: string) => setGroupBy(p => p.includes(k) ? p : [...p, k])
+  const removeGroupBy = (k: string) => {
+    setGroupBy(p => p.filter(x => x !== k))
+    // Drop any sort rules that referenced this groupBy key.
+    setSort(p => p.filter(s => s.field !== k))
+  }
+
+  // ── Aggregates ────────────────────────────────────────
+  const addAggregate = () =>
+    setAggregates(p => [...p, { op: 'count' }])
+  const updateAggregate = (i: number, patch: Partial<AggregateColumn>) => {
+    setAggregates(p => p.map((a, idx) => idx === i ? { ...a, ...patch } : a))
+  }
+  const removeAggregate = (i: number) => {
+    setAggregates(p => p.filter((_, idx) => idx !== i))
+    // Re-key sort rules that referenced an aggregate by index.
+    const stripped = aggregateKey(i)
+    setSort(p => p
+      .filter(s => s.field !== stripped)
+      .map(s => {
+        const m = s.field.match(/^__agg_(\d+)$/)
+        if (!m) return s
+        const idx = Number(m[1])
+        return idx > i ? { ...s, field: aggregateKey(idx - 1) } : s
+      }))
+  }
+
   // ── Save ─────────────────────────────────────────────
 
-  const canSave = !!name.trim() && columns.length > 0 && !saving
+  // Save gating: ungrouped → at least one column. Grouped → at least one
+  // groupBy AND one aggregate (otherwise the result is empty).
+  const canSave = !!name.trim() && !saving && (
+    isGrouped
+      ? (groupBy.length > 0 && aggregates.length > 0)
+      : columns.length > 0
+  )
 
   const save = async () => {
     if (!canSave || !user) return
@@ -116,7 +176,10 @@ export default function CustomReportBuilder({ reportId, onCancel, onSaved }: {
       source,
       visibility,
       store_id: visibility === 'store' ? (storeId || null) : null,
-      config: { columns, filters, sort } as ReportConfig,
+      config: {
+        columns, filters, sort,
+        ...(isGrouped ? { groupBy, aggregates } : {}),
+      } as ReportConfig,
       updated_at: new Date().toISOString(),
     }
     let res: any
@@ -162,7 +225,7 @@ export default function CustomReportBuilder({ reportId, onCancel, onSaved }: {
         {/* Left rail: source */}
         <div className="card" style={{ position: 'sticky', top: 12, alignSelf: 'flex-start' }}>
           <div className="card-title" style={{ marginBottom: 8 }}>Data source</div>
-          <select value={source} onChange={e => { setSource(e.target.value); setColumns([]); setFilters([]); setSort([]) }} style={{ width: '100%' }}>
+          <select value={source} onChange={e => { setSource(e.target.value); setColumns([]); setFilters([]); setSort([]); setGroupBy([]); setAggregates([]) }} style={{ width: '100%' }}>
             {Object.entries(SOURCES).map(([k, s]) => (
               <option key={k} value={k}>{s.label}</option>
             ))}
@@ -176,29 +239,73 @@ export default function CustomReportBuilder({ reportId, onCancel, onSaved }: {
 
         {/* Main panel */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {/* Columns */}
+          {/* Columns — hidden in grouping mode, output cols are derived. */}
+          {!isGrouped && (
+            <div className="card">
+              <div className="card-title">Columns</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                {columns.length === 0 && <div style={{ fontSize: 12, color: 'var(--mist)' }}>No columns yet — add some below.</div>}
+                {columns.map((k, i) => {
+                  const cd = colByKey.get(k)
+                  return (
+                    <span key={k} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      background: 'var(--green-pale)', color: 'var(--green-dark)',
+                      padding: '4px 8px', borderRadius: 6, fontSize: 12, fontWeight: 700,
+                    }}>
+                      {i > 0 && <button onClick={() => moveColumn(i, i - 1)} title="Move left" style={chipBtn}>‹</button>}
+                      {cd?.column.label || k}
+                      {i < columns.length - 1 && <button onClick={() => moveColumn(i, i + 1)} title="Move right" style={chipBtn}>›</button>}
+                      <button onClick={() => removeColumn(k)} title="Remove" style={chipBtn}>×</button>
+                    </span>
+                  )
+                })}
+              </div>
+              <ColumnPicker catalog={colCatalog} selected={columns} onAdd={addColumn} />
+            </div>
+          )}
+
+          {/* Group by */}
           <div className="card">
-            <div className="card-title">Columns</div>
+            <div className="card-title">Group by</div>
+            <div style={{ fontSize: 11, color: 'var(--mist)', marginBottom: 8 }}>
+              Roll input rows up by these columns. When set, output is one row per group with the aggregates below.
+            </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-              {columns.length === 0 && <div style={{ fontSize: 12, color: 'var(--mist)' }}>No columns yet — add some below.</div>}
-              {columns.map((k, i) => {
+              {groupBy.length === 0 && <div style={{ fontSize: 12, color: 'var(--mist)' }}>Not grouped — report returns raw rows.</div>}
+              {groupBy.map(k => {
                 const cd = colByKey.get(k)
                 return (
                   <span key={k} style={{
                     display: 'inline-flex', alignItems: 'center', gap: 4,
-                    background: 'var(--green-pale)', color: 'var(--green-dark)',
+                    background: 'var(--amber-pale)', color: 'var(--amber)',
                     padding: '4px 8px', borderRadius: 6, fontSize: 12, fontWeight: 700,
                   }}>
-                    {i > 0 && <button onClick={() => moveColumn(i, i - 1)} title="Move left" style={chipBtn}>‹</button>}
                     {cd?.column.label || k}
-                    {i < columns.length - 1 && <button onClick={() => moveColumn(i, i + 1)} title="Move right" style={chipBtn}>›</button>}
-                    <button onClick={() => removeColumn(k)} title="Remove" style={chipBtn}>×</button>
+                    <button onClick={() => removeGroupBy(k)} title="Remove" style={chipBtn}>×</button>
                   </span>
                 )
               })}
             </div>
-            <ColumnPicker catalog={colCatalog} selected={columns} onAdd={addColumn} />
+            <ColumnPicker catalog={colCatalog} selected={groupBy} onAdd={addGroupBy} buttonLabel="+ Add group" />
           </div>
+
+          {/* Aggregations — only meaningful when grouped */}
+          {isGrouped && (
+            <div className="card">
+              <div className="card-title">Aggregations</div>
+              {aggregates.length === 0 && <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 8 }}>Add at least one aggregate (Count / Sum / Avg / Min / Max).</div>}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {aggregates.map((a, i) => (
+                  <AggregateRow key={i} agg={a} catalog={colCatalog}
+                    onChange={patch => updateAggregate(i, patch)}
+                    onRemove={() => removeAggregate(i)}
+                  />
+                ))}
+              </div>
+              <button onClick={addAggregate} className="btn-outline btn-sm" style={{ marginTop: 8 }}>+ Add aggregate</button>
+            </div>
+          )}
 
           {/* Filters */}
           <div className="card">
@@ -224,8 +331,8 @@ export default function CustomReportBuilder({ reportId, onCancel, onSaved }: {
               {sort.map((s, i) => (
                 <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   <select value={s.field} onChange={e => updateSort(i, { field: e.target.value })} style={{ flex: 1, fontSize: 13 }}>
-                    {colCatalog.map(c => (
-                      <option key={c.column.key} value={c.column.key}>{c.groupLabel} → {c.column.label}</option>
+                    {sortOptions.map(o => (
+                      <option key={o.key} value={o.key}>{o.label}</option>
                     ))}
                   </select>
                   <select value={s.direction} onChange={e => updateSort(i, { direction: e.target.value as 'asc' | 'desc' })} style={{ fontSize: 13 }}>
@@ -279,17 +386,18 @@ const chipBtn: React.CSSProperties = {
   cursor: 'pointer', fontSize: 14, padding: '0 2px', lineHeight: 1, fontFamily: 'inherit',
 }
 
-function ColumnPicker({ catalog, selected, onAdd }: {
+function ColumnPicker({ catalog, selected, onAdd, buttonLabel }: {
   catalog: { groupLabel: string; column: ColumnDef }[]
   selected: string[]
   onAdd: (k: string) => void
+  buttonLabel?: string
 }) {
   const [open, setOpen] = useState(false)
   const remaining = catalog.filter(c => !selected.includes(c.column.key))
   if (remaining.length === 0) return null
 
   if (!open) {
-    return <button onClick={() => setOpen(true)} className="btn-outline btn-sm">+ Add column</button>
+    return <button onClick={() => setOpen(true)} className="btn-outline btn-sm">{buttonLabel || '+ Add column'}</button>
   }
 
   // Group remaining by groupLabel
@@ -321,6 +429,45 @@ function ColumnPicker({ catalog, selected, onAdd }: {
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+function AggregateRow({ agg, catalog, onChange, onRemove }: {
+  agg: AggregateColumn
+  catalog: { groupLabel: string; column: ColumnDef }[]
+  onChange: (patch: Partial<AggregateColumn>) => void
+  onRemove: () => void
+}) {
+  // count operates on rows, no field needed. Other ops always need a field.
+  const needsField = agg.op !== 'count'
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+      <select value={agg.op}
+        onChange={e => onChange({ op: e.target.value as AggregateOp, field: e.target.value === 'count' ? undefined : (agg.field || catalog[0]?.column.key) })}
+        style={{ fontSize: 13 }}>
+        {(Object.keys(AGG_LABELS) as AggregateOp[]).map(o => (
+          <option key={o} value={o}>{AGG_LABELS[o]}</option>
+        ))}
+      </select>
+      {needsField ? (
+        <select value={agg.field || ''}
+          onChange={e => onChange({ field: e.target.value })}
+          style={{ flex: '1 1 200px', fontSize: 13 }}>
+          {!agg.field && <option value="">— pick column —</option>}
+          {catalog.map(c => (
+            <option key={c.column.key} value={c.column.key}>{c.groupLabel} → {c.column.label}</option>
+          ))}
+        </select>
+      ) : (
+        <span style={{ flex: '1 1 200px', fontSize: 12, color: 'var(--mist)' }}>(counts rows in each group)</span>
+      )}
+      <input value={agg.label || ''}
+        onChange={e => onChange({ label: e.target.value || undefined })}
+        placeholder="Label (optional)"
+        style={{ flex: '1 1 140px', fontSize: 13 }}
+      />
+      <button onClick={onRemove} className="btn-danger btn-sm">×</button>
     </div>
   )
 }

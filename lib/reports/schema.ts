@@ -203,9 +203,41 @@ export interface ReportSort {
   direction: 'asc' | 'desc'
 }
 
+export type AggregateOp = 'count' | 'count_distinct' | 'sum' | 'avg' | 'min' | 'max'
+
+export interface AggregateColumn {
+  /** Source column key. Ignored when op='count' (which counts rows). */
+  field?: string
+  op: AggregateOp
+  /** Optional display label override. Auto-generated if missing. */
+  label?: string
+}
+
+export const AGG_LABELS: Record<AggregateOp, string> = {
+  count: 'Count', count_distinct: 'Count distinct',
+  sum: 'Sum', avg: 'Avg', min: 'Min', max: 'Max',
+}
+
+/** Synthetic key the runner emits for the i-th aggregate column. */
+export function aggregateKey(i: number): string {
+  return `__agg_${i}`
+}
+
+/** Default human label like "Count" / "Sum of amount". */
+export function aggregateLabel(agg: AggregateColumn, fieldLabel?: string): string {
+  if (agg.label) return agg.label
+  if (agg.op === 'count') return 'Count'
+  return `${AGG_LABELS[agg.op]} of ${fieldLabel || agg.field || ''}`.trim()
+}
+
 export interface ReportConfig {
   columns: string[]               // column keys from the source/related set
   filters: ReportFilter[]
   sort: ReportSort[]
   limit?: number                  // capped at 10000 by the runner
+  /** When non-empty, the runner groups input rows by these keys and emits
+   *  one row per group with the aggregate columns. `columns` is ignored
+   *  in grouping mode — output cols are `[...groupBy, aggregate_keys]`. */
+  groupBy?: string[]
+  aggregates?: AggregateColumn[]
 }
