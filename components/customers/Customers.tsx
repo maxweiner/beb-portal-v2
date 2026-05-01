@@ -23,9 +23,10 @@ import TagsAndEngagement from './TagsAndEngagement'
 import MarketingExport from './MarketingExport'
 import WinBack from './WinBack'
 import SourceAttribution from './SourceAttribution'
+import Lookalike from './Lookalike'
 import type { ExportFilters } from '@/lib/customers/exportFilters'
 
-type Tab = 'list' | 'import' | 'dedup' | 'export' | 'winback' | 'attribution' | 'tags' | 'trash'
+type Tab = 'list' | 'import' | 'dedup' | 'export' | 'winback' | 'lookalike' | 'attribution' | 'tags' | 'trash'
 
 export default function Customers() {
   const { user, stores } = useApp()
@@ -112,13 +113,14 @@ export default function Customers() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
-        {(['list', 'import', 'dedup', 'export', 'winback', 'attribution', 'tags', 'trash'] as const).map(t => {
+        {(['list', 'import', 'dedup', 'export', 'winback', 'lookalike', 'attribution', 'tags', 'trash'] as const).map(t => {
           const active = tab === t
           const label = t === 'list' ? 'All Customers'
                       : t === 'import' ? '📥 Import'
                       : t === 'dedup' ? '⚖️ Dedup Review'
                       : t === 'export' ? '📨 Marketing Export'
                       : t === 'winback' ? '🎯 Win-Back'
+                      : t === 'lookalike' ? '👯 Lookalikes'
                       : t === 'attribution' ? '📊 Source Attribution'
                       : t === 'tags' ? '🏷️ Tags & Engagement'
                       : '🗑️ Trash'
@@ -268,6 +270,10 @@ export default function Customers() {
             if (filters.storeId && filters.storeId !== storeId) setStoreId(filters.storeId)
             setTab('export')
           }} />
+      )}
+
+      {tab === 'lookalike' && (
+        <Lookalike stores={stores} storeId={storeId} setStoreId={setStoreId} />
       )}
 
       {tab === 'attribution' && (
