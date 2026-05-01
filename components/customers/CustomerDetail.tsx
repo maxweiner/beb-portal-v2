@@ -6,10 +6,13 @@
 // narrower API path; admin always sees full edit here.
 
 import { useEffect, useState } from 'react'
+import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { Customer, CustomerTagDefinition, HowDidYouHear } from '@/lib/customers/types'
 import { HOW_DID_YOU_HEAR_LABELS, ENGAGEMENT_TIER_LABELS, ENGAGEMENT_TIER_COLORS } from '@/lib/customers/types'
 import { fmtPhone, fmtDateLong } from '@/lib/customers/format'
+import { logCustomerEvent } from '@/lib/customers/events'
+import CustomerTimeline from './CustomerTimeline'
 
 const HOW_DID_YOU_HEAR_OPTIONS: HowDidYouHear[] = [
   'postcard', 'newspaper', 'word_of_mouth', 'walk_in',
@@ -23,6 +26,7 @@ export default function CustomerDetail({ customer, tagDefs, storeName, onClose, 
   onClose: () => void
   onChanged: () => void
 }) {
+  const { user } = useApp()
   // Local edit copy; saved on Save click.
   const [draft, setDraft] = useState<Customer>(customer)
   const [tags, setTags] = useState<string[]>([])
@@ -69,6 +73,30 @@ export default function CustomerDetail({ customer, tagDefs, storeName, onClose, 
     const { error: err } = await supabase.from('customers').update(payload).eq('id', customer.id)
     setBusy(false)
     if (err) { setError(err.message); return }
+    // Log timeline events. Detect a notes-add (was empty, now has
+    // content) so the timeline shows it explicitly; treat any other
+    // diff as a generic "edited" entry.
+    const notesChanged = (customer.notes || '') !== (payload.notes || '')
+    const notesAdded = !customer.notes && !!payload.notes
+    if (notesAdded) {
+      logCustomerEvent({
+        customerId: customer.id, type: 'note_added',
+        actorId: user?.id ?? null,
+        description: typeof payload.notes === 'string' ? payload.notes.slice(0, 200) : null,
+      })
+    } else if (notesChanged) {
+      logCustomerEvent({
+        customerId: customer.id, type: 'edited',
+        actorId: user?.id ?? null,
+        description: 'Notes updated',
+      })
+    } else {
+      logCustomerEvent({
+        customerId: customer.id, type: 'edited',
+        actorId: user?.id ?? null,
+        description: 'Profile fields updated',
+      })
+    }
     setSavedAt(Date.now())
     setTimeout(() => setSavedAt(null), 1800)
   }
@@ -96,7 +124,14 @@ export default function CustomerDetail({ customer, tagDefs, storeName, onClose, 
       setError(`Tag ${has ? 'remove' : 'add'} failed: ${err.message}`)
       // Rollback
       setTags(prev => has ? [...prev, tag] : prev.filter(t => t !== tag))
+      return
     }
+    logCustomerEvent({
+      customerId: customer.id,
+      type: has ? 'tag_removed' : 'tag_added',
+      actorId: user?.id ?? null,
+      meta: { tag },
+    })
   }
 
   const tier = customer.engagement_tier
@@ -259,10 +294,8 @@ export default function CustomerDetail({ customer, tagDefs, storeName, onClose, 
             </div>
           </div>
 
-          {/* Mailing history placeholder */}
-          <div className="card" style={{ padding: 14, color: 'var(--mist)', fontSize: 12, fontStyle: 'italic' }}>
-            Mailing history + appointment timeline appear here in Phase 5.
-          </div>
+          {/* Timeline (Phase 5): events + mailings + appointments */}
+          <CustomerTimeline customer={customer} />
 
           {/* Footer actions */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, paddingTop: 8, borderTop: '1px solid var(--pearl)' }}>

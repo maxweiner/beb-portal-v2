@@ -9,9 +9,11 @@
 // Phase 2 just inserts; admin RLS gates write access.
 
 import { useState } from 'react'
+import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { HowDidYouHear } from '@/lib/customers/types'
 import { HOW_DID_YOU_HEAR_LABELS } from '@/lib/customers/types'
+import { logCustomerEvent } from '@/lib/customers/events'
 
 const HOW_DID_YOU_HEAR_OPTIONS: HowDidYouHear[] = [
   'postcard', 'newspaper', 'word_of_mouth', 'walk_in',
@@ -24,6 +26,7 @@ export default function NewCustomerForm({ storeId, storeName, onClose, onCreated
   onClose: () => void
   onCreated: () => void
 }) {
+  const { user } = useApp()
   const [first, setFirst] = useState('')
   const [last, setLast] = useState('')
   const [addr1, setAddr1] = useState('')
@@ -65,9 +68,17 @@ export default function NewCustomerForm({ storeId, storeName, onClose, onCreated
       notes: notes.trim() || null,
       do_not_contact: dnc,
     }
-    const { error: err } = await supabase.from('customers').insert(payload)
+    const { data: row, error: err } = await supabase.from('customers')
+      .insert(payload).select('id').single()
     setBusy(false)
     if (err) { setError(err.message); return }
+    if (row?.id) {
+      logCustomerEvent({
+        customerId: row.id, type: 'created',
+        actorId: user?.id ?? null,
+        description: 'Manually added via New Customer form',
+      })
+    }
     onCreated()
   }
 
