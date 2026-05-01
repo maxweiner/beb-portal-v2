@@ -22,24 +22,33 @@ const HOW_HEARD_OPTIONS: HowDidYouHear[] = [
   'online', 'referral', 'other',
 ]
 
-export default function MarketingExport({ stores, storeId, setStoreId }: {
+export default function MarketingExport({ stores, storeId, setStoreId, initialFilters }: {
   stores: Store[]
   storeId: string
   setStoreId: (id: string) => void
+  /** When set (e.g., from a Win-Back "Customize" click), seeds the
+   *  filter form with these values on first mount. */
+  initialFilters?: ExportFilters | null
 }) {
   // Filter state
-  const [tiers, setTiers] = useState<EngagementTier[]>([])
-  const [howHeardEnum, setHowHeardEnum] = useState<HowDidYouHear[]>([])
-  const [howHeardLegacy, setHowHeardLegacy] = useState<string[]>([])
-  const [tagsSel, setTagsSel] = useState<string[]>([])
-  const [tagsLogic, setTagsLogic] = useState<'and' | 'or'>('or')
-  const [lifetimeMin, setLifetimeMin] = useState('')
-  const [lifetimeMax, setLifetimeMax] = useState('')
-  const [firstStart, setFirstStart] = useState('')
-  const [firstEnd, setFirstEnd] = useState('')
-  const [lastContactStart, setLastContactStart] = useState('')
-  const [lastContactEnd, setLastContactEnd] = useState('')
-  const [daysSinceLastMailing, setDaysSinceLastMailing] = useState('')
+  const [tiers, setTiers] = useState<EngagementTier[]>(initialFilters?.tiers ?? [])
+  const [howHeardEnum, setHowHeardEnum] = useState<HowDidYouHear[]>(initialFilters?.howHeardEnum ?? [])
+  const [howHeardLegacy, setHowHeardLegacy] = useState<string[]>(initialFilters?.howHeardLegacy ?? [])
+  const [tagsSel, setTagsSel] = useState<string[]>(initialFilters?.tags ?? [])
+  const [tagsLogic, setTagsLogic] = useState<'and' | 'or'>(initialFilters?.tagsLogic ?? 'or')
+  const [lifetimeMin, setLifetimeMin] = useState(initialFilters?.lifetimeApptMin != null ? String(initialFilters.lifetimeApptMin) : '')
+  const [lifetimeMax, setLifetimeMax] = useState(initialFilters?.lifetimeApptMax != null ? String(initialFilters.lifetimeApptMax) : '')
+  const [firstStart, setFirstStart] = useState(initialFilters?.firstApptStart ?? '')
+  const [firstEnd, setFirstEnd] = useState(initialFilters?.firstApptEnd ?? '')
+  const [lastContactStart, setLastContactStart] = useState(initialFilters?.lastContactStart ?? '')
+  const [lastContactEnd, setLastContactEnd] = useState(initialFilters?.lastContactEnd ?? '')
+  const [daysSinceLastMailing, setDaysSinceLastMailing] = useState(initialFilters?.daysSinceLastMailing != null ? String(initialFilters.daysSinceLastMailing) : '')
+
+  // Save-as-segment form state
+  const [savingSegment, setSavingSegment] = useState(false)
+  const [segmentName, setSegmentName] = useState('')
+  const [segmentDesc, setSegmentDesc] = useState('')
+  const [savedToast, setSavedToast] = useState<string | null>(null)
 
   // Tag definitions for the chip picker
   const [tagDefs, setTagDefs] = useState<CustomerTagDefinition[]>([])
@@ -125,6 +134,19 @@ export default function MarketingExport({ stores, storeId, setStoreId }: {
     }, 400)
     return () => { if (debounce.current) clearTimeout(debounce.current) }
   }, [filters, storeId])
+
+  async function saveAsSegment() {
+    const name = segmentName.trim()
+    if (!name) { setError('Segment name required.'); return }
+    setError(null)
+    const { error: err } = await supabase.from('customer_segments').insert({
+      name, description: segmentDesc.trim() || null, filters,
+    })
+    if (err) { setError(`Save failed: ${err.message}`); return }
+    setSavingSegment(false); setSegmentName(''); setSegmentDesc('')
+    setSavedToast(`✓ Saved "${name}"`)
+    setTimeout(() => setSavedToast(null), 2400)
+  }
 
   async function exportNow() {
     if (count == null || count === 0) return
@@ -291,18 +313,54 @@ export default function MarketingExport({ stores, storeId, setStoreId }: {
             <div style={{ marginTop: 6, fontSize: 12, color: '#7f1d1d' }}>{error}</div>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           {lastExport && (
             <span style={{ fontSize: 12, color: 'var(--green-dark)', fontWeight: 700 }}>
               ✓ Last export: {lastExport.count} at {lastExport.at}
             </span>
           )}
+          {savedToast && (
+            <span style={{ fontSize: 12, color: 'var(--green-dark)', fontWeight: 700 }}>{savedToast}</span>
+          )}
+          <button className="btn-outline btn-sm" onClick={() => setSavingSegment(s => !s)}
+            disabled={count == null || count === 0}
+            title="Save these filters as a re-runnable segment in Win-Back">
+            💾 Save as segment
+          </button>
           <button className="btn-primary btn-sm" onClick={exportNow}
             disabled={exporting || loading || count == null || count === 0}>
             {exporting ? 'Exporting…' : '⬇️ Export CSV'}
           </button>
         </div>
       </div>
+
+      {savingSegment && (
+        <div className="card" style={{ padding: 14, background: 'var(--cream2)' }}>
+          <div className="card-title">💾 Save current filters as segment</div>
+          <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 10 }}>
+            Saved segments appear in the <strong>🎯 Win-Back</strong> tab and can be re-run as one-click exports.
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10, alignItems: 'end' }}>
+            <div className="field" style={{ margin: 0 }}>
+              <label className="fl">Name (required)</label>
+              <input value={segmentName} onChange={e => setSegmentName(e.target.value)}
+                placeholder='e.g., "VIPs near Phoenix not mailed 6mo"' />
+            </div>
+            <div className="field" style={{ margin: 0 }}>
+              <label className="fl">Description (optional)</label>
+              <input value={segmentDesc} onChange={e => setSegmentDesc(e.target.value)} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <button className="btn-primary btn-sm" onClick={saveAsSegment} disabled={!segmentName.trim()}>
+              Save segment
+            </button>
+            <button className="btn-outline btn-sm" onClick={() => { setSavingSegment(false); setSegmentName(''); setSegmentDesc('') }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
