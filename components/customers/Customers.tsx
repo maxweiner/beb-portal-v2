@@ -21,8 +21,10 @@ import ImportTool from './ImportTool'
 import DedupReview from './DedupReview'
 import TagsAndEngagement from './TagsAndEngagement'
 import MarketingExport from './MarketingExport'
+import WinBack from './WinBack'
+import type { ExportFilters } from '@/lib/customers/exportFilters'
 
-type Tab = 'list' | 'import' | 'dedup' | 'export' | 'tags' | 'trash'
+type Tab = 'list' | 'import' | 'dedup' | 'export' | 'winback' | 'tags' | 'trash'
 
 export default function Customers() {
   const { user, stores } = useApp()
@@ -34,6 +36,9 @@ export default function Customers() {
   const [tierFilter, setTierFilter] = useState<EngagementTier | ''>('')
   const [showNew, setShowNew] = useState(false)
   const [selected, setSelected] = useState<Customer | null>(null)
+  // Win-Back's "Customize" action loads its filters into Marketing
+  // Export and switches to that tab.
+  const [exportSeed, setExportSeed] = useState<ExportFilters | null>(null)
 
   const [customers, setCustomers] = useState<Customer[]>([])
   const [tagDefs, setTagDefs] = useState<CustomerTagDefinition[]>([])
@@ -106,12 +111,13 @@ export default function Customers() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
-        {(['list', 'import', 'dedup', 'export', 'tags', 'trash'] as const).map(t => {
+        {(['list', 'import', 'dedup', 'export', 'winback', 'tags', 'trash'] as const).map(t => {
           const active = tab === t
           const label = t === 'list' ? 'All Customers'
                       : t === 'import' ? '📥 Import'
                       : t === 'dedup' ? '⚖️ Dedup Review'
                       : t === 'export' ? '📨 Marketing Export'
+                      : t === 'winback' ? '🎯 Win-Back'
                       : t === 'tags' ? '🏷️ Tags & Engagement'
                       : '🗑️ Trash'
           return (
@@ -248,7 +254,18 @@ export default function Customers() {
       )}
 
       {tab === 'export' && (
-        <MarketingExport stores={stores} storeId={storeId} setStoreId={setStoreId} />
+        <MarketingExport key={exportSeed ? JSON.stringify(exportSeed) : 'fresh'}
+          stores={stores} storeId={storeId} setStoreId={setStoreId}
+          initialFilters={exportSeed} />
+      )}
+
+      {tab === 'winback' && (
+        <WinBack stores={stores} storeId={storeId} setStoreId={setStoreId}
+          onCustomize={(filters) => {
+            setExportSeed(filters)
+            if (filters.storeId && filters.storeId !== storeId) setStoreId(filters.storeId)
+            setTab('export')
+          }} />
       )}
 
       {tab === 'tags' && (
