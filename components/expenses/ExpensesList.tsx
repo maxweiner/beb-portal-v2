@@ -35,9 +35,10 @@ const STATUS_FILTERS: { id: 'all' | ExpenseReportStatus; label: string }[] = [
 
 export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) => void }) {
   const { user, events } = useApp()
-  // Per policy: every user (including regular admins) sees only their own
-  // reports. Only superadmins get the "see everyone" dropdown filter.
-  const isSuperAdmin = user?.role === 'superadmin'
+  // Regular admins still see only their own reports. Superadmins and
+  // accounting users get the cross-user view + "User" dropdown filter
+  // — accounting needs all reports for AP processing, RLS now permits it.
+  const canSeeAll = user?.role === 'superadmin' || user?.role === 'accounting'
   const isNarrow = useIsNarrow()
 
   const [rows, setRows] = useState<ReportRow[]>([])
@@ -102,7 +103,7 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
   const filtered = useMemo(() => {
     return rows.filter(r => {
       if (statusFilter !== 'all' && r.status !== statusFilter) return false
-      if (isSuperAdmin) {
+      if (canSeeAll) {
         // Superadmin: respect the dropdown ('all' shows everyone).
         if (userFilter !== 'all' && r.user_id !== userFilter) return false
       } else {
@@ -111,7 +112,7 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
       }
       return true
     })
-  }, [rows, statusFilter, userFilter, isSuperAdmin, user?.id])
+  }, [rows, statusFilter, userFilter, canSeeAll, user?.id])
 
   // For the new-report picker: events the user can see, minus events
   // that already have a report for this user.
@@ -156,7 +157,7 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
       <div className="card" style={{ marginBottom: 12, padding: 12 }}>
         <div style={{
           display: 'grid',
-          gridTemplateColumns: isSuperAdmin ? 'minmax(180px,1fr) minmax(200px,1fr)' : 'minmax(180px,1fr)',
+          gridTemplateColumns: canSeeAll ? 'minmax(180px,1fr) minmax(200px,1fr)' : 'minmax(180px,1fr)',
           gap: 10,
         }}>
           <div>
@@ -165,7 +166,7 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
               {STATUS_FILTERS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
           </div>
-          {isSuperAdmin && (
+          {canSeeAll && (
             <div>
               <label className="fl">User</label>
               <select value={userFilter} onChange={e => setUserFilter(e.target.value)} style={{ width: '100%' }}>
@@ -209,7 +210,7 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--mist)' }}>
                       {r.event_start ? formatDateLong(r.event_start) : '—'}
-                      {isSuperAdmin && r.user_name ? ` · ${r.user_name}` : ''}
+                      {canSeeAll && r.user_name ? ` · ${r.user_name}` : ''}
                     </div>
                   </div>
                   <span style={{
@@ -234,16 +235,16 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: 'var(--cream2)', borderBottom: '2px solid var(--pearl)' }}>
-                {['Event', 'Date', isSuperAdmin ? 'User' : '', 'Status', 'Total', ''].filter(Boolean).map(h => (
+                {['Event', 'Date', canSeeAll ? 'User' : '', 'Status', 'Total', ''].filter(Boolean).map(h => (
                   <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 800, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {!loaded ? (
-                <tr><td colSpan={isSuperAdmin ? 6 : 5} style={{ padding: 30, textAlign: 'center', color: 'var(--mist)' }}>Loading…</td></tr>
+                <tr><td colSpan={canSeeAll ? 6 : 5} style={{ padding: 30, textAlign: 'center', color: 'var(--mist)' }}>Loading…</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={isSuperAdmin ? 6 : 5} style={{ padding: 30, textAlign: 'center', color: 'var(--mist)' }}>
+                <tr><td colSpan={canSeeAll ? 6 : 5} style={{ padding: 30, textAlign: 'center', color: 'var(--mist)' }}>
                   {rows.length === 0 ? 'No reports yet — create one with "+ New Report".' : 'No reports match the current filters.'}
                 </td></tr>
               ) : filtered.map(r => {
@@ -258,7 +259,7 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
                     <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: 'var(--ash)' }}>
                       {r.event_start ? formatDateLong(r.event_start) : '—'}
                     </td>
-                    {isSuperAdmin && <td style={{ padding: '10px 12px', color: 'var(--ash)' }}>{r.user_name}</td>}
+                    {canSeeAll && <td style={{ padding: '10px 12px', color: 'var(--ash)' }}>{r.user_name}</td>}
                     <td style={{ padding: '10px 12px' }}>
                       <span style={{
                         background: sc.bg, color: sc.fg,
