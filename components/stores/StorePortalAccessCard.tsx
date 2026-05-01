@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { supabase } from '@/lib/supabase'
+import { makeSquareLogoDataUrl } from '@/lib/qr/squareLogo'
 
 interface StorePortalToken {
   id: string
@@ -19,6 +20,9 @@ interface StorePortalToken {
 export default function StorePortalAccessCard({ storeId }: { storeId: string }) {
   const [portalToken, setPortalToken] = useState<StorePortalToken | null>(null)
   const [storeImageUrl, setStoreImageUrl] = useState<string | null>(null)
+  const [storeName, setStoreName] = useState<string>('')
+  const [storeColor, setStoreColor] = useState<string>('#1D6B44')
+  const [squareLogo, setSquareLogo] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
@@ -29,11 +33,14 @@ export default function StorePortalAccessCard({ storeId }: { storeId: string }) 
         .eq('store_id', storeId)
         .eq('active', true)
         .maybeSingle(),
-      supabase.from('stores').select('store_image_url').eq('id', storeId).maybeSingle(),
+      supabase.from('stores').select('store_image_url, name, color_primary').eq('id', storeId).maybeSingle(),
     ]).then(([tokRes, storeRes]) => {
       if (cancelled) return
       setPortalToken((tokRes.data as StorePortalToken | null) || null)
-      setStoreImageUrl((storeRes.data as { store_image_url?: string } | null)?.store_image_url || null)
+      const s = storeRes.data as { store_image_url?: string; name?: string; color_primary?: string } | null
+      setStoreImageUrl(s?.store_image_url || null)
+      setStoreName(s?.name || '')
+      setStoreColor(s?.color_primary || '#1D6B44')
       setLoaded(true)
     })
     return () => { cancelled = true }
@@ -55,6 +62,18 @@ export default function StorePortalAccessCard({ storeId }: { storeId: string }) 
     if (error) { alert('Error: ' + error.message); return }
     setPortalToken(data)
   }
+
+  // Build a SQUARE QR-center image: letterbox the (possibly rectangular)
+  // store logo on white, or fall back to the store's initials in its
+  // primary color when no logo exists.
+  useEffect(() => {
+    if (!loaded || !storeName) { setSquareLogo(null); return }
+    let cancelled = false
+    makeSquareLogoDataUrl({
+      logoUrl: storeImageUrl, storeName, color: storeColor, size: 256,
+    }).then(url => { if (!cancelled) setSquareLogo(url) })
+    return () => { cancelled = true }
+  }, [storeImageUrl, storeName, storeColor, loaded])
 
   // Append ?add=1 so the QR / link lands directly on the Add Appointment
   // modal — staff can still get to the appointments list by removing the
@@ -85,8 +104,8 @@ export default function StorePortalAccessCard({ storeId }: { storeId: string }) 
               size={88}
               includeMargin={false}
               level="H"
-              imageSettings={storeImageUrl ? {
-                src: storeImageUrl,
+              imageSettings={squareLogo ? {
+                src: squareLogo,
                 height: 88 * 0.22,
                 width: 88 * 0.22,
                 excavate: true,

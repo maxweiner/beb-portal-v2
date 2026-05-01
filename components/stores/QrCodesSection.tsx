@@ -5,6 +5,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import { fileSlug, qrShortUrl, bookingBaseUrl } from '@/lib/qr/code'
+import { makeSquareLogoDataUrl } from '@/lib/qr/squareLogo'
 
 interface QrRow {
   id: string
@@ -28,6 +29,7 @@ interface StoreLite {
   id: string
   name: string
   store_image_url?: string | null
+  color_primary?: string | null
 }
 
 const DEFAULT_HEAR_ABOUT = [
@@ -102,7 +104,7 @@ export default function QrCodesSection({
         .eq('store_id', storeId)
         .maybeSingle(),
       supabase.from('stores')
-        .select('id, name, store_image_url')
+        .select('id, name, store_image_url, color_primary')
         .eq('active', true)
         .order('name'),
     ])
@@ -518,10 +520,22 @@ function QrCard({
     ? allStores.find(s => s.id === qr.store_id)
     : null
   const storeName = linkedStore?.name || null
-  // Logo to overlay in the QR center. NULL → no overlay, just a plain QR.
-  // Stored as a data URL on stores.store_image_url so it's safe to embed
-  // in the SVG/canvas downloads without CORS taint.
-  const logoUrl = linkedStore?.store_image_url || null
+  // Logo to overlay in the QR center. We always render a SQUARE
+  // image — either letterboxing the (possibly rectangular) store
+  // logo on a white background, or rendering the store's initials
+  // on the store's primary color when no logo exists. Cached in
+  // the helper so the redraw is cheap on re-render.
+  const sourceLogo = linkedStore?.store_image_url || null
+  const storeColor = linkedStore?.color_primary || '#1D6B44'
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
+  useEffect(() => {
+    if (!storeName) { setLogoUrl(null); return }
+    let cancelled = false
+    makeSquareLogoDataUrl({
+      logoUrl: sourceLogo, storeName, color: storeColor, size: 256,
+    }).then(url => { if (!cancelled) setLogoUrl(url) })
+    return () => { cancelled = true }
+  }, [sourceLogo, storeName, storeColor])
 
   // ---- helpers ----
   // Wrap label into lines that fit a given pixel width with a measuring ctx.
