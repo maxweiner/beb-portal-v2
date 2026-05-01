@@ -212,12 +212,12 @@ export async function POST(req: Request) {
 
   // ── Commit mode ────────────────────────────────────────────
   // Insert/update one row at a time. Slow for huge imports but
-  // simpler + safer than batching with CTEs. Tracks per-row outcome.
+  // simpler + safer than batching with CTEs. Tracks per-row outcome
+  // and emits a customer_events row per affected customer.
   for (const a of actions) {
     if (a.verdict.kind === 'auto_merge') {
       // Merge: only overwrite a target column when the incoming is NOT NULL.
       const updates: Record<string, unknown> = {
-        // address + contact
         address_line_1: a.row.address_line_1 ?? undefined,
         address_line_2: a.row.address_line_2 ?? undefined,
         city: a.row.city ?? undefined,
@@ -231,11 +231,14 @@ export async function POST(req: Request) {
         last_contact_date: a.row.last_contact_date ?? undefined,
         do_not_contact: a.row.do_not_contact || undefined,
       }
-      // Drop undefined keys so PG doesn't try to set them.
       const cleaned: Record<string, unknown> = {}
       for (const k of Object.keys(updates)) if (updates[k] !== undefined) cleaned[k] = updates[k]
       if (Object.keys(cleaned).length > 0) {
         await sb.from('customers').update(cleaned).eq('id', a.verdict.existing.id)
+        await sb.from('customer_events').insert({
+          customer_id: a.verdict.existing.id, event_type: 'merged', actor_id: me.id,
+          description: `Merged from CSV import: ${a.verdict.reasons.join(', ')}`,
+        })
       }
     } else if (a.verdict.kind === 'review') {
       await sb.from('customer_dedup_review_queue').insert({
@@ -246,7 +249,7 @@ export async function POST(req: Request) {
         source: 'import',
       })
     } else {
-      await sb.from('customers').insert({
+      const { data: created } = await sb.from('customers').insert({
         store_id: storeId,
         first_name: a.row.first_name,
         last_name: a.row.last_name,
@@ -262,7 +265,13 @@ export async function POST(req: Request) {
         notes: a.row.notes,
         last_contact_date: a.row.last_contact_date,
         do_not_contact: a.row.do_not_contact,
-      })
+      }).select('id').single()
+      if (created?.id) {
+        await sb.from('customer_events').insert({
+          customer_id: created.id, event_type: 'imported', actor_id: me.id,
+          description: 'Created via CSV import',
+        })
+      }
     }
   }
 
