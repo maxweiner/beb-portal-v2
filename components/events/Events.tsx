@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useApp } from '@/lib/context'
+import BuyerCustomerView from '@/components/customers/BuyerCustomerView'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import { isMobileDevice } from '@/lib/mobile'
@@ -1300,7 +1301,22 @@ function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
   onClose: () => void
   fmtDollars: (n: number) => string
 }) {
+  const { user } = useApp()
   const store = stores.find(s => s.id === ev.store_id)
+  // "Customers at this Store" panel: admins always; buyers only when
+  // they're assigned to this event AND today is in the 3-day window.
+  // Spec gates this surface tightly — server RLS ALSO enforces (see
+  // customers_buyer_has_event_access in Phase 1).
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
+  const isAssigned = !!user && Array.isArray(ev.workers) && ev.workers.some((w: any) => w?.id === user.id)
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  let inWindow = false
+  if (ev.start_date) {
+    const start = new Date(ev.start_date + 'T00:00:00')
+    const end = new Date(start); end.setDate(start.getDate() + 2); end.setHours(23, 59, 59, 999)
+    inWindow = today >= start && today <= end
+  }
+  const canSeeCustomers = isAdmin || (isAssigned && inWindow)
   const days = [...(ev.days || [])].sort((a, b) => a.day_number - b.day_number)
   const totalPurchases = days.reduce((s, d) => s + (d.purchases || 0), 0)
   const totalCustomers = days.reduce((s, d) => s + (d.customers || 0), 0)
@@ -1403,6 +1419,21 @@ function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Phase 7: Customers at this Store. Visible to admin always
+              and to buyers only when assigned to this event AND today
+              falls in the 3-day window. RLS double-enforces server-side. */}
+          {canSeeCustomers && store && (
+            <div className="card card-accent" style={{ margin: 0 }}>
+              <div className="card-title">👥 Customers at this Store</div>
+              <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 10 }}>
+                {isAdmin
+                  ? 'Read-only browse with note-append. Full edit lives in the Customers module sidebar entry.'
+                  : `Read-only access for the duration of this event window. You can add notes; record edits stay admin-only.`}
+              </div>
+              <BuyerCustomerView storeId={store.id} storeName={store.name || ''} />
             </div>
           )}
         </div>
