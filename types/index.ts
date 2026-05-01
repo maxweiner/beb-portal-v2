@@ -268,6 +268,9 @@ export interface MarketingCampaign {
   paid_at: string | null
   paid_by: string | null
   accountant_receipt_sent_at: string | null
+  /** Optional campaign-wide note from the marketing team. Surfaces
+   *  on the Proofing section; broader than per-version upload notes. */
+  marketing_team_notes: string | null
   created_at: string
   updated_at: string
 }
