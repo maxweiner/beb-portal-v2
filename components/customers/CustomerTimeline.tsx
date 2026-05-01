@@ -79,30 +79,13 @@ export default function CustomerTimeline({ customer }: { customer: Customer }) {
         supabase.from('customer_mailings').select('id, mailed_at, mailing_type, notes, marketing_campaign_id')
           .eq('customer_id', customer.id).order('mailed_at', { ascending: false }).limit(200),
       ])
-      // Appointments are matched by email/phone snapshot at the same store
-      // (no FK yet — Phase 12 lands the backfill).
-      let aRows: RawAppointment[] = []
-      const filters: string[] = []
-      if (customer.email_normalized) filters.push(`customer_email.ilike.${customer.email_normalized}`)
-      if (customer.phone_normalized) {
-        // Build a comma-separated set of common phone formats so we
-        // catch (xxx) xxx-xxxx, xxx-xxx-xxxx, xxxxxxxxxx variants.
-        const d = customer.phone_normalized
-        const variants = [
-          d, `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`,
-          `${d.slice(0,3)}-${d.slice(3,6)}-${d.slice(6)}`,
-          `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6)}`,
-        ]
-        for (const v of variants) filters.push(`customer_phone.eq.${v}`)
-      }
-      if (filters.length > 0) {
-        const { data: aData } = await supabase.from('appointments')
-          .select('id, appointment_date, appointment_time, status, customer_email, customer_phone')
-          .eq('store_id', customer.store_id)
-          .or(filters.join(','))
-          .order('appointment_date', { ascending: false }).limit(200)
-        aRows = (aData ?? []) as RawAppointment[]
-      }
+      // Appointments via Phase-12 customer_id FK (every appointment
+      // gets linked or auto-creates the customer via the SQL trigger).
+      const { data: aData } = await supabase.from('appointments')
+        .select('id, appointment_date, appointment_time, status, customer_email, customer_phone')
+        .eq('customer_id', customer.id)
+        .order('appointment_date', { ascending: false }).limit(200)
+      const aRows = (aData ?? []) as RawAppointment[]
       if (cancelled) return
       setEvents((eRes.data ?? []) as RawEvent[])
       setMailings((mRes.data ?? []) as RawMailing[])
