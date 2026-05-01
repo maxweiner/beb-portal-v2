@@ -8,7 +8,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
-import { allColumns, type ReportConfig, type ColumnDef } from '@/lib/reports/schema'
+import {
+  allColumns, aggregateKey, aggregateLabel,
+  type ReportConfig, type ColumnDef,
+} from '@/lib/reports/schema'
 import { runReport, displayKey, getValue, type RunResult } from '@/lib/reports/runQuery'
 
 const PAGE_SIZE = 100
@@ -73,19 +76,48 @@ export default function CustomReportRunner({ reportId, onBack, onEdit }: {
     return m
   }, [colCatalog])
 
+  // Output columns + headers. In grouping mode the output is derived
+  // (groupBy keys + aggregate keys) instead of `config.columns`.
+  const isGrouped = !!report && (report.config.groupBy?.length ?? 0) > 0
+  const outputColumns = useMemo<{ key: string; label: string; type?: string }[]>(() => {
+    if (!report) return []
+    if (!isGrouped) {
+      return report.config.columns.map(k => {
+        const cd = colDefByKey.get(k)
+        return { key: k, label: cd?.label || displayKey(k), type: cd?.type }
+      })
+    }
+    const out: { key: string; label: string; type?: string }[] = []
+    for (const gk of report.config.groupBy ?? []) {
+      const cd = colDefByKey.get(gk)
+      out.push({ key: gk, label: cd?.label || displayKey(gk), type: cd?.type })
+    }
+    ;(report.config.aggregates ?? []).forEach((a, i) => {
+      const fl = a.field ? colDefByKey.get(a.field)?.label : undefined
+      out.push({ key: aggregateKey(i), label: aggregateLabel(a, fl), type: 'number' })
+    })
+    return out
+  }, [report, isGrouped, colDefByKey])
+
   const sortedRows = useMemo(() => {
     if (!result) return []
     if (!clientSort) return result.rows
     return [...result.rows].sort((a, b) => {
-      const av = getValue(a, clientSort.field)
-      const bv = getValue(b, clientSort.field)
+      // In grouped mode, output rows have the column keys as own properties
+      // (including __agg_N keys). In ungrouped mode, joined keys still need
+      // getValue() to reach into embedded objects.
+      const av = isGrouped ? a[clientSort.field] : getValue(a, clientSort.field)
+      const bv = isGrouped ? b[clientSort.field] : getValue(b, clientSort.field)
       if (av == null && bv == null) return 0
       if (av == null) return 1
       if (bv == null) return -1
+      if (typeof av === 'number' && typeof bv === 'number') {
+        return clientSort.dir === 'asc' ? av - bv : bv - av
+      }
       const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true })
       return clientSort.dir === 'asc' ? cmp : -cmp
     })
-  }, [result, clientSort])
+  }, [result, clientSort, isGrouped])
 
   const pageRows = sortedRows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
   const totalPages = Math.max(1, Math.ceil(sortedRows.length / PAGE_SIZE))
@@ -102,6 +134,10 @@ export default function CustomReportRunner({ reportId, onBack, onEdit }: {
         }
       } catch { /* fall through */ }
     }
+    if (typeof v === 'number' && type === 'number') {
+      // Up to 2 fractional digits; thousand separators. Integers stay integer.
+      return Number.isInteger(v) ? v.toLocaleString() : v.toLocaleString(undefined, { maximumFractionDigits: 2 })
+    }
     if (Array.isArray(v)) return v.join(', ')
     if (typeof v === 'object') return JSON.stringify(v)
     return String(v)
@@ -109,12 +145,13 @@ export default function CustomReportRunner({ reportId, onBack, onEdit }: {
 
   function downloadCsv() {
     if (!report || !result) return
-    const cols = report.config.columns
-    const headers = cols.map(k => colDefByKey.get(k)?.label || displayKey(k))
     const escape = (s: string) => `"${s.replace(/"/g, '""')}"`
-    const lines = [headers.map(escape).join(',')]
+    const lines = [outputColumns.map(c => escape(c.label)).join(',')]
     for (const row of sortedRows) {
-      lines.push(cols.map(k => escape(fmtCell(getValue(row, k), colDefByKey.get(k)?.type))).join(','))
+      lines.push(outputColumns.map(c => {
+        const v = isGrouped ? row[c.key] : getValue(row, c.key)
+        return escape(fmtCell(v, c.type))
+      }).join(','))
     }
     const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -145,7 +182,10 @@ export default function CustomReportRunner({ reportId, onBack, onEdit }: {
           </button>
           <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)', margin: '4px 0 2px' }}>{report.name}</h1>
           <div style={{ fontSize: 12, color: 'var(--mist)' }}>
-            {report.source} · brand {brand} · {result ? `${result.rows.length} row${result.rows.length === 1 ? '' : 's'} in ${result.durationMs}ms` : '—'}
+            {report.source} · brand {brand}
+            {isGrouped && <> · grouped by {(report.config.groupBy ?? []).map(k => colDefByKey.get(k)?.label || displayKey(k)).join(' + ')}</>}
+            {' · '}
+            {result ? `${result.rows.length} row${result.rows.length === 1 ? '' : 's'} in ${result.durationMs}ms` : '—'}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -194,19 +234,18 @@ export default function CustomReportRunner({ reportId, onBack, onEdit }: {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: 'var(--cream2)', borderBottom: '2px solid var(--pearl)' }}>
-                    {report.config.columns.map(k => {
-                      const cd = colDefByKey.get(k)
-                      const sel = clientSort?.field === k
+                    {outputColumns.map(c => {
+                      const sel = clientSort?.field === c.key
                       return (
-                        <th key={k}
-                          onClick={() => setClientSort(s => s?.field === k ? { field: k, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { field: k, dir: 'asc' })}
+                        <th key={c.key}
+                          onClick={() => setClientSort(s => s?.field === c.key ? { field: c.key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { field: c.key, dir: 'asc' })}
                           style={{
                             padding: '10px 12px', textAlign: 'left',
                             fontSize: 11, fontWeight: 800, color: 'var(--ash)',
                             textTransform: 'uppercase', letterSpacing: '.04em',
                             cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap',
                           }}>
-                          {cd?.label || displayKey(k)}
+                          {c.label}
                           {sel && <span style={{ marginLeft: 4, fontSize: 9 }}>{clientSort?.dir === 'asc' ? '▲' : '▼'}</span>}
                         </th>
                       )
@@ -216,11 +255,14 @@ export default function CustomReportRunner({ reportId, onBack, onEdit }: {
                 <tbody>
                   {pageRows.map((row, i) => (
                     <tr key={i} style={{ borderBottom: '1px solid var(--cream2)' }}>
-                      {report.config.columns.map(k => (
-                        <td key={k} style={{ padding: '8px 12px', whiteSpace: 'nowrap', color: 'var(--ink)' }}>
-                          {fmtCell(getValue(row, k), colDefByKey.get(k)?.type)}
-                        </td>
-                      ))}
+                      {outputColumns.map(c => {
+                        const v = isGrouped ? row[c.key] : getValue(row, c.key)
+                        return (
+                          <td key={c.key} style={{ padding: '8px 12px', whiteSpace: 'nowrap', color: 'var(--ink)' }}>
+                            {fmtCell(v, c.type)}
+                          </td>
+                        )
+                      })}
                     </tr>
                   ))}
                 </tbody>
