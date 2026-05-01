@@ -45,6 +45,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     .maybeSingle()
   if (rErr) return NextResponse.json({ error: rErr.message }, { status: 500 })
   if (!report) return NextResponse.json({ error: 'Report not found' }, { status: 404 })
+  // Partners cannot grant themselves a bonus on their own report —
+  // bonuses are inter-partner judgment calls. UI hides the input on
+  // self-owned reports; this check closes the loop server-side.
+  if (report.user_id === me.id) {
+    return NextResponse.json({ error: 'Partners cannot grant a bonus on their own expense report.' }, { status: 403 })
+  }
 
   const { data: updated, error: upErr } = await sb
     .from('expense_reports')

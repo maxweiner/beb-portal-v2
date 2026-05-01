@@ -452,13 +452,17 @@ export default function ExpenseReportDetail({
         onSave={updateCompRate}
       />
 
-      {/* Partner-only bonus card. Hidden for non-partners unless a bonus
-          has been granted (then read-only display). */}
-      {(isPartner || Number(report.bonus_amount || 0) > 0) && (
+      {/* Partner-only bonus card. Partners CAN'T grant themselves a
+          bonus on their own report (Max/Joe/Rich shouldn't show a
+          self-grant input), so the editable card only appears when a
+          partner is reviewing someone else's report. If a bonus has
+          already been granted by another partner, it stays visible
+          read-only for everyone — including the report owner. */}
+      {((isPartner && !isOwner) || Number(report.bonus_amount || 0) > 0) && (
         <BonusCard
           amount={Number(report.bonus_amount || 0)}
           note={report.bonus_note}
-          canEdit={isPartner}
+          canEdit={isPartner && !isOwner}
           onSave={updateBonus}
         />
       )}
