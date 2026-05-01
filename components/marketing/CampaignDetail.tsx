@@ -4,11 +4,12 @@
 // budget input, "Notify Marketing Team" button, mail-by date display.
 // Planning / Proofing / Payment / Done sections land in Phases 4-8.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
-import type { MarketingCampaign, Event } from '@/types'
+import type { MarketingCampaign, MarketingStatus, Event } from '@/types'
 import PhaseTimeline from './PhaseTimeline'
+import PhaseStepCard from './PhaseStepCard'
 import VDPPlanningSection from './VDPPlanningSection'
 import PostcardPlanningSection from './PostcardPlanningSection'
 import NewspaperPlanningSection from './NewspaperPlanningSection'
@@ -31,11 +32,54 @@ export default function CampaignDetail({ campaign, onBack, onChanged, onDeleted 
   onChanged: (next: MarketingCampaign) => void
   onDeleted: (id: string) => void
 }) {
-  const { events, stores, user } = useApp()
+  const { events, stores, user, users } = useApp()
   const event = useMemo(() => events.find(e => e.id === campaign.event_id), [events, campaign.event_id])
   const store = useMemo(() => stores.find(s => s.id === event?.store_id), [stores, event?.store_id])
   const storeName = store?.name || event?.store_name || '(unknown store)'
   const isMarketingRole = user?.role === 'marketing'
+
+  // Smart-collapse state: phases the user has manually expanded.
+  // Active phase is always expanded regardless of this set.
+  const [expandedOverride, setExpandedOverride] = useState<Set<MarketingStatus>>(new Set())
+  function toggleOverride(p: MarketingStatus) {
+    setExpandedOverride(prev => {
+      const n = new Set(prev)
+      if (n.has(p)) n.delete(p); else n.add(p)
+      return n
+    })
+  }
+  // Refs for scroll-into-view from the sticky stepper. Declared one
+  // per phase (must be unconditional hooks) then bundled into a map.
+  const setupRef    = useRef<HTMLDivElement>(null)
+  const planningRef = useRef<HTMLDivElement>(null)
+  const proofingRef = useRef<HTMLDivElement>(null)
+  const paymentRef  = useRef<HTMLDivElement>(null)
+  const doneRef     = useRef<HTMLDivElement>(null)
+  const phaseRefs: Record<MarketingStatus, React.RefObject<HTMLDivElement>> = {
+    setup: setupRef, planning: planningRef, proofing: proofingRef,
+    payment: paymentRef, done: doneRef,
+  }
+  function jumpToPhase(p: MarketingStatus) {
+    setExpandedOverride(prev => { const n = new Set(prev); n.add(p); return n })
+    // Wait a tick so the (potentially newly-expanded) section is in the DOM.
+    setTimeout(() => {
+      phaseRefs[p].current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 30)
+  }
+
+  // Done-summary text per phase. Pulled from campaign fields so no
+  // extra queries are needed; "—" for fields not yet populated.
+  const userById = useMemo(() => new Map(users.map(u => [u.id, u])), [users])
+  const fmtDate = (iso: string | null) => iso
+    ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : '—'
+  const fmtMoney = (n: number | null | undefined) => n != null
+    ? `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+    : '—'
+  const setupSummary = `${fmtMoney(campaign.marketing_budget)} budget · Notified ${fmtDate(campaign.team_notified_at)}`
+  const paymentSummary = campaign.paid_at
+    ? `Paid via ${campaign.payment_method_label || 'card'} on ${fmtDate(campaign.paid_at)}${campaign.paid_by ? ` by ${userById.get(campaign.paid_by)?.name || ''}` : ''}`
+    : 'Paid'
 
   // Local edit state for budget
   const [budgetInput, setBudgetInput] = useState<string>(
@@ -128,8 +172,16 @@ export default function CampaignDetail({ campaign, onBack, onChanged, onDeleted 
         <EventMeta event={event} />
       </div>
 
-      {/* Phase indicator */}
-      <PhaseTimeline campaign={campaign} />
+      {/* Sticky phase indicator. position: sticky pins it to the top
+          of the scroll container as the user scrolls through phases. */}
+      <div style={{
+        position: 'sticky', top: 0, zIndex: 5,
+        marginLeft: -2, marginRight: -2,
+        paddingTop: 2,
+        background: 'var(--page-bg, transparent)',
+      }}>
+        <PhaseTimeline campaign={campaign} onPhaseClick={jumpToPhase} />
+      </div>
 
       {error && (
         <div style={{
@@ -139,7 +191,13 @@ export default function CampaignDetail({ campaign, onBack, onChanged, onDeleted 
         }}>{error}</div>
       )}
 
-      {/* Setup phase: budget + notify */}
+      {/* ── 1. Setup ───────────────────────────────────────── */}
+      <PhaseStepCard ref={setupRef}
+        phase="setup" campaignStatus={campaign.status}
+        number={1} title="Setup" roleSuffix="Buyers"
+        doneSummary={setupSummary}
+        forceOpen={expandedOverride.has('setup')}
+        onToggle={() => toggleOverride('setup')}>
       <div className="card" style={{ padding: 18, marginBottom: 14 }}>
         <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)', marginBottom: 4 }}>
           1. Setup <RoleLabel>(Buyers)</RoleLabel>
@@ -216,39 +274,59 @@ export default function CampaignDetail({ campaign, onBack, onChanged, onDeleted 
           </>
         )}
       </div>
+      </PhaseStepCard>
 
-      {/* Mail-by date */}
+      {/* Mail-by date — always visible when set, regardless of phase */}
       {campaign.mail_by_date && (
         <div className="card" style={{ padding: 14, marginBottom: 14 }}>
           <MailByLine mailByDate={campaign.mail_by_date} status={campaign.status} />
         </div>
       )}
 
-      {/* Planning phase — flow-specific */}
-      {campaign.flow_type === 'vdp' && (
-        <VDPPlanningSection campaign={campaign} onChanged={onChanged} />
-      )}
-      {campaign.flow_type === 'postcard' && (
-        <PostcardPlanningSection campaign={campaign} onChanged={onChanged} />
-      )}
-      {campaign.flow_type === 'newspaper' && (
-        <NewspaperPlanningSection campaign={campaign} onChanged={onChanged} />
-      )}
+      {/* ── 2. Planning (flow-specific) ────────────────────── */}
+      <PhaseStepCard ref={planningRef}
+        phase="planning" campaignStatus={campaign.status}
+        number={2} title={`Planning — ${campaign.flow_type.toUpperCase()}`} roleSuffix="Marketing Team"
+        doneSummary={campaign.mail_by_date ? `Mail-by ${fmtDate(campaign.mail_by_date)}` : 'Plan submitted + approved'}
+        lockedHint="Unlocks once the buyer notifies the marketing team."
+        forceOpen={expandedOverride.has('planning')}
+        onToggle={() => toggleOverride('planning')}>
+        {campaign.flow_type === 'vdp' && <VDPPlanningSection campaign={campaign} onChanged={onChanged} />}
+        {campaign.flow_type === 'postcard' && <PostcardPlanningSection campaign={campaign} onChanged={onChanged} />}
+        {campaign.flow_type === 'newspaper' && <NewspaperPlanningSection campaign={campaign} onChanged={onChanged} />}
+      </PhaseStepCard>
 
-      {/* Proofing — only after planning has been approved */}
-      {(campaign.status === 'proofing' || campaign.status === 'payment' || campaign.status === 'done') && (
+      {/* ── 3. Proofing ────────────────────────────────────── */}
+      <PhaseStepCard ref={proofingRef}
+        phase="proofing" campaignStatus={campaign.status}
+        number={3} title="Proofing" roleSuffix="Marketing Team"
+        doneSummary="Proof approved"
+        lockedHint="Unlocks once planning is approved."
+        forceOpen={expandedOverride.has('proofing')}
+        onToggle={() => toggleOverride('proofing')}>
         <ProofingSection campaign={campaign} onChanged={onChanged} />
-      )}
+      </PhaseStepCard>
 
-      {/* Payment — when proof is approved through done */}
-      {(campaign.status === 'payment' || campaign.status === 'done') && (
+      {/* ── 4. Payment ─────────────────────────────────────── */}
+      <PhaseStepCard ref={paymentRef}
+        phase="payment" campaignStatus={campaign.status}
+        number={4} title="Payment" roleSuffix="Marketing Team"
+        doneSummary={paymentSummary}
+        lockedHint="Unlocks once the proof is approved."
+        forceOpen={expandedOverride.has('payment')}
+        onToggle={() => toggleOverride('payment')}>
         <PaymentSection campaign={campaign} onChanged={onChanged} />
-      )}
+      </PhaseStepCard>
 
-      {/* Done — celebration card + accountant receipt status */}
-      {campaign.status === 'done' && (
+      {/* ── 5. Done ────────────────────────────────────────── */}
+      <PhaseStepCard ref={doneRef}
+        phase="done" campaignStatus={campaign.status}
+        number={5} title="Done"
+        lockedHint="Unlocks once payment is marked paid."
+        forceOpen={expandedOverride.has('done')}
+        onToggle={() => toggleOverride('done')}>
         <DoneSection campaign={campaign} onChanged={onChanged} />
-      )}
+      </PhaseStepCard>
 
       {/* QR codes (read-only) — surfaced on every campaign page so
           marketing partners can grab the short URLs for proofs. */}

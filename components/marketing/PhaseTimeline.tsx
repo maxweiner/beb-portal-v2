@@ -41,7 +41,13 @@ function humanizeSubStatus(raw: string | null | undefined): string {
   return SUB_STATUS_LABEL[raw] ?? raw.replace(/_/g, ' ')
 }
 
-export default function PhaseTimeline({ campaign }: { campaign: MarketingCampaign }) {
+export default function PhaseTimeline({ campaign, onPhaseClick }: {
+  campaign: MarketingCampaign
+  /** When provided, each phase node renders as a button that calls
+   *  this with the phase id. CampaignDetail uses it to scroll to +
+   *  expand the matching PhaseStepCard. */
+  onPhaseClick?: (phase: MarketingStatus) => void
+}) {
   const currentIdx = PHASE_INDEX[campaign.status] ?? 0
   const allDone = campaign.status === 'done'
   const subStatusText = humanizeSubStatus(campaign.sub_status)
@@ -76,8 +82,20 @@ export default function PhaseTimeline({ campaign }: { campaign: MarketingCampaig
               ? 'var(--green-dark)'
               : 'var(--cream2)'
           const dotFg = completed || current ? '#fff' : 'var(--mist)'
+          const Wrapper: 'button' | 'div' = onPhaseClick ? 'button' : 'div'
+          const wrapperStyle: React.CSSProperties = {
+            display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', zIndex: 1,
+            ...(onPhaseClick ? {
+              background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
+              fontFamily: 'inherit', whiteSpace: 'normal',
+              justifyContent: 'flex-start',
+            } : {}),
+          }
           return (
-            <div key={p.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', zIndex: 1 }}>
+            <Wrapper key={p.id}
+              {...(onPhaseClick ? { type: 'button' as const, onClick: () => onPhaseClick(p.id) } : {})}
+              title={onPhaseClick ? `Jump to ${p.label}` : undefined}
+              style={wrapperStyle}>
               <div style={{
                 width: 30, height: 30, borderRadius: '50%',
                 background: dotBg, color: dotFg,
@@ -101,7 +119,7 @@ export default function PhaseTimeline({ campaign }: { campaign: MarketingCampaig
                   {subStatusText}
                 </div>
               )}
-            </div>
+            </Wrapper>
           )
         })}
       </div>
