@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/marketing-escalations?secret=bebportal2024",
       "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/cron/customers-engagement?secret=bebportal2024",
+      "schedule": "23 4 * * *"
     }
   ]
 }
