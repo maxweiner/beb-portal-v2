@@ -54,6 +54,7 @@ const BEB_NAV: NavItem[] = [
   { label: 'Admin', section: true },
   { id: 'admin',         label: 'Admin Panel',    iconKey: 'admin' },
   { id: 'stores',        label: 'Stores',         iconKey: 'stores' },
+  { id: 'customers',     label: 'Customers',      iconKey: 'staff' },
   { id: 'data-research', label: 'Data Research',  iconKey: 'reports' },
   { id: 'financials',    label: 'Financials',     iconKey: 'financials' },
 ]
@@ -76,6 +77,7 @@ const LIBERTY_NAV: NavItem[] = [
   { label: 'Admin', section: true },
   { id: 'libertyadmin',  label: 'Liberty Admin',  iconKey: 'admin' },
   { id: 'stores',        label: 'Stores',         iconKey: 'stores' },
+  { id: 'customers',     label: 'Customers',      iconKey: 'staff' },
   { id: 'data-research', label: 'Data Research',  iconKey: 'reports' },
   { id: 'financials',    label: 'Financials',     iconKey: 'financials' },
 ]
