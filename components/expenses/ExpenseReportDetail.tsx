@@ -511,8 +511,8 @@ export default function ExpenseReportDetail({
       <div style={{ marginTop: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button className="btn-outline btn-sm"
-            onClick={viewPdf} disabled={pdfBusy || expenses.length === 0}
-            title={expenses.length === 0 ? 'Add an expense first.' : ''}>
+            onClick={viewPdf} disabled={pdfBusy || !hasContent}
+            title={!hasContent ? 'Add an expense, set a compensation rate, or add a bonus first.' : ''}>
             {pdfBusy ? 'Generating…' : 'View PDF'}
           </button>
           {/* Approve already auto-emails the accountant. This button is a
