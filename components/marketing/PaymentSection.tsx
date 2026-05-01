@@ -35,6 +35,10 @@ export default function PaymentSection({ campaign, onChanged }: {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isApprover, setIsApprover] = useState(false)
+  // Only the Marketing Team triggers payment requests — they're the
+  // ones running the card. BEB-only users (admin/superadmin without
+  // marketing_access) see a read-only "awaiting MT" message instead.
+  const isMT = user?.role === 'marketing' || !!user?.marketing_access
   const [methods, setMethods] = useState<PaymentMethod[]>([])
   const [pickedLabel, setPickedLabel] = useState<string>('')
   const [newLabel, setNewLabel] = useState<string>('')
@@ -168,10 +172,15 @@ export default function PaymentSection({ campaign, onChanged }: {
       </div>
 
       {/* Mode-specific UI */}
-      {isAwaitingRequest && (
+      {isAwaitingRequest && isMT && (
         <button className="btn-primary btn-sm" onClick={requestPayment} disabled={busy}>
           {busy ? '…' : '💳 Request Payment'}
         </button>
+      )}
+      {isAwaitingRequest && !isMT && (
+        <div style={{ fontSize: 13, color: 'var(--mist)', fontStyle: 'italic' }}>
+          Waiting for the Marketing Team to request payment.
+        </div>
       )}
 
       {isAwaitingMethod && isApprover && (
@@ -261,10 +270,12 @@ export default function PaymentSection({ campaign, onChanged }: {
           <button className="btn-primary btn-sm" onClick={markPaid} disabled={busy}>
             {busy ? '…' : '✓ Mark as Paid'}
           </button>
-          <button className="btn-outline btn-sm" onClick={requestPayment} disabled={busy}
-            title="Use a different card — re-notify approvers">
-            ↻ Card declined? Request new payment method
-          </button>
+          {isMT && (
+            <button className="btn-outline btn-sm" onClick={requestPayment} disabled={busy}
+              title="Use a different card — re-notify approvers">
+              ↻ Card declined? Request new payment method
+            </button>
+          )}
         </div>
       )}
     </div>
