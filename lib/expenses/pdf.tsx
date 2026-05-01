@@ -131,8 +131,9 @@ export interface PdfData {
   owner: { name: string }
   receipts: PdfReceipt[]
   signatureUrl?: string | null
-  /** PNG/JPG buffer for the BEB wordmark; rendered in each page header. */
-  logo?: Buffer | null
+  /** Brand wordmark + the encoding format detected from the bytes.
+   *  format must match the actual encoding or @react-pdf renders nothing. */
+  logo?: { data: Buffer; format: 'png' | 'jpg' } | null
 }
 
 export function ExpenseReportPdf({ report, expenses, event, owner, receipts, signatureUrl, logo }: PdfData) {
@@ -171,7 +172,7 @@ export function ExpenseReportPdf({ report, expenses, event, owner, receipts, sig
         <View style={styles.hRow}>
           <View>
             {logo
-              ? <Image style={styles.logoLg} src={{ data: logo, format: 'png' }} />
+              ? <Image style={styles.logoLg} src={{ data: logo.data, format: logo.format }} />
               : <Text style={{ fontSize: 13, fontWeight: 700, color: COLORS.greenDark, letterSpacing: 1 }}>BENEFICIAL ESTATE BUYERS</Text>}
             <Text style={styles.brandSub}>Expense Report</Text>
           </View>
@@ -237,7 +238,7 @@ export function ExpenseReportPdf({ report, expenses, event, owner, receipts, sig
         {isPaid && <PaidStamp />}
         <View style={styles.hRow}>
           {logo
-            ? <Image style={styles.logoSm} src={{ data: logo, format: 'png' }} />
+            ? <Image style={styles.logoSm} src={{ data: logo.data, format: logo.format }} />
             : <Text style={{ fontSize: 13, fontWeight: 700, color: COLORS.greenDark, letterSpacing: 1 }}>BENEFICIAL ESTATE BUYERS</Text>}
           <Text style={styles.hMetaLine}>{owner.name} · {event?.store_name ?? ''}</Text>
         </View>
@@ -285,7 +286,7 @@ export function ExpenseReportPdf({ report, expenses, event, owner, receipts, sig
           {isPaid && <PaidStamp />}
           <View style={styles.hRow}>
             {logo
-              ? <Image style={styles.logoSm} src={{ data: logo, format: 'png' }} />
+              ? <Image style={styles.logoSm} src={{ data: logo.data, format: logo.format }} />
               : <Text style={{ fontSize: 13, fontWeight: 700, color: COLORS.greenDark, letterSpacing: 1 }}>BENEFICIAL ESTATE BUYERS</Text>}
             <Text style={styles.hMetaLine}>{owner.name} · receipts ({receipts.length})</Text>
           </View>

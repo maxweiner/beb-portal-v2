@@ -7,7 +7,8 @@ import { renderToBuffer } from '@react-pdf/renderer'
 import { ExpenseReportPdf } from '../lib/expenses/pdf'
 
 async function main() {
-  const logo = await readFile(path.join(process.cwd(), 'public', 'beb-wordmark.png'))
+  const logoBytes = await readFile(path.join(process.cwd(), 'public', 'beb-wordmark.png'))
+  const logo = { data: logoBytes, format: 'png' as const }
   const buf = await renderToBuffer(ExpenseReportPdf({
     report: {
       id: '11111111-2222-3333-4444-555555555555',

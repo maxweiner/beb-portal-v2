@@ -15,22 +15,35 @@ import type { Expense, ExpenseReport } from '@/types'
 // renders within the same warm function instance skip the disk hit.
 const LOGO_PATH = path.join(process.cwd(), 'public', 'beb-wordmark.png')
 let bundledLogoBuf: Buffer | null = null
-async function loadBundledLogo(): Promise<Buffer | null> {
-  if (bundledLogoBuf) return bundledLogoBuf
-  try { bundledLogoBuf = await readFile(LOGO_PATH); return bundledLogoBuf }
-  catch { return null }  // Fall back to text wordmark if the asset is missing.
+async function loadBundledLogo(): Promise<{ data: Buffer; format: 'png' | 'jpg' } | null> {
+  if (bundledLogoBuf) return { data: bundledLogoBuf, format: 'png' }
+  try {
+    bundledLogoBuf = await readFile(LOGO_PATH)
+    return { data: bundledLogoBuf, format: 'png' }
+  } catch { return null }
+}
+
+/** PNG starts with 89 50 4E 47; JPEG with FF D8 FF. Detect from
+ *  the first few bytes so the PDF renderer is told the right format
+ *  (Image src.format must match the actual encoding). */
+function detectImageFormat(buf: Buffer): 'png' | 'jpg' {
+  if (buf.length >= 3 && buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return 'jpg'
+  return 'png'  // Default — react-pdf decodes PNG even if header is unusual
 }
 
 // Per-brand uploaded logo (Settings → Brand Logos). Falls back to the
 // bundled wordmark when no upload exists for the resolved brand.
-async function loadBrandLogo(sb: SupabaseClient, brand: 'beb' | 'liberty' | null): Promise<Buffer | null> {
+async function loadBrandLogo(
+  sb: SupabaseClient, brand: 'beb' | 'liberty' | null,
+): Promise<{ data: Buffer; format: 'png' | 'jpg' } | null> {
   if (!brand) return loadBundledLogo()
   const { data } = await sb.from('brand_logos').select('logo_path').eq('brand', brand).maybeSingle()
   const logoPath = (data as any)?.logo_path
   if (!logoPath) return loadBundledLogo()
   const { data: file, error } = await sb.storage.from('brand-logos').download(logoPath)
   if (error || !file) return loadBundledLogo()
-  return Buffer.from(await file.arrayBuffer())
+  const buf = Buffer.from(await file.arrayBuffer())
+  return { data: buf, format: detectImageFormat(buf) }
 }
 
 const RECEIPTS_BUCKET = 'expense-receipts'
