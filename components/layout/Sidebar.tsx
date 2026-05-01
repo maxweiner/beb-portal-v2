@@ -5,7 +5,6 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { NavPage } from '@/app/page'
 import { usePendingApprovals } from '@/components/expenses/usePendingApprovals'
-import TodoNotificationsBell from '@/components/todo/TodoNotificationsBell'
 import { useRoleModules } from '@/lib/useRoleModules'
 
 const COLLAPSE_KEY = 'beb-sidebar-collapsed'
@@ -385,9 +384,8 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
             ★ Liberty Estate Buyers
           </div>
         )}
-        <div style={{ marginBottom: 6 }}>
-          <TodoNotificationsBell setNav={setNav} />
-        </div>
+        {/* Notifications bell moved to a floating widget at the
+            bottom-right of the viewport (mounted in app/page.tsx). */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <div className="sidebar-user-name" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.name || user?.email}</div>
           <button

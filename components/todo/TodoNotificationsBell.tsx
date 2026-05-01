@@ -1,9 +1,11 @@
 'use client'
 
-// Bell icon + unread count + dropdown for To-Do notifications.
-// Lives in the sidebar footer. Polls every 30s; realtime upgrade is
-// Phase 6. Clicking a row marks it read and dispatches the
-// `beb:open-todo` event so TodoPage can switch + briefly highlight.
+// Floating notifications bell — pinned to the bottom-right of the
+// viewport. Always visible regardless of which page is active.
+// Mounted once at app/page.tsx so both desktop + mobile show it.
+// Polls every 30s; realtime upgrade is Phase 6. Clicking a row marks
+// it read and dispatches the `beb:open-todo` event so TodoPage can
+// switch + briefly highlight.
 
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '@/lib/context'
@@ -19,9 +21,14 @@ const POLL_MS = 30_000
 
 interface Props {
   setNav: (n: NavPage) => void
+  /** Where to nudge the bell from the viewport edges (px). Defaults
+   *  cover desktop. Mobile callers can pass bigger bottom to clear
+   *  the bottom nav. */
+  bottom?: number
+  right?: number
 }
 
-export default function TodoNotificationsBell({ setNav }: Props) {
+export default function TodoNotificationsBell({ setNav, bottom = 16, right = 16 }: Props) {
   const { user, users } = useApp()
   const [open, setOpen] = useState(false)
   const [notifs, setNotifs] = useState<TodoNotification[]>([])
@@ -111,35 +118,43 @@ export default function TodoNotificationsBell({ setNav }: Props) {
   if (!user) return null
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
+    <div ref={ref} style={{
+      position: 'fixed', bottom, right,
+      zIndex: 800,
+    }}>
       <button onClick={() => setOpen(v => !v)} aria-label="Notifications"
+        title={unread > 0 ? `${unread} unread notification${unread === 1 ? '' : 's'}` : 'Notifications'}
         style={{
-          background: 'transparent', border: 'none', cursor: 'pointer',
-          color: 'rgba(255,255,255,.85)', padding: '6px 8px',
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          fontSize: 14, fontFamily: 'inherit', position: 'relative',
-        }}>
-        <span aria-hidden style={{ fontSize: 16 }}>🔔</span>
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.04em' }}>
-          {unread > 0 ? `${unread} new` : 'Notifications'}
-        </span>
+          background: 'var(--sidebar-bg, #2D3B2D)', border: 'none', cursor: 'pointer',
+          color: '#fff',
+          width: 48, height: 48, borderRadius: '50%',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 20, fontFamily: 'inherit', position: 'relative',
+          boxShadow: '0 4px 14px rgba(0,0,0,.22), 0 1px 3px rgba(0,0,0,.18)',
+          transition: 'transform .15s ease, box-shadow .15s ease',
+        }}
+        onMouseOver={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)' }}
+        onMouseOut={e => { (e.currentTarget as HTMLElement).style.transform = '' }}>
+        <span aria-hidden>🔔</span>
         {unread > 0 && (
           <span aria-hidden style={{
-            position: 'absolute', top: 2, left: 18,
+            position: 'absolute', top: -2, right: -2,
             background: '#EF4444', color: '#fff',
-            fontSize: 9, fontWeight: 800, lineHeight: 1,
-            padding: '2px 5px', borderRadius: 8,
+            fontSize: 10, fontWeight: 800, lineHeight: 1,
+            padding: '3px 6px', borderRadius: 99,
+            border: '2px solid #fff',
+            minWidth: 18, textAlign: 'center',
           }}>{unread > 9 ? '9+' : unread}</span>
         )}
       </button>
 
       {open && (
         <div style={{
-          position: 'absolute', bottom: '100%', left: 0,
-          marginBottom: 8, width: 320,
+          position: 'absolute', bottom: 'calc(100% + 8px)', right: 0,
+          width: 340,
           background: '#fff', border: '1px solid var(--pearl)',
-          borderRadius: 10, boxShadow: '0 12px 32px rgba(0,0,0,.18)',
-          overflow: 'hidden', zIndex: 1100,
+          borderRadius: 10, boxShadow: '0 12px 32px rgba(0,0,0,.22)',
+          overflow: 'hidden',
         }}>
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
