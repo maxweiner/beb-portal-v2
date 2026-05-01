@@ -32,6 +32,9 @@ export interface User {
   /** Marketing module access. Per-user gate granted independently of role.
    *  External Collected Concepts users get this without other portal access. */
   marketing_access?: boolean
+  /** NavPage IDs the user has pinned to the top of their sidebar. Order
+   *  is preserved (display order in the ★ Pinned section). Empty = no pins. */
+  pinned_pages?: string[]
 }
 
 // ── Expenses & Invoicing module ──────────────────────────────
