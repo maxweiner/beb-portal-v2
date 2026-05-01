@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { NavPage } from '@/app/page'
@@ -40,45 +40,45 @@ interface NavItem {
 const BEB_NAV: NavItem[] = [
   { label: 'Daily', section: true },
   { id: 'dashboard',    label: 'Dashboard',      iconKey: 'dashboard' },
-  { id: 'calendar',     label: 'Appointments',   iconKey: 'calendar' },
-  { id: 'events',       label: 'Events',         iconKey: 'events' },
-  { id: 'schedule',     label: 'Calendar',       iconKey: 'schedule' },
+  { id: 'calendar',     label: 'Bookings',       iconKey: 'calendar' },
+  { id: 'events',       label: 'Buying Events',  iconKey: 'events' },
+  { id: 'schedule',     label: 'Schedule',       iconKey: 'schedule' },
   { id: 'travel',       label: 'Travel Share',   iconKey: 'travel' },
   { id: 'dayentry',     label: 'Enter Day Data', iconKey: 'dayentry' },
   { id: 'staff',        label: 'Staff',          iconKey: 'staff' },
-  { label: 'Admin', section: true },
-  { id: 'admin',         label: 'Admin Panel',     iconKey: 'admin' },
-  { id: 'stores',        label: 'Stores',          iconKey: 'stores' },
-  { id: 'data-research', label: 'Data Research',   iconKey: 'reports' },
-  { id: 'reports',       label: 'Reports & Notify', iconKey: 'reports' },
-  { id: 'financials',    label: 'Financials',      iconKey: 'financials' },
-  { label: 'Tools', section: true },
+  { label: 'Operations', section: true },
   { id: 'marketing',    label: 'Marketing',      iconKey: 'marketing' },
   { id: 'shipping',     label: 'Shipping',       iconKey: 'shipping' },
   { id: 'expenses',     label: 'Expenses',       iconKey: 'expenses' },
+  { id: 'reports',      label: 'Reports',        iconKey: 'reports' },
   { id: 'todo',         label: 'To-Do List',     iconKey: 'reports' },
+  { label: 'Admin', section: true },
+  { id: 'admin',         label: 'Admin Panel',    iconKey: 'admin' },
+  { id: 'stores',        label: 'Stores',         iconKey: 'stores' },
+  { id: 'data-research', label: 'Data Research',  iconKey: 'reports' },
+  { id: 'financials',    label: 'Financials',     iconKey: 'financials' },
 ]
 
 const LIBERTY_NAV: NavItem[] = [
   { label: 'Daily', section: true },
   { id: 'dashboard',    label: 'Dashboard',      iconKey: 'dashboard' },
-  { id: 'calendar',     label: 'Appointments',   iconKey: 'calendar' },
-  { id: 'events',       label: 'Events',         iconKey: 'events' },
-  { id: 'schedule',     label: 'Calendar',       iconKey: 'schedule' },
+  { id: 'calendar',     label: 'Bookings',       iconKey: 'calendar' },
+  { id: 'events',       label: 'Buying Events',  iconKey: 'events' },
+  { id: 'schedule',     label: 'Schedule',       iconKey: 'schedule' },
   { id: 'travel',       label: 'Travel Share',   iconKey: 'travel' },
   { id: 'dayentry',     label: 'Enter Day Data', iconKey: 'dayentry' },
   { id: 'staff',        label: 'Staff',          iconKey: 'staff' },
-  { label: 'Admin', section: true },
-  { id: 'libertyadmin',  label: 'Liberty Admin',   iconKey: 'admin' },
-  { id: 'stores',        label: 'Stores',          iconKey: 'stores' },
-  { id: 'data-research', label: 'Data Research',   iconKey: 'reports' },
-  { id: 'reports',       label: 'Reports & Notify', iconKey: 'reports' },
-  { id: 'financials',    label: 'Financials',      iconKey: 'financials' },
-  { label: 'Tools', section: true },
+  { label: 'Operations', section: true },
   { id: 'marketing',    label: 'Marketing',      iconKey: 'marketing' },
   { id: 'shipping',     label: 'Shipping',       iconKey: 'shipping' },
   { id: 'expenses',     label: 'Expenses',       iconKey: 'expenses' },
+  { id: 'reports',      label: 'Reports',        iconKey: 'reports' },
   { id: 'todo',         label: 'To-Do List',     iconKey: 'reports' },
+  { label: 'Admin', section: true },
+  { id: 'libertyadmin',  label: 'Liberty Admin',  iconKey: 'admin' },
+  { id: 'stores',        label: 'Stores',         iconKey: 'stores' },
+  { id: 'data-research', label: 'Data Research',  iconKey: 'reports' },
+  { id: 'financials',    label: 'Financials',     iconKey: 'financials' },
 ]
 
 interface SidebarProps {
@@ -101,15 +101,59 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
   const { modules: grantedModules, loaded: modulesLoaded } = useRoleModules()
   const NAV_ITEMS = isLiberty ? LIBERTY_NAV : BEB_NAV
 
-  // Per-section collapse state, persisted to localStorage. Default = all open.
+  // Lookup: nav id → its (label, iconKey) so the Pinned section can
+  // render rows that match what they look like in the regular sections.
+  const navItemById = useMemo(() => {
+    const m = new Map<NavPage, { label: string; iconKey?: string }>()
+    for (const it of NAV_ITEMS) {
+      if (it.id) m.set(it.id, { label: it.label, iconKey: it.iconKey })
+    }
+    return m
+  }, [NAV_ITEMS])
+
+  // Lookup: nav id → its parent section label. Used for default-collapse
+  // (only the section containing the active nav opens on first paint).
+  const sectionByItemId = useMemo(() => {
+    const m = new Map<NavPage, string>()
+    let cur: string | null = null
+    for (const it of NAV_ITEMS) {
+      if (it.section) { cur = it.label; continue }
+      if (it.id && cur) m.set(it.id, cur)
+    }
+    return m
+  }, [NAV_ITEMS])
+
+  // Per-section collapse state, persisted to localStorage. NEW default:
+  // every section closed except the one containing the active nav.
+  // localStorage overrides if the user has manually toggled before.
   const { count: pendingApprovalCount } = usePendingApprovals()
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => {
+    // Seed with every section label closed; the active section is opened
+    // below in a useEffect once nav + NAV_ITEMS are stable.
+    const allLabels = NAV_ITEMS.filter(it => it.section).map(it => it.label)
+    return new Set(allLabels)
+  })
+  const collapseHydrated = useRef(false)
   useEffect(() => {
+    if (collapseHydrated.current) return
+    collapseHydrated.current = true
     if (typeof window === 'undefined') return
     try {
       const raw = window.localStorage.getItem(COLLAPSE_KEY)
-      if (raw) setCollapsed(new Set(JSON.parse(raw)))
+      if (raw) {
+        // User has manually toggled before — respect their preferences.
+        setCollapsed(new Set(JSON.parse(raw)))
+        return
+      }
     } catch { /* ignore */ }
+    // No saved preference: start with every section closed EXCEPT the one
+    // containing the current nav. Smart default for the two-tier layout.
+    const allLabels = NAV_ITEMS.filter(it => it.section).map(it => it.label)
+    const activeSection = sectionByItemId.get(nav)
+    const next = new Set(allLabels)
+    if (activeSection) next.delete(activeSection)
+    setCollapsed(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const toggleSection = (label: string) => {
     setCollapsed(prev => {
@@ -155,6 +199,31 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
     }
   }
 
+  // Per-user pinned NAV pages. Synced across devices via users.pinned_pages.
+  // Hydrated from the user object; togglePin writes back to the DB and
+  // updates local state optimistically so the sidebar reflects the change
+  // immediately.
+  const [pinnedPages, setPinnedPages] = useState<NavPage[]>(
+    Array.isArray(user?.pinned_pages) ? (user!.pinned_pages as NavPage[]) : []
+  )
+  useEffect(() => {
+    setPinnedPages(Array.isArray(user?.pinned_pages) ? (user!.pinned_pages as NavPage[]) : [])
+  }, [user?.id, user?.pinned_pages])
+  const isPinned = (id: NavPage) => pinnedPages.includes(id)
+  async function togglePin(id: NavPage) {
+    if (!user) return
+    const next = isPinned(id)
+      ? pinnedPages.filter(p => p !== id)
+      : [...pinnedPages, id]
+    setPinnedPages(next)
+    const { error } = await supabase.from('users')
+      .update({ pinned_pages: next }).eq('id', user.id)
+    if (error) {
+      // Rollback on failure
+      setPinnedPages(pinnedPages)
+    }
+  }
+
   return (
     <aside className="sidebar">
       {/* Brand Switcher — only for liberty-enabled users */}
@@ -191,6 +260,37 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
 
       {/* Nav */}
       <nav className="sidebar-nav">
+        {/* ★ Pinned section — only renders when the user has any pins.
+            Always-open. Pages also remain accessible from their normal
+            section below. */}
+        {modulesLoaded && pinnedPages.length > 0 && (
+          <>
+            <div className="nav-group-label" style={{ display: 'block' }}>
+              <span style={{ display: 'inline-block', width: 10, marginRight: 4, fontSize: 9 }}>★</span>
+              PINNED
+            </div>
+            {pinnedPages
+              .filter(pid => grantedModules.has(pid))
+              .map(pid => {
+                const meta = navItemById.get(pid)
+                if (!meta) return null
+                const showBadge = pid === 'expenses' && pendingApprovalCount > 0
+                return (
+                  <NavRow
+                    key={`pin-${pid}`}
+                    label={meta.label}
+                    icon={ICONS[meta.iconKey || '']}
+                    active={nav === pid}
+                    pinned={true}
+                    onClick={() => setNav(pid)}
+                    onTogglePin={() => togglePin(pid)}
+                    badgeCount={showBadge ? pendingApprovalCount : 0}
+                  />
+                )
+              })}
+          </>
+        )}
+
         {(() => {
           // Pre-compute which sections have at least one granted item
           // so we can skip empty section headers (e.g. marketing role
@@ -243,20 +343,15 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
             if (currentSection && !currentOpen) return null
             const showExpensesBadge = item.id === 'expenses' && pendingApprovalCount > 0
             const navBtn = (
-              <button key={item.id} onClick={() => setNav(item.id!)}
-                className={`nav-item${nav === item.id ? ' active' : ''}`}>
-                <span className="ni-icon">{ICONS[item.iconKey!]}</span>
-                <span style={{ flex: 1 }}>{item.label}</span>
-                {showExpensesBadge && (
-                  <span title={`${pendingApprovalCount} report(s) awaiting your review`}
-                    style={{
-                      background: '#DC2626', color: '#fff',
-                      borderRadius: 999, padding: '1px 7px',
-                      fontSize: 10, fontWeight: 800,
-                      minWidth: 18, textAlign: 'center',
-                    }}>{pendingApprovalCount}</span>
-                )}
-              </button>
+              <NavRow
+                label={item.label}
+                icon={ICONS[item.iconKey!]}
+                active={nav === item.id}
+                pinned={isPinned(item.id!)}
+                onClick={() => setNav(item.id!)}
+                onTogglePin={() => togglePin(item.id!)}
+                badgeCount={showExpensesBadge ? pendingApprovalCount : 0}
+              />
             )
             // Render pinned custom reports as sub-items right below "Reports".
             if (item.id === 'reports' && pinnedReports.length > 0) {
@@ -278,7 +373,7 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
                 </div>
               )
             }
-            return navBtn
+            return <div key={item.id}>{navBtn}</div>
           })
         })()}
       </nav>
@@ -321,5 +416,67 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
         <button onClick={() => supabase.auth.signOut()} className="btn-outline btn-xs btn-full">Sign Out</button>
       </div>
     </aside>
+  )
+}
+
+/**
+ * Single sidebar nav row. Wraps the nav-item button with an inline
+ * pin/unpin star on the right. The pin star is dim until hovered or
+ * the item is pinned. Click on the row navigates; click on the star
+ * toggles pin state (e.stopPropagation prevents the row click).
+ */
+function NavRow({
+  label, icon, active, pinned, onClick, onTogglePin, badgeCount,
+}: {
+  label: string
+  icon: React.ReactNode
+  active: boolean
+  pinned: boolean
+  onClick: () => void
+  onTogglePin: () => void
+  badgeCount: number
+}) {
+  return (
+    <div
+      className="nav-row"
+      style={{ position: 'relative' }}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        className={`nav-item${active ? ' active' : ''}`}
+        style={{ paddingRight: 30 }}
+      >
+        <span className="ni-icon">{icon}</span>
+        <span style={{ flex: 1 }}>{label}</span>
+        {badgeCount > 0 && (
+          <span title={`${badgeCount} item(s) awaiting your review`}
+            style={{
+              background: '#DC2626', color: '#fff',
+              borderRadius: 999, padding: '1px 7px',
+              fontSize: 10, fontWeight: 800,
+              minWidth: 18, textAlign: 'center',
+              marginRight: 6,
+            }}>{badgeCount}</span>
+        )}
+      </button>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onTogglePin() }}
+        title={pinned ? 'Unpin from top' : 'Pin to top'}
+        aria-label={pinned ? 'Unpin from top' : 'Pin to top'}
+        className="nav-pin"
+        style={{
+          position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          color: pinned ? 'var(--green-mute, #7EC8A0)' : 'rgba(255,255,255,.35)',
+          fontSize: 12, padding: '4px 6px',
+          opacity: pinned ? 1 : 0,
+          transition: 'opacity .12s ease, color .12s ease',
+        }}
+      >
+        ★
+      </button>
+    </div>
   )
 }
