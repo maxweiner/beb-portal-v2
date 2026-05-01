@@ -31,7 +31,7 @@ export default function ExpenseReportDetail({
   reportId: string
   onBack: () => void
 }) {
-  const { user, events } = useApp()
+  const { user, users, events } = useApp()
   const [report, setReport] = useState<ExpenseReport | null>(null)
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [ownerName, setOwnerName] = useState<string>('')
@@ -50,6 +50,10 @@ export default function ExpenseReportDetail({
   const isOwner = !!user && !!report && user.id === report.user_id
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
   const isPartner = !!user?.is_partner
+  // Bonuses are for non-partner buyers only — partners (Max/Joe/Rich)
+  // never receive a bonus on their own expense reports, regardless of
+  // who's viewing.
+  const ownerIsPartner = !!report && !!users.find(u => u.id === report.user_id)?.is_partner
   const canMutate = (isOwner && report?.status === 'active') || isAdmin
   const hasContent = expenses.length > 0
     || Number(report?.comp_rate || 0) > 0
@@ -452,13 +456,13 @@ export default function ExpenseReportDetail({
         onSave={updateCompRate}
       />
 
-      {/* Partner-only bonus card. Partners CAN'T grant themselves a
-          bonus on their own report (Max/Joe/Rich shouldn't show a
-          self-grant input), so the editable card only appears when a
-          partner is reviewing someone else's report. If a bonus has
-          already been granted by another partner, it stays visible
-          read-only for everyone — including the report owner. */}
-      {((isPartner && !isOwner) || Number(report.bonus_amount || 0) > 0) && (
+      {/* Partner-only bonus card. Bonuses are for NON-partner buyers
+          only — Max/Joe/Rich never receive a bonus on their own
+          reports. So the card is fully suppressed when the report's
+          owner is a partner. For non-partner owners: editable when a
+          partner is reviewing; otherwise read-only display when a
+          bonus has already been granted. */}
+      {!ownerIsPartner && ((isPartner && !isOwner) || Number(report.bonus_amount || 0) > 0) && (
         <BonusCard
           amount={Number(report.bonus_amount || 0)}
           note={report.bonus_note}
