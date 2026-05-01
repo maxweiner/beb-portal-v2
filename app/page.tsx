@@ -26,7 +26,7 @@ import { useRoleModules } from '@/lib/useRoleModules'
 import LibertyAdminPanel from '@/components/admin/LibertyAdminPanel'
 import NotificationTemplatesAdmin from '@/components/admin/NotificationTemplatesAdmin'
 import DataResearch from '@/components/admin/DataResearch'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import MobileLayout from '@/components/mobile/MobileLayout'
 import MobileDashboard from '@/components/mobile/MobileDashboard'
 import MobileDayEntry from '@/components/mobile/MobileDayEntry'
@@ -43,12 +43,36 @@ export default function Home() {
   const [nav, rawSetNav] = useState<NavPage>('dashboard')
   const setNav = (n: NavPage) => { rawSetNav(n); setNavKey(k => k + 1) }
   const [isMobile, setIsMobile] = useState(false)
+  const initialRoutedRef = useRef(false)
+
+  // Initial landing: every user should start on dashboard if they have
+  // it granted. Otherwise, first available page in the fallback list.
+  // Runs once after user + modules load — explicitly forces nav to a
+  // sensible landing target so cached/prior state can't sneak in.
+  // Skipped when an email deep-link (?report=…) is present so that
+  // path can do its own routing.
+  const { modules: grantedModules, loaded: modulesLoaded } = useRoleModules()
+  useEffect(() => {
+    if (!user || !modulesLoaded || initialRoutedRef.current) return
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('report')) {
+      initialRoutedRef.current = true
+      return
+    }
+    initialRoutedRef.current = true
+    const fallbackOrder: NavPage[] = [
+      'dashboard', 'calendar', 'marketing', 'expenses',
+      'events', 'schedule', 'travel', 'staff', 'shipping',
+      'reports', 'todo',
+    ]
+    const next = fallbackOrder.find(p => grantedModules.has(p))
+    if (next) rawSetNav(next)
+    // If literally nothing is granted, leave nav as-is (dashboard) and
+    // let the deep-link guard below decide.
+  }, [user, modulesLoaded, grantedModules])
 
   // Generic deep-link guard: if the current nav target isn't in the
   // user's role_modules, redirect to the first granted page. Settings
   // is always allowed (gear icon stays accessible to every role).
-  // Replaces the old marketing/accounting-specific branches.
-  const { modules: grantedModules, loaded: modulesLoaded } = useRoleModules()
   useEffect(() => {
     if (!modulesLoaded || !user) return
     if (nav === 'settings') return
