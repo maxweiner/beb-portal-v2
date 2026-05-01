@@ -226,7 +226,6 @@ export interface AppState {
   stores: Store[]
   events: Event[]
   shipments: Shipment[]
-  permissions: Record<string, Record<string, boolean>> | null
   theme: Theme
   year: string
   loading: boolean

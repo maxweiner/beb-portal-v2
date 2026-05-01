@@ -1,12 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useApp, DEFAULT_PERMS } from '@/lib/context'
+import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { User, Role } from '@/types'
-import Checkbox from '@/components/ui/Checkbox'
 
-type Tab = 'users' | 'invite' | 'merge' | 'email' | 'sms' | 'permissions'
+type Tab = 'users' | 'invite' | 'merge' | 'email' | 'sms' | 'events'
 
 export default function AdminPanel() {
   const [tab, setTab] = useState<Tab>('users')
@@ -24,7 +23,7 @@ export default function AdminPanel() {
           ['merge', 'Merge Users'],
           ['email', 'Email Settings'],
           ['sms', 'SMS Settings'],
-          ['permissions', 'Permissions'],
+          ['events', 'Events'],
         ] as [Tab, string][]).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             className={`tab${tab === id ? ' active' : ''}`}>
@@ -38,7 +37,7 @@ export default function AdminPanel() {
       {tab === 'merge' && <MergeTab />}
       {tab === 'email' && <EmailTab />}
       {tab === 'sms' && <SmsTab />}
-      {tab === 'permissions' && <PermissionsTab />}
+      {tab === 'events' && <EventsTab />}
     </div>
   )
 }
@@ -682,125 +681,10 @@ function SmsTab() {
   )
 }
 
-/* ── PERMISSIONS TAB ── */
-const FEATURES = [
-  { key: 'dashboard',  label: 'Dashboard' },
-  { key: 'calendar',   label: 'Calendar' },
-  { key: 'events',     label: 'Events' },
-  { key: 'dayentry',   label: 'Enter Day Data' },
-  { key: 'shipping',   label: 'Shipping Log' },
-  { key: 'reports',    label: 'Reports' },
-  { key: 'stores',     label: 'Stores' },
-  { key: 'admin',      label: 'Admin Panel' },
-]
-
-function PermissionsTab() {
-  const { user: me, permissions, reload } = useApp()
-  const isSuperAdmin = me?.role === 'superadmin'
-  // Local copy so checkboxes work independently of global state
-  const [localPerms, setLocalPerms] = useState<Record<string, Record<string, boolean>>>(
-    permissions || DEFAULT_PERMS
-  )
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-
-  // Sync if global permissions load after mount
-  useEffect(() => {
-    if (permissions) setLocalPerms(permissions)
-  }, [permissions])
-
-  const toggle = (feature: string, role: string) => {
-    setLocalPerms(prev => ({
-      ...prev,
-      [feature]: { ...(prev[feature] || {}), [role]: !(prev[feature] || {})[role] }
-    }))
-  }
-
-  const save = async () => {
-    setSaving(true)
-    const { error } = await supabase.from('settings').upsert({
-      key: 'permissions',
-      value: localPerms,
-      updated_at: new Date().toISOString(),
-      updated_by: me?.id,
-    })
-    setSaving(false)
-    if (error) { alert(error.message); return }
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
-    reload()
-  }
-
-  const ROLES = ['buyer', 'admin', 'superadmin']
-
+/* ── EVENTS TAB ── superadmin tools to edit/delete an event */
+function EventsTab() {
   return (
     <div>
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--pearl)' }}>
-          <div>
-            <div className="font-black text-lg" style={{ color: 'var(--ink)' }}>Permission Matrix</div>
-            <div className="text-xs mt-0.5" style={{ color: 'var(--mist)' }}>
-              {isSuperAdmin ? 'Toggle permissions then save. Superadmin always has full access.' : 'Superadmin access required to edit.'}
-            </div>
-          </div>
-          {isSuperAdmin && (
-            <button onClick={save} disabled={saving}
-              className="btn-primary"
-              style={{ background: saved ? '#22c55e' : 'var(--green)' }}>
-              {saving ? 'Saving…' : saved ? '✓ Saved!' : 'Save Changes'}
-            </button>
-          )}
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--pearl)', background: 'var(--cream2)' }}>
-                <th className="text-left px-6 py-3 text-xs font-bold uppercase tracking-wide w-2/5" style={{ color: 'var(--mist)' }}>Feature</th>
-                {ROLES.map(r => (
-                  <th key={r} className="text-center px-6 py-3">
-                    <span className={`badge badge-${r === 'superadmin' ? 'ruby' : r === 'admin' ? 'gold' : 'sapph'}`}>{r}</span>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {FEATURES.map((f, i) => (
-                <tr key={f.key} style={{ borderBottom: i < FEATURES.length - 1 ? '1px solid var(--cream2)' : 'none' }}>
-                  <td className="px-6 py-4 font-semibold" style={{ color: 'var(--ink)' }}>{f.label}</td>
-                  {ROLES.map(r => {
-                    const isLocked = r === 'superadmin'
-                    const checked = isLocked || localPerms[f.key]?.[r] !== false
-                    return (
-                      <td key={r} className="px-6 py-4 text-center">
-                        {isLocked ? (
-                          <span className="text-xl" style={{ color: 'var(--green)' }}>✓</span>
-                        ) : isSuperAdmin ? (
-                          <Checkbox
-                            checked={checked}
-                            onChange={() => toggle(f.key, r)}
-                            size={20}
-                          />
-                        ) : (
-                          <span className="text-xl" style={{ color: checked ? 'var(--green)' : 'var(--fog)' }}>
-                            {checked ? '✓' : '✗'}
-                          </span>
-                        )}
-                      </td>
-                    )
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      {!isSuperAdmin && (
-        <div className="mt-3 p-3 rounded-lg text-sm notice notice-gold">
-          ⚠ Only superadmins can edit permissions.
-        </div>
-      )}
-
       <EditEventSection />
       <DeleteEventSection />
     </div>

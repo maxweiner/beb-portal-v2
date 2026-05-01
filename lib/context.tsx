@@ -24,18 +24,6 @@ interface AppContextType extends AppState {
 
 const AppContext = createContext<AppContextType | null>(null)
 
-const DEFAULT_PERMS = {
-  dashboard:  { buyer: true,  admin: true },
-  calendar:   { buyer: true,  admin: true },
-  events:     { buyer: true,  admin: true },
-  dayentry:   { buyer: true,  admin: true },
-  shipping:   { buyer: true,  admin: true },
-  reports:    { buyer: true,  admin: true },
-  stores:     { buyer: false, admin: true },
-  historical: { buyer: false, admin: true },
-  admin:      { buyer: false, admin: true },
-}
-
 const LIBERTY_DEFAULT_THEME: Theme = 'liberty'
 
 function readLocal<T extends string>(key: string, fallback: T): T {
@@ -49,7 +37,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [stores, setStoresState] = useState<Store[]>([])
   const [events, setEventsState] = useState<Event[]>([])
   const [shipments, setShipments] = useState<Shipment[]>([])
-  const [permissions, setPermissions] = useState<any>(null)
   const [theme, setThemeState] = useState<Theme>(() => readLocal('beb-theme', 'original'))
   const [year, setYearState] = useState(String(new Date().getFullYear()))
   const [loading, setLoading] = useState(true)
@@ -78,7 +65,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const [usersRes, storesRes, eventsRes, shipmentsRes, permsRes] = await Promise.all([
+        const [usersRes, storesRes, eventsRes, shipmentsRes] = await Promise.all([
           supabase.from('users').select('*').order('name'),
           supabase.from('stores').select('*').eq('brand', currentBrand).order('name'),
           supabase
@@ -91,7 +78,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             .select('*')
             .eq('brand', currentBrand)
             .order('ship_date', { ascending: false }),
-          supabase.from('settings').select('value').eq('key', 'permissions').maybeSingle(),
         ])
 
         const hasError = usersRes.error || storesRes.error || eventsRes.error || shipmentsRes.error
@@ -107,7 +93,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setEventsState(eventsRes.data.map((e: any) => ({ ...e, days: e.days || [] })))
         }
         if (shipmentsRes.data) setShipments(shipmentsRes.data)
-        setPermissions(permsRes.data?.value || DEFAULT_PERMS)
         setConnectionError(false)
         return { users: nextUsers }
       } catch (err) {
@@ -367,14 +352,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [themeClass])
 
   const ctxValue = useMemo<AppContextType>(() => ({
-    user, users, stores, events, shipments, permissions,
+    user, users, stores, events, shipments,
     theme, year, loading, brand, connectionError,
     isSwitching, pendingBrand,
     setTheme, setYear, setBrand, reload, setUser,
     setStores, setEvents,
     dayEntryIntent, setDayEntryIntent,
   }), [
-    user, users, stores, events, shipments, permissions,
+    user, users, stores, events, shipments,
     theme, year, loading, brand, connectionError,
     isSwitching, pendingBrand,
     reload, dayEntryIntent,
@@ -395,5 +380,3 @@ export function useApp() {
   if (!ctx) throw new Error('useApp must be used within AppProvider')
   return ctx
 }
-
-export { DEFAULT_PERMS }
