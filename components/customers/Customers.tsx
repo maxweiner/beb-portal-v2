@@ -17,8 +17,10 @@ import { fmtPhone, fmtDateLong, fmtDateRel } from '@/lib/customers/format'
 import CustomerDetail from './CustomerDetail'
 import NewCustomerForm from './NewCustomerForm'
 import CustomerTrash from './CustomerTrash'
+import ImportTool from './ImportTool'
+import DedupReview from './DedupReview'
 
-type Tab = 'list' | 'trash'
+type Tab = 'list' | 'import' | 'dedup' | 'trash'
 
 export default function Customers() {
   const { user, stores } = useApp()
@@ -101,12 +103,16 @@ export default function Customers() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-        {(['list', 'trash'] as const).map(t => {
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+        {(['list', 'import', 'dedup', 'trash'] as const).map(t => {
           const active = tab === t
+          const label = t === 'list' ? 'All Customers'
+                      : t === 'import' ? '📥 Import'
+                      : t === 'dedup' ? '⚖️ Dedup Review'
+                      : '🗑️ Trash'
           return (
             <button key={t} onClick={() => setTab(t)} className={active ? 'btn-primary btn-sm' : 'btn-outline btn-sm'}>
-              {t === 'list' ? 'All Customers' : '🗑️ Trash'}
+              {label}
             </button>
           )
         })}
@@ -227,6 +233,14 @@ export default function Customers() {
             {filtered.length} of {customers.length} customer{customers.length === 1 ? '' : 's'} shown.
           </div>
         </>
+      )}
+
+      {tab === 'import' && (
+        <ImportTool stores={stores} storeId={storeId} setStoreId={setStoreId} onImported={reload} />
+      )}
+
+      {tab === 'dedup' && (
+        <DedupReview storeId={storeId} />
       )}
 
       {tab === 'trash' && (
