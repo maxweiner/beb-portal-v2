@@ -411,12 +411,16 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
         </div>
       )}
 
-      {/* Store Performance + Lead Sources grid — admin / superadmin
-          only. Buyers' dashboard is scoped to their own events; no
-          team-wide store / source breakdown. */}
+      {/* Store Performance + Lead Sources. Store Performance is
+          partners-only (Max / Joe / Rich) — financial visibility
+          rule, not a role gate. Lead Sources stays for all
+          non-buyers. Grid layout collapses to 1-col when Store
+          Performance is hidden so Lead Sources doesn't sit in an
+          empty column. */}
       {!isBuyer && (
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Store performance */}
+      <div className={user?.is_partner ? 'grid grid-cols-1 lg:grid-cols-3 gap-6' : 'grid grid-cols-1 gap-6'}>
+        {/* Store performance — partners only. */}
+        {user?.is_partner && (
         <div className="lg:col-span-2 rounded-xl overflow-hidden" style={{ background: 'var(--card-bg)', border: '1px solid var(--pearl)', boxShadow: '0 2px 10px rgba(0,0,0,.04)' }}>
           <div style={{ background: 'var(--green-pale)', padding: '12px 20px', borderBottom: '1px solid var(--green3)', fontWeight: 900, fontSize: 13, color: 'var(--green-dark)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
             Store Performance — {year}
@@ -455,6 +459,7 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
             </div>
           )}
         </div>
+        )}
 
         {/* Lead sources */}
         <div className="card">
