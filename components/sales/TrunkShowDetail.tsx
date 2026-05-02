@@ -13,6 +13,7 @@ import {
   enumerateDates, effectiveStatus,
 } from '@/lib/sales/trunkShows'
 import type { TrunkShow, TrunkShowHours, TrunkShowStatus } from '@/types'
+import SpecialRequestsPanel from './SpecialRequestsPanel'
 
 interface Props {
   trunkShowId: string
@@ -200,11 +201,13 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
         )}
       </div>
 
+      {/* Special requests — Phase 11 */}
+      <SpecialRequestsPanel trunkShowId={show.id} canWrite={!!canMutate} />
+
       {/* Phase placeholders */}
       <div className="card" style={{ padding: 18, marginBottom: 14, opacity: 0.7 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginBottom: 6 }}>Coming soon on this page</div>
         <ul style={{ fontSize: 12, color: 'var(--mist)', lineHeight: 1.6, paddingLeft: 18, margin: 0 }}>
-          <li>Special requests + office staff notifications — Phase 11</li>
           <li>Customer appointment slots (Trunk Customer Bookings) — Phase 12</li>
           <li>Spiff calculation + payouts — Phase 13</li>
         </ul>
