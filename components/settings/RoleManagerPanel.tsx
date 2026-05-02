@@ -15,7 +15,7 @@ type ModuleId =
   | 'dashboard' | 'calendar' | 'events' | 'schedule' | 'travel'
   | 'dayentry' | 'staff' | 'admin' | 'libertyadmin' | 'stores'
   | 'data-research' | 'reports' | 'financials' | 'marketing'
-  | 'shipping' | 'expenses' | 'todo' | 'recipients'
+  | 'shipping' | 'expenses' | 'recipients'
   | 'notification-templates'
 
 interface Role {
@@ -63,7 +63,6 @@ const MODULE_SECTIONS: ModuleSection[] = [
       { id: 'marketing', label: 'Marketing' },
       { id: 'shipping',  label: 'Shipping' },
       { id: 'expenses',  label: 'Expenses' },
-      { id: 'todo',      label: 'To-Do List' },
     ],
   },
 ]
