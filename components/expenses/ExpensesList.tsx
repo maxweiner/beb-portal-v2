@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useIsNarrow } from './useIsNarrow'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
+import { isWorkerAssigned } from '@/lib/permissions'
 import type { Event, ExpenseReport, ExpenseReportStatus, ExpenseReportTemplate, User } from '@/types'
 import {
   STATUS_LABEL, STATUS_COLOR,
@@ -90,8 +91,61 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
       user_name:   userMap.get(r.user_id) ?? '',
     })))
     setLoaded(true)
+    return reportsArr
   }
-  useEffect(() => { reload() /* eslint-disable-next-line */ }, [user?.id, events.length])
+
+  /**
+   * Idempotent backfill: every event the user is a worker on
+   * gets an expense_reports row. The unique (event_id, user_id)
+   * constraint makes the inserts safe to repeat — already-
+   * existing rows are skipped. Runs once per (user, events)
+   * pair after the initial reload.
+   */
+  async function autoCreateMissingReports(existingReports: ExpenseReport[]): Promise<boolean> {
+    if (!user) return false
+    const myReportEventIds = new Set(
+      existingReports.filter(r => r.user_id === user.id).map(r => r.event_id),
+    )
+    const missing = events
+      .filter(e => isWorkerAssigned(e, user.id))
+      .filter(e => !myReportEventIds.has(e.id))
+    if (missing.length === 0) return false
+    const { error: insErr } = await supabase
+      .from('expense_reports')
+      .upsert(
+        missing.map(e => ({ event_id: e.id, user_id: user.id })),
+        { onConflict: 'event_id,user_id', ignoreDuplicates: true },
+      )
+    if (insErr) {
+      console.warn('[expenses] auto-create reports failed:', insErr.message)
+      return false
+    }
+    return true
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const initial = await reload()
+      if (cancelled || !initial) return
+      const created = await autoCreateMissingReports(initial)
+      if (cancelled) return
+      if (created) await reload()
+    })()
+    return () => { cancelled = true }
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [user?.id, events.length])
+
+  async function deleteReport(r: ReportRow) {
+    if (r.status !== 'active') return
+    if (!confirm(`Delete the expense report for "${r.event_name}"? This can't be undone.`)) return
+    const { error: delErr } = await supabase.from('expense_reports').delete().eq('id', r.id)
+    if (delErr) {
+      alert(`Could not delete: ${delErr.message}`)
+      return
+    }
+    await reload()
+  }
 
   // Load active templates once for the new-report picker.
   useEffect(() => {
@@ -206,36 +260,53 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
             </div>
           ) : filtered.map(r => {
             const sc = STATUS_COLOR[r.status]
+            const canDelete = r.status === 'active' && (r.user_id === user?.id || canSeeAll)
             return (
-              <button key={r.id} onClick={() => onOpen(r.id)} className="card"
-                style={{
+              <div key={r.id} className="card" style={{
+                position: 'relative', padding: 12, background: '#fff',
+              }}>
+                <button onClick={() => onOpen(r.id)} style={{
                   display: 'block', width: '100%', textAlign: 'left',
-                  padding: 12, cursor: 'pointer', fontFamily: 'inherit',
-                  background: '#fff',
+                  background: 'transparent', border: 'none', padding: 0,
+                  cursor: 'pointer', fontFamily: 'inherit',
                 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink)', marginBottom: 2 }}>
-                      {r.event_name}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink)', marginBottom: 2 }}>
+                        {r.event_name}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--mist)' }}>
+                        {r.event_start ? formatDateLong(r.event_start) : '—'}
+                        {canSeeAll && r.user_name ? ` · ${r.user_name}` : ''}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--mist)' }}>
-                      {r.event_start ? formatDateLong(r.event_start) : '—'}
-                      {canSeeAll && r.user_name ? ` · ${r.user_name}` : ''}
-                    </div>
+                    <span style={{
+                      background: sc.bg, color: sc.fg,
+                      padding: '2px 10px', borderRadius: 999,
+                      fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap',
+                    }}>{STATUS_LABEL[r.status]}</span>
                   </div>
-                  <span style={{
-                    background: sc.bg, color: sc.fg,
-                    padding: '2px 10px', borderRadius: 999,
-                    fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap',
-                  }}>{STATUS_LABEL[r.status]}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 8 }}>
-                  <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)' }}>
-                    {formatCurrency(r.grand_total)}
-                  </span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--green-dark)' }}>Open →</span>
-                </div>
-              </button>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 8 }}>
+                    <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)' }}>
+                      {formatCurrency(r.grand_total)}
+                    </span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--green-dark)' }}>Open →</span>
+                  </div>
+                </button>
+                {canDelete && (
+                  <button
+                    onClick={e => { e.stopPropagation(); deleteReport(r) }}
+                    title="Delete this report"
+                    aria-label="Delete this report"
+                    style={{
+                      position: 'absolute', top: 8, right: 8,
+                      background: 'transparent', border: 'none',
+                      padding: 4, cursor: 'pointer', color: 'var(--mist)',
+                      fontSize: 16, lineHeight: 1,
+                    }}
+                  >×</button>
+                )}
+              </div>
             )
           })}
         </div>
@@ -280,9 +351,22 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
                     <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--ink)', whiteSpace: 'nowrap' }}>
                       {formatCurrency(r.grand_total)}
                     </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                       <button onClick={e => { e.stopPropagation(); onOpen(r.id) }}
                         className="btn-outline btn-sm">Open →</button>
+                      {r.status === 'active' && (r.user_id === user?.id || canSeeAll) && (
+                        <button
+                          onClick={e => { e.stopPropagation(); deleteReport(r) }}
+                          title="Delete this report"
+                          aria-label="Delete this report"
+                          style={{
+                            marginLeft: 6, background: 'transparent',
+                            border: '1px solid var(--cream2)', borderRadius: 6,
+                            padding: '4px 8px', cursor: 'pointer', color: 'var(--mist)',
+                            fontSize: 14, lineHeight: 1,
+                          }}
+                        >×</button>
+                      )}
                     </td>
                   </tr>
                 )
