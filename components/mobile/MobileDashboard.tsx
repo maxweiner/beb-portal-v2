@@ -53,9 +53,16 @@ export default function MobileDashboard({ setNav }: Props) {
   const showingFallback = thisWeek.length === 0 && nextWeek.length > 0
   const displayed = thisWeek.length > 0 ? thisWeek : nextWeek
 
-  // Sort so the user's own events come first (only for buyers).
+  // Buyers see ONLY their assigned events on the dashboard. Admins
+  // still see the full week and the user's own events float to the
+  // top via the sort below.
   const sortedDisplayed = useMemo(() => {
     if (isAdmin) return displayed
+    if (user?.role === 'buyer' && user?.id) {
+      return displayed
+        .filter(ev => isWorkerAssigned(ev, user.id))
+        .sort((a, b) => a.start_date.localeCompare(b.start_date))
+    }
     return [...displayed].sort((a, b) => {
       const aMine = isWorkerAssigned(a, user?.id) ? 0 : 1
       const bMine = isWorkerAssigned(b, user?.id) ? 0 : 1
@@ -63,7 +70,7 @@ export default function MobileDashboard({ setNav }: Props) {
       return a.start_date.localeCompare(b.start_date)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [displayed, isAdmin, user?.id])
+  }, [displayed, isAdmin, user?.id, user?.role])
 
   /* ── Personal stats (for name-tap popup) ── */
   const myDays = yearEvents.reduce((s, ev) =>

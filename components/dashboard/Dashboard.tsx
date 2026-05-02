@@ -133,6 +133,31 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
   // the active brand. Brand-scoping happens upstream via context.events.
   const buyers = leaderboardBuyers(users, events)
 
+  // Buyer view: hero stats + event lists scope to events the buyer is
+  // assigned to. Other roles still see the team-wide view. Filter
+  // funcs rather than gates so the JSX stays role-agnostic.
+  const isBuyer = user?.role === 'buyer'
+  const myId = user?.id
+  const filterMine = (evs: any[]) =>
+    (isBuyer && myId) ? evs.filter(e => isWorkerAssigned(e, myId)) : evs
+
+  const visibleWeekEvents       = filterMine(weekEvents)
+  const visibleNextWeekFallback = filterMine(nextWeekFallback)
+  const visibleNextWeekEvents   = filterMine(nextWeekEvents)
+  const visibleDisplayedEvents  = visibleWeekEvents.length > 0 ? visibleWeekEvents : visibleNextWeekFallback
+  const visibleShowingNextWeek  = visibleWeekEvents.length === 0 && visibleNextWeekFallback.length > 0
+  const visibleWeekTotals = isBuyer
+    ? visibleWeekEvents.reduce((acc, ev) => {
+        ev.days.forEach((d: any) => {
+          acc.purchases  += d.purchases  || 0
+          acc.customers  += d.customers  || 0
+          acc.dollars    += daySpend(d)
+          acc.commission += dayCommission(d)
+        })
+        return acc
+      }, { purchases: 0, customers: 0, dollars: 0, commission: 0 })
+    : weekTotals
+
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
 
@@ -181,10 +206,10 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
-              { label: 'Events This Week', value: weekEvents.length, sub: fmtWeek },
-              { label: 'Purchases', value: weekTotals.purchases.toLocaleString(), sub: `${weekTotals.customers.toLocaleString()} customers` },
-              { label: '💰 Amount Spent', value: fmt(weekTotals.dollars), sub: weekTotals.customers > 0 ? `${Math.round(weekTotals.purchases / weekTotals.customers * 100)}% close rate` : 'This week' },
-              { label: 'Commission Due', value: fmt(weekTotals.commission), sub: '10% + 5% tiers' },
+              { label: 'Events This Week', value: visibleWeekEvents.length, sub: fmtWeek },
+              { label: 'Purchases', value: visibleWeekTotals.purchases.toLocaleString(), sub: `${visibleWeekTotals.customers.toLocaleString()} customers` },
+              { label: '💰 Amount Spent', value: fmt(visibleWeekTotals.dollars), sub: visibleWeekTotals.customers > 0 ? `${Math.round(visibleWeekTotals.purchases / visibleWeekTotals.customers * 100)}% close rate` : 'This week' },
+              { label: 'Commission Due', value: fmt(visibleWeekTotals.commission), sub: '10% + 5% tiers' },
             ].map(({ label, value, sub }) => (
               <div key={label} style={{
                 background: 'rgba(240,253,244,.95)', borderRadius: 12, padding: '14px 16px',
@@ -199,18 +224,18 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
           </div>
 
           {/* This week's events — one card per event, live spend + day status */}
-          {displayedEvents.length > 0 && (
+          {visibleDisplayedEvents.length > 0 && (
             <div style={{ marginTop: 18 }}>
               <div style={{
                 fontSize: 11, fontWeight: 700, color: 'rgba(245,240,232,.75)',
                 textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 10,
               }}>
-                {showingNextWeek
+                {visibleShowingNextWeek
                   ? 'Nothing this week — here\'s what\'s coming'
                   : 'This week\'s events'}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
-                {displayedEvents.map(ev => {
+                {visibleDisplayedEvents.map(ev => {
                   const spend = getEventSpend(ev)
                   const status = getEventDayStatus(ev)
                   const store = stores.find(s => s.id === ev.store_id)
@@ -268,7 +293,7 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
       <NextEventCard setNav={setNav} variant="desktop" />
 
       {/* Next Week Preview — only on weekends */}
-      {isWeekend && nextWeekEvents.length > 0 && (
+      {isWeekend && visibleNextWeekEvents.length > 0 && (
         <div style={{ background: 'var(--card-bg)', borderRadius: 'var(--r2)', border: '1px solid var(--pearl)', marginBottom: 24, overflow: 'hidden' }}>
           <div style={{ background: 'var(--green-pale)', padding: '12px 20px', borderBottom: '1px solid var(--green3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -276,11 +301,11 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
               <span style={{ fontWeight: 900, fontSize: 13, color: 'var(--green-dark)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Next Week</span>
               <span style={{ fontSize: 12, color: 'var(--green-dark)', opacity: 0.7 }}>{fmtNextWeek}</span>
             </div>
-            <span style={{ fontSize: 12, fontWeight: 900, color: 'var(--green-dark)' }}>{nextWeekEvents.length} event{nextWeekEvents.length !== 1 ? 's' : ''}</span>
+            <span style={{ fontSize: 12, fontWeight: 900, color: 'var(--green-dark)' }}>{visibleNextWeekEvents.length} event{visibleNextWeekEvents.length !== 1 ? 's' : ''}</span>
           </div>
           <div style={{ padding: '16px 20px' }}>
           <div style={{ display: 'flex', gap: 12, overflowX: 'auto' }}>
-            {nextWeekEvents.sort((a, b) => a.start_date.localeCompare(b.start_date)).map((ev, i) => {
+            {visibleNextWeekEvents.sort((a, b) => a.start_date.localeCompare(b.start_date)).map((ev, i) => {
               const store = stores.find(s => s.id === ev.store_id)
               const evStart = new Date(ev.start_date + 'T12:00:00')
               const evEnd = new Date(ev.start_date + 'T12:00:00')
@@ -311,8 +336,10 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Store performance table */}
+      <div className={isBuyer ? 'grid grid-cols-1 gap-6' : 'grid grid-cols-1 lg:grid-cols-3 gap-6'}>
+        {/* Store performance table — admins/superadmins only.
+            Buyers don't need a team-wide store breakdown on their dash. */}
+        {!isBuyer && (
         <div className="lg:col-span-2 rounded-xl overflow-hidden" style={{ background: 'var(--card-bg)', border: '1px solid var(--pearl)', boxShadow: '0 2px 10px rgba(0,0,0,.04)' }}>
           <div style={{ background: 'var(--green-pale)', padding: '12px 20px', borderBottom: '1px solid var(--green3)', fontWeight: 900, fontSize: 13, color: 'var(--green-dark)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
             Store Performance — {year}
@@ -351,6 +378,7 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
             </div>
           )}
         </div>
+        )}
 
         {/* Lead sources */}
         <div className="card">
@@ -373,8 +401,10 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
           </div>
 
 
-          {/* Leaderboard mini */}
-          {buyers.length > 0 && (
+          {/* Leaderboard mini — admin/superadmin view only. Buyers
+              already get the full Leaderboard at the bottom; we
+              don't want two leaderboards on one page. */}
+          {!isBuyer && buyers.length > 0 && (
             <div className="mt-6 pt-5" style={{ borderTop: '1px solid var(--cream2)' }}>
               <div className="font-black text-sm mb-3" style={{ color: 'var(--ink)' }}>🏆 {new Date().getFullYear()} Standings</div>
               <div className="space-y-2">
