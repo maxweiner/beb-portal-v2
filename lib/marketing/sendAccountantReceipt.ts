@@ -25,14 +25,20 @@ const FLOW_LABELS = {
   newspaper: 'Newspaper',
 } as const
 
-async function loadAccountantEmail(): Promise<string | null> {
-  // Reuses the same settings key that the expenses module uses, per
-  // spec ("same accountant address used for expense reports"). Strips
+async function loadAccountantEmails(): Promise<string[]> {
+  // Reuses the same settings keys that the expenses module uses, per
+  // spec ("same accountant address used for expense reports"). Optional
+  // accountant_email_2 sends a copy to a second address. Strips
   // wrapping quotes to tolerate JSON.stringify'd values.
   const sb = admin()
-  const { data } = await sb.from('settings').select('value').eq('key', 'accountant_email').maybeSingle()
-  const raw = ((data as any)?.value as string | undefined)?.trim().replace(/^"|"$/g, '')
-  return raw || process.env.ACCOUNTANT_EMAIL || null
+  const [{ data: a }, { data: b }] = await Promise.all([
+    sb.from('settings').select('value').eq('key', 'accountant_email').maybeSingle(),
+    sb.from('settings').select('value').eq('key', 'accountant_email_2').maybeSingle(),
+  ])
+  const clean = (v: any) => (v as string | undefined)?.trim().replace(/^"|"$/g, '') || ''
+  const out = [clean((a as any)?.value), clean((b as any)?.value)].filter(Boolean)
+  if (out.length === 0 && process.env.ACCOUNTANT_EMAIL) out.push(process.env.ACCOUNTANT_EMAIL)
+  return Array.from(new Set(out.map(s => s.toLowerCase())))
 }
 
 export interface SendReceiptResult {
@@ -55,8 +61,8 @@ export async function sendMarketingReceiptForCampaign(campaignId: string): Promi
     return { ok: false, reason: 'campaign_not_done' }
   }
 
-  const accountantTo = await loadAccountantEmail()
-  if (!accountantTo) return { ok: false, reason: 'no_accountant_address' }
+  const accountantTos = await loadAccountantEmails()
+  if (accountantTos.length === 0) return { ok: false, reason: 'no_accountant_address' }
 
   const { data: event } = await sb.from('events')
     .select('store_id, store_name, start_date').eq('id', campaign.event_id).maybeSingle()
@@ -152,18 +158,27 @@ export async function sendMarketingReceiptForCampaign(campaignId: string): Promi
     </div>
   `
 
-  try {
-    await sendEmail({
-      to: accountantTo,
-      subject,
-      html,
-      attachments: [{
-        filename: `marketing-receipt-${storeName.replace(/[^A-Za-z0-9-]+/g, '_')}-${campaign.id.slice(0, 8)}.pdf`,
-        content: pdfBuffer.toString('base64'),
-      }],
-    })
-  } catch (err: any) {
-    return { ok: false, reason: 'send_failed', pdfPath, error: err?.message || 'unknown' }
+  // Per-recipient sends so a single bad address doesn't tank the batch.
+  let sentCount = 0
+  let firstError: string | null = null
+  for (const to of accountantTos) {
+    try {
+      await sendEmail({
+        to,
+        subject,
+        html,
+        attachments: [{
+          filename: `marketing-receipt-${storeName.replace(/[^A-Za-z0-9-]+/g, '_')}-${campaign.id.slice(0, 8)}.pdf`,
+          content: pdfBuffer.toString('base64'),
+        }],
+      })
+      sentCount++
+    } catch (err: any) {
+      if (firstError === null) firstError = err?.message || 'unknown'
+    }
+  }
+  if (sentCount === 0) {
+    return { ok: false, reason: 'send_failed', pdfPath, error: firstError ?? 'no addresses succeeded' }
   }
 
   await sb.from('marketing_campaigns')
