@@ -34,15 +34,21 @@ const fmt$ = (n: number | string | null | undefined) => fmtMoney(n, { cents: tru
 const fmtDateLong = (iso: string) =>
   new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 
-async function loadAccountantEmail(): Promise<string | null> {
+async function loadAccountantEmails(): Promise<string[]> {
   const sb = admin()
-  // Prefer the settings-table value (matches how resend_api_key is stored
-  // in this codebase). Strip wrapping quotes — historically some settings
-  // values are JSON.stringify'd, others are plain text. Falls back to the
-  // ACCOUNTANT_EMAIL env var.
-  const { data } = await sb.from('settings').select('value').eq('key', 'accountant_email').maybeSingle()
-  const raw = ((data as any)?.value as string | undefined)?.trim().replace(/^"|"$/g, '')
-  return raw || process.env.ACCOUNTANT_EMAIL || null
+  // Settings-table values (matches how resend_api_key is stored). Strip
+  // wrapping quotes — historically some settings values are JSON.stringify'd,
+  // others are plain text. accountant_email_2 is optional. Falls back to
+  // the ACCOUNTANT_EMAIL env var if neither is set.
+  const [{ data: a }, { data: b }] = await Promise.all([
+    sb.from('settings').select('value').eq('key', 'accountant_email').maybeSingle(),
+    sb.from('settings').select('value').eq('key', 'accountant_email_2').maybeSingle(),
+  ])
+  const clean = (v: any) => (v as string | undefined)?.trim().replace(/^"|"$/g, '') || ''
+  const out = [clean((a as any)?.value), clean((b as any)?.value)].filter(Boolean)
+  if (out.length === 0 && process.env.ACCOUNTANT_EMAIL) out.push(process.env.ACCOUNTANT_EMAIL)
+  // Dedupe so a typo'd duplicate doesn't double-send.
+  return Array.from(new Set(out.map(s => s.toLowerCase())))
 }
 
 export interface SendAccountantEmailResult {
@@ -63,8 +69,8 @@ export async function sendAccountantEmailForReport(
   reportId: string,
   opts: { portalBaseUrl?: string } = {},
 ): Promise<SendAccountantEmailResult> {
-  const accountantTo = await loadAccountantEmail()
-  if (!accountantTo) return { ok: false, reason: 'no_accountant_address' }
+  const accountantTos = await loadAccountantEmails()
+  if (accountantTos.length === 0) return { ok: false, reason: 'no_accountant_address' }
 
   const sb = admin()
   const { data: report, error: rErr } = await sb
@@ -140,16 +146,26 @@ export async function sendAccountantEmailForReport(
   `.trim()
 
   const filename = `expense-report-${buyerName.replace(/\s+/g, '-').toLowerCase()}-${(event as any)?.start_date ?? 'undated'}.pdf`
+  // Per-recipient sends so a single bad address doesn't tank the batch.
+  // The first message id we get back is what we report on; remaining
+  // sends are best-effort.
   let messageId: string | null = null
-  try {
-    messageId = await sendEmail({
-      to: accountantTo,
-      subject,
-      html,
-      attachments: [{ filename, content: pdfBuffer.toString('base64') }],
-    })
-  } catch (err: any) {
-    return { ok: false, reason: 'send_failed', error: err?.message ?? 'unknown error' }
+  let firstError: string | null = null
+  for (const to of accountantTos) {
+    try {
+      const id = await sendEmail({
+        to,
+        subject,
+        html,
+        attachments: [{ filename, content: pdfBuffer.toString('base64') }],
+      })
+      if (messageId === null) messageId = id
+    } catch (err: any) {
+      if (firstError === null) firstError = err?.message ?? 'unknown error'
+    }
+  }
+  if (messageId === null) {
+    return { ok: false, reason: 'send_failed', error: firstError ?? 'no addresses succeeded' }
   }
 
   await sb.from('expense_reports')

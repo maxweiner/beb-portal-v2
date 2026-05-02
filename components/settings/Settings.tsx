@@ -401,16 +401,19 @@ export default function Settings() {
 /* ── EXPENSE SETTINGS ── */
 function ExpenseSettings() {
   const [accountantEmail, setAccountantEmail] = useState('')
+  const [accountantEmail2, setAccountantEmail2] = useState('')
   const [irsMileageRate, setIrsMileageRate] = useState('0.67')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const load = async () => {
-      const [{ data: ae }, { data: rate }] = await Promise.all([
+      const [{ data: ae }, { data: ae2 }, { data: rate }] = await Promise.all([
         supabase.from('settings').select('value').eq('key', 'accountant_email').maybeSingle(),
+        supabase.from('settings').select('value').eq('key', 'accountant_email_2').maybeSingle(),
         supabase.from('settings').select('value').eq('key', 'irs_mileage_rate').maybeSingle(),
       ])
       setAccountantEmail((ae?.value || '').replace(/^"|"$/g, ''))
+      setAccountantEmail2((ae2?.value || '').replace(/^"|"$/g, ''))
       const rateVal = rate?.value
       const rateStr = rateVal == null
         ? '0.67'
@@ -422,8 +425,8 @@ function ExpenseSettings() {
   }, [])
 
   const status = useAutosave(
-    { accountantEmail, irsMileageRate },
-    async ({ accountantEmail, irsMileageRate }) => {
+    { accountantEmail, accountantEmail2, irsMileageRate },
+    async ({ accountantEmail, accountantEmail2, irsMileageRate }) => {
       // settings.value is JSONB — JSON.stringify so a bare string /
       // number passes column validation.
       const rate = Number(irsMileageRate)
@@ -431,6 +434,10 @@ function ExpenseSettings() {
         supabase.from('settings').upsert({
           key: 'accountant_email',
           value: JSON.stringify(accountantEmail.trim()),
+        }),
+        supabase.from('settings').upsert({
+          key: 'accountant_email_2',
+          value: JSON.stringify(accountantEmail2.trim()),
         }),
         supabase.from('settings').upsert({
           key: 'irs_mileage_rate',
@@ -457,6 +464,16 @@ function ExpenseSettings() {
           placeholder="accountant@example.com" />
         <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
           Recipient for the auto-generated expense report email when a report is approved.
+        </div>
+      </div>
+
+      <div className="field">
+        <label className="fl">Accountant Email 2 (optional)</label>
+        <input type="email" value={accountantEmail2}
+          onChange={e => setAccountantEmail2(e.target.value)}
+          placeholder="second-accountant@example.com" />
+        <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
+          Optional second recipient. Receives the same expense + marketing accountant emails as the primary.
         </div>
       </div>
 
