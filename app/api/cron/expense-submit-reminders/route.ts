@@ -79,25 +79,76 @@ async function run(req: Request) {
     process.env.NEXT_PUBLIC_BOOKING_BASE_URL
     || process.env.NEXT_PUBLIC_APP_URL
     || 'https://beb-portal-v2.vercel.app'
-  const outcomes = []
+
+  // Need owner ids so we can dedupe per buyer. The earlier select
+  // doesn't return user_id; pull it now in one round-trip.
+  const { data: ownerRows } = await sb
+    .from('expense_reports')
+    .select('id, user_id')
+    .in('id', eligible.map((r: any) => r.id))
+  const ownerById = new Map<string, string>()
+  for (const o of (ownerRows || [])) ownerById.set(o.id as string, o.user_id as string)
+
+  // Group eligible reports by buyer. Send AT MOST one reminder per
+  // buyer per cron run — a buyer with 20 untouched reports gets
+  // one email about their oldest pending one, not 20. Cooldown is
+  // applied to ALL their eligible rows so the next cron leaves
+  // them alone for COOLDOWN_DAYS regardless of report count.
+  const byBuyer = new Map<string, any[]>()
   for (const r of eligible) {
-    const next = (r.reminder_count ?? 0) + 1
+    const uid = ownerById.get(r.id)
+    if (!uid) continue
+    if (!byBuyer.has(uid)) byBuyer.set(uid, [])
+    byBuyer.get(uid)!.push(r)
+  }
+
+  const outcomes: any[] = []
+  for (const [uid, list] of byBuyer.entries()) {
+    // Oldest event first → that's the report we name in the email.
+    list.sort((a, b) => (a.event?.start_date || '').localeCompare(b.event?.start_date || ''))
+    const target = list[0]
+    const next = (target.reminder_count ?? 0) + 1
+
     let result
     try {
-      result = await sendSubmitReminderForReport(r.id, next, { portalBaseUrl })
+      result = await sendSubmitReminderForReport(target.id, next, { portalBaseUrl })
     } catch (err: any) {
-      outcomes.push({ id: r.id, ok: false, error: err?.message ?? 'unknown' })
+      outcomes.push({ buyer: uid, id: target.id, ok: false, error: err?.message ?? 'unknown' })
       continue
     }
+
+    const nowIso = new Date().toISOString()
     if (result.ok) {
+      // Bump reminder_count on the report we actually emailed about
+      // — cap at MAX_REMINDERS still applies per report.
       await sb.from('expense_reports')
-        .update({ reminder_count: next, last_reminder_sent_at: new Date().toISOString() })
-        .eq('id', r.id)
+        .update({ reminder_count: next, last_reminder_sent_at: nowIso })
+        .eq('id', target.id)
+      // Cooldown-stamp the rest of this buyer's eligible reports
+      // (without bumping their counts). Prevents the cron from
+      // emailing this buyer again for COOLDOWN_DAYS no matter how
+      // many other reports they have.
+      const otherIds = list.slice(1).map(r => r.id)
+      if (otherIds.length > 0) {
+        await sb.from('expense_reports')
+          .update({ last_reminder_sent_at: nowIso })
+          .in('id', otherIds)
+      }
     }
-    outcomes.push({ id: r.id, attempt: next, ...result })
+    outcomes.push({ buyer: uid, id: target.id, attempt: next, suppressed: list.length - 1, ...result })
   }
+
   const sent = outcomes.filter(o => o.ok).length
-  return NextResponse.json({ ok: true, eligible: eligible.length, sent, failed: eligible.length - sent, outcomes })
+  const suppressed = outcomes.reduce((s, o) => s + (o.suppressed || 0), 0)
+  return NextResponse.json({
+    ok: true,
+    eligible: eligible.length,
+    buyers: byBuyer.size,
+    sent,
+    suppressed,
+    failed: outcomes.length - sent,
+    outcomes,
+  })
 }
 
 export async function GET(req: Request) { return run(req) }

@@ -113,20 +113,33 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
   }
 
   /**
-   * Idempotent backfill: every event the user is a worker on
-   * gets an expense_reports row. The unique (event_id, user_id)
-   * constraint makes the inserts safe to repeat — already-
-   * existing rows are skipped. Runs once per (user, events)
-   * pair after the initial reload.
+   * Idempotent backfill: every recent event the user is a worker
+   * on gets an expense_reports row. The unique (event_id, user_id)
+   * constraint makes the inserts safe to repeat — already-existing
+   * rows are skipped.
+   *
+   * RECENT-ONLY GATE: only create rows for events whose start_date
+   * is within the last AUTO_CREATE_LOOKBACK_DAYS days. Without
+   * this, opening the page generated rows for every event the
+   * user ever worked, including 2018-era ones — which then
+   * tripped the daily expense-reminder cron and produced an email
+   * storm (Tom: 10 emails, Elliott: 6 emails on 2026-05-02).
    */
   async function autoCreateMissingReports(existingReports: ExpenseReport[]): Promise<boolean> {
     if (!user) return false
+    const AUTO_CREATE_LOOKBACK_DAYS = 90
+    const cutoffMs = Date.now() - AUTO_CREATE_LOOKBACK_DAYS * 24 * 60 * 60 * 1000
+    const cutoffIso = (() => {
+      const d = new Date(cutoffMs)
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+    })()
     const myReportEventIds = new Set(
       existingReports.filter(r => r.user_id === user.id).map(r => r.event_id),
     )
     const missing = events
       .filter(e => isWorkerAssigned(e, user.id))
       .filter(e => !myReportEventIds.has(e.id))
+      .filter(e => e.start_date && e.start_date >= cutoffIso)
     if (missing.length === 0) return false
     const { error: insErr } = await supabase
       .from('expense_reports')
