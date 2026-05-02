@@ -10,6 +10,7 @@ import BrandLogosPanel from './BrandLogosPanel'
 import RoleManagerPanel from './RoleManagerPanel'
 import ImpersonationLogPanel from '@/components/impersonation/ImpersonationLogPanel'
 import BoothCostCategoriesPanel from '@/components/sales/BoothCostCategoriesPanel'
+import SalesRepTerritoriesPanel from '@/components/sales/SalesRepTerritoriesPanel'
 import Checkbox from '@/components/ui/Checkbox'
 import AddressAutocompleteInput from '@/components/ui/AddressAutocompleteInput'
 import CollapsibleCard from '@/components/ui/CollapsibleCard'
@@ -373,6 +374,20 @@ export default function Settings() {
           subtitle="Create roles and choose which modules each one unlocks. Drives the sidebar + page guards (PRs C/D in this initiative wire them in)."
         >
           <RoleManagerPanel />
+        </CollapsibleCard>
+      )}
+
+      {/* Sales Rep Territories — admin / superadmin / partner.
+          Maps states → reps so newly-created leads with a
+          matching state auto-assign on save. Existing leads
+          aren't re-routed. */}
+      {(user?.role === 'admin' || user?.role === 'superadmin' || user?.is_partner) && (
+        <CollapsibleCard
+          storageKey="settings-sales-rep-territories"
+          title="🗺️ Sales Rep Territories"
+          subtitle="Assign each state to a sales rep so new leads with a matching state auto-route on creation. Existing leads keep their current rep."
+        >
+          <SalesRepTerritoriesPanel />
         </CollapsibleCard>
       )}
 

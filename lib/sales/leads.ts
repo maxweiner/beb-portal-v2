@@ -10,6 +10,7 @@
 
 import { supabase } from '@/lib/supabase'
 import type { Lead, LeadInterestLevel, LeadStatus } from '@/types'
+import { lookupTerritoryRep } from './territories'
 
 const COLS = `id, first_name, last_name, company_name, title,
   email, phone, address_line_1, address_line_2, city, state, zip,
@@ -63,6 +64,18 @@ export async function createLead(draft: LeadDraft): Promise<Lead> {
   // Normalize empty strings → null on optional fields so the DB
   // gets a clean NULL rather than ''.
   const norm = (v: string | null | undefined) => (v && v.trim() ? v.trim() : null)
+
+  // Phase 8: territory-based auto-assignment. If the caller didn't
+  // pick a rep, look up the lead's state in sales_rep_territories.
+  // No mapping → leave assigned_rep_id null so admin can route
+  // manually (the leads list filters can surface unassigned).
+  let assignedRepId: string | null = draft.assigned_rep_id || null
+  if (!assignedRepId && draft.state) {
+    try {
+      assignedRepId = await lookupTerritoryRep(draft.state)
+    } catch { /* swallow — fall back to null */ }
+  }
+
   const payload = {
     first_name: draft.first_name.trim(),
     last_name:  draft.last_name.trim(),
@@ -76,7 +89,7 @@ export async function createLead(draft: LeadDraft): Promise<Lead> {
     state:           norm(draft.state),
     zip:             norm(draft.zip),
     website:         norm(draft.website),
-    assigned_rep_id: draft.assigned_rep_id || null,
+    assigned_rep_id: assignedRepId,
     captured_at_trade_show_id: draft.captured_at_trade_show_id || null,
     captured_by_user_id:       draft.captured_by_user_id || null,
     interest_level:        draft.interest_level || null,
