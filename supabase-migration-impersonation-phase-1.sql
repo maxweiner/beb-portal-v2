@@ -196,8 +196,11 @@ BEGIN
 
   -- Pull the in-band impersonation marker the API writes to
   -- auth.users.app_metadata when starting a session.
-  SELECT app_metadata ->> 'impersonating_user_id',
-         (app_metadata ->> 'impersonating_expires_at')::timestamptz
+  -- auth.users actually stores app_metadata under the column name
+  -- raw_app_meta_data; the JS auth-admin client maps it on writes,
+  -- but SQL has to use the real column name.
+  SELECT raw_app_meta_data ->> 'impersonating_user_id',
+         (raw_app_meta_data ->> 'impersonating_expires_at')::timestamptz
     INTO imp_id, imp_expiry
     FROM auth.users
     WHERE id = user_uuid;
