@@ -53,8 +53,27 @@ The invoice number is a pre-printed number, often in red. The check number and d
 
 Respond ONLY with valid JSON in this exact format, no other text:
 {"invoice_number": "48271", "check_number": "1047", "dollar_amount": 2450.00}`
+    } else if (type === 'business_card') {
+      prompt = `You are a data entry assistant for a sales rep at a jewelry company. This image shows a business card the rep collected at a trade show. Please read all visible text and extract the contact's information.
+
+Extract the following fields. If a field is not visible or unclear, return null for that field — do NOT guess.
+
+- First name
+- Last name
+- Company / organization name
+- Job title
+- Email address
+- Primary phone number (if multiple, prefer mobile, then office)
+- Street address (just the street line — number + street name + suite if any)
+- City
+- State (2-letter abbreviation if US, full name otherwise)
+- ZIP / postal code
+- Website URL (just the domain or full URL as printed)
+
+Respond ONLY with valid JSON in this exact format, no other text:
+{"first_name": "Jane", "last_name": "Doe", "company_name": "Acme Jewelers", "title": "Owner", "email": "jane@acme.com", "phone": "555-0100", "address_line_1": "123 Main St", "city": "Albany", "state": "NY", "zip": "12345", "website": "acme.com"}`
     } else {
-      return NextResponse.json({ error: 'Invalid type. Use: id_front, id_back, or receipt' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid type. Use: id_front, id_back, receipt, or business_card' }, { status: 400 })
     }
 
     // Determine media type from base64 header

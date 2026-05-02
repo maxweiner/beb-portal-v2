@@ -5,7 +5,7 @@
 // _show_id is pre-filled). Phase 7 will add a second tab for
 // business-card scanning that pre-fills these fields from OCR.
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { createLead } from '@/lib/sales/leads'
 import type { Lead, LeadInterestLevel, LeadStatus } from '@/types'
@@ -22,6 +22,9 @@ export default function AddLeadModal({ tradeShowId, onCreated, onClose }: Props)
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || !!user?.is_partner
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [scanning, setScanning] = useState(false)
+  const [scanNotice, setScanNotice] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [draft, setDraft] = useState({
     first_name: '', last_name: '', company_name: '', title: '',
     email: '', phone: '', address_line_1: '', city: '', state: '', zip: '',
@@ -40,6 +43,52 @@ export default function AddLeadModal({ tradeShowId, onCreated, onClose }: Props)
     .filter(u => u.active !== false)
     .filter(u => u.role === 'sales_rep' || u.role === 'admin' || u.role === 'superadmin' || u.is_partner)
     .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+
+  async function handleScanFile(file: File) {
+    if (!file.type.startsWith('image/')) {
+      setError('Please pick an image file (JPG / PNG / HEIC).')
+      return
+    }
+    setScanning(true); setError(null); setScanNotice(null)
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = () => reject(new Error('Could not read the file.'))
+        reader.readAsDataURL(file)
+      })
+      const res = await fetch('/api/scan-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: dataUrl, type: 'business_card' }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json?.success) throw new Error(json?.error || `Scan failed (${res.status})`)
+      const d = json.data || {}
+      // Pre-fill empty fields only — never overwrite user-entered text.
+      setDraft(p => ({
+        ...p,
+        first_name:    p.first_name    || d.first_name    || '',
+        last_name:     p.last_name     || d.last_name     || '',
+        company_name:  p.company_name  || d.company_name  || '',
+        title:         p.title         || d.title         || '',
+        email:         p.email         || d.email         || '',
+        phone:         p.phone         || d.phone         || '',
+        address_line_1: p.address_line_1 || d.address_line_1 || '',
+        city:          p.city          || d.city          || '',
+        state:         p.state         || d.state         || '',
+        zip:           p.zip           || d.zip           || '',
+        website:       p.website       || d.website       || '',
+      }))
+      setScanNotice(json.parseError
+        ? "Couldn't auto-fill — review the card and enter manually."
+        : 'Scanned. Review the fields below before saving.')
+    } catch (err: any) {
+      setError(err?.message || 'Scan failed')
+    } finally {
+      setScanning(false)
+    }
+  }
 
   async function submit() {
     if (!valid || busy) return
@@ -87,6 +136,49 @@ export default function AddLeadModal({ tradeShowId, onCreated, onClose }: Props)
           </h2>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 22, color: 'var(--mist)' }}>×</button>
         </div>
+
+        {/* Scan business card */}
+        <div style={{
+          background: 'var(--green-pale)', border: '1px dashed var(--green3)',
+          borderRadius: 8, padding: 12, marginBottom: 14,
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        }}>
+          <span style={{ fontSize: 22 }}>📇</span>
+          <div style={{ flex: 1, minWidth: 160 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--green-dark)' }}>
+              Scan a business card
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--green-dark)', opacity: 0.75 }}>
+              Auto-fills name, company, contact, address from the image. Review before saving.
+            </div>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            style={{ display: 'none' }}
+            onChange={e => {
+              const file = e.target.files?.[0]
+              if (file) void handleScanFile(file)
+              e.target.value = ''  // allow re-picking the same file
+            }}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={scanning || busy}
+            className="btn-primary btn-sm"
+          >
+            {scanning ? 'Scanning…' : 'Scan card'}
+          </button>
+        </div>
+        {scanNotice && (
+          <div style={{
+            background: 'var(--green-pale)', color: 'var(--green-dark)',
+            padding: '8px 10px', borderRadius: 6, fontSize: 12, marginBottom: 10,
+            border: '1px solid var(--green3)',
+          }}>{scanNotice}</div>
+        )}
 
         {/* Identity */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3" style={{ marginBottom: 8 }}>
