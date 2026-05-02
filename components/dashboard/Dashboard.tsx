@@ -176,6 +176,68 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
         />
       )}
 
+      {/* Buyer-only: full Standings list with every buyer's name +
+          days. Lifted out of the Lead Sources sidebar (which is
+          hidden for buyers) so the list stays visible. */}
+      {isBuyer && buyers.length > 0 && (
+        <div className="card" style={{ marginBottom: 24 }}>
+          <div className="font-black text-sm mb-3" style={{ color: 'var(--ink)' }}>
+            🏆 {new Date().getFullYear()} Standings
+          </div>
+          <div className="space-y-2">
+            {(() => {
+              const currentYear = String(new Date().getFullYear())
+              const currentYearEvents = events.filter(e => e.start_date?.startsWith(currentYear))
+              const ranked = buyers.map(b => {
+                const days = currentYearEvents.reduce((s, ev) => {
+                  return s + (isWorkerAssigned(ev, b.id) ? daysWorkedOnEvent(ev) : 0)
+                }, 0)
+                return { ...b, days }
+              }).sort((a, b) => b.days - a.days)
+              const ineligible = ['joe', 'max', 'rich'].map(n => n.toLowerCase())
+              let rank = 0; let lastDays = -1
+              return ranked.map((b, i) => {
+                if (b.days !== lastDays) { rank = i + 1; lastDays = b.days }
+                const isIneligible = ineligible.some(n => b.name?.toLowerCase().includes(n))
+                const tier = rank === 1 ? { label: 'Estate Elite', icon: '👑', color: '#B8860B', bg: 'rgba(184,134,11,.1)' }
+                  : rank === 2 ? { label: 'Platinum', icon: '💎', color: '#6B7FD4', bg: 'rgba(107,127,212,.1)' }
+                  : rank === 3 ? { label: 'Gold', icon: '🥇', color: '#C9A84C', bg: 'rgba(201,168,76,.1)' }
+                  : null
+                const isMe = b.id === user?.id
+                return (
+                  <div key={b.id}
+                    className="flex items-center justify-between text-sm"
+                    style={{
+                      padding: '6px 8px', borderRadius: 6,
+                      background: isMe ? 'var(--green-pale)' : tier ? tier.bg : 'transparent',
+                    }}>
+                    <div className="flex items-center gap-2">
+                      <div style={{ width: 18, fontSize: 11, fontWeight: 900, color: tier ? tier.color : 'var(--mist)', textAlign: 'center' }}>
+                        {rank}
+                      </div>
+                      {b.photo_url ? (
+                        <img src={b.photo_url} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                      ) : (
+                        <div style={{ width: 24, height: 24, borderRadius: '50%', background: tier ? tier.color : 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: 11, flexShrink: 0 }}>
+                          {b.name?.charAt(0)}
+                        </div>
+                      )}
+                      <span style={{ color: 'var(--ash)', fontWeight: tier || isMe ? 700 : 400 }}>{b.name}</span>
+                      {isMe && <span style={{ fontSize: 10, color: 'var(--green)', fontWeight: 800 }}>YOU</span>}
+                      {tier && <span style={{ fontSize: 10, fontWeight: 700, color: tier.color }}>{tier.icon} {tier.label}</span>}
+                      {isIneligible && (
+                        <span title="Not eligible for prize" style={{ fontSize: 10, color: 'var(--mist)', cursor: 'help' }}>*</span>
+                      )}
+                    </div>
+                    <span className="text-xs font-bold" style={{ color: tier ? tier.color : 'var(--mist)' }}>{b.days} days</span>
+                  </div>
+                )
+              })
+            })()}
+          </div>
+        </div>
+      )}
+
       {/* Hero: gradient header with greeting + week stats as interior pills */}
       {!isBuyer && (
       <div style={{
