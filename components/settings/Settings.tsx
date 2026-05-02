@@ -9,6 +9,7 @@ import AvatarPicker from './AvatarPicker'
 import BrandLogosPanel from './BrandLogosPanel'
 import RoleManagerPanel from './RoleManagerPanel'
 import ImpersonationLogPanel from '@/components/impersonation/ImpersonationLogPanel'
+import BoothCostCategoriesPanel from '@/components/sales/BoothCostCategoriesPanel'
 import Checkbox from '@/components/ui/Checkbox'
 import AddressAutocompleteInput from '@/components/ui/AddressAutocompleteInput'
 import CollapsibleCard from '@/components/ui/CollapsibleCard'
@@ -372,6 +373,20 @@ export default function Settings() {
           subtitle="Create roles and choose which modules each one unlocks. Drives the sidebar + page guards (PRs C/D in this initiative wire them in)."
         >
           <RoleManagerPanel />
+        </CollapsibleCard>
+      )}
+
+      {/* Booth Cost Categories — admin / superadmin / partner.
+          Master list driving the dropdown on each trade show's
+          booth cost breakdown. Custom lines on a show stay
+          per-show; this list seeds the common ones. */}
+      {(user?.role === 'admin' || user?.role === 'superadmin' || user?.is_partner) && (
+        <CollapsibleCard
+          storageKey="settings-booth-cost-categories"
+          title="🎪 Booth Cost Categories"
+          subtitle="Master list of booth-cost categories (Booth Space, Lighting, Drayage, etc.). Drives the dropdown on each trade show's cost breakdown. Archive instead of delete to keep historical line items readable."
+        >
+          <BoothCostCategoriesPanel />
         </CollapsibleCard>
       )}
 
