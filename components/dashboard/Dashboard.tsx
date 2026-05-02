@@ -204,13 +204,17 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
             </div>
           </div>
 
-          <div className={isBuyer ? 'grid grid-cols-2 gap-3' : 'grid grid-cols-2 md:grid-cols-4 gap-3'}>
+          <div className={isBuyer ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-2 md:grid-cols-4 gap-3'}>
             {[
-              { label: 'Events This Week', value: visibleWeekEvents.length, sub: fmtWeek },
+              // Events-this-week pill hidden for buyers — the
+              // event cards below already make the count obvious.
+              ...(isBuyer ? [] : [
+                { label: 'Events This Week', value: visibleWeekEvents.length, sub: fmtWeek },
+              ]),
               { label: 'Purchases', value: visibleWeekTotals.purchases.toLocaleString(), sub: `${visibleWeekTotals.customers.toLocaleString()} customers` },
-              // Amount-spent + commission hidden for buyers: spend
-              // already shows on each event card below; commission
-              // belongs on the buyer's own profile / payout view.
+              // Amount-spent + commission also hidden for buyers:
+              // spend shows on each event card; commission belongs
+              // on the buyer's profile / payout view.
               ...(isBuyer ? [] : [
                 { label: '💰 Amount Spent', value: fmt(visibleWeekTotals.dollars), sub: visibleWeekTotals.customers > 0 ? `${Math.round(visibleWeekTotals.purchases / visibleWeekTotals.customers * 100)}% close rate` : 'This week' },
                 { label: 'Commission Due', value: fmt(visibleWeekTotals.commission), sub: '10% + 5% tiers' },
