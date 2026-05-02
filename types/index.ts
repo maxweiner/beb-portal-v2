@@ -306,6 +306,30 @@ export interface TradeShow {
   deleted_at: string | null
 }
 
+export type TrunkShowStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+
+export interface TrunkShow {
+  id: string
+  store_id: string
+  start_date: string
+  end_date: string
+  assigned_rep_id: string
+  status: TrunkShowStatus
+  notes: string | null
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+}
+
+export interface TrunkShowHours {
+  id: string
+  trunk_show_id: string
+  show_date: string
+  open_time: string
+  close_time: string
+  created_at: string
+}
+
 export type LeadInterestLevel = 'hot' | 'warm' | 'cold'
 export type LeadStatus = 'new' | 'contacted' | 'converted' | 'dead'
 
