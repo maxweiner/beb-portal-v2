@@ -3,7 +3,7 @@
 // CSV download) and the server email route.
 
 import {
-  allColumns, aggregateKey, aggregateLabel, type ReportConfig,
+  allColumns, aggregateKey, aggregateLabel, computedKey, type ReportConfig,
 } from './schema'
 import { displayKey, getValue } from './runQuery'
 
@@ -22,21 +22,26 @@ export function deriveOutputColumns(source: string, config: ReportConfig): Outpu
   const byKey = new Map(catalog.map(c => [c.column.key, c.column]))
   const isGrouped = (config.groupBy?.length ?? 0) > 0
 
+  const out: OutputColumn[] = []
   if (!isGrouped) {
-    return config.columns.map(k => {
+    for (const k of config.columns) {
       const cd = byKey.get(k)
-      return { key: k, label: cd?.label || displayKey(k), type: cd?.type }
+      out.push({ key: k, label: cd?.label || displayKey(k), type: cd?.type })
+    }
+  } else {
+    for (const gk of config.groupBy ?? []) {
+      const cd = byKey.get(gk)
+      out.push({ key: gk, label: cd?.label || displayKey(gk), type: cd?.type })
+    }
+    ;(config.aggregates ?? []).forEach((a, i) => {
+      const fl = a.field ? byKey.get(a.field)?.label : undefined
+      out.push({ key: aggregateKey(i), label: aggregateLabel(a, fl), type: 'number' })
     })
   }
-
-  const out: OutputColumn[] = []
-  for (const gk of config.groupBy ?? []) {
-    const cd = byKey.get(gk)
-    out.push({ key: gk, label: cd?.label || displayKey(gk), type: cd?.type })
-  }
-  ;(config.aggregates ?? []).forEach((a, i) => {
-    const fl = a.field ? byKey.get(a.field)?.label : undefined
-    out.push({ key: aggregateKey(i), label: aggregateLabel(a, fl), type: 'number' })
+  // Computed columns trail at the end in both modes — they always exist
+  // as own props on the output row, hence they read like aggregate cols.
+  ;(config.computed ?? []).forEach((c, i) => {
+    out.push({ key: computedKey(i), label: c.label || `Computed ${i + 1}`, type: 'number' })
   })
   return out
 }

@@ -232,6 +232,21 @@ export function aggregateLabel(agg: AggregateColumn, fieldLabel?: string): strin
 
 export type FilterCombinator = 'and' | 'or'
 
+export interface ComputedColumn {
+  /** Display label, also used as the {Label} reference token in formulas. */
+  label: string
+  /** Formula string. References other columns by their label inside
+   *  square brackets, eg `[Spend VDP] + [Spend newspaper]`. Supports
+   *  `+ - * /` and parentheses. Numeric output only — non-numeric
+   *  references resolve to NaN and the cell renders blank. */
+  formula: string
+}
+
+/** Synthetic key the runner emits for the i-th computed column. */
+export function computedKey(i: number): string {
+  return `__calc_${i}`
+}
+
 export interface ReportConfig {
   columns: string[]               // column keys from the source/related set
   filters: ReportFilter[]
@@ -245,4 +260,7 @@ export interface ReportConfig {
    *  in grouping mode — output cols are `[...groupBy, aggregate_keys]`. */
   groupBy?: string[]
   aggregates?: AggregateColumn[]
+  /** Per-row formulas evaluated AFTER fetch (and after aggregation when
+   *  grouped). Each gets a synthetic `__calc_N` key on the output row. */
+  computed?: ComputedColumn[]
 }

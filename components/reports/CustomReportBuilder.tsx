@@ -9,10 +9,11 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import {
   SOURCES, allColumns, TYPE_OPERATORS, OPERATOR_LABELS, DATE_PRESETS,
-  AGG_LABELS, aggregateKey, aggregateLabel,
+  AGG_LABELS, aggregateKey, aggregateLabel, computedKey,
   type ReportConfig, type ReportFilter, type ReportSort, type Operator, type ColumnDef,
-  type AggregateColumn, type AggregateOp, type FilterCombinator,
+  type AggregateColumn, type AggregateOp, type FilterCombinator, type ComputedColumn,
 } from '@/lib/reports/schema'
+import { validateFormula } from '@/lib/reports/formula'
 
 type Visibility = 'global' | 'store' | 'private'
 
@@ -43,6 +44,7 @@ export default function CustomReportBuilder({ reportId, onCancel, onSaved }: {
   const [sort, setSort] = useState<ReportSort[]>([])
   const [groupBy, setGroupBy] = useState<string[]>([])
   const [aggregates, setAggregates] = useState<AggregateColumn[]>([])
+  const [computed, setComputed] = useState<ComputedColumn[]>([])
   const [visibility, setVisibility] = useState<Visibility>('global')
   const [storeId, setStoreId] = useState<string>('')
   const [loaded, setLoaded] = useState(reportId === null)
@@ -68,6 +70,7 @@ export default function CustomReportBuilder({ reportId, onCancel, onSaved }: {
         setSort(cfg.sort || [])
         setGroupBy(cfg.groupBy || [])
         setAggregates(cfg.aggregates || [])
+        setComputed(cfg.computed || [])
         setLoaded(true)
       })
   }, [reportId])
@@ -124,7 +127,34 @@ export default function CustomReportBuilder({ reportId, onCancel, onSaved }: {
     return out
   }, [isGrouped, colCatalog, groupBy, aggregates, colByKey])
 
-  const defaultSortKey = sortOptions[0]?.key || ''
+  // Sort options always include computed columns at the tail (regardless
+  // of grouping) so users can sort by their derived metrics.
+  const sortOptionsWithComputed = useMemo(() => {
+    const base = sortOptions.slice()
+    computed.forEach((c, i) => {
+      base.push({ key: computedKey(i), label: c.label || `Computed ${i + 1}` })
+    })
+    return base
+  }, [sortOptions, computed])
+
+  // Labels available as `[Label]` references inside formulas. Mirrors
+  // what the runner's resolver looks up: source cols (ungrouped), or
+  // groupBy + aggregate labels (grouped).
+  const availableRefs = useMemo<string[]>(() => {
+    if (!isGrouped) return colCatalog.map(c => c.column.label)
+    const out: string[] = []
+    for (const gk of groupBy) {
+      const cd = colByKey.get(gk)
+      if (cd) out.push(cd.column.label)
+    }
+    aggregates.forEach((a, i) => {
+      const fl = a.field ? colByKey.get(a.field)?.column.label : undefined
+      out.push(aggregateLabel(a, fl))
+    })
+    return out
+  }, [isGrouped, colCatalog, groupBy, aggregates, colByKey])
+
+  const defaultSortKey = sortOptionsWithComputed[0]?.key || ''
   const addSort = () => setSort(p => [...p, { field: defaultSortKey, direction: 'asc' }])
   const updateSort = (i: number, patch: Partial<ReportSort>) =>
     setSort(p => p.map((s, idx) => idx === i ? { ...s, ...patch } : s))
@@ -136,6 +166,25 @@ export default function CustomReportBuilder({ reportId, onCancel, onSaved }: {
     setGroupBy(p => p.filter(x => x !== k))
     // Drop any sort rules that referenced this groupBy key.
     setSort(p => p.filter(s => s.field !== k))
+  }
+
+  // ── Computed columns ──────────────────────────────────
+  const addComputed = () =>
+    setComputed(p => [...p, { label: `Computed ${p.length + 1}`, formula: '' }])
+  const updateComputed = (i: number, patch: Partial<ComputedColumn>) =>
+    setComputed(p => p.map((c, idx) => idx === i ? { ...c, ...patch } : c))
+  const removeComputed = (i: number) => {
+    setComputed(p => p.filter((_, idx) => idx !== i))
+    // Re-key sort rules that referenced a computed col by index.
+    const stripped = computedKey(i)
+    setSort(p => p
+      .filter(s => s.field !== stripped)
+      .map(s => {
+        const m = s.field.match(/^__calc_(\d+)$/)
+        if (!m) return s
+        const idx = Number(m[1])
+        return idx > i ? { ...s, field: computedKey(idx - 1) } : s
+      }))
   }
 
   // ── Aggregates ────────────────────────────────────────
@@ -182,6 +231,7 @@ export default function CustomReportBuilder({ reportId, onCancel, onSaved }: {
         columns, filters, sort,
         ...(filterCombinator === 'or' ? { filterCombinator } : {}),
         ...(isGrouped ? { groupBy, aggregates } : {}),
+        ...(computed.length > 0 ? { computed } : {}),
       } as ReportConfig,
       updated_at: new Date().toISOString(),
     }
@@ -228,7 +278,7 @@ export default function CustomReportBuilder({ reportId, onCancel, onSaved }: {
         {/* Left rail: source */}
         <div className="card" style={{ position: 'sticky', top: 12, alignSelf: 'flex-start' }}>
           <div className="card-title" style={{ marginBottom: 8 }}>Data source</div>
-          <select value={source} onChange={e => { setSource(e.target.value); setColumns([]); setFilters([]); setFilterCombinator('and'); setSort([]); setGroupBy([]); setAggregates([]) }} style={{ width: '100%' }}>
+          <select value={source} onChange={e => { setSource(e.target.value); setColumns([]); setFilters([]); setFilterCombinator('and'); setSort([]); setGroupBy([]); setAggregates([]); setComputed([]) }} style={{ width: '100%' }}>
             {Object.entries(SOURCES).map(([k, s]) => (
               <option key={k} value={k}>{s.label}</option>
             ))}
@@ -310,6 +360,27 @@ export default function CustomReportBuilder({ reportId, onCancel, onSaved }: {
             </div>
           )}
 
+          {/* Computed columns — derived per-row formulas */}
+          <div className="card">
+            <div className="card-title">Computed columns</div>
+            <div style={{ fontSize: 11, color: 'var(--mist)', marginBottom: 8 }}>
+              Formulas of <code>+ - * / ( )</code> over <code>[Column label]</code> references.{' '}
+              {isGrouped
+                ? 'In grouping mode, references resolve against groupBy columns + aggregate labels.'
+                : 'References resolve against the source columns.'}
+            </div>
+            {computed.length === 0 && <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 8 }}>No computed columns yet.</div>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {computed.map((c, i) => (
+                <ComputedRow key={i} computed={c} availableRefs={availableRefs}
+                  onChange={patch => updateComputed(i, patch)}
+                  onRemove={() => removeComputed(i)}
+                />
+              ))}
+            </div>
+            <button onClick={addComputed} className="btn-outline btn-sm" style={{ marginTop: 8 }}>+ Add computed</button>
+          </div>
+
           {/* Filters */}
           <div className="card">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -374,7 +445,7 @@ export default function CustomReportBuilder({ reportId, onCancel, onSaved }: {
               {sort.map((s, i) => (
                 <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   <select value={s.field} onChange={e => updateSort(i, { field: e.target.value })} style={{ flex: 1, fontSize: 13 }}>
-                    {sortOptions.map(o => (
+                    {sortOptionsWithComputed.map(o => (
                       <option key={o.key} value={o.key}>{o.label}</option>
                     ))}
                   </select>
@@ -472,6 +543,60 @@ function ColumnPicker({ catalog, selected, onAdd, buttonLabel }: {
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+function ComputedRow({ computed, availableRefs, onChange, onRemove }: {
+  computed: ComputedColumn
+  availableRefs: string[]
+  onChange: (patch: Partial<ComputedColumn>) => void
+  onRemove: () => void
+}) {
+  const validation = useMemo(
+    () => computed.formula.trim() ? validateFormula(computed.formula) : { ok: true as const },
+    [computed.formula],
+  )
+  const insertRef = (label: string) => {
+    onChange({ formula: (computed.formula || '') + `[${label}]` })
+  }
+  return (
+    <div style={{
+      border: '1px solid var(--pearl)', borderRadius: 8, padding: 10,
+      display: 'flex', flexDirection: 'column', gap: 6,
+    }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <input value={computed.label}
+          onChange={e => onChange({ label: e.target.value })}
+          placeholder="Column name"
+          style={{ flex: '0 0 180px', fontSize: 13, fontWeight: 700 }}
+        />
+        <input value={computed.formula}
+          onChange={e => onChange({ formula: e.target.value })}
+          placeholder="e.g. [Spend VDP] + [Spend newspaper]"
+          style={{ flex: 1, fontSize: 13, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}
+        />
+        <button onClick={onRemove} className="btn-danger btn-sm">×</button>
+      </div>
+      {availableRefs.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+          <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.04em', marginRight: 4 }}>
+            Insert:
+          </span>
+          {availableRefs.slice(0, 14).map(label => (
+            <button key={label} type="button" onClick={() => insertRef(label)} style={{
+              background: '#fff', border: '1px solid var(--pearl)', borderRadius: 6,
+              padding: '2px 6px', fontSize: 11, color: 'var(--ash)',
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}>[{label}]</button>
+          ))}
+        </div>
+      )}
+      {!validation.ok && (
+        <div style={{ fontSize: 11, color: '#B91C1C', fontWeight: 700 }}>
+          {validation.error}
+        </div>
+      )}
     </div>
   )
 }
