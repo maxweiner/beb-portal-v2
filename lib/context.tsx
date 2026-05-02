@@ -20,6 +20,13 @@ interface AppContextType extends AppState {
   setEvents: (events: Event[]) => void
   dayEntryIntent: DayEntryIntent
   setDayEntryIntent: (i: DayEntryIntent) => void
+  /** When max@bebllp.com is in "View As" mode, `user` is swapped
+   *  to the impersonated target so role-gated UI surfaces render
+   *  as that user. `impersonationActor` retains a reference to
+   *  the real signed-in user (Max) so the switcher can still
+   *  detect eligibility and render its Exit control. Null at all
+   *  other times. */
+  impersonationActor: User | null
 }
 
 const AppContext = createContext<AppContextType | null>(null)
@@ -33,6 +40,7 @@ function readLocal<T extends string>(key: string, fallback: T): T {
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [user, setUserState] = useState<User | null>(null)
+  const [impersonationActor, setImpersonationActor] = useState<User | null>(null)
   const [users, setUsers] = useState<User[]>([])
   const [stores, setStoresState] = useState<Store[]>([])
   const [events, setEventsState] = useState<Event[]>([])
@@ -173,6 +181,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         window.localStorage.setItem('beb-theme', effectiveTheme)
       }
 
+      // If the signed-in actor is the lone impersonator, check
+      // whether a "View As" session is active and swap `user` to
+      // the target. Without this, Max would see admin-only nav /
+      // settings cards even while impersonating a buyer because
+      // the role gates read `user.role`. RLS already gates data
+      // via the JWT claim — this just keeps the UI consistent.
+      if (userData.email.toLowerCase() === 'max@bebllp.com') {
+        try {
+          const { data: { session } } = await supabase.auth.getSession()
+          const token = session?.access_token
+          const res = await fetch('/api/impersonation/status', {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          })
+          if (res.ok) {
+            const json = await res.json() as { active: boolean; session?: { target: { id: string } } }
+            if (json.active && json.session) {
+              const target = loadedUsers.find(u => u.id === json.session!.target.id)
+              if (target && mounted) {
+                setImpersonationActor(userData)
+                setUserState(target)
+              }
+            } else if (mounted) {
+              setImpersonationActor(null)
+            }
+          }
+        } catch { /* fail closed: leave user as the real actor */ }
+      }
+
       // Re-fetch if the resolved brand differs from what we hot-loaded with.
       if (effectiveBrand !== cachedBrand) {
         await reloadRef.current(effectiveBrand)
@@ -202,6 +238,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (event === 'SIGNED_OUT') {
         initialized = false
         setUserState(null)
+        setImpersonationActor(null)
         setUsers([])
         setStoresState([])
         setEventsState([])
@@ -358,11 +395,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setTheme, setYear, setBrand, reload, setUser,
     setStores, setEvents,
     dayEntryIntent, setDayEntryIntent,
+    impersonationActor,
   }), [
     user, users, stores, events, shipments,
     theme, year, loading, brand, connectionError,
     isSwitching, pendingBrand,
     reload, dayEntryIntent,
+    impersonationActor,
   ])
 
   // Theme class lives on <html> only (set by the boot script for the

@@ -31,8 +31,12 @@ interface Props {
 }
 
 export default function ViewAsSwitcher({ variant }: Props) {
-  const { user, users } = useApp()
+  const { user, users, impersonationActor } = useApp()
+  // While impersonating, `user` is swapped to the target — so we
+  // also check `impersonationActor` (the real signed-in user) so
+  // the switcher remains visible during a session and Max can exit.
   const eligible = isImpersonatorEmail(user?.email)
+                 || isImpersonatorEmail(impersonationActor?.email)
   const { status, refresh } = useImpersonationStatus(eligible)
   const [pickerOpen, setPickerOpen] = useState(false)
 
