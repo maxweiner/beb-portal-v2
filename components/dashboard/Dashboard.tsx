@@ -13,6 +13,7 @@ import { eventSpend, dayHasData, daySpend, dayCommission } from '@/lib/eventSpen
 import UnderstaffedBadge from '@/components/events/UnderstaffedBadge'
 import NextEventCard from './NextEventCard'
 import ProfileTrigger from './ProfileTrigger'
+import MetalsTicker from './MetalsTicker'
 
 /** Current-year past/current events where `buyerId` is in the workers array. */
 function getBuyerEventsThisYear(buyerId: string, allEvents: any[]): any[] {
@@ -137,6 +138,10 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
+      {/* Metals price ticker — buyer-only for now. Top strip above
+          the hero so it's always visible without scrolling. */}
+      {user?.role === 'buyer' && <MetalsTicker variant="desktop" />}
+
       {/* Hero: gradient header with greeting + week stats as interior pills */}
       <div style={{
         background: 'linear-gradient(160deg, var(--sidebar-bg) 0%, var(--green-dark) 50%, var(--green) 100%)',

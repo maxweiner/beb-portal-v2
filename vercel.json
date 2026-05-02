@@ -43,6 +43,10 @@
     {
       "path": "/api/cron/customers-compliance?secret=bebportal2024",
       "schedule": "47 5 * * *"
+    },
+    {
+      "path": "/api/cron/metals-prices-refresh?secret=bebportal2024",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

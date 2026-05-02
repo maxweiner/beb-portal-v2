@@ -14,6 +14,7 @@ import { eventSpend, dayHasData } from '@/lib/eventSpend'
 import UnderstaffedBadge from '@/components/events/UnderstaffedBadge'
 import NextEventCard from '@/components/dashboard/NextEventCard'
 import MyUpcomingEventsList from '@/components/dashboard/MyUpcomingEventsList'
+import MetalsTicker from '@/components/dashboard/MetalsTicker'
 
 const TIERS: Record<number, { label: string; icon: string; color: string }> = {
   1: { label: 'Estate Elite', icon: '👑', color: '#F5A000' },
@@ -91,6 +92,14 @@ export default function MobileDashboard({ setNav }: Props) {
 
   return (
     <div style={{ background: 'var(--cream2)', minHeight: '100%' }}>
+      {/* Metals ticker — buyer-only. Sits above the hero so the
+          three spots are visible without scrolling. */}
+      {user?.role === 'buyer' && (
+        <div style={{ padding: '10px 12px 0' }}>
+          <MetalsTicker variant="mobile" />
+        </div>
+      )}
+
       {/* Slim hero — greeting + tappable name */}
       <div style={{
         background: 'linear-gradient(160deg, var(--sidebar-bg) 0%, var(--green-dark) 50%, var(--green) 100%)',
