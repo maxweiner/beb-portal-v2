@@ -58,11 +58,58 @@ function evDays(ev: Event): string[] {
   })
 }
 
+// Trade shows have explicit start/end dates and can run any number
+// of days. Enumerate all dates in the range, capped defensively.
+export interface TradeShowOverlay {
+  id: string
+  name: string
+  start_date: string
+  end_date: string
+  venue_city: string | null
+  venue_state: string | null
+}
+function tradeShowDays(t: TradeShowOverlay): string[] {
+  const out: string[] = []
+  if (!t.start_date || !t.end_date) return out
+  const s = new Date(t.start_date + 'T12:00:00')
+  const e = new Date(t.end_date + 'T12:00:00')
+  for (let d = new Date(s); d <= e && out.length < 30; d.setDate(d.getDate() + 1)) {
+    out.push(d.toISOString().slice(0, 10))
+  }
+  return out
+}
+
 export default function Schedule() {
   const { events, stores, users, user, brand } = useApp()
   const [view, setView] = useState<ViewMode>('month')
   const [shipments, setShipments] = useState<ShipmentEntry[]>([])
   const [shipmentDetail, setShipmentDetail] = useState<ShipmentEntry | null>(null)
+  // Trade shows overlay — admins / sales reps see them on the
+  // month grid alongside buying events. Trunk shows are NOT
+  // overlaid (per the e1 walled-off rule). Toggle persisted to
+  // localStorage so a user's preference sticks across sessions.
+  const [tradeShows, setTradeShows] = useState<TradeShowOverlay[]>([])
+  const [showTradeShows, setShowTradeShows] = useState(() => {
+    if (typeof window === 'undefined') return true
+    return localStorage.getItem('beb-show-trade-shows') !== 'false'
+  })
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('beb-show-trade-shows', String(showTradeShows))
+    }
+  }, [showTradeShows])
+  useEffect(() => {
+    let cancelled = false
+    supabase.from('trade_shows')
+      .select('id, name, start_date, end_date, venue_city, venue_state')
+      .is('deleted_at', null)
+      .then(({ data, error }) => {
+        if (cancelled) return
+        if (error) { setTradeShows([]); return }  // RLS may block — degrade silently
+        setTradeShows((data || []) as TradeShowOverlay[])
+      })
+    return () => { cancelled = true }
+  }, [])
 
   // Brand-scoped shipments. Re-fetches on brand switch.
   useEffect(() => {
@@ -153,6 +200,18 @@ export default function Schedule() {
           }}>
             ☀ Vacations {showVacations ? 'ON' : 'OFF'}
           </button>
+          {tradeShows.length > 0 && (
+            <button onClick={() => setShowTradeShows(s => !s)} style={{
+              padding: isNarrow ? '10px 14px' : '7px 12px', borderRadius: 'var(--r)',
+              border: '1px solid var(--pearl)', cursor: 'pointer',
+              fontSize: 13, fontWeight: 700,
+              background: showTradeShows ? 'rgba(147,51,234,.12)' : 'transparent',
+              color: showTradeShows ? '#5B21B6' : 'var(--fog)',
+              minHeight: isNarrow ? 44 : undefined,
+            }}>
+              🎪 Trade Shows {showTradeShows ? 'ON' : 'OFF'}
+            </button>
+          )}
           <div style={{
             display: isNarrow ? 'grid' : 'flex',
             gridTemplateColumns: isNarrow ? 'repeat(4, 1fr)' : undefined,
@@ -174,7 +233,7 @@ export default function Schedule() {
         </div>
       </div>
 
-      {view === 'month'    && <MonthView    events={events} stores={stores} users={users} vacations={showVacations ? vacations : []} currentUserId={user?.id} onSelect={setDetail} isNarrow={isNarrow} shipments={shipments} onSelectShipment={setShipmentDetail} />}
+      {view === 'month'    && <MonthView    events={events} stores={stores} users={users} vacations={showVacations ? vacations : []} currentUserId={user?.id} onSelect={setDetail} isNarrow={isNarrow} shipments={shipments} onSelectShipment={setShipmentDetail} tradeShows={showTradeShows ? tradeShows : []} />}
       {view === 'week'     && <WeekView     events={events} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
       {view === 'day'      && <DayView      events={events} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
       {view === 'timeline' && <TimelineView events={events} stores={stores} onSelect={setDetail} isNarrow={isNarrow} onSwitchView={setView} />}
@@ -214,7 +273,7 @@ function ShipmentDrawer({ shipment, onClose }: { shipment: ShipmentEntry; onClos
 /* ══════════════════════════════════════════
    MONTH VIEW
 ══════════════════════════════════════════ */
-function MonthView({ events, stores, users, vacations, currentUserId, onSelect, isNarrow, shipments, onSelectShipment }: { events: Event[]; stores: any[]; users: any[]; vacations: BuyerVacation[]; currentUserId?: string; onSelect: (e: Event) => void; isNarrow: boolean; shipments: ShipmentEntry[]; onSelectShipment: (s: ShipmentEntry) => void }) {
+function MonthView({ events, stores, users, vacations, currentUserId, onSelect, isNarrow, shipments, onSelectShipment, tradeShows = [] }: { events: Event[]; stores: any[]; users: any[]; vacations: BuyerVacation[]; currentUserId?: string; onSelect: (e: Event) => void; isNarrow: boolean; shipments: ShipmentEntry[]; onSelectShipment: (s: ShipmentEntry) => void; tradeShows?: TradeShowOverlay[] }) {
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
@@ -236,6 +295,7 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
 
   const eventsOnDay = (d: number) => events.filter(ev => evDays(ev).includes(ds(d)))
   const shipmentsOnDay = (d: number) => shipments.filter(s => s.ship_date === ds(d))
+  const tradesOnDay = (d: number) => tradeShows.filter(t => tradeShowDays(t).includes(ds(d)))
 
   const vacationsOnDay = (d: number) => {
     const dateStr = ds(d)
@@ -354,6 +414,22 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
                     color: isToday ? '#fff' : 'var(--ash)', background: isToday ? 'var(--green)' : 'transparent',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4,
                   }}>{day}</div>
+                  {day && tradesOnDay(day).map(t => (
+                    <div
+                      key={`trade-${t.id}`}
+                      title={`Trade Show — ${t.name}\n${t.start_date} – ${t.end_date}${t.venue_city ? ` · ${t.venue_city}, ${t.venue_state || ''}` : ''}`}
+                      style={{
+                        background: 'rgba(147,51,234,.15)',
+                        color: '#5B21B6',
+                        border: '1px solid rgba(147,51,234,.3)',
+                        fontSize: 11, fontWeight: 700,
+                        padding: '3px 7px', borderRadius: 4,
+                        marginBottom: 3, overflow: 'hidden',
+                        whiteSpace: 'nowrap', textOverflow: 'ellipsis', lineHeight: 1.2,
+                      }}>
+                      🎪 {t.name}
+                    </div>
+                  ))}
                   {dayEvs.slice(0, visibleCount).map(ev => {
                     const staffing = eventStaffing(ev)
                     return (
