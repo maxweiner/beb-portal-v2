@@ -13,6 +13,7 @@ import { weekRange, eventOverlapsWeek, daysWorkedOnEvent } from '@/lib/eventDate
 import { eventSpend, dayHasData } from '@/lib/eventSpend'
 import UnderstaffedBadge from '@/components/events/UnderstaffedBadge'
 import NextEventCard from '@/components/dashboard/NextEventCard'
+import BuyerNextEventCard from '@/components/dashboard/BuyerNextEventCard'
 import MyUpcomingEventsList from '@/components/dashboard/MyUpcomingEventsList'
 import MetalsTicker from '@/components/dashboard/MetalsTicker'
 
@@ -268,13 +269,14 @@ export default function MobileDashboard({ setNav }: Props) {
       </div>
       )}
 
-      {/* Next event hero — admin / superadmin only. Buyers' BuyerWeekCardMobile already
-          covers their current event. */}
-      {!isBuyer && (
+      {/* Next event hero. Buyers get the 3-column travel variant
+          (Event / Flight / Hotel); other roles keep the existing
+          single-line card. */}
       <div style={{ padding: '14px 14px 0' }}>
-        <NextEventCard setNav={setNav} variant="mobile" />
+        {isBuyer
+          ? <BuyerNextEventCard setNav={setNav} variant="mobile" />
+          : <NextEventCard setNav={setNav} variant="mobile" />}
       </div>
-      )}
 
       {/* Leaderboard (unchanged) */}
       <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>

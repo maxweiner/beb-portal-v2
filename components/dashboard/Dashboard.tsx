@@ -12,6 +12,7 @@ import { formatEventRange, weekRange, eventOverlapsWeek, daysWorkedOnEvent } fro
 import { eventSpend, dayHasData, daySpend, dayCommission } from '@/lib/eventSpend'
 import UnderstaffedBadge from '@/components/events/UnderstaffedBadge'
 import NextEventCard from './NextEventCard'
+import BuyerNextEventCard from './BuyerNextEventCard'
 import ProfileTrigger from './ProfileTrigger'
 import MetalsTicker from './MetalsTicker'
 
@@ -362,9 +363,12 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
       </div>
       )}
 
-      {/* Next event hero — buyer's soonest upcoming/in-progress event.
-          Hidden for buyers since BuyerHero already covers their current event. */}
-      {!isBuyer && <NextEventCard setNav={setNav} variant="desktop" />}
+      {/* Next event hero. Buyers get the 3-column variant with
+          flight + hotel pulled from travel_reservations; other roles
+          keep the existing single-line card. */}
+      {isBuyer
+        ? <BuyerNextEventCard setNav={setNav} variant="desktop" />
+        : <NextEventCard setNav={setNav} variant="desktop" />}
 
       {/* Next Week Preview — only on weekends, hidden for buyers
           (their dashboard is scoped to last week + this week only). */}
