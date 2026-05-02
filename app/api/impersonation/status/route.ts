@@ -37,7 +37,7 @@ export async function GET(req: Request) {
     await sb.from('impersonation_sessions')
       .update({ ended_at: new Date().toISOString() })
       .eq('id', active.sessionId)
-    await sb.auth.admin.updateUserById(me.id, {
+    await sb.auth.admin.updateUserById(me.auth_id, {
       app_metadata: { impersonating_user_id: null, impersonating_expires_at: null },
     })
     return NextResponse.json({ active: false, reason: 'target-removed' })

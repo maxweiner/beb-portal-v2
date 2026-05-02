@@ -40,8 +40,9 @@ export async function POST(req: Request) {
     .is('ended_at', null)
 
   // Clear the claim from app_metadata. Pass nulls (not omission)
-  // so Supabase merges out the keys.
-  const { error: metaErr } = await sb.auth.admin.updateUserById(me.id, {
+  // so Supabase merges out the keys. Uses auth.users.id (auth_id),
+  // distinct from public.users.id in this codebase.
+  const { error: metaErr } = await sb.auth.admin.updateUserById(me.auth_id, {
     app_metadata: {
       impersonating_user_id: null,
       impersonating_expires_at: null,

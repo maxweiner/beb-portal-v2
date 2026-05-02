@@ -95,9 +95,9 @@ export async function POST(req: Request) {
     ip_address: ip,
   })
 
-  // Find the auth.users row id matching Max. The public.users.id
-  // is the Supabase Auth UUID (existing convention in this codebase).
-  const { error: metaErr } = await sb.auth.admin.updateUserById(me.id, {
+  // The auth-admin client needs auth.users.id (= users.auth_id),
+  // NOT public.users.id — they're distinct in this codebase.
+  const { error: metaErr } = await sb.auth.admin.updateUserById(me.auth_id, {
     app_metadata: {
       impersonating_user_id: target.id,
       impersonating_expires_at: expiresAt.toISOString(),

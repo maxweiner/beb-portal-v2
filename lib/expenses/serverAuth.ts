@@ -15,7 +15,11 @@ function admin() {
 }
 
 export interface AuthedUser {
+  /** public.users.id — the app-level user id used in FKs across the schema. */
   id: string
+  /** auth.users.id — needed for sb.auth.admin.updateUserById() and similar
+   *  Supabase Auth admin operations. Distinct from `id` in this codebase. */
+  auth_id: string
   name: string
   email: string
   role: 'buyer' | 'admin' | 'superadmin' | 'pending' | 'marketing' | 'accounting'
@@ -31,7 +35,7 @@ export async function getAuthedUser(req: Request): Promise<AuthedUser | null> {
   const { data: tokenUser, error: tokenErr } = await sb.auth.getUser(m[1])
   if (tokenErr || !tokenUser?.user?.email) return null
   const { data: row } = await sb.from('users')
-    .select('id, name, email, role, is_partner, active')
+    .select('id, auth_id, name, email, role, is_partner, active')
     .eq('email', tokenUser.user.email)
     .maybeSingle()
   if (!row || row.active === false) return null
