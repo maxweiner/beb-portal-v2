@@ -15,6 +15,7 @@ import { getTradeShow, updateTradeShow, softDeleteTradeShow } from '@/lib/sales/
 import type { TradeShow } from '@/types'
 import BoothCostsPanel from './BoothCostsPanel'
 import TradeShowStaffPanel from './TradeShowStaffPanel'
+import TradeShowAppointmentsPanel from './TradeShowAppointmentsPanel'
 import AddLeadModal from './AddLeadModal'
 
 interface Props {
@@ -220,16 +221,13 @@ export default function TradeShowDetail({ tradeShowId, onBack, onDeleted }: Prop
         canWrite={isAdmin}
       />
 
-      {/* Phase placeholders */}
-      <div className="card" style={{ padding: 18, marginBottom: 14, opacity: 0.7 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginBottom: 6 }}>
-          Coming soon on this page
-        </div>
-        <ul style={{ fontSize: 12, color: 'var(--mist)', lineHeight: 1.6, paddingLeft: 18, margin: 0 }}>
-          <li>Lead capture (manual + business-card scan) — Phase 6 / 7</li>
-          <li>Booth appointments with magic-link booking — Phase 9</li>
-        </ul>
-      </div>
+      {/* Booth appointments — Phase 9 */}
+      <TradeShowAppointmentsPanel
+        tradeShowId={show!.id}
+        startDate={draft.start_date || show!.start_date}
+        endDate={draft.end_date || show!.end_date}
+        canWrite={isAdmin}
+      />
     </div>
   )
 }
