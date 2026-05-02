@@ -8,11 +8,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
-import {
-  allColumns, aggregateKey, aggregateLabel,
-  type ReportConfig, type ColumnDef,
-} from '@/lib/reports/schema'
+import { allColumns, type ReportConfig, type ColumnDef } from '@/lib/reports/schema'
 import { runReport, displayKey, getValue, type RunResult } from '@/lib/reports/runQuery'
+import { deriveOutputColumns, buildCsv } from '@/lib/reports/output'
+import EmailNowModal from './EmailNowModal'
 
 const PAGE_SIZE = 100
 
@@ -39,6 +38,7 @@ export default function CustomReportRunner({ reportId, onBack, onEdit }: {
   const [result, setResult] = useState<RunResult | null>(null)
   const [page, setPage] = useState(0)
   const [clientSort, setClientSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null)
+  const [emailOpen, setEmailOpen] = useState(false)
 
   // Load report row
   useEffect(() => {
@@ -76,28 +76,13 @@ export default function CustomReportRunner({ reportId, onBack, onEdit }: {
     return m
   }, [colCatalog])
 
-  // Output columns + headers. In grouping mode the output is derived
-  // (groupBy keys + aggregate keys) instead of `config.columns`.
+  // Output columns + headers. Derived from source + config — handles both
+  // grouped (groupBy + aggregates) and ungrouped (raw columns) modes.
   const isGrouped = !!report && (report.config.groupBy?.length ?? 0) > 0
-  const outputColumns = useMemo<{ key: string; label: string; type?: string }[]>(() => {
-    if (!report) return []
-    if (!isGrouped) {
-      return report.config.columns.map(k => {
-        const cd = colDefByKey.get(k)
-        return { key: k, label: cd?.label || displayKey(k), type: cd?.type }
-      })
-    }
-    const out: { key: string; label: string; type?: string }[] = []
-    for (const gk of report.config.groupBy ?? []) {
-      const cd = colDefByKey.get(gk)
-      out.push({ key: gk, label: cd?.label || displayKey(gk), type: cd?.type })
-    }
-    ;(report.config.aggregates ?? []).forEach((a, i) => {
-      const fl = a.field ? colDefByKey.get(a.field)?.label : undefined
-      out.push({ key: aggregateKey(i), label: aggregateLabel(a, fl), type: 'number' })
-    })
-    return out
-  }, [report, isGrouped, colDefByKey])
+  const outputColumns = useMemo(
+    () => (report ? deriveOutputColumns(report.source, report.config) : []),
+    [report],
+  )
 
   const sortedRows = useMemo(() => {
     if (!result) return []
@@ -145,15 +130,8 @@ export default function CustomReportRunner({ reportId, onBack, onEdit }: {
 
   function downloadCsv() {
     if (!report || !result) return
-    const escape = (s: string) => `"${s.replace(/"/g, '""')}"`
-    const lines = [outputColumns.map(c => escape(c.label)).join(',')]
-    for (const row of sortedRows) {
-      lines.push(outputColumns.map(c => {
-        const v = isGrouped ? row[c.key] : getValue(row, c.key)
-        return escape(fmtCell(v, c.type))
-      }).join(','))
-    }
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const csv = buildCsv(report.source, report.config, sortedRows)
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -191,6 +169,7 @@ export default function CustomReportRunner({ reportId, onBack, onEdit }: {
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => report && run(report)} disabled={running} className="btn-outline btn-sm">⟳ Re-run</button>
           <button onClick={downloadCsv} disabled={!result || result.rows.length === 0} className="btn-outline btn-sm">⤓ CSV</button>
+          <button onClick={() => setEmailOpen(true)} disabled={!result || result.rows.length === 0} className="btn-outline btn-sm">✉ Email</button>
           <button onClick={onEdit} className="btn-outline btn-sm">Edit</button>
         </div>
       </div>
@@ -282,6 +261,17 @@ export default function CustomReportRunner({ reportId, onBack, onEdit }: {
             </div>
           )}
         </div>
+      )}
+
+      {/* Email Now modal */}
+      {report && (
+        <EmailNowModal
+          open={emailOpen}
+          onClose={() => setEmailOpen(false)}
+          reportId={report.id}
+          reportName={report.name}
+          rowCount={result?.rows.length ?? 0}
+        />
       )}
     </div>
   )

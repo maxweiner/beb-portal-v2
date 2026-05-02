@@ -7,6 +7,7 @@
 // regardless of join depth.
 
 import { supabase } from '@/lib/supabase'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   SOURCES, aggregateKey,
   type ReportConfig, type ReportFilter, type AggregateColumn,
@@ -103,6 +104,7 @@ export async function runReport(
   source: string,
   config: ReportConfig,
   brand: 'beb' | 'liberty',
+  client: SupabaseClient = supabase,
 ): Promise<RunResult> {
   const def = SOURCES[source]
   if (!def) return { rows: [], truncated: false, durationMs: 0, error: `Unknown source: ${source}` }
@@ -139,7 +141,7 @@ export async function runReport(
     .join(', ')
   const selectStr = [ownPart, embedPart].filter(Boolean).join(', ') || '*'
 
-  let query: any = supabase.from(def.table).select(selectStr).limit(HARD_LIMIT + 1)
+  let query: any = client.from(def.table).select(selectStr).limit(HARD_LIMIT + 1)
 
   // Brand scoping at run time (the spec's section 6).
   if (def.brandScoped) {
