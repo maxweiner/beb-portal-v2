@@ -204,12 +204,17 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className={isBuyer ? 'grid grid-cols-2 gap-3' : 'grid grid-cols-2 md:grid-cols-4 gap-3'}>
             {[
               { label: 'Events This Week', value: visibleWeekEvents.length, sub: fmtWeek },
               { label: 'Purchases', value: visibleWeekTotals.purchases.toLocaleString(), sub: `${visibleWeekTotals.customers.toLocaleString()} customers` },
-              { label: '💰 Amount Spent', value: fmt(visibleWeekTotals.dollars), sub: visibleWeekTotals.customers > 0 ? `${Math.round(visibleWeekTotals.purchases / visibleWeekTotals.customers * 100)}% close rate` : 'This week' },
-              { label: 'Commission Due', value: fmt(visibleWeekTotals.commission), sub: '10% + 5% tiers' },
+              // Amount-spent + commission hidden for buyers: spend
+              // already shows on each event card below; commission
+              // belongs on the buyer's own profile / payout view.
+              ...(isBuyer ? [] : [
+                { label: '💰 Amount Spent', value: fmt(visibleWeekTotals.dollars), sub: visibleWeekTotals.customers > 0 ? `${Math.round(visibleWeekTotals.purchases / visibleWeekTotals.customers * 100)}% close rate` : 'This week' },
+                { label: 'Commission Due', value: fmt(visibleWeekTotals.commission), sub: '10% + 5% tiers' },
+              ]),
             ].map(({ label, value, sub }) => (
               <div key={label} style={{
                 background: 'rgba(240,253,244,.95)', borderRadius: 12, padding: '14px 16px',
