@@ -15,6 +15,7 @@ import { getTradeShow, updateTradeShow, softDeleteTradeShow } from '@/lib/sales/
 import type { TradeShow } from '@/types'
 import BoothCostsPanel from './BoothCostsPanel'
 import TradeShowStaffPanel from './TradeShowStaffPanel'
+import AddLeadModal from './AddLeadModal'
 
 interface Props {
   tradeShowId: string
@@ -28,6 +29,7 @@ export default function TradeShowDetail({ tradeShowId, onBack, onDeleted }: Prop
   const [show, setShow] = useState<TradeShow | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [addLeadOpen, setAddLeadOpen] = useState(false)
   const [draft, setDraft] = useState({
     name: '', venue_name: '', venue_city: '', venue_state: '',
     venue_address: '', start_date: '', end_date: '',
@@ -117,12 +119,21 @@ export default function TradeShowDetail({ tradeShowId, onBack, onDeleted }: Prop
         <button onClick={onBack} className="btn-outline btn-sm">← Trade Shows</button>
         <div style={{ flex: 1 }} />
         <AutosaveIndicator status={status} />
+        <button onClick={() => setAddLeadOpen(true)} className="btn-primary btn-sm">+ Add Lead</button>
         {isAdmin && (
           <button onClick={handleDelete} className="btn-outline btn-sm" style={{ color: '#B91C1C', borderColor: '#FCA5A5' }}>
             Delete
           </button>
         )}
       </div>
+
+      {addLeadOpen && (
+        <AddLeadModal
+          tradeShowId={show!.id}
+          onCreated={() => setAddLeadOpen(false)}
+          onClose={() => setAddLeadOpen(false)}
+        />
+      )}
 
       {/* Identity */}
       <div className="card" style={{ padding: 20, marginBottom: 14 }}>

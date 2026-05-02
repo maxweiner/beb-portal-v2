@@ -1,0 +1,276 @@
+'use client'
+
+// Lead detail page. Phase 6: every spec field editable, autosave
+// per-section. Phase 16 will add a Convert-to-Trunk-Show button
+// that pre-fills the trunk-show form. Phase 7 will add the
+// business-card thumbnail.
+
+import { useEffect, useState } from 'react'
+import { useApp } from '@/lib/context'
+import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
+import { getLead, updateLead, softDeleteLead } from '@/lib/sales/leads'
+import type { Lead, LeadInterestLevel, LeadStatus } from '@/types'
+
+interface Props {
+  leadId: string
+  onBack: () => void
+  onChanged: () => void
+  onDeleted: () => void
+}
+
+export default function LeadDetail({ leadId, onBack, onChanged, onDeleted }: Props) {
+  const { user, users } = useApp()
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || !!user?.is_partner
+  const canMutate = isAdmin || user?.role === 'sales_rep'
+  const [lead, setLead] = useState<Lead | null>(null)
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [draft, setDraft] = useState<{
+    first_name: string; last_name: string; company_name: string; title: string
+    email: string; phone: string
+    address_line_1: string; address_line_2: string; city: string; state: string; zip: string
+    website: string
+    assigned_rep_id: string
+    status: LeadStatus
+    interest_level: '' | LeadInterestLevel
+    interest_description: string
+    follow_up_date: string
+    notes: string
+  }>({
+    first_name: '', last_name: '', company_name: '', title: '',
+    email: '', phone: '',
+    address_line_1: '', address_line_2: '', city: '', state: '', zip: '',
+    website: '',
+    assigned_rep_id: '',
+    status: 'new',
+    interest_level: '',
+    interest_description: '',
+    follow_up_date: '',
+    notes: '',
+  })
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const row = await getLead(leadId)
+        if (cancelled) return
+        if (!row) { setError('Lead not found.'); setLoaded(true); return }
+        setLead(row)
+        setDraft({
+          first_name:    row.first_name || '',
+          last_name:     row.last_name || '',
+          company_name:  row.company_name || '',
+          title:         row.title || '',
+          email:         row.email || '',
+          phone:         row.phone || '',
+          address_line_1: row.address_line_1 || '',
+          address_line_2: row.address_line_2 || '',
+          city:          row.city || '',
+          state:         row.state || '',
+          zip:           row.zip || '',
+          website:       row.website || '',
+          assigned_rep_id: row.assigned_rep_id || '',
+          status:        row.status,
+          interest_level: row.interest_level || '',
+          interest_description: row.interest_description || '',
+          follow_up_date: row.follow_up_date || '',
+          notes:         row.notes || '',
+        })
+        setLoaded(true)
+      } catch (err: any) {
+        if (!cancelled) { setError(err?.message || 'Failed to load'); setLoaded(true) }
+      }
+    })()
+    return () => { cancelled = true }
+  }, [leadId])
+
+  const status = useAutosave(
+    draft,
+    async (d) => {
+      if (!lead || !canMutate) return
+      await updateLead(lead.id, {
+        first_name: d.first_name || lead.first_name,
+        last_name:  d.last_name  || lead.last_name,
+        company_name: d.company_name,
+        title:        d.title,
+        email:        d.email,
+        phone:        d.phone,
+        address_line_1: d.address_line_1,
+        address_line_2: d.address_line_2,
+        city:           d.city,
+        state:          d.state,
+        zip:            d.zip,
+        website:        d.website,
+        assigned_rep_id: d.assigned_rep_id || null,
+        status:         d.status,
+        interest_level: d.interest_level || null,
+        interest_description: d.interest_description,
+        follow_up_date: d.follow_up_date || null,
+        notes:          d.notes,
+      })
+      onChanged()
+    },
+    { delay: 800, enabled: loaded && !!lead && draft.first_name.trim().length > 0
+                          && draft.last_name.trim().length > 0 && canMutate },
+  )
+
+  async function handleDelete() {
+    if (!lead || !isAdmin) return
+    if (!confirm(`Delete lead "${lead.first_name} ${lead.last_name}"? Soft-deletes the row.`)) return
+    try {
+      await softDeleteLead(lead.id)
+      onDeleted()
+    } catch (err: any) {
+      alert(err?.message || 'Could not delete')
+    }
+  }
+
+  const repOptions = users
+    .filter(u => u.active !== false)
+    .filter(u => u.role === 'sales_rep' || u.role === 'admin' || u.role === 'superadmin' || u.is_partner)
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+
+  if (!loaded) return <div className="p-6 text-center" style={{ color: 'var(--mist)' }}>Loading…</div>
+  if (error) return (
+    <div className="p-6" style={{ maxWidth: 720, margin: '0 auto' }}>
+      <button onClick={onBack} className="btn-outline btn-sm" style={{ marginBottom: 14 }}>← Leads</button>
+      <div className="card" style={{ padding: 20, color: '#991B1B', background: '#FEE2E2' }}>{error}</div>
+    </div>
+  )
+
+  return (
+    <div className="p-6" style={{ maxWidth: 880, margin: '0 auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+        <button onClick={onBack} className="btn-outline btn-sm">← Leads</button>
+        <div style={{ flex: 1 }} />
+        <AutosaveIndicator status={status} />
+        {isAdmin && (
+          <button onClick={handleDelete} className="btn-outline btn-sm" style={{ color: '#B91C1C', borderColor: '#FCA5A5' }}>
+            Delete
+          </button>
+        )}
+      </div>
+
+      {/* Identity */}
+      <div className="card" style={{ padding: 20, marginBottom: 14 }}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <Field label="First name" required>
+            <input value={draft.first_name} onChange={e => setDraft(p => ({ ...p, first_name: e.target.value }))} disabled={!canMutate} />
+          </Field>
+          <Field label="Last name" required>
+            <input value={draft.last_name} onChange={e => setDraft(p => ({ ...p, last_name: e.target.value }))} disabled={!canMutate} />
+          </Field>
+          <Field label="Company">
+            <input value={draft.company_name} onChange={e => setDraft(p => ({ ...p, company_name: e.target.value }))} disabled={!canMutate} />
+          </Field>
+          <Field label="Title">
+            <input value={draft.title} onChange={e => setDraft(p => ({ ...p, title: e.target.value }))} disabled={!canMutate} />
+          </Field>
+          <Field label="Email">
+            <input type="email" value={draft.email} onChange={e => setDraft(p => ({ ...p, email: e.target.value }))} disabled={!canMutate} />
+          </Field>
+          <Field label="Phone">
+            <input type="tel" value={draft.phone} onChange={e => setDraft(p => ({ ...p, phone: e.target.value }))} disabled={!canMutate} />
+          </Field>
+        </div>
+      </div>
+
+      {/* Address */}
+      <div className="card" style={{ padding: 20, marginBottom: 14 }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>
+          Address
+        </div>
+        <Field label="Street">
+          <input value={draft.address_line_1} onChange={e => setDraft(p => ({ ...p, address_line_1: e.target.value }))} disabled={!canMutate} />
+        </Field>
+        <Field label="Suite / Apt">
+          <input value={draft.address_line_2} onChange={e => setDraft(p => ({ ...p, address_line_2: e.target.value }))} disabled={!canMutate} />
+        </Field>
+        <div className="grid gap-3" style={{ gridTemplateColumns: '2fr 1fr 1fr' }}>
+          <Field label="City">
+            <input value={draft.city} onChange={e => setDraft(p => ({ ...p, city: e.target.value }))} disabled={!canMutate} />
+          </Field>
+          <Field label="State">
+            <input value={draft.state} onChange={e => setDraft(p => ({ ...p, state: e.target.value }))} disabled={!canMutate} placeholder="NY" />
+          </Field>
+          <Field label="ZIP">
+            <input value={draft.zip} onChange={e => setDraft(p => ({ ...p, zip: e.target.value }))} disabled={!canMutate} />
+          </Field>
+        </div>
+        <Field label="Website">
+          <input type="url" value={draft.website} onChange={e => setDraft(p => ({ ...p, website: e.target.value }))} disabled={!canMutate} />
+        </Field>
+      </div>
+
+      {/* Pipeline */}
+      <div className="card" style={{ padding: 20, marginBottom: 14 }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>
+          Pipeline
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3" style={{ marginBottom: 8 }}>
+          <Field label="Status">
+            <select value={draft.status} onChange={e => setDraft(p => ({ ...p, status: e.target.value as LeadStatus }))} disabled={!canMutate}>
+              <option value="new">New</option>
+              <option value="contacted">Contacted</option>
+              <option value="converted">Converted</option>
+              <option value="dead">Dead</option>
+            </select>
+          </Field>
+          <Field label="Assigned rep">
+            <select value={draft.assigned_rep_id}
+              onChange={e => setDraft(p => ({ ...p, assigned_rep_id: e.target.value }))}
+              disabled={!canMutate}>
+              <option value="">Unassigned</option>
+              {repOptions.map(u => (
+                <option key={u.id} value={u.id}>{u.name} · {u.role.replace('_', ' ')}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Interest">
+            <select value={draft.interest_level}
+              onChange={e => setDraft(p => ({ ...p, interest_level: e.target.value as any }))}
+              disabled={!canMutate}>
+              <option value="">Not set</option>
+              <option value="hot">🔥 Hot</option>
+              <option value="warm">🌤️ Warm</option>
+              <option value="cold">❄️ Cold</option>
+            </select>
+          </Field>
+          <Field label="Follow-up date">
+            <input type="date" value={draft.follow_up_date}
+              onChange={e => setDraft(p => ({ ...p, follow_up_date: e.target.value }))} disabled={!canMutate} />
+          </Field>
+        </div>
+        <Field label="Interest description">
+          <input value={draft.interest_description}
+            onChange={e => setDraft(p => ({ ...p, interest_description: e.target.value }))}
+            disabled={!canMutate} />
+        </Field>
+        <Field label="Notes">
+          <textarea rows={4} value={draft.notes}
+            onChange={e => setDraft(p => ({ ...p, notes: e.target.value }))} disabled={!canMutate} />
+        </Field>
+      </div>
+
+      {/* Phase placeholders */}
+      <div className="card" style={{ padding: 18, marginBottom: 14, opacity: 0.7 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginBottom: 6 }}>Coming soon on this page</div>
+        <ul style={{ fontSize: 12, color: 'var(--mist)', lineHeight: 1.6, paddingLeft: 18, margin: 0 }}>
+          <li>Business-card image preview — Phase 7</li>
+          <li>Notes timeline with author + timestamps — future</li>
+          <li>"Convert to Trunk Show Opportunity" — Phase 16</li>
+        </ul>
+      </div>
+    </div>
+  )
+}
+
+function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+  return (
+    <div className="field" style={{ marginBottom: 8 }}>
+      <label className="fl">{label}{required && <span style={{ color: '#B91C1C', marginLeft: 4 }}>*</span>}</label>
+      {children}
+    </div>
+  )
+}

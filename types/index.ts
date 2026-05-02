@@ -305,3 +305,36 @@ export interface TradeShow {
   updated_at: string
   deleted_at: string | null
 }
+
+export type LeadInterestLevel = 'hot' | 'warm' | 'cold'
+export type LeadStatus = 'new' | 'contacted' | 'converted' | 'dead'
+
+export interface Lead {
+  id: string
+  first_name: string
+  last_name: string
+  company_name: string | null
+  title: string | null
+  email: string | null
+  phone: string | null
+  address_line_1: string | null
+  address_line_2: string | null
+  city: string | null
+  state: string | null
+  zip: string | null
+  website: string | null
+  assigned_rep_id: string | null
+  captured_at_trade_show_id: string | null
+  captured_by_user_id: string | null
+  interest_level: LeadInterestLevel | null
+  interest_description: string | null
+  follow_up_date: string | null
+  status: LeadStatus
+  converted_to_store_id: string | null
+  notes: string | null
+  business_card_image_url: string | null
+  ocr_extracted_data: any
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+}
