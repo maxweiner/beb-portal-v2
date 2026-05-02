@@ -24,6 +24,17 @@ interface ReportRow extends ExpenseReport {
   event_name: string
   event_start: string
   user_name: string
+  /** 'buying' | 'trunk' | 'trade' — sales-side reports use the
+   *  same row shape but reference trunk_show_id / trade_show_id
+   *  instead of event_id. Display strips the prefix when 'buying'. */
+  parent_kind: 'buying' | 'trunk' | 'trade' | 'unknown'
+}
+
+interface SalesParent {
+  id: string
+  start_date: string
+  end_date: string
+  label: string
 }
 
 const STATUS_FILTERS: { id: 'all' | ExpenseReportStatus; label: string }[] = [
@@ -39,7 +50,7 @@ const STATUS_FILTERS: { id: 'all' | ExpenseReportStatus; label: string }[] = [
 const STATUS_FILTERS_ACCOUNTING = STATUS_FILTERS.filter(s => s.id !== 'active')
 
 export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) => void }) {
-  const { user, events } = useApp()
+  const { user, events, stores } = useApp()
   // Regular admins still see only their own reports. Superadmins and
   // accounting users get the cross-user view + "User" dropdown filter
   // — accounting needs all reports for AP processing, RLS now permits it.
@@ -75,6 +86,10 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
   const [error, setError] = useState<string | null>(null)
   const [templates, setTemplates] = useState<ExpenseReportTemplate[]>([])
   const [pickerTemplateId, setPickerTemplateId] = useState<string>('')
+  // Phase 14: sales-side parents fetched lazily for the picker +
+  // for decorating list rows that point at trunk / trade shows.
+  const [trunkShowsList, setTrunkShowsList] = useState<SalesParent[]>([])
+  const [tradeShowsList, setTradeShowsList] = useState<SalesParent[]>([])
 
   async function reload() {
     if (!user) return
@@ -90,9 +105,40 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
     }
     const reportsArr = (reports ?? []) as ExpenseReport[]
 
-    // Decorate with event + user names. Events are already in context;
-    // users are loaded separately so the admin filter dropdown can show
-    // names even for owners not already in the events graph.
+    // Pull sales-side parents in parallel. Reports tied to trunk
+    // shows / trade shows reference these via their respective
+    // FKs; we need the labels + dates to decorate the row.
+    const trunkShowIds = Array.from(new Set(reportsArr.map(r => (r as any).trunk_show_id).filter(Boolean) as string[]))
+    const tradeShowIds = Array.from(new Set(reportsArr.map(r => (r as any).trade_show_id).filter(Boolean) as string[]))
+    const storesById = new Map(stores.map(s => [s.id, s]))
+    let trunkShowsById = new Map<string, SalesParent>()
+    let tradeShowsById = new Map<string, SalesParent>()
+    if (trunkShowIds.length > 0) {
+      const { data: tsRows } = await supabase.from('trunk_shows')
+        .select('id, store_id, start_date, end_date').in('id', trunkShowIds)
+      for (const t of (tsRows || [])) {
+        const store = storesById.get(t.store_id as string)
+        trunkShowsById.set(t.id as string, {
+          id: t.id as string,
+          start_date: t.start_date as string,
+          end_date:   t.end_date   as string,
+          label: `Trunk · ${store?.name || 'Store'}`,
+        })
+      }
+    }
+    if (tradeShowIds.length > 0) {
+      const { data: tsRows } = await supabase.from('trade_shows')
+        .select('id, name, start_date, end_date').in('id', tradeShowIds).is('deleted_at', null)
+      for (const t of (tsRows || [])) {
+        tradeShowsById.set(t.id as string, {
+          id: t.id as string,
+          start_date: t.start_date as string,
+          end_date:   t.end_date   as string,
+          label: `Trade · ${t.name}`,
+        })
+      }
+    }
+
     const eventById = new Map(events.map(e => [e.id, e]))
     const userIds = Array.from(new Set(reportsArr.map(r => r.user_id)))
     let userMap = new Map<string, string>()
@@ -102,15 +148,65 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
       userMap = new Map((usersRows ?? []).map((u: any) => [u.id, u.name]))
       setUsers((usersRows ?? []) as any)
     }
-    setRows(reportsArr.map(r => ({
-      ...r,
-      event_name:  eventById.get(r.event_id)?.store_name ?? '(unknown event)',
-      event_start: eventById.get(r.event_id)?.start_date ?? '',
-      user_name:   userMap.get(r.user_id) ?? '',
-    })))
+    setRows(reportsArr.map(r => {
+      const trunkId = (r as any).trunk_show_id as string | null
+      const tradeId = (r as any).trade_show_id as string | null
+      let kind: ReportRow['parent_kind'] = 'unknown'
+      let name = '(unknown)'
+      let start = ''
+      if (r.event_id) {
+        kind = 'buying'
+        const e = eventById.get(r.event_id)
+        name = e?.store_name || '(unknown event)'
+        start = e?.start_date || ''
+      } else if (trunkId) {
+        kind = 'trunk'
+        const t = trunkShowsById.get(trunkId)
+        name = t?.label || 'Trunk show'
+        start = t?.start_date || ''
+      } else if (tradeId) {
+        kind = 'trade'
+        const t = tradeShowsById.get(tradeId)
+        name = t?.label || 'Trade show'
+        start = t?.start_date || ''
+      }
+      return {
+        ...r,
+        event_name:  name,
+        event_start: start,
+        user_name:   userMap.get(r.user_id) ?? '',
+        parent_kind: kind,
+      }
+    }))
     setLoaded(true)
     return reportsArr
   }
+
+  // Pre-load sales-side parent lists for the picker. Reads what
+  // the current user is allowed to see via RLS — sales reps see
+  // their assigned trunk shows + all trade shows; admins see
+  // everything. Skipped silently if the tables don't return rows.
+  async function loadParentLists() {
+    try {
+      const [{ data: ts }, { data: tr }] = await Promise.all([
+        supabase.from('trunk_shows')
+          .select('id, store_id, start_date, end_date')
+          .is('deleted_at', null).order('start_date', { ascending: false }),
+        supabase.from('trade_shows')
+          .select('id, name, start_date, end_date')
+          .is('deleted_at', null).order('start_date', { ascending: false }),
+      ])
+      const storesById = new Map(stores.map(s => [s.id, s]))
+      setTrunkShowsList((ts || []).map(t => ({
+        id: t.id, start_date: t.start_date, end_date: t.end_date,
+        label: storesById.get(t.store_id)?.name || 'Store',
+      })))
+      setTradeShowsList((tr || []).map(t => ({
+        id: t.id, start_date: t.start_date, end_date: t.end_date, label: t.name,
+      })))
+    } catch { /* swallow — picker degrades to buying-only */ }
+  }
+  useEffect(() => { void loadParentLists() /* eslint-disable-next-line */ }, [stores.length])
 
   /**
    * Idempotent backfill: every recent event the user is a worker
@@ -229,12 +325,13 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
       .sort((a, b) => b.start_date.localeCompare(a.start_date))
   }, [events, rows, user?.id])
 
-  async function createReportForEvent(ev: Event) {
+  async function createReport(parent: { kind: 'buying' | 'trunk' | 'trade'; id: string }) {
     if (!user) return
     setCreating(true); setError(null)
-    const payload: { event_id: string; user_id: string; template_id?: string } = {
-      event_id: ev.id, user_id: user.id,
-    }
+    const payload: any = { user_id: user.id }
+    if (parent.kind === 'buying') payload.event_id = parent.id
+    else if (parent.kind === 'trunk') payload.trunk_show_id = parent.id
+    else payload.trade_show_id = parent.id
     if (pickerTemplateId) payload.template_id = pickerTemplateId
     const { data, error: insertErr } = await supabase
       .from('expense_reports')
@@ -456,33 +553,123 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
                 </div>
               </div>
             )}
-            {eligibleEvents.length === 0 ? (
-              <div style={{ padding: 20, textAlign: 'center', color: 'var(--mist)' }}>
-                No events without a report. Create an event first, or open an existing report from the list.
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {eligibleEvents.map(ev => (
-                  <button key={ev.id} disabled={creating}
-                    onClick={() => createReportForEvent(ev)}
-                    style={{
-                      textAlign: 'left', padding: '12px 14px', borderRadius: 8,
-                      background: '#fff', border: '1px solid var(--cream2)', cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      fontFamily: 'inherit',
-                    }}>
-                    <div>
-                      <div style={{ fontWeight: 800, color: 'var(--ink)' }}>{ev.store_name}</div>
-                      <div style={{ fontSize: 12, color: 'var(--mist)' }}>{formatDateLong(ev.start_date)}</div>
-                    </div>
-                    <span style={{ color: 'var(--green)', fontWeight: 700 }}>+ Create</span>
-                  </button>
-                ))}
-              </div>
-            )}
+            <PickerBody
+              creating={creating}
+              eligibleEvents={eligibleEvents}
+              trunkShows={trunkShowsList}
+              tradeShows={tradeShowsList}
+              existingTrunkIds={new Set(rows.filter(r => r.user_id === user?.id).map(r => (r as any).trunk_show_id).filter(Boolean) as string[])}
+              existingTradeIds={new Set(rows.filter(r => r.user_id === user?.id).map(r => (r as any).trade_show_id).filter(Boolean) as string[])}
+              onPick={(p) => createReport(p)}
+            />
           </div>
         </div>
       )}
     </div>
   )
+}
+
+/* ── new-report picker body (shared shell, parent-type tabs) ── */
+
+function PickerBody({
+  creating, eligibleEvents, trunkShows, tradeShows,
+  existingTrunkIds, existingTradeIds, onPick,
+}: {
+  creating: boolean
+  eligibleEvents: Event[]
+  trunkShows: SalesParent[]
+  tradeShows: SalesParent[]
+  existingTrunkIds: Set<string>
+  existingTradeIds: Set<string>
+  onPick: (p: { kind: 'buying' | 'trunk' | 'trade'; id: string }) => void
+}) {
+  const [kind, setKind] = useState<'buying' | 'trunk' | 'trade'>('buying')
+  const showTrunk = trunkShows.length > 0
+  const showTrade = tradeShows.length > 0
+  const hasOnlyOne = !showTrunk && !showTrade
+  const trunkAvail = trunkShows.filter(t => !existingTrunkIds.has(t.id))
+  const tradeAvail = tradeShows.filter(t => !existingTradeIds.has(t.id))
+
+  const fmt = (s: string, e: string) => {
+    if (!s) return ''
+    if (s === e || !e) return formatDateLong(s)
+    return `${formatDateLong(s)} – ${formatDateLong(e)}`
+  }
+
+  return (
+    <>
+      {!hasOnlyOne && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+          <button onClick={() => setKind('buying')}
+            className={kind === 'buying' ? 'btn-primary btn-xs' : 'btn-outline btn-xs'}>Buying Event</button>
+          {showTrunk && (
+            <button onClick={() => setKind('trunk')}
+              className={kind === 'trunk' ? 'btn-primary btn-xs' : 'btn-outline btn-xs'}>Trunk Show</button>
+          )}
+          {showTrade && (
+            <button onClick={() => setKind('trade')}
+              className={kind === 'trade' ? 'btn-primary btn-xs' : 'btn-outline btn-xs'}>Trade Show</button>
+          )}
+        </div>
+      )}
+
+      {kind === 'buying' && (
+        eligibleEvents.length === 0 ? (
+          <Empty msg="No buying events without a report. Create an event first, or open an existing report from the list." />
+        ) : (
+          <PickList items={eligibleEvents.map(ev => ({
+            id: ev.id, label: ev.store_name, sub: formatDateLong(ev.start_date),
+          }))} disabled={creating} onPick={(id) => onPick({ kind: 'buying', id })} />
+        )
+      )}
+      {kind === 'trunk' && (
+        trunkAvail.length === 0 ? (
+          <Empty msg="No trunk shows without a report (or none assigned to you)." />
+        ) : (
+          <PickList items={trunkAvail.map(t => ({
+            id: t.id, label: t.label, sub: fmt(t.start_date, t.end_date),
+          }))} disabled={creating} onPick={(id) => onPick({ kind: 'trunk', id })} />
+        )
+      )}
+      {kind === 'trade' && (
+        tradeAvail.length === 0 ? (
+          <Empty msg="No trade shows without a report." />
+        ) : (
+          <PickList items={tradeAvail.map(t => ({
+            id: t.id, label: t.label, sub: fmt(t.start_date, t.end_date),
+          }))} disabled={creating} onPick={(id) => onPick({ kind: 'trade', id })} />
+        )
+      )}
+    </>
+  )
+}
+
+function PickList({ items, disabled, onPick }: {
+  items: { id: string; label: string; sub: string }[]
+  disabled: boolean
+  onPick: (id: string) => void
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {items.map(it => (
+        <button key={it.id} disabled={disabled} onClick={() => onPick(it.id)}
+          style={{
+            textAlign: 'left', padding: '12px 14px', borderRadius: 8,
+            background: '#fff', border: '1px solid var(--cream2)', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            fontFamily: 'inherit',
+          }}>
+          <div>
+            <div style={{ fontWeight: 800, color: 'var(--ink)' }}>{it.label}</div>
+            <div style={{ fontSize: 12, color: 'var(--mist)' }}>{it.sub}</div>
+          </div>
+          <span style={{ color: 'var(--green)', fontWeight: 700 }}>+ Create</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function Empty({ msg }: { msg: string }) {
+  return <div style={{ padding: 20, textAlign: 'center', color: 'var(--mist)' }}>{msg}</div>
 }

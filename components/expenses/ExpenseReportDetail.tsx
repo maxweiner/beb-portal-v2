@@ -66,13 +66,50 @@ export default function ExpenseReportDetail({
     [events, report?.event_id],
   )
 
-  // Owner can't submit until the event has ended. Prevents
-  // pre-event filing of expenses that may still change during the
-  // show. Admins / superadmins still gate on status only — they
-  // sometimes file on a buyer's behalf and may need an early path.
-  const eventHasEnded = event?.start_date
-    ? eventEndDate(event.start_date).getTime() < Date.now()
-    : false
+  // Phase 14: sales-side parents. Loaded lazily when the report
+  // points at a trunk show / trade show instead of a buying event.
+  const [salesParent, setSalesParent] = useState<{ label: string; start: string; end: string } | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    const trunkId = (report as any)?.trunk_show_id as string | undefined
+    const tradeId = (report as any)?.trade_show_id as string | undefined
+    if (!trunkId && !tradeId) { setSalesParent(null); return }
+    ;(async () => {
+      try {
+        if (trunkId) {
+          const { data: ts } = await supabase.from('trunk_shows')
+            .select('store_id, start_date, end_date').eq('id', trunkId).maybeSingle()
+          if (cancelled || !ts) return
+          const { data: store } = await supabase.from('stores').select('name').eq('id', ts.store_id).maybeSingle()
+          setSalesParent({
+            label: `Trunk · ${store?.name || 'Store'}`,
+            start: ts.start_date, end: ts.end_date,
+          })
+        } else if (tradeId) {
+          const { data: tr } = await supabase.from('trade_shows')
+            .select('name, start_date, end_date').eq('id', tradeId).maybeSingle()
+          if (cancelled || !tr) return
+          setSalesParent({ label: `Trade · ${tr.name}`, start: tr.start_date, end: tr.end_date })
+        }
+      } catch { /* swallow — fall back to default labels */ }
+    })()
+    return () => { cancelled = true }
+  }, [report?.id])
+
+  // Owner can't submit until the parent event/show has ended.
+  // Prevents pre-event filing of expenses that may still change
+  // during the show. Trunk + trade shows have explicit end_date
+  // columns; buying events derive end from start + EVENT_LENGTH
+  // _DAYS via eventEndDate().
+  const eventHasEnded = (() => {
+    if (salesParent?.end) {
+      return new Date(salesParent.end + 'T23:59:59').getTime() < Date.now()
+    }
+    if (event?.start_date) {
+      return eventEndDate(event.start_date).getTime() < Date.now()
+    }
+    return false
+  })()
   const canSubmit = isOwner && report?.status === 'active' && hasContent && eventHasEnded
   const canApprove = isPartner && report?.status === 'submitted_pending_review'
   const canRecall  = isOwner && report?.status === 'submitted_pending_review'
@@ -396,10 +433,14 @@ export default function ExpenseReportDetail({
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
           <div>
             <h1 style={{ fontSize: 20, fontWeight: 900, color: 'var(--ink)' }}>
-              {event?.store_name ?? '(unknown event)'}
+              {salesParent?.label || event?.store_name || '(unknown parent)'}
             </h1>
             <div style={{ fontSize: 13, color: 'var(--mist)', marginTop: 2 }}>
-              {event?.start_date ? formatDateLong(event.start_date) : ''}
+              {salesParent
+                ? (salesParent.start === salesParent.end
+                    ? formatDateLong(salesParent.start)
+                    : `${formatDateLong(salesParent.start)} – ${formatDateLong(salesParent.end)}`)
+                : (event?.start_date ? formatDateLong(event.start_date) : '')}
               {ownerName && <> · {ownerName}</>}
             </div>
           </div>
