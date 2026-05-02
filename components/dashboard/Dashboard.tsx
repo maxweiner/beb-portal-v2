@@ -133,31 +133,6 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
   // the active brand. Brand-scoping happens upstream via context.events.
   const buyers = leaderboardBuyers(users, events)
 
-  // Buyer view: hero stats + event lists scope to events the buyer is
-  // assigned to. Other roles still see the team-wide view. Filter
-  // funcs rather than gates so the JSX stays role-agnostic.
-  const isBuyer = user?.role === 'buyer'
-  const myId = user?.id
-  const filterMine = (evs: any[]) =>
-    (isBuyer && myId) ? evs.filter(e => isWorkerAssigned(e, myId)) : evs
-
-  const visibleWeekEvents       = filterMine(weekEvents)
-  const visibleNextWeekFallback = filterMine(nextWeekFallback)
-  const visibleNextWeekEvents   = filterMine(nextWeekEvents)
-  const visibleDisplayedEvents  = visibleWeekEvents.length > 0 ? visibleWeekEvents : visibleNextWeekFallback
-  const visibleShowingNextWeek  = visibleWeekEvents.length === 0 && visibleNextWeekFallback.length > 0
-  const visibleWeekTotals = isBuyer
-    ? visibleWeekEvents.reduce((acc, ev) => {
-        ev.days.forEach((d: any) => {
-          acc.purchases  += d.purchases  || 0
-          acc.customers  += d.customers  || 0
-          acc.dollars    += daySpend(d)
-          acc.commission += dayCommission(d)
-        })
-        return acc
-      }, { purchases: 0, customers: 0, dollars: 0, commission: 0 })
-    : weekTotals
-
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
 
@@ -190,86 +165,52 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
                 {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · Week of {fmtWeek}
               </div>
             </div>
-            {/* Year selector — admin / superadmin only. Buyers
-                only ever care about the current year on this dash. */}
-            {!isBuyer && (
-              <div className="flex items-center gap-2">
-                <span style={{ color: 'rgba(245,240,232,.6)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em' }}>Year</span>
-                <select value={year} onChange={e => setYear(e.target.value)}
-                  style={{
-                    padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 700,
-                    background: 'rgba(255,255,255,.12)', color: '#fff',
-                    border: '1px solid rgba(255,255,255,.2)', cursor: 'pointer',
-                    WebkitAppearance: 'none', appearance: 'none',
-                  }}>
-                  {YEARS.map(y => <option key={y} style={{ color: 'var(--ink)' }}>{y}</option>)}
-                </select>
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              <span style={{ color: 'rgba(245,240,232,.6)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em' }}>Year</span>
+              <select value={year} onChange={e => setYear(e.target.value)}
+                style={{
+                  padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+                  background: 'rgba(255,255,255,.12)', color: '#fff',
+                  border: '1px solid rgba(255,255,255,.2)', cursor: 'pointer',
+                  WebkitAppearance: 'none', appearance: 'none',
+                }}>
+                {YEARS.map(y => <option key={y} style={{ color: 'var(--ink)' }}>{y}</option>)}
+              </select>
+            </div>
           </div>
 
-          {isBuyer ? (
-            // Three side-by-side stat cards. grid-cols-3 always so
-            // they stay on one line even on narrow phones — each
-            // card is small enough to fit comfortably down to ~110
-            // px, which is wider than the smallest viable phone
-            // width / 3.
-            <div className="grid grid-cols-3 gap-2 sm:gap-3">
-              {[
-                { label: 'Purchases', value: visibleWeekTotals.purchases.toLocaleString() },
-                { label: 'Customers', value: visibleWeekTotals.customers.toLocaleString() },
-                { label: 'Close Rate', value: visibleWeekTotals.customers > 0
-                    ? `${Math.round(visibleWeekTotals.purchases / visibleWeekTotals.customers * 100)}%`
-                    : '—' },
-              ].map(({ label, value }) => (
-                <div key={label} style={{
-                  background: 'rgba(240,253,244,.95)',
-                  border: '1px solid var(--green3)',
-                  borderRadius: 12,
-                  padding: '10px 12px',
-                  textAlign: 'center',
-                  boxShadow: '0 2px 10px rgba(0,0,0,.08)',
-                  minWidth: 0,
-                }}>
-                  <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--green-dark)', letterSpacing: '-.02em', lineHeight: 1 }}>{value}</div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--green-dark)', opacity: 0.7, textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 4 }}>{label}</div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {[
-                { label: 'Events This Week', value: visibleWeekEvents.length, sub: fmtWeek },
-                { label: 'Purchases', value: visibleWeekTotals.purchases.toLocaleString(), sub: `${visibleWeekTotals.customers.toLocaleString()} customers` },
-                { label: '💰 Amount Spent', value: fmt(visibleWeekTotals.dollars), sub: visibleWeekTotals.customers > 0 ? `${Math.round(visibleWeekTotals.purchases / visibleWeekTotals.customers * 100)}% close rate` : 'This week' },
-                { label: 'Commission Due', value: fmt(visibleWeekTotals.commission), sub: '10% + 5% tiers' },
-              ].map(({ label, value, sub }) => (
-                <div key={label} style={{
-                  background: 'rgba(240,253,244,.95)', borderRadius: 12, padding: '14px 16px',
-                  border: '1px solid var(--green3)',
-                  boxShadow: '0 2px 10px rgba(0,0,0,.08)',
-                }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--green-dark)', opacity: 0.7, textTransform: 'uppercase', letterSpacing: '.06em' }}>{label}</div>
-                  <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--green-dark)', letterSpacing: '-.02em', marginTop: 4, lineHeight: 1 }}>{value}</div>
-                  <div style={{ fontSize: 11, color: 'var(--green-dark)', opacity: 0.6, marginTop: 4 }}>{sub}</div>
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: 'Events This Week', value: weekEvents.length, sub: fmtWeek },
+              { label: 'Purchases', value: weekTotals.purchases.toLocaleString(), sub: `${weekTotals.customers.toLocaleString()} customers` },
+              { label: '💰 Amount Spent', value: fmt(weekTotals.dollars), sub: weekTotals.customers > 0 ? `${Math.round(weekTotals.purchases / weekTotals.customers * 100)}% close rate` : 'This week' },
+              { label: 'Commission Due', value: fmt(weekTotals.commission), sub: '10% + 5% tiers' },
+            ].map(({ label, value, sub }) => (
+              <div key={label} style={{
+                background: 'rgba(240,253,244,.95)', borderRadius: 12, padding: '14px 16px',
+                border: '1px solid var(--green3)',
+                boxShadow: '0 2px 10px rgba(0,0,0,.08)',
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--green-dark)', opacity: 0.7, textTransform: 'uppercase', letterSpacing: '.06em' }}>{label}</div>
+                <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--green-dark)', letterSpacing: '-.02em', marginTop: 4, lineHeight: 1 }}>{value}</div>
+                <div style={{ fontSize: 11, color: 'var(--green-dark)', opacity: 0.6, marginTop: 4 }}>{sub}</div>
+              </div>
+            ))}
+          </div>
 
           {/* This week's events — one card per event, live spend + day status */}
-          {visibleDisplayedEvents.length > 0 && (
+          {displayedEvents.length > 0 && (
             <div style={{ marginTop: 18 }}>
               <div style={{
                 fontSize: 11, fontWeight: 700, color: 'rgba(245,240,232,.75)',
                 textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 10,
               }}>
-                {visibleShowingNextWeek
+                {showingNextWeek
                   ? 'Nothing this week — here\'s what\'s coming'
                   : 'This week\'s events'}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
-                {visibleDisplayedEvents.map(ev => {
+                {displayedEvents.map(ev => {
                   const spend = getEventSpend(ev)
                   const status = getEventDayStatus(ev)
                   const store = stores.find(s => s.id === ev.store_id)
@@ -327,7 +268,7 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
       <NextEventCard setNav={setNav} variant="desktop" />
 
       {/* Next Week Preview — only on weekends */}
-      {isWeekend && visibleNextWeekEvents.length > 0 && (
+      {isWeekend && nextWeekEvents.length > 0 && (
         <div style={{ background: 'var(--card-bg)', borderRadius: 'var(--r2)', border: '1px solid var(--pearl)', marginBottom: 24, overflow: 'hidden' }}>
           <div style={{ background: 'var(--green-pale)', padding: '12px 20px', borderBottom: '1px solid var(--green3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -335,11 +276,11 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
               <span style={{ fontWeight: 900, fontSize: 13, color: 'var(--green-dark)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Next Week</span>
               <span style={{ fontSize: 12, color: 'var(--green-dark)', opacity: 0.7 }}>{fmtNextWeek}</span>
             </div>
-            <span style={{ fontSize: 12, fontWeight: 900, color: 'var(--green-dark)' }}>{visibleNextWeekEvents.length} event{visibleNextWeekEvents.length !== 1 ? 's' : ''}</span>
+            <span style={{ fontSize: 12, fontWeight: 900, color: 'var(--green-dark)' }}>{nextWeekEvents.length} event{nextWeekEvents.length !== 1 ? 's' : ''}</span>
           </div>
           <div style={{ padding: '16px 20px' }}>
           <div style={{ display: 'flex', gap: 12, overflowX: 'auto' }}>
-            {visibleNextWeekEvents.sort((a, b) => a.start_date.localeCompare(b.start_date)).map((ev, i) => {
+            {nextWeekEvents.sort((a, b) => a.start_date.localeCompare(b.start_date)).map((ev, i) => {
               const store = stores.find(s => s.id === ev.store_id)
               const evStart = new Date(ev.start_date + 'T12:00:00')
               const evEnd = new Date(ev.start_date + 'T12:00:00')
@@ -370,10 +311,8 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
         </div>
       )}
 
-      <div className={isBuyer ? 'grid grid-cols-1 gap-6' : 'grid grid-cols-1 lg:grid-cols-3 gap-6'}>
-        {/* Store performance table — admins/superadmins only.
-            Buyers don't need a team-wide store breakdown on their dash. */}
-        {!isBuyer && (
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Store performance table */}
         <div className="lg:col-span-2 rounded-xl overflow-hidden" style={{ background: 'var(--card-bg)', border: '1px solid var(--pearl)', boxShadow: '0 2px 10px rgba(0,0,0,.04)' }}>
           <div style={{ background: 'var(--green-pale)', padding: '12px 20px', borderBottom: '1px solid var(--green3)', fontWeight: 900, fontSize: 13, color: 'var(--green-dark)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
             Store Performance — {year}
@@ -412,7 +351,6 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
             </div>
           )}
         </div>
-        )}
 
         {/* Lead sources */}
         <div className="card">
@@ -435,11 +373,7 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
           </div>
 
 
-          {/* "Standings" — full ranking with every buyer's name and
-              days. Buyers want this comprehensive list (the bottom
-              Leaderboard component only shows the top-3 podium and
-              hides the rest, which made the buyer dash feel like
-              the leaderboard was missing). */}
+          {/* Leaderboard mini */}
           {buyers.length > 0 && (
             <div className="mt-6 pt-5" style={{ borderTop: '1px solid var(--cream2)' }}>
               <div className="font-black text-sm mb-3" style={{ color: 'var(--ink)' }}>🏆 {new Date().getFullYear()} Standings</div>
@@ -541,10 +475,7 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
         </div>
       </div>
 
-      {/* Top-3 podium leaderboard. Visible to everyone, including
-          buyers — the sidebar "Standings" block above shows the
-          comprehensive list, and this podium gives the prize-tier
-          highlight. */}
+      {/* Full Leaderboard */}
       <Leaderboard events={events} users={users} buyers={buyers} />
     </div>
   )
