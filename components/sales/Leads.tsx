@@ -10,6 +10,7 @@ import { listLeads } from '@/lib/sales/leads'
 import type { Lead, LeadInterestLevel, LeadStatus } from '@/types'
 import AddLeadModal from './AddLeadModal'
 import LeadDetail from './LeadDetail'
+import type { NavPage } from '@/app/page'
 
 type StatusFilter = 'all' | LeadStatus
 type InterestFilter = 'all' | LeadInterestLevel
@@ -25,7 +26,7 @@ const STATUS_COLOR: Record<LeadStatus, { bg: string; fg: string }> = {
 }
 const INTEREST_ICON: Record<LeadInterestLevel, string> = { hot: '🔥', warm: '🌤️', cold: '❄️' }
 
-export default function Leads() {
+export default function Leads({ setNav }: { setNav?: (n: NavPage) => void }) {
   const { user, users } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || !!user?.is_partner
 
@@ -74,6 +75,7 @@ export default function Leads() {
         onBack={() => setOpenId(null)}
         onChanged={() => void reload()}
         onDeleted={() => { setOpenId(null); void reload() }}
+        setNav={setNav}
       />
     )
   }

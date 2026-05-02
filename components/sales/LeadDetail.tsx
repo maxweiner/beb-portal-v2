@@ -5,21 +5,26 @@
 // that pre-fills the trunk-show form. Phase 7 will add the
 // business-card thumbnail.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
+import { supabase } from '@/lib/supabase'
 import { getLead, updateLead, softDeleteLead } from '@/lib/sales/leads'
+import { createTrunkShow } from '@/lib/sales/trunkShows'
 import type { Lead, LeadInterestLevel, LeadStatus } from '@/types'
+import type { NavPage } from '@/app/page'
 
 interface Props {
   leadId: string
   onBack: () => void
   onChanged: () => void
   onDeleted: () => void
+  setNav?: (n: NavPage) => void
 }
 
-export default function LeadDetail({ leadId, onBack, onChanged, onDeleted }: Props) {
-  const { user, users } = useApp()
+export default function LeadDetail({ leadId, onBack, onChanged, onDeleted, setNav }: Props) {
+  const { user, users, stores } = useApp()
+  const [convertOpen, setConvertOpen] = useState(false)
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || !!user?.is_partner
   const canMutate = isAdmin || user?.role === 'sales_rep'
   const [lead, setLead] = useState<Lead | null>(null)
@@ -132,10 +137,10 @@ export default function LeadDetail({ leadId, onBack, onChanged, onDeleted }: Pro
     .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
 
   if (!loaded) return <div className="p-6 text-center" style={{ color: 'var(--mist)' }}>Loading…</div>
-  if (error) return (
+  if (error || !lead) return (
     <div className="p-6" style={{ maxWidth: 720, margin: '0 auto' }}>
       <button onClick={onBack} className="btn-outline btn-sm" style={{ marginBottom: 14 }}>← Leads</button>
-      <div className="card" style={{ padding: 20, color: '#991B1B', background: '#FEE2E2' }}>{error}</div>
+      <div className="card" style={{ padding: 20, color: '#991B1B', background: '#FEE2E2' }}>{error || 'Not found'}</div>
     </div>
   )
 
@@ -145,12 +150,46 @@ export default function LeadDetail({ leadId, onBack, onChanged, onDeleted }: Pro
         <button onClick={onBack} className="btn-outline btn-sm">← Leads</button>
         <div style={{ flex: 1 }} />
         <AutosaveIndicator status={status} />
+        {lead.status !== 'converted' && (
+          <button onClick={() => setConvertOpen(true)} className="btn-primary btn-sm">
+            ✨ Convert to Trunk Show
+          </button>
+        )}
+        {lead.status === 'converted' && lead.converted_to_store_id && (
+          <button
+            onClick={() => setNav?.('trunk-shows')}
+            className="btn-outline btn-sm"
+          >
+            View trunk shows →
+          </button>
+        )}
         {isAdmin && (
           <button onClick={handleDelete} className="btn-outline btn-sm" style={{ color: '#B91C1C', borderColor: '#FCA5A5' }}>
             Delete
           </button>
         )}
       </div>
+
+      {convertOpen && (
+        <ConvertModal
+          lead={lead}
+          repOptions={repOptions}
+          onClose={() => setConvertOpen(false)}
+          onConverted={async () => {
+            setConvertOpen(false)
+            onChanged()
+            // Re-fetch this lead so the badge flips to "Converted"
+            // and the action bar swaps button.
+            try {
+              const fresh = await getLead(lead.id)
+              if (fresh) setLead(fresh)
+            } catch { /* swallow */ }
+            // Navigate to Trunk Shows so the new row is in front
+            // of the user.
+            setNav?.('trunk-shows')
+          }}
+        />
+      )}
 
       {/* Identity */}
       <div className="card" style={{ padding: 20, marginBottom: 14 }}>
@@ -271,6 +310,134 @@ function Field({ label, required, children }: { label: string; required?: boolea
     <div className="field" style={{ marginBottom: 8 }}>
       <label className="fl">{label}{required && <span style={{ color: '#B91C1C', marginLeft: 4 }}>*</span>}</label>
       {children}
+    </div>
+  )
+}
+
+/* ── Convert-to-Trunk-Show modal ─────────────────────────── */
+
+function ConvertModal({
+  lead, repOptions, onClose, onConverted,
+}: {
+  lead: Lead
+  repOptions: any[]
+  onClose: () => void
+  onConverted: () => void | Promise<void>
+}) {
+  const { stores } = useApp()
+  const [storeId, setStoreId] = useState<string>(lead.converted_to_store_id || '')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [repId, setRepId] = useState<string>(lead.assigned_rep_id || '')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  // If a store name happens to match the lead's company exactly,
+  // suggest it as the default store.
+  const matchByCompany = useMemo(() => {
+    if (!lead.company_name) return null
+    const norm = (s: string | null) => (s || '').toLowerCase().trim()
+    return stores.find(s => norm(s.name) === norm(lead.company_name)) || null
+  }, [stores, lead.company_name])
+  useEffect(() => {
+    if (!storeId && matchByCompany) setStoreId(matchByCompany.id)
+  }, [matchByCompany, storeId])
+
+  const valid = !!storeId && !!startDate && !!endDate
+                 && endDate >= startDate && !!repId
+
+  async function submit() {
+    if (!valid || busy) return
+    setBusy(true); setErr(null)
+    try {
+      const ts = await createTrunkShow({
+        store_id: storeId,
+        start_date: startDate,
+        end_date: endDate,
+        assigned_rep_id: repId,
+      })
+      // Mark the lead converted + record the linked store.
+      await updateLead(lead.id, {
+        status: 'converted',
+        // assigned_rep_id stays whatever it was; it's a separate axis.
+      })
+      // updateLead doesn't accept converted_to_store_id since it's
+      // not in LeadDraft — patch directly.
+      const { error: patchErr } = await supabase
+        .from('leads').update({ converted_to_store_id: storeId }).eq('id', lead.id)
+      if (patchErr) throw new Error(patchErr.message)
+      await onConverted()
+    } catch (e: any) {
+      setErr(e?.message || 'Could not convert')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div onClick={e => e.target === e.currentTarget && onClose()}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1100,
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+        padding: '6vh 16px',
+      }}>
+      <div style={{ width: 'min(560px, 100%)', background: '#fff', borderRadius: 12, padding: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)' }}>
+            ✨ Convert to Trunk Show
+          </h2>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 22, color: 'var(--mist)' }}>×</button>
+        </div>
+
+        <div style={{ fontSize: 13, color: 'var(--ash)', marginBottom: 12 }}>
+          Creates a trunk show at the linked store and marks
+          <strong> {lead.first_name} {lead.last_name}</strong> as converted.
+          The lead row stays for history.
+        </div>
+
+        <Field label="Store" required>
+          <select value={storeId} onChange={e => setStoreId(e.target.value)}>
+            <option value="">Pick a store…</option>
+            {stores.filter(s => s.active !== false)
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.name}{s.city ? ` · ${s.city}, ${s.state}` : ''}
+                </option>
+              ))}
+          </select>
+          {!matchByCompany && lead.company_name && !storeId && (
+            <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
+              No store found matching "{lead.company_name}". Pick one or have an admin create the store first.
+            </div>
+          )}
+        </Field>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3" style={{ marginBottom: 8 }}>
+          <Field label="Start date" required>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+          </Field>
+          <Field label="End date" required>
+            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+          </Field>
+        </div>
+        <Field label="Assigned rep" required>
+          <select value={repId} onChange={e => setRepId(e.target.value)}>
+            <option value="">Pick a rep…</option>
+            {repOptions.map(u => (
+              <option key={u.id} value={u.id}>{u.name} · {u.role.replace('_', ' ')}</option>
+            ))}
+          </select>
+        </Field>
+
+        {err && <div style={{ background: '#FEE2E2', color: '#991B1B', padding: '8px 10px', borderRadius: 6, fontSize: 13, marginBottom: 8 }}>{err}</div>}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+          <button onClick={onClose} className="btn-outline btn-sm">Cancel</button>
+          <button onClick={submit} disabled={!valid || busy} className="btn-primary btn-sm">
+            {busy ? 'Converting…' : 'Convert + create trunk show'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
