@@ -27,7 +27,9 @@ export function categoryIcon(c: ExpenseCategory): string {
 }
 
 export const STATUS_LABEL: Record<ExpenseReportStatus, string> = {
-  active: 'Active',
+  // 'active' is the DB enum but the buyer hasn't actually done
+  // anything yet — it's a draft. Display label reflects that.
+  active: 'Non-Submitted',
   submitted_pending_review: 'Pending review',
   approved: 'Approved',
   paid: 'Paid',

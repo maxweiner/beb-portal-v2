@@ -27,11 +27,15 @@ interface ReportRow extends ExpenseReport {
 
 const STATUS_FILTERS: { id: 'all' | ExpenseReportStatus; label: string }[] = [
   { id: 'all',                      label: 'All' },
-  { id: 'active',                   label: 'Active' },
+  { id: 'active',                   label: 'Non-Submitted' },
   { id: 'submitted_pending_review', label: 'Pending review' },
   { id: 'approved',                 label: 'Approved' },
   { id: 'paid',                     label: 'Paid' },
 ]
+
+// Accounting role doesn't need to see drafts ("active") — those are
+// reports the buyer hasn't acted on yet. Strip from list + filter.
+const STATUS_FILTERS_ACCOUNTING = STATUS_FILTERS.filter(s => s.id !== 'active')
 
 export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) => void }) {
   const { user, events } = useApp()
@@ -39,6 +43,7 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
   // accounting users get the cross-user view + "User" dropdown filter
   // — accounting needs all reports for AP processing, RLS now permits it.
   const canSeeAll = user?.role === 'superadmin' || user?.role === 'accounting'
+  const isAccounting = user?.role === 'accounting'
   const isNarrow = useIsNarrow()
 
   const [rows, setRows] = useState<ReportRow[]>([])
@@ -102,6 +107,9 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
 
   const filtered = useMemo(() => {
     return rows.filter(r => {
+      // Accounting never sees drafts ("active") — those reports
+      // haven't been submitted yet and aren't ready for AP.
+      if (isAccounting && r.status === 'active') return false
       if (statusFilter !== 'all' && r.status !== statusFilter) return false
       if (canSeeAll) {
         // Superadmin: respect the dropdown ('all' shows everyone).
@@ -112,7 +120,7 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
       }
       return true
     })
-  }, [rows, statusFilter, userFilter, canSeeAll, user?.id])
+  }, [rows, statusFilter, userFilter, canSeeAll, isAccounting, user?.id])
 
   // For the new-report picker: events the user can see, minus events
   // that already have a report for this user.
@@ -163,7 +171,9 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
           <div>
             <label className="fl">Status</label>
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)}>
-              {STATUS_FILTERS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+              {(isAccounting ? STATUS_FILTERS_ACCOUNTING : STATUS_FILTERS).map(s => (
+                <option key={s.id} value={s.id}>{s.label}</option>
+              ))}
             </select>
           </div>
           {canSeeAll && (
