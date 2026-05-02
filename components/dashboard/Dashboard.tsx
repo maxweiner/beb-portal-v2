@@ -190,47 +190,71 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
                 {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · Week of {fmtWeek}
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span style={{ color: 'rgba(245,240,232,.6)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em' }}>Year</span>
-              <select value={year} onChange={e => setYear(e.target.value)}
-                style={{
-                  padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 700,
-                  background: 'rgba(255,255,255,.12)', color: '#fff',
-                  border: '1px solid rgba(255,255,255,.2)', cursor: 'pointer',
-                  WebkitAppearance: 'none', appearance: 'none',
-                }}>
-                {YEARS.map(y => <option key={y} style={{ color: 'var(--ink)' }}>{y}</option>)}
-              </select>
-            </div>
+            {/* Year selector — admin / superadmin only. Buyers
+                only ever care about the current year on this dash. */}
+            {!isBuyer && (
+              <div className="flex items-center gap-2">
+                <span style={{ color: 'rgba(245,240,232,.6)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em' }}>Year</span>
+                <select value={year} onChange={e => setYear(e.target.value)}
+                  style={{
+                    padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+                    background: 'rgba(255,255,255,.12)', color: '#fff',
+                    border: '1px solid rgba(255,255,255,.2)', cursor: 'pointer',
+                    WebkitAppearance: 'none', appearance: 'none',
+                  }}>
+                  {YEARS.map(y => <option key={y} style={{ color: 'var(--ink)' }}>{y}</option>)}
+                </select>
+              </div>
+            )}
           </div>
 
-          <div className={isBuyer ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-2 md:grid-cols-4 gap-3'}>
-            {[
-              // Events-this-week pill hidden for buyers — the
-              // event cards below already make the count obvious.
-              ...(isBuyer ? [] : [
+          {isBuyer ? (
+            // Compact single-line summary for buyers. The pill grid
+            // looked oversized stretched across the row; this keeps
+            // the same data dense + adds close rate.
+            <div style={{
+              display: 'flex', alignItems: 'baseline', flexWrap: 'wrap',
+              gap: '6px 14px',
+              background: 'rgba(240,253,244,.95)',
+              border: '1px solid var(--green3)',
+              borderRadius: 12,
+              padding: '10px 16px',
+              color: 'var(--green-dark)',
+              boxShadow: '0 2px 10px rgba(0,0,0,.08)',
+            }}>
+              <span><strong style={{ fontSize: 18, fontWeight: 900 }}>{visibleWeekTotals.purchases.toLocaleString()}</strong>
+                <span style={{ fontSize: 12, marginLeft: 4, opacity: 0.75 }}>purchases</span></span>
+              <span style={{ opacity: 0.4 }}>·</span>
+              <span><strong style={{ fontSize: 18, fontWeight: 900 }}>{visibleWeekTotals.customers.toLocaleString()}</strong>
+                <span style={{ fontSize: 12, marginLeft: 4, opacity: 0.75 }}>customers</span></span>
+              <span style={{ opacity: 0.4 }}>·</span>
+              <span><strong style={{ fontSize: 18, fontWeight: 900 }}>
+                {visibleWeekTotals.customers > 0
+                  ? `${Math.round(visibleWeekTotals.purchases / visibleWeekTotals.customers * 100)}%`
+                  : '—'}
+              </strong>
+                <span style={{ fontSize: 12, marginLeft: 4, opacity: 0.75 }}>close rate</span></span>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
                 { label: 'Events This Week', value: visibleWeekEvents.length, sub: fmtWeek },
-              ]),
-              { label: 'Purchases', value: visibleWeekTotals.purchases.toLocaleString(), sub: `${visibleWeekTotals.customers.toLocaleString()} customers` },
-              // Amount-spent + commission also hidden for buyers:
-              // spend shows on each event card; commission belongs
-              // on the buyer's profile / payout view.
-              ...(isBuyer ? [] : [
+                { label: 'Purchases', value: visibleWeekTotals.purchases.toLocaleString(), sub: `${visibleWeekTotals.customers.toLocaleString()} customers` },
                 { label: '💰 Amount Spent', value: fmt(visibleWeekTotals.dollars), sub: visibleWeekTotals.customers > 0 ? `${Math.round(visibleWeekTotals.purchases / visibleWeekTotals.customers * 100)}% close rate` : 'This week' },
                 { label: 'Commission Due', value: fmt(visibleWeekTotals.commission), sub: '10% + 5% tiers' },
-              ]),
-            ].map(({ label, value, sub }) => (
-              <div key={label} style={{
-                background: 'rgba(240,253,244,.95)', borderRadius: 12, padding: '14px 16px',
-                border: '1px solid var(--green3)',
-                boxShadow: '0 2px 10px rgba(0,0,0,.08)',
-              }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--green-dark)', opacity: 0.7, textTransform: 'uppercase', letterSpacing: '.06em' }}>{label}</div>
-                <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--green-dark)', letterSpacing: '-.02em', marginTop: 4, lineHeight: 1 }}>{value}</div>
-                <div style={{ fontSize: 11, color: 'var(--green-dark)', opacity: 0.6, marginTop: 4 }}>{sub}</div>
-              </div>
-            ))}
-          </div>
+              ].map(({ label, value, sub }) => (
+                <div key={label} style={{
+                  background: 'rgba(240,253,244,.95)', borderRadius: 12, padding: '14px 16px',
+                  border: '1px solid var(--green3)',
+                  boxShadow: '0 2px 10px rgba(0,0,0,.08)',
+                }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--green-dark)', opacity: 0.7, textTransform: 'uppercase', letterSpacing: '.06em' }}>{label}</div>
+                  <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--green-dark)', letterSpacing: '-.02em', marginTop: 4, lineHeight: 1 }}>{value}</div>
+                  <div style={{ fontSize: 11, color: 'var(--green-dark)', opacity: 0.6, marginTop: 4 }}>{sub}</div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* This week's events — one card per event, live spend + day status */}
           {visibleDisplayedEvents.length > 0 && (
