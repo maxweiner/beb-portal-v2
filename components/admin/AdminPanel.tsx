@@ -146,6 +146,16 @@ function UsersTab() {
   }
   const handleDrop = async (targetId: string) => {
     if (!dragId || dragId === targetId) { setDragId(null); setDragOverId(null); return }
+    const fromUser = orderedUsers.find(u => u.id === dragId)
+    const toUser   = orderedUsers.find(u => u.id === targetId)
+    // Drag is scoped to within a role group — moving a user
+    // across roles via drag would silently flip their visual
+    // group but keep their role unchanged, which is confusing.
+    // Use the role-change action instead.
+    if (!fromUser || !toUser || fromUser.role !== toUser.role) {
+      setDragId(null); setDragOverId(null)
+      return
+    }
     const newOrder = [...orderedUsers]
     const fromIdx = newOrder.findIndex(u => u.id === dragId)
     const toIdx = newOrder.findIndex(u => u.id === targetId)
@@ -160,6 +170,41 @@ function UsersTab() {
     ))
   }
 
+  // Display order for the per-role sections. Unknown / custom
+  // roles fall through to a generic group at the bottom.
+  const ROLE_ORDER: Array<{ role: Role; label: string }> = [
+    { role: 'superadmin', label: 'Superadmins' },
+    { role: 'admin',      label: 'Admins' },
+    { role: 'marketing',  label: 'Marketing' },
+    { role: 'accounting', label: 'Accounting' },
+    { role: 'buyer',      label: 'Buyers' },
+    { role: 'pending',    label: 'Pending' },
+  ]
+  const groupedUsers = (() => {
+    const seen = new Set<string>()
+    const groups: Array<{ role: string; label: string; users: typeof orderedUsers }> = []
+    for (const { role, label } of ROLE_ORDER) {
+      const list = orderedUsers.filter(u => u.role === role)
+      seen.add(role)
+      if (list.length > 0) groups.push({ role, label, users: list })
+    }
+    // Catch-all for any custom / unknown roles introduced via the
+    // Role Manager so they don't disappear from the panel.
+    const remaining = orderedUsers.filter(u => !seen.has(u.role))
+    const byOther: Record<string, typeof orderedUsers> = {}
+    for (const u of remaining) {
+      ;(byOther[u.role] ||= []).push(u)
+    }
+    for (const role of Object.keys(byOther).sort()) {
+      groups.push({
+        role,
+        label: role.charAt(0).toUpperCase() + role.slice(1).replace(/_/g, ' '),
+        users: byOther[role],
+      })
+    }
+    return groups
+  })()
+
   const roleBadge = (role: Role) => {
     const map: Record<string,string> = { superadmin: 'badge-ruby', admin: 'badge-gold', buyer: 'badge-sapph', pending: 'badge-silver' }
     return <span className={`badge ${map[role] || 'badge-silver'}`}>{role.replace('_', ' ')}</span>
@@ -170,11 +215,23 @@ function UsersTab() {
   const avatarColor = (id: string) => avatarColors[id.charCodeAt(0) % avatarColors.length]
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 4 }}>
-        ⠿ Drag cards to reorder staff
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+      <div style={{ fontSize: 12, color: 'var(--mist)' }}>
+        ⠿ Drag cards to reorder within a role group. Use the role
+        dropdown on a card to move a user to a different group.
       </div>
-      {orderedUsers.map(u => (
+      {groupedUsers.map(g => (
+      <div key={g.role} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{
+          display: 'flex', alignItems: 'baseline', gap: 8,
+          fontSize: 12, fontWeight: 800, color: 'var(--ash)',
+          textTransform: 'uppercase', letterSpacing: '.06em',
+          padding: '4px 2px', borderBottom: '1px solid var(--cream2)',
+        }}>
+          <span>{g.label}</span>
+          <span style={{ fontWeight: 700, color: 'var(--mist)' }}>{g.users.length}</span>
+        </div>
+        {g.users.map(u => (
         <div key={u.id}
           draggable
           onDragStart={() => handleDragStart(u.id)}
@@ -270,6 +327,8 @@ function UsersTab() {
             </div>
           </div>
         </div>
+        ))}
+      </div>
       ))}
 
       {/* Edit User Modal */}
