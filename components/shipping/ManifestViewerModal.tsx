@@ -68,18 +68,21 @@ export default function ManifestViewerModal({
   }, [onClose, activeItems.length])
 
   // Lazily resolve signed URLs for the manifests we actually render.
+  // Cache failures (as '') alongside successes so a transient sign error
+  // doesn't loop the effect — without that, every retry re-renders and
+  // re-fires, producing hundreds of duplicate /sign requests.
   useEffect(() => {
     let cancelled = false
-    const need = manifests.filter(m => !urls[m.id])
+    const need = manifests.filter(m => !(m.id in urls))
     if (need.length === 0) return
     Promise.all(need.map(async m => {
-      try { return [m.id, await signManifestUrl(m.file_path)] as const }
+      try { return [m.id, await signManifestUrl(m.id)] as const }
       catch { return [m.id, ''] as const }
     })).then(pairs => {
       if (cancelled) return
       setUrls(prev => {
         const next = { ...prev }
-        for (const [id, url] of pairs) if (url) next[id] = url
+        for (const [id, url] of pairs) next[id] = url
         return next
       })
     })
@@ -95,6 +98,9 @@ export default function ManifestViewerModal({
 
   const active = activeItems[activeIdx]
   const activeUrl = active ? urls[active.id] : null
+  // After the resolver finishes, a failed sign caches as '' so we don't
+  // re-loop. Distinguish "still resolving" from "tried and failed".
+  const activeFailed = !!active && active.id in urls && !urls[active.id]
   const uploader = useMemo(() => {
     if (!active?.uploaded_by) return null
     return users.find(u => u.id === active.uploaded_by) || null
@@ -173,6 +179,10 @@ export default function ManifestViewerModal({
         {!active ? (
           <div style={{ color: 'rgba(255,255,255,.7)', fontSize: 14 }}>
             No manifests attached.
+          </div>
+        ) : activeFailed ? (
+          <div style={{ color: 'rgba(255,255,255,.7)', fontSize: 14 }}>
+            Couldn't load this photo.
           </div>
         ) : !activeUrl ? (
           <div style={{ color: 'rgba(255,255,255,.7)', fontSize: 14 }}>Loading…</div>

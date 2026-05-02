@@ -59,13 +59,24 @@ export async function fetchManifestsForEvents(eventIds: string[]): Promise<Shipp
   return (data || []) as ShippingManifest[]
 }
 
-/** Sign a storage path for viewing. TTL = 1 hour. */
-export async function signManifestUrl(filePath: string, ttlSeconds = 3600): Promise<string> {
-  const { data, error } = await supabase.storage
-    .from('manifests')
-    .createSignedUrl(filePath, ttlSeconds)
-  if (error || !data) throw error || new Error('No signed URL')
-  return data.signedUrl
+/**
+ * Sign a manifest photo for viewing (1-hour TTL). Goes through the
+ * server route so service-role does the signing and RLS doesn't depend
+ * on the browser having a fresh Supabase Auth JWT — matches how every
+ * other private bucket in this app issues signed URLs.
+ */
+export async function signManifestUrl(manifestId: string): Promise<string> {
+  const { data: session } = await supabase.auth.getSession()
+  const token = session.session?.access_token
+  const res = await fetch(`/api/shipping/manifests/${manifestId}/sign`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok || !json?.signedUrl) {
+    throw new Error(json?.error || `Sign failed (${res.status})`)
+  }
+  return json.signedUrl as string
 }
 
 /** Soft-delete (sets deleted_at). 30-day cron will hard-purge later. */
