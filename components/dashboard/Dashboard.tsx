@@ -209,31 +209,32 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
           </div>
 
           {isBuyer ? (
-            // Compact single-line summary for buyers. The pill grid
-            // looked oversized stretched across the row; this keeps
-            // the same data dense + adds close rate.
-            <div style={{
-              display: 'flex', alignItems: 'baseline', flexWrap: 'wrap',
-              gap: '6px 14px',
-              background: 'rgba(240,253,244,.95)',
-              border: '1px solid var(--green3)',
-              borderRadius: 12,
-              padding: '10px 16px',
-              color: 'var(--green-dark)',
-              boxShadow: '0 2px 10px rgba(0,0,0,.08)',
-            }}>
-              <span><strong style={{ fontSize: 18, fontWeight: 900 }}>{visibleWeekTotals.purchases.toLocaleString()}</strong>
-                <span style={{ fontSize: 12, marginLeft: 4, opacity: 0.75 }}>purchases</span></span>
-              <span style={{ opacity: 0.4 }}>·</span>
-              <span><strong style={{ fontSize: 18, fontWeight: 900 }}>{visibleWeekTotals.customers.toLocaleString()}</strong>
-                <span style={{ fontSize: 12, marginLeft: 4, opacity: 0.75 }}>customers</span></span>
-              <span style={{ opacity: 0.4 }}>·</span>
-              <span><strong style={{ fontSize: 18, fontWeight: 900 }}>
-                {visibleWeekTotals.customers > 0
-                  ? `${Math.round(visibleWeekTotals.purchases / visibleWeekTotals.customers * 100)}%`
-                  : '—'}
-              </strong>
-                <span style={{ fontSize: 12, marginLeft: 4, opacity: 0.75 }}>close rate</span></span>
+            // Three side-by-side stat cards. grid-cols-3 always so
+            // they stay on one line even on narrow phones — each
+            // card is small enough to fit comfortably down to ~110
+            // px, which is wider than the smallest viable phone
+            // width / 3.
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              {[
+                { label: 'Purchases', value: visibleWeekTotals.purchases.toLocaleString() },
+                { label: 'Customers', value: visibleWeekTotals.customers.toLocaleString() },
+                { label: 'Close Rate', value: visibleWeekTotals.customers > 0
+                    ? `${Math.round(visibleWeekTotals.purchases / visibleWeekTotals.customers * 100)}%`
+                    : '—' },
+              ].map(({ label, value }) => (
+                <div key={label} style={{
+                  background: 'rgba(240,253,244,.95)',
+                  border: '1px solid var(--green3)',
+                  borderRadius: 12,
+                  padding: '10px 12px',
+                  textAlign: 'center',
+                  boxShadow: '0 2px 10px rgba(0,0,0,.08)',
+                  minWidth: 0,
+                }}>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--green-dark)', letterSpacing: '-.02em', lineHeight: 1 }}>{value}</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--green-dark)', opacity: 0.7, textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 4 }}>{label}</div>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
