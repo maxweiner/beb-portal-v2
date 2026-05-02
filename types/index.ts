@@ -285,3 +285,23 @@ export interface BuyerVacation {
   note?: string
   created_at?: string
 }
+
+/* ── Sales-side types ──────────────────────────────────────── */
+
+export interface TradeShow {
+  id: string
+  name: string
+  venue_name: string | null
+  venue_city: string | null
+  venue_state: string | null
+  venue_address: string | null
+  start_date: string
+  end_date: string
+  booth_number: string | null
+  show_website_url: string | null
+  organizing_body: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+}
