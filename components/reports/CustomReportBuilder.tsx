@@ -11,7 +11,7 @@ import {
   SOURCES, allColumns, TYPE_OPERATORS, OPERATOR_LABELS, DATE_PRESETS,
   AGG_LABELS, aggregateKey, aggregateLabel,
   type ReportConfig, type ReportFilter, type ReportSort, type Operator, type ColumnDef,
-  type AggregateColumn, type AggregateOp,
+  type AggregateColumn, type AggregateOp, type FilterCombinator,
 } from '@/lib/reports/schema'
 
 type Visibility = 'global' | 'store' | 'private'
@@ -39,6 +39,7 @@ export default function CustomReportBuilder({ reportId, onCancel, onSaved }: {
   const [source, setSource] = useState<string>('appointments')
   const [columns, setColumns] = useState<string[]>([])
   const [filters, setFilters] = useState<ReportFilter[]>([])
+  const [filterCombinator, setFilterCombinator] = useState<FilterCombinator>('and')
   const [sort, setSort] = useState<ReportSort[]>([])
   const [groupBy, setGroupBy] = useState<string[]>([])
   const [aggregates, setAggregates] = useState<AggregateColumn[]>([])
@@ -63,6 +64,7 @@ export default function CustomReportBuilder({ reportId, onCancel, onSaved }: {
         const cfg: ReportConfig = r.config || { columns: [], filters: [], sort: [] }
         setColumns(cfg.columns || [])
         setFilters(cfg.filters || [])
+        setFilterCombinator(cfg.filterCombinator === 'or' ? 'or' : 'and')
         setSort(cfg.sort || [])
         setGroupBy(cfg.groupBy || [])
         setAggregates(cfg.aggregates || [])
@@ -178,6 +180,7 @@ export default function CustomReportBuilder({ reportId, onCancel, onSaved }: {
       store_id: visibility === 'store' ? (storeId || null) : null,
       config: {
         columns, filters, sort,
+        ...(filterCombinator === 'or' ? { filterCombinator } : {}),
         ...(isGrouped ? { groupBy, aggregates } : {}),
       } as ReportConfig,
       updated_at: new Date().toISOString(),
@@ -225,7 +228,7 @@ export default function CustomReportBuilder({ reportId, onCancel, onSaved }: {
         {/* Left rail: source */}
         <div className="card" style={{ position: 'sticky', top: 12, alignSelf: 'flex-start' }}>
           <div className="card-title" style={{ marginBottom: 8 }}>Data source</div>
-          <select value={source} onChange={e => { setSource(e.target.value); setColumns([]); setFilters([]); setSort([]); setGroupBy([]); setAggregates([]) }} style={{ width: '100%' }}>
+          <select value={source} onChange={e => { setSource(e.target.value); setColumns([]); setFilters([]); setFilterCombinator('and'); setSort([]); setGroupBy([]); setAggregates([]) }} style={{ width: '100%' }}>
             {Object.entries(SOURCES).map(([k, s]) => (
               <option key={k} value={k}>{s.label}</option>
             ))}
@@ -309,18 +312,58 @@ export default function CustomReportBuilder({ reportId, onCancel, onSaved }: {
 
           {/* Filters */}
           <div className="card">
-            <div className="card-title">Filters</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div className="card-title" style={{ marginBottom: 0 }}>Filters</div>
+              {filters.length >= 2 && (
+                <div style={{
+                  display: 'inline-flex', borderRadius: 6, overflow: 'hidden',
+                  border: '1px solid var(--pearl)', fontSize: 12, fontWeight: 700,
+                }}>
+                  {(['and', 'or'] as FilterCombinator[]).map(c => (
+                    <button key={c}
+                      onClick={() => setFilterCombinator(c)}
+                      style={{
+                        padding: '4px 10px',
+                        background: filterCombinator === c ? 'var(--green-pale)' : '#fff',
+                        color: filterCombinator === c ? 'var(--green-dark)' : 'var(--ash)',
+                        border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                        textTransform: 'uppercase', letterSpacing: '.04em',
+                      }}>
+                      Match {c === 'and' ? 'ALL' : 'ANY'}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             {filters.length === 0 && <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 8 }}>No filters yet.</div>}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {filters.map((f, i) => (
-                <FilterRow key={i} filter={f} catalog={colCatalog}
-                  onChange={patch => updateFilter(i, patch)}
-                  onRemove={() => removeFilter(i)}
-                />
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {filters.length >= 2 && i > 0 && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 800, color: 'var(--mist)',
+                      letterSpacing: '.08em', minWidth: 30, textAlign: 'center',
+                    }}>
+                      {filterCombinator === 'or' ? 'OR' : 'AND'}
+                    </span>
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <FilterRow filter={f} catalog={colCatalog}
+                      onChange={patch => updateFilter(i, patch)}
+                      onRemove={() => removeFilter(i)}
+                    />
+                  </div>
+                </div>
               ))}
             </div>
             <button onClick={addFilter} className="btn-outline btn-sm" style={{ marginTop: 8 }}>+ Add filter</button>
-            <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 6 }}>Filters AND together (no OR support in v1).</div>
+            <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 6 }}>
+              {filters.length < 2
+                ? 'Add a second filter to choose between Match ALL (AND) and Match ANY (OR).'
+                : filterCombinator === 'or'
+                  ? 'Match ANY: a row passes if it matches at least one filter.'
+                  : 'Match ALL: a row passes only if it matches every filter.'}
+            </div>
           </div>
 
           {/* Sort */}

@@ -230,11 +230,16 @@ export function aggregateLabel(agg: AggregateColumn, fieldLabel?: string): strin
   return `${AGG_LABELS[agg.op]} of ${fieldLabel || agg.field || ''}`.trim()
 }
 
+export type FilterCombinator = 'and' | 'or'
+
 export interface ReportConfig {
   columns: string[]               // column keys from the source/related set
   filters: ReportFilter[]
   sort: ReportSort[]
   limit?: number                  // capped at 10000 by the runner
+  /** How filters combine. 'and' (default, legacy) requires every filter
+   *  to match. 'or' matches if any filter matches. */
+  filterCombinator?: FilterCombinator
   /** When non-empty, the runner groups input rows by these keys and emits
    *  one row per group with the aggregate columns. `columns` is ignored
    *  in grouping mode — output cols are `[...groupBy, aggregate_keys]`. */

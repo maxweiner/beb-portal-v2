@@ -54,6 +54,47 @@ function presetRange(preset: string): { start: string; end: string } | null {
   }
 }
 
+/** Translate a filter to a PostgREST `.or()`-eligible predicate string.
+ *  Returns null when the filter can't be expressed in that syntax
+ *  (joined columns, unsupported ops, empty value lists). For date_preset
+ *  the two date bounds get wrapped in an inner `and(...)` group so the
+ *  preset still matches as a single predicate inside the outer OR. */
+function filterToOrPredicate(f: ReportFilter): string | null {
+  if (f.field.includes('(')) return null
+  const v = f.value
+  switch (f.op) {
+    case 'eq':       return `${f.field}.eq.${encodeOrValue(v)}`
+    case 'neq':      return `${f.field}.neq.${encodeOrValue(v)}`
+    case 'gt':       return `${f.field}.gt.${encodeOrValue(v)}`
+    case 'gte':      return `${f.field}.gte.${encodeOrValue(v)}`
+    case 'lt':       return `${f.field}.lt.${encodeOrValue(v)}`
+    case 'lte':      return `${f.field}.lte.${encodeOrValue(v)}`
+    case 'contains':    return `${f.field}.ilike.*${encodeOrValue(v)}*`
+    case 'starts_with': return `${f.field}.ilike.${encodeOrValue(v)}*`
+    case 'in': {
+      const list = String(v).split(',').map(s => s.trim()).filter(Boolean)
+      if (list.length === 0) return null
+      return `${f.field}.in.(${list.map(encodeOrValue).join(',')})`
+    }
+    case 'is_null':  return `${f.field}.is.null`
+    case 'not_null': return `${f.field}.not.is.null`
+    case 'date_preset': {
+      const r = f.preset ? presetRange(f.preset) : null
+      if (!r) return null
+      return `and(${f.field}.gte.${r.start},${f.field}.lte.${r.end})`
+    }
+    default: return null
+  }
+}
+
+/** Quote values that contain PostgREST-meaningful chars so they don't
+ *  break the .or() parser. Doubles internal quotes (the escape rule). */
+function encodeOrValue(v: any): string {
+  const s = String(v ?? '')
+  if (/[,()"\s]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+  return s
+}
+
 function applyFilter(query: any, f: ReportFilter): any {
   // Joined columns can't go through Supabase's standard .eq() etc. — we
   // skip those at the SQL layer and filter client-side later. v1.
@@ -148,9 +189,22 @@ export async function runReport(
     query = query.eq('brand', brand)
   }
 
-  // Filters
-  for (const f of config.filters || []) {
-    query = applyFilter(query, f)
+  // Filters. AND mode chains .eq()/.gt()/etc per filter. OR mode builds a
+  // single PostgREST .or() string from those predicates the operator
+  // supports; joined-column filters and any unsupported op are silently
+  // skipped (same as the AND path treats joined columns).
+  const allFilters = config.filters || []
+  if (config.filterCombinator === 'or' && allFilters.length > 0) {
+    const parts: string[] = []
+    for (const f of allFilters) {
+      const part = filterToOrPredicate(f)
+      if (part) parts.push(part)
+    }
+    if (parts.length > 0) query = query.or(parts.join(','))
+  } else {
+    for (const f of allFilters) {
+      query = applyFilter(query, f)
+    }
   }
 
   // Sort — joined columns can't be sorted server-side; defer to client.
