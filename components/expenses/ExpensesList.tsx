@@ -9,7 +9,7 @@
 // will fall back to this picker only for events that don't already
 // auto-create a report.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useIsNarrow } from './useIsNarrow'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
@@ -52,6 +52,19 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
   const [loaded, setLoaded] = useState(false)
   const [statusFilter, setStatusFilter] = useState<'all' | ExpenseReportStatus>('all')
   const [userFilter, setUserFilter] = useState<string>('all')
+  // Superadmins (Max etc.) default the User filter to themselves
+  // — they almost always want their own queue first, and can flip
+  // to "All users" in the dropdown when they need the cross-user
+  // view. Accounting still defaults to All since their job is to
+  // process every report. Only fires once per session.
+  const userFilterDefaulted = useRef(false)
+  useEffect(() => {
+    if (userFilterDefaulted.current || !user) return
+    if (user.role === 'superadmin' && user.id) {
+      setUserFilter(user.id)
+    }
+    userFilterDefaulted.current = true
+  }, [user])
   const [pickerOpen, setPickerOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
