@@ -12,6 +12,7 @@ import ImpersonationLogPanel from '@/components/impersonation/ImpersonationLogPa
 import BoothCostCategoriesPanel from '@/components/sales/BoothCostCategoriesPanel'
 import SalesRepTerritoriesPanel from '@/components/sales/SalesRepTerritoriesPanel'
 import OfficeStaffRecipientsPanel from '@/components/sales/OfficeStaffRecipientsPanel'
+import SpiffConfigPanel from '@/components/sales/SpiffConfigPanel'
 import Checkbox from '@/components/ui/Checkbox'
 import AddressAutocompleteInput from '@/components/ui/AddressAutocompleteInput'
 import CollapsibleCard from '@/components/ui/CollapsibleCard'
@@ -375,6 +376,18 @@ export default function Settings() {
           subtitle="Create roles and choose which modules each one unlocks. Drives the sidebar + page guards (PRs C/D in this initiative wire them in)."
         >
           <RoleManagerPanel />
+        </CollapsibleCard>
+      )}
+
+      {/* Spiff config — admin / superadmin / partner. Single
+          row in spiff_config drives the auto-spiff amount. */}
+      {(user?.role === 'admin' || user?.role === 'superadmin' || user?.is_partner) && (
+        <CollapsibleCard
+          storageKey="settings-spiff-config"
+          title="💵 Spiff Config"
+          subtitle="Default spiff amount paid to a store salesperson when a trunk-show appointment results in a purchase. v1: single global amount."
+        >
+          <SpiffConfigPanel />
         </CollapsibleCard>
       )}
 

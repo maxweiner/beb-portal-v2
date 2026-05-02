@@ -7,10 +7,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import {
-  listSlots, createSlot, bulkCreateSlots, bookSlot, setStatus, markPurchased,
+  listSlots, createSlot, bulkCreateSlots, bookSlot, setStatus,
   deleteSlot, generateBookingToken,
   type TrunkShowSlot, type TrunkShowAppointmentStatus,
 } from '@/lib/sales/trunkShowAppointments'
+import { supabase } from '@/lib/supabase'
 import type { TrunkShowHours } from '@/types'
 
 const STATUS_LABEL: Record<TrunkShowAppointmentStatus, string> = {
@@ -72,14 +73,31 @@ export default function TrunkShowAppointmentsPanel({ trunkShowId, hours, canWrit
     catch (e: any) { alert(e?.message || 'Could not update') }
   }
   async function handlePurchased(id: string, purchased: boolean) {
+    // Routes through the server endpoint so the spiff row is
+    // created (or removed) in the same call. Spiff writes need
+    // service role per RLS — this keeps the rep's flow simple.
     try {
-      await markPurchased(id, user?.id || null, purchased)
+      const { data: session } = await supabase.auth.getSession()
+      const token = session.session?.access_token
+      const res = await fetch(`/api/trunk-show-slots/${id}/purchase`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ purchased }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error || `Save failed (${res.status})`)
       setRows(p => p.map(r => r.id === id ? {
         ...r, purchased,
         purchased_marked_by: purchased ? user?.id || null : null,
         purchased_marked_at: purchased ? new Date().toISOString() : null,
       } : r))
-    } catch (e: any) { alert(e?.message || 'Could not save') }
+      if (json.notice) alert(json.notice)
+    } catch (e: any) {
+      alert(e?.message || 'Could not save')
+    }
   }
   async function handleDelete(id: string) {
     if (!confirm('Delete this slot?')) return

@@ -15,6 +15,7 @@ import {
 import type { TrunkShow, TrunkShowHours, TrunkShowStatus } from '@/types'
 import SpecialRequestsPanel from './SpecialRequestsPanel'
 import TrunkShowAppointmentsPanel from './TrunkShowAppointmentsPanel'
+import SpiffsPanel from './SpiffsPanel'
 
 interface Props {
   trunkShowId: string
@@ -212,13 +213,8 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
         canWrite={!!canMutate}
       />
 
-      {/* Phase placeholders */}
-      <div className="card" style={{ padding: 18, marginBottom: 14, opacity: 0.7 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginBottom: 6 }}>Coming soon on this page</div>
-        <ul style={{ fontSize: 12, color: 'var(--mist)', lineHeight: 1.6, paddingLeft: 18, margin: 0 }}>
-          <li>Spiff payout view (Mark purchased already records the spiff) — Phase 13</li>
-        </ul>
-      </div>
+      {/* Spiffs — Phase 13 */}
+      <SpiffsPanel trunkShowId={show.id} canMarkPaid={isAdmin} />
     </div>
   )
 }
