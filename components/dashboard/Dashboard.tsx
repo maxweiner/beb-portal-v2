@@ -406,10 +406,12 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
           </div>
 
 
-          {/* Leaderboard mini — admin/superadmin view only. Buyers
-              already get the full Leaderboard at the bottom; we
-              don't want two leaderboards on one page. */}
-          {!isBuyer && buyers.length > 0 && (
+          {/* "Standings" — full ranking with every buyer's name and
+              days. Buyers want this comprehensive list (the bottom
+              Leaderboard component only shows the top-3 podium and
+              hides the rest, which made the buyer dash feel like
+              the leaderboard was missing). */}
+          {buyers.length > 0 && (
             <div className="mt-6 pt-5" style={{ borderTop: '1px solid var(--cream2)' }}>
               <div className="font-black text-sm mb-3" style={{ color: 'var(--ink)' }}>🏆 {new Date().getFullYear()} Standings</div>
               <div className="space-y-2">
@@ -510,8 +512,11 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
         </div>
       </div>
 
-      {/* Full Leaderboard */}
-      <Leaderboard events={events} users={users} buyers={buyers} />
+      {/* Top-3 podium leaderboard — admin / superadmin only. Buyers
+          rely on the "Standings" block above (full list with every
+          name); the podium hides everyone past 3rd, which made the
+          buyer dash feel like the leaderboard was missing names. */}
+      {!isBuyer && <Leaderboard events={events} users={users} buyers={buyers} />}
     </div>
   )
 }
