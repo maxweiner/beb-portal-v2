@@ -39,6 +39,7 @@ export default function CustomReportRunner({ reportId, onBack, onEdit }: {
   const [page, setPage] = useState(0)
   const [clientSort, setClientSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null)
   const [emailOpen, setEmailOpen] = useState(false)
+  const [xlsxBusy, setXlsxBusy] = useState(false)
 
   // Load report row
   useEffect(() => {
@@ -128,6 +129,38 @@ export default function CustomReportRunner({ reportId, onBack, onEdit }: {
     return String(v)
   }
 
+  // Server-side XLSX render so the ~1MB exceljs dependency stays out of
+  // the browser bundle. Re-runs the report under the user's auth — same
+  // path as the email export — and streams the file as a download.
+  async function downloadXlsx() {
+    if (!report || !result) return
+    setXlsxBusy(true)
+    try {
+      const { data: sess } = await supabase.auth.getSession()
+      const token = sess?.session?.access_token
+      if (!token) throw new Error('Not signed in')
+      const res = await fetch(`/api/reports/${report.id}/export?format=xlsx&brand=${brand}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j?.error || `HTTP ${res.status}`)
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${report.name.replace(/[^a-z0-9-_]+/gi, '_')}_${new Date().toISOString().slice(0,10)}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (e: any) {
+      alert(`Excel export failed: ${e?.message || 'unknown error'}`)
+    }
+    setXlsxBusy(false)
+  }
+
   function downloadCsv() {
     if (!report || !result) return
     const csv = buildCsv(report.source, report.config, sortedRows)
@@ -169,6 +202,9 @@ export default function CustomReportRunner({ reportId, onBack, onEdit }: {
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => report && run(report)} disabled={running} className="btn-outline btn-sm">⟳ Re-run</button>
           <button onClick={downloadCsv} disabled={!result || result.rows.length === 0} className="btn-outline btn-sm">⤓ CSV</button>
+          <button onClick={downloadXlsx} disabled={xlsxBusy || !result || result.rows.length === 0} className="btn-outline btn-sm">
+            {xlsxBusy ? '…' : '⤓ Excel'}
+          </button>
           <button onClick={() => setEmailOpen(true)} disabled={!result || result.rows.length === 0} className="btn-outline btn-sm">✉ Email</button>
           <button onClick={onEdit} className="btn-outline btn-sm">Edit</button>
         </div>

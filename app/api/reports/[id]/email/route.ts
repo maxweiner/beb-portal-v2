@@ -10,6 +10,7 @@ import { createClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email'
 import { runReport } from '@/lib/reports/runQuery'
 import { buildCsv } from '@/lib/reports/output'
+import { buildXlsx } from '@/lib/reports/excel'
 import type { ReportConfig } from '@/lib/reports/schema'
 
 export const dynamic = 'force-dynamic'
@@ -17,11 +18,14 @@ export const dynamic = 'force-dynamic'
 const MAX_RECIPIENTS = 25
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+type AttachFormat = 'csv' | 'xlsx'
+
 interface PostBody {
   recipients?: string[]
   subject?: string
   message?: string
   brand?: 'beb' | 'liberty'
+  formats?: AttachFormat[]
 }
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
@@ -46,6 +50,15 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const message = (body.message || '').trim()
   const brand = body.brand === 'liberty' ? 'liberty' : 'beb'
 
+  // Default to CSV-only for backward compatibility with the original modal.
+  const requested = Array.isArray(body.formats) ? body.formats : ['csv']
+  const formats: AttachFormat[] = Array.from(new Set(
+    requested.filter((f): f is AttachFormat => f === 'csv' || f === 'xlsx')
+  ))
+  if (formats.length === 0) {
+    return NextResponse.json({ error: 'Pick at least one attachment format' }, { status: 400 })
+  }
+
   // 2. User-scoped client — RLS gates report visibility + table SELECT.
   //    If the caller can't read the report, the SELECT returns null below.
   const sb = createClient(
@@ -69,15 +82,30 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: `Run failed: ${result.error}` }, { status: 500 })
   }
 
-  // 4. Build CSV + attachment payload.
-  const csv = buildCsv(report.source, config, result.rows)
+  // 4. Build attachments for the requested formats.
   const slug = String(report.name || 'report').replace(/[^a-z0-9-_]+/gi, '_').slice(0, 60) || 'report'
-  const filename = `${slug}_${new Date().toISOString().slice(0, 10)}.csv`
-  const csvB64 = Buffer.from(csv, 'utf-8').toString('base64')
+  const datestamp = new Date().toISOString().slice(0, 10)
+  const attachments: { filename: string; content: string }[] = []
+  for (const fmt of formats) {
+    if (fmt === 'csv') {
+      const csv = buildCsv(report.source, config, result.rows)
+      attachments.push({
+        filename: `${slug}_${datestamp}.csv`,
+        content: Buffer.from(csv, 'utf-8').toString('base64'),
+      })
+    } else if (fmt === 'xlsx') {
+      const buf = await buildXlsx(report.source, config, result.rows, report.name)
+      attachments.push({
+        filename: `${slug}_${datestamp}.xlsx`,
+        content: buf.toString('base64'),
+      })
+    }
+  }
 
   // 5. Build HTML body. Plain — no styling, just the user's message + a
   //    summary line. Recipients see one email per send (no BCC games).
-  const html = renderHtml(report.name, message, result.rows.length, result.truncated)
+  const formatLabel = formats.map(f => f.toUpperCase()).join(' + ')
+  const html = renderHtml(report.name, message, result.rows.length, result.truncated, formatLabel)
 
   // 6. Send. Per-recipient calls so a single bad address doesn't tank
   //    the whole batch — collect errors and return them.
@@ -85,12 +113,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   let sent = 0
   for (const to of cleaned) {
     try {
-      await sendEmail({
-        to,
-        subject,
-        html,
-        attachments: [{ filename, content: csvB64 }],
-      })
+      await sendEmail({ to, subject, html, attachments })
       sent++
     } catch (e: any) {
       errors.push(`${to}: ${e?.message || 'send failed'}`)
@@ -100,7 +123,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   return NextResponse.json({ ok: true, sent, errors })
 }
 
-function renderHtml(reportName: string, message: string, rowCount: number, truncated: boolean): string {
+function renderHtml(reportName: string, message: string, rowCount: number, truncated: boolean, formatLabel: string): string {
   const safeMsg = (message || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
   const safeName = reportName.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
   const truncNote = truncated
@@ -112,7 +135,7 @@ function renderHtml(reportName: string, message: string, rowCount: number, trunc
       <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 8px; padding: 12px 14px; font-size: 13px;">
         <div><strong>Report:</strong> ${safeName}</div>
         <div><strong>Rows:</strong> ${rowCount.toLocaleString()}</div>
-        <div><strong>Format:</strong> CSV (attached)</div>
+        <div><strong>Format:</strong> ${formatLabel} (attached)</div>
       </div>
       ${truncNote}
     </div>
