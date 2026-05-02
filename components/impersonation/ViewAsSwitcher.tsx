@@ -14,6 +14,7 @@
 // is the only impersonation indicator (per spec Q1 answer).
 
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { User } from '@/types'
 import { useApp } from '@/lib/context'
 import {
@@ -220,12 +221,19 @@ function PickerModal({
       .slice(0, 20)
   }, [users, q, selfId])
 
-  return (
+  // Portal to document.body so the sidebar's stacking context
+  // can't trap the overlay below page content. The sidebar uses
+  // position:fixed, which establishes its own stacking context;
+  // children rendered there are clamped to it, so a same-tree
+  // overlay even with high z-index can sit behind sibling
+  // top-level UI. Portaling escapes that.
+  if (typeof document === 'undefined') return null
+  return createPortal(
     <div
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)',
-        zIndex: 9999, display: 'flex', alignItems: 'flex-start',
+        zIndex: 2147483646, display: 'flex', alignItems: 'flex-start',
         justifyContent: 'center', paddingTop: '10vh',
       }}
     >
@@ -295,7 +303,8 @@ function PickerModal({
           Showing {matches.length} of {users.length} users. Page reloads on select.
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
