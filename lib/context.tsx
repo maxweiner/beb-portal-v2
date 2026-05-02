@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, useRef, useMemo } from 'react'
+import { createContext, useContext, useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { User, Store, Event, Shipment, Theme, Brand, AppState } from '@/types'
 
@@ -363,10 +363,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     })
   }
 
-  const setYear = (y: string) => setYearState(y)
-  const setUser = (u: User | null) => setUserState(u)
-  const setStores = (s: Store[]) => setStoresState(s)
-  const setEvents = (e: Event[]) => setEventsState(e)
+  // Stable setter identities. Without useCallback, each AppProvider
+  // render produced fresh function refs, which propagated into the
+  // memoized ctxValue (because `events` changes triggered the memo
+  // to re-run). Consumers like Events.tsx have
+  //   const fetchEvents = useCallback(..., [brand, setContextEvents])
+  // — so a churning setContextEvents identity invalidated their
+  // fetchEvents and re-fired the mount effect every realtime tick,
+  // creating a refetch loop after autosave. Stabilizing these
+  // setters breaks the loop while still routing through the same
+  // useState dispatchers.
+  const setYear = useCallback((y: string) => setYearState(y), [])
+  const setUser = useCallback((u: User | null) => setUserState(u), [])
+  const setStores = useCallback((s: Store[]) => setStoresState(s), [])
+  const setEvents = useCallback((e: Event[]) => setEventsState(e), [])
 
   // Brand wins over theme: a stale `liberty-*` theme paired with brand=beb
   // would render Liberty colors against a BEB session. The boot script in
