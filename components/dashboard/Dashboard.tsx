@@ -136,13 +136,48 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
 
+  // Buyer-only dashboard scope. We keep the rest of the file
+  // unchanged for admin / superadmin / etc.; buyers get a stripped
+  // top + just the leaderboard podium below.
+  const isBuyer = user?.role === 'buyer'
+  const myId = user?.id
+
+  // Two-card "Last Week / This Week" data, scoped to events the
+  // buyer was assigned to. No money figures.
+  const lastWeekStart = new Date(monday); lastWeekStart.setDate(monday.getDate() - 7)
+  const lastWeekEnd   = new Date(sunday); lastWeekEnd.setDate(sunday.getDate() - 7)
+  const myThisWeek = (isBuyer && myId)
+    ? weekEvents.filter(e => isWorkerAssigned(e, myId))
+    : []
+  const myLastWeek = (isBuyer && myId)
+    ? events.filter(e => isWorkerAssigned(e, myId) && eventOverlapsWeek(e, lastWeekStart, lastWeekEnd))
+    : []
+  const fmtRange = (start: Date, end: Date) =>
+    `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       {/* Metals price ticker — buyer-only for now. Top strip above
           the hero so it's always visible without scrolling. */}
-      {user?.role === 'buyer' && <MetalsTicker variant="desktop" />}
+      {isBuyer && <MetalsTicker variant="desktop" />}
+
+      {/* Buyer-only: compact greeting + Last Week / This Week
+          two-card split. No team-wide stats, no money figures. */}
+      {isBuyer && (
+        <BuyerHero
+          firstName={(user?.name || '').split(' ')[0] || ''}
+          greeting={greeting}
+          lastWeekRange={fmtRange(lastWeekStart, lastWeekEnd)}
+          thisWeekRange={fmtRange(monday, sunday)}
+          lastWeekEvents={myLastWeek}
+          thisWeekEvents={myThisWeek}
+          stores={stores}
+          onOpenEvents={() => setNav?.('events')}
+        />
+      )}
 
       {/* Hero: gradient header with greeting + week stats as interior pills */}
+      {!isBuyer && (
       <div style={{
         background: 'linear-gradient(160deg, var(--sidebar-bg) 0%, var(--green-dark) 50%, var(--green) 100%)',
         borderRadius: 20, padding: '26px 28px', marginBottom: 24,
@@ -263,12 +298,15 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
           )}
         </div>
       </div>
+      )}
 
-      {/* Next event hero — buyer's soonest upcoming/in-progress event. */}
-      <NextEventCard setNav={setNav} variant="desktop" />
+      {/* Next event hero — buyer's soonest upcoming/in-progress event.
+          Hidden for buyers since BuyerHero already covers their current event. */}
+      {!isBuyer && <NextEventCard setNav={setNav} variant="desktop" />}
 
-      {/* Next Week Preview — only on weekends */}
-      {isWeekend && nextWeekEvents.length > 0 && (
+      {/* Next Week Preview — only on weekends, hidden for buyers
+          (their dashboard is scoped to last week + this week only). */}
+      {!isBuyer && isWeekend && nextWeekEvents.length > 0 && (
         <div style={{ background: 'var(--card-bg)', borderRadius: 'var(--r2)', border: '1px solid var(--pearl)', marginBottom: 24, overflow: 'hidden' }}>
           <div style={{ background: 'var(--green-pale)', padding: '12px 20px', borderBottom: '1px solid var(--green3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -311,10 +349,12 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
         </div>
       )}
 
-      <div className={user?.role === 'buyer' ? 'grid grid-cols-1 gap-6' : 'grid grid-cols-1 lg:grid-cols-3 gap-6'}>
-        {/* Store performance — admin / superadmin only. Buyers
-            don't need a team-wide store breakdown on their dash. */}
-        {user?.role !== 'buyer' && (
+      {/* Store Performance + Lead Sources grid — admin / superadmin
+          only. Buyers' dashboard is scoped to their own events; no
+          team-wide store / source breakdown. */}
+      {!isBuyer && (
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Store performance */}
         <div className="lg:col-span-2 rounded-xl overflow-hidden" style={{ background: 'var(--card-bg)', border: '1px solid var(--pearl)', boxShadow: '0 2px 10px rgba(0,0,0,.04)' }}>
           <div style={{ background: 'var(--green-pale)', padding: '12px 20px', borderBottom: '1px solid var(--green3)', fontWeight: 900, fontSize: 13, color: 'var(--green-dark)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
             Store Performance — {year}
@@ -353,7 +393,6 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
             </div>
           )}
         </div>
-        )}
 
         {/* Lead sources */}
         <div className="card">
@@ -477,9 +516,146 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
           )}
         </div>
       </div>
+      )}
 
-      {/* Full Leaderboard */}
+      {/* Full Leaderboard — visible to everyone. Motivational
+          podium with no $; fits both buyer and admin contexts. */}
       <Leaderboard events={events} users={users} buyers={buyers} />
+    </div>
+  )
+}
+
+/* ── BUYER HERO (Variant 2: balanced two-card split) ── */
+function BuyerHero({
+  firstName, greeting, lastWeekRange, thisWeekRange,
+  lastWeekEvents, thisWeekEvents, stores, onOpenEvents,
+}: {
+  firstName: string
+  greeting: string
+  lastWeekRange: string
+  thisWeekRange: string
+  lastWeekEvents: any[]
+  thisWeekEvents: any[]
+  stores: any[]
+  onOpenEvents: () => void
+}) {
+  return (
+    <>
+      <div style={{
+        background: 'linear-gradient(160deg, var(--sidebar-bg) 0%, var(--green-dark) 50%, var(--green) 100%)',
+        borderRadius: 16, padding: '14px 22px', marginBottom: 14,
+        color: '#fff', display: 'flex', alignItems: 'center',
+        flexWrap: 'wrap', gap: 12,
+        boxShadow: '0 4px 16px rgba(29,107,68,.18)',
+      }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.8, textTransform: 'uppercase', letterSpacing: '.08em' }}>
+            Good {greeting}
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 900, marginTop: 2 }}>
+            {firstName || 'there'}
+          </div>
+        </div>
+        <div style={{ marginLeft: 'auto', fontSize: 12, opacity: 0.65 }}>
+          {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+        </div>
+      </div>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+        gap: 12, marginBottom: 24,
+      }}>
+        <BuyerWeekCard
+          label="Last Week"
+          range={lastWeekRange}
+          events={lastWeekEvents}
+          stores={stores}
+          onOpenEvents={onOpenEvents}
+        />
+        <BuyerWeekCard
+          label="This Week"
+          range={thisWeekRange}
+          events={thisWeekEvents}
+          stores={stores}
+          onOpenEvents={onOpenEvents}
+        />
+      </div>
+    </>
+  )
+}
+
+function BuyerWeekCard({
+  label, range, events, stores, onOpenEvents,
+}: {
+  label: string
+  range: string
+  events: any[]
+  stores: any[]
+  onOpenEvents: () => void
+}) {
+  const empty = events.length === 0
+  return (
+    <div style={{
+      background: '#fff',
+      border: empty ? '1px dashed var(--cream2)' : '1px solid var(--green3)',
+      borderRadius: 14,
+      padding: '16px 20px',
+      display: 'flex', flexDirection: 'column', gap: 10,
+      minHeight: 160,
+      boxShadow: empty ? 'none' : '0 2px 10px rgba(0,0,0,.06)',
+    }}>
+      <div style={{
+        fontSize: 11, fontWeight: 800, color: 'var(--mist)',
+        textTransform: 'uppercase', letterSpacing: '.06em',
+        display: 'flex', gap: 8, alignItems: 'baseline',
+      }}>
+        <span>{label}</span>
+        <span style={{ fontWeight: 700, color: 'var(--ash)' }}>{range}</span>
+      </div>
+
+      {empty ? (
+        <div style={{
+          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: 'var(--mist)', fontStyle: 'italic', fontSize: 13,
+          textAlign: 'center',
+        }}>No event {label.toLowerCase()}</div>
+      ) : events.map(ev => {
+        const store = stores.find(s => s.id === ev.store_id)
+        const totals = (ev.days || []).reduce((acc: any, d: any) => {
+          acc.purchases += d.purchases || 0
+          acc.customers += d.customers || 0
+          return acc
+        }, { purchases: 0, customers: 0 })
+        const close = totals.customers > 0
+          ? Math.round(totals.purchases / totals.customers * 100)
+          : null
+        const enteredDays = (ev.days || []).filter(dayHasData).length
+        const dayStatus = enteredDays === 0 ? '' : `Day ${enteredDays} of 3`
+        return (
+          <button key={ev.id} onClick={onOpenEvents} style={{
+            background: 'transparent', border: 'none', padding: 0,
+            textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
+            display: 'flex', flexDirection: 'column', gap: 6,
+          }}>
+            <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--green-dark)', lineHeight: 1.2 }}>
+              {eventDisplayName(ev, stores)}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--green-dark)', opacity: 0.65 }}>
+              {store?.city}{store?.state ? ', ' + store.state : ''}
+              {dayStatus && <span style={{ marginLeft: 8 }}>· {dayStatus}</span>}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', marginTop: 4 }}>
+              <span><span style={{ fontSize: 18, fontWeight: 900, color: 'var(--green-dark)' }}>{totals.purchases}</span>
+                <span style={{ fontSize: 11, opacity: 0.65, marginLeft: 4, color: 'var(--green-dark)' }}>purchases</span></span>
+              <span><span style={{ fontSize: 18, fontWeight: 900, color: 'var(--green-dark)' }}>{totals.customers}</span>
+                <span style={{ fontSize: 11, opacity: 0.65, marginLeft: 4, color: 'var(--green-dark)' }}>customers</span></span>
+              <span><span style={{ fontSize: 18, fontWeight: 900, color: 'var(--green-dark)' }}>{close === null ? '—' : `${close}%`}</span>
+                <span style={{ fontSize: 11, opacity: 0.65, marginLeft: 4, color: 'var(--green-dark)' }}>close</span></span>
+            </div>
+          </button>
+        )
+      })}
     </div>
   )
 }

@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Buyer Dashboard — Top Section Options</title>
+<style>
+  :root {
+    --ink: #14532d;
+    --green: #1d6b44;
+    --green-dark: #14532d;
+    --green3: #86efac;
+    --green-pale: #f0fdf4;
+    --cream: #f5f0e8;
+    --cream2: #ece5d8;
+    --pearl: #e5e7eb;
+    --mist: #6b7280;
+    --ash: #4b5563;
+    --card-bg: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px;
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
+    background: var(--cream);
+    color: var(--ink);
+  }
+  h1 { margin: 0 0 6px; font-size: 22px; font-weight: 900; }
+  .lead { color: var(--ash); font-size: 13px; margin-bottom: 28px; }
+  .option {
+    background: var(--card-bg);
+    border: 1px solid var(--pearl);
+    border-radius: 14px;
+    padding: 24px;
+    margin-bottom: 28px;
+    box-shadow: 0 2px 12px rgba(0,0,0,.04);
+  }
+  .option-title {
+    font-size: 16px; font-weight: 900; color: var(--ink);
+    margin: 0 0 4px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .badge-letter {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--green); color: #fff;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 900; font-size: 13px;
+  }
+  .option-meta { color: var(--mist); font-size: 12px; margin-bottom: 14px; }
+  .preview-frame {
+    background: var(--cream);
+    border: 1px solid var(--cream2);
+    border-radius: 10px;
+    padding: 18px;
+  }
+  .preview-frame.dark { background: var(--cream); }
+
+  /* common ticker mock + greeting */
+  .ticker {
+    background: #fff; border: 1px solid var(--pearl); border-radius: 8px;
+    padding: 8px 16px; font-size: 13px; color: var(--ink);
+    display: flex; gap: 16px; align-items: center;
+    margin-bottom: 12px;
+  }
+  .ticker .met { display: inline-flex; align-items: baseline; gap: 4px; flex: 1; }
+  .ticker .lbl { color: var(--green-dark); font-weight: 800; }
+  .ticker .pct.up { color: #15803d; font-weight: 700; }
+  .ticker .pct.dn { color: #b91c1c; font-weight: 700; }
+
+  .greeting-hero {
+    background: linear-gradient(160deg, #14532d 0%, #14532d 50%, #1d6b44 100%);
+    color: #fff;
+    padding: 22px 26px;
+    border-radius: 16px;
+    margin-bottom: 14px;
+  }
+  .greeting-hero .small {
+    text-transform: uppercase; letter-spacing: .08em;
+    font-size: 11px; opacity: .8; font-weight: 700;
+  }
+  .greeting-hero h2 { margin: 4px 0 6px; font-size: 24px; font-weight: 900; }
+  .greeting-hero .meta { font-size: 12px; opacity: .65; }
+
+  /* week tag chip */
+  .tag {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    font-size: 10px; font-weight: 800; letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .tag.last  { background: rgba(20,83,45,.08); color: #14532d; }
+  .tag.this  { background: rgba(245,196,0,.15); color: #92400e; }
+
+  /* event card */
+  .ev-card {
+    background: #fff; border: 1px solid var(--green3);
+    border-radius: 12px; padding: 14px 16px;
+    display: flex; flex-direction: column; gap: 6px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.06);
+    min-width: 0;
+  }
+  .ev-card .row1 {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  .ev-card h3 { margin: 0; font-size: 15px; font-weight: 900; color: var(--green-dark); line-height: 1.2; }
+  .ev-card .loc { color: var(--green-dark); opacity: .65; font-size: 11px; }
+  .ev-card .stats {
+    display: flex; gap: 10px; flex-wrap: wrap;
+    font-size: 12px; color: var(--green-dark); margin-top: 4px;
+  }
+  .ev-card .stats .num { font-weight: 900; font-size: 16px; color: var(--green-dark); margin-right: 4px; }
+  .ev-card .stats .lbl { opacity: .7; }
+  .ev-card .day {
+    font-size: 11px; font-weight: 700; color: var(--green-dark); opacity: .7;
+  }
+
+  /* OPTION A — two-card week split */
+  .opt-a-grid {
+    display: grid; gap: 12px;
+    grid-template-columns: 1fr 1fr;
+  }
+  @media (max-width: 720px) { .opt-a-grid { grid-template-columns: 1fr; } }
+  .week-card {
+    background: #fff; border: 1px solid var(--pearl);
+    border-radius: 12px; padding: 14px 16px;
+  }
+  .week-card .week-title {
+    font-size: 11px; font-weight: 800; color: var(--mist);
+    text-transform: uppercase; letter-spacing: .08em;
+    margin-bottom: 8px;
+    display: flex; gap: 8px; align-items: baseline;
+  }
+  .week-card .range { font-weight: 700; color: var(--ash); font-size: 11px; }
+  .week-card .empty {
+    color: var(--mist); font-size: 13px; padding: 14px 0;
+    font-style: italic;
+  }
+  .week-card .ev-card { border-color: var(--green3); margin-bottom: 8px; }
+  .week-card .ev-card:last-child { margin-bottom: 0; }
+
+  /* OPTION B — per-event cards timeline */
+  .opt-b-grid {
+    display: grid; gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
+
+  /* OPTION C — greeting hero + event cards */
+  .opt-c .events {
+    display: grid; gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
+
+  /* device toggle */
+  .toggle {
+    display: inline-flex; gap: 6px; margin-bottom: 14px;
+  }
+  .toggle button {
+    background: #fff; border: 1px solid var(--pearl);
+    padding: 6px 12px; font-size: 12px; font-weight: 700;
+    border-radius: 6px; cursor: pointer; color: var(--ash);
+    font-family: inherit;
+  }
+  .toggle button.active { background: var(--green); color: #fff; border-color: var(--green); }
+  .preview-frame.mobile-mode { max-width: 380px; margin: 0 auto; }
+  .preview-frame.mobile-mode .opt-a-grid { grid-template-columns: 1fr; }
+  .preview-frame.mobile-mode .opt-b-grid { grid-template-columns: 1fr; }
+  .preview-frame.mobile-mode .opt-c .events { grid-template-columns: 1fr; }
+  .preview-frame.mobile-mode .ticker { font-size: 11px; padding: 6px 10px; }
+  .preview-frame.mobile-mode .greeting-hero { padding: 18px 20px; }
+  .preview-frame.mobile-mode .greeting-hero h2 { font-size: 20px; }
+</style>
+</head>
+<body>
+
+<h1>Buyer Dashboard — Top Section, No $ Figures</h1>
+<p class="lead">
+  Three takes on what a buyer sees at the top of the dashboard. Money is hidden in all three;
+  data is scoped to events the buyer worked last week and this week. Click a button below
+  each option to compare the desktop vs. mobile rendering.
+</p>
+
+<!-- ─────────────── OPTION A ─────────────── -->
+<div class="option">
+  <h2 class="option-title"><span class="badge-letter">A</span> Two-Card Week Split</h2>
+  <div class="option-meta">One card per week. Events for that week stack inside the week card. Empty week shows a placeholder.</div>
+  <div class="toggle">
+    <button class="active" onclick="setMode('a','desk')">Desktop</button>
+    <button onclick="setMode('a','mob')">Mobile</button>
+  </div>
+
+  <div id="frame-a" class="preview-frame">
+    <div class="ticker">
+      <span class="met"><span class="lbl">Gold</span> $2,047.32 <span class="pct up">▲ 0.84%</span></span>
+      <span class="met"><span class="lbl">Silver</span> $24.81 <span class="pct dn">▼ 1.12%</span></span>
+      <span class="met"><span class="lbl">Platinum</span> $928.40 <span class="pct up">▲ 0.32%</span></span>
+    </div>
+    <div class="opt-a-grid">
+      <div class="week-card">
+        <div class="week-title">
+          <span>Last Week</span>
+          <span class="range">Apr 21 – Apr 27</span>
+        </div>
+        <div class="ev-card">
+          <div class="row1">
+            <div>
+              <h3>Goodman &amp; Sons</h3>
+              <div class="loc">Hampton, VA</div>
+            </div>
+            <span class="day">Day 3 of 3</span>
+          </div>
+          <div class="stats">
+            <span><span class="num">87</span><span class="lbl">purchases</span></span>
+            <span><span class="num">110</span><span class="lbl">customers</span></span>
+            <span><span class="num">79%</span><span class="lbl">close</span></span>
+          </div>
+        </div>
+        <div class="ev-card">
+          <div class="row1">
+            <div>
+              <h3>Smith Jewelers</h3>
+              <div class="loc">Norfolk, VA</div>
+            </div>
+            <span class="day">Day 3 of 3</span>
+          </div>
+          <div class="stats">
+            <span><span class="num">51</span><span class="lbl">purchases</span></span>
+            <span><span class="num">80</span><span class="lbl">customers</span></span>
+            <span><span class="num">64%</span><span class="lbl">close</span></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="week-card">
+        <div class="week-title">
+          <span>This Week</span>
+          <span class="range">Apr 28 – May 4</span>
+        </div>
+        <div class="ev-card">
+          <div class="row1">
+            <div>
+              <h3>Alan Miller Jewelers</h3>
+              <div class="loc">Oregon, OH</div>
+            </div>
+            <span class="day">Day 2 of 3</span>
+          </div>
+          <div class="stats">
+            <span><span class="num">42</span><span class="lbl">purchases</span></span>
+            <span><span class="num">56</span><span class="lbl">customers</span></span>
+            <span><span class="num">75%</span><span class="lbl">close</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────────── OPTION B ─────────────── -->
+<div class="option">
+  <h2 class="option-title"><span class="badge-letter">B</span> Per-Event Cards Timeline</h2>
+  <div class="option-meta">One card per event in chronological order. Each card has a Last Week / This Week tag. Scales naturally to N events.</div>
+  <div class="toggle">
+    <button class="active" onclick="setMode('b','desk')">Desktop</button>
+    <button onclick="setMode('b','mob')">Mobile</button>
+  </div>
+
+  <div id="frame-b" class="preview-frame">
+    <div class="ticker">
+      <span class="met"><span class="lbl">Gold</span> $2,047.32 <span class="pct up">▲ 0.84%</span></span>
+      <span class="met"><span class="lbl">Silver</span> $24.81 <span class="pct dn">▼ 1.12%</span></span>
+      <span class="met"><span class="lbl">Platinum</span> $928.40 <span class="pct up">▲ 0.32%</span></span>
+    </div>
+    <div class="opt-b-grid">
+      <div class="ev-card">
+        <div class="row1">
+          <div><span class="tag last">Last Week</span></div>
+          <span class="day">Apr 21 · Day 3/3</span>
+        </div>
+        <h3>Goodman &amp; Sons</h3>
+        <div class="loc">Hampton, VA</div>
+        <div class="stats">
+          <span><span class="num">87</span><span class="lbl">purchases</span></span>
+          <span><span class="num">110</span><span class="lbl">customers</span></span>
+          <span><span class="num">79%</span><span class="lbl">close</span></span>
+        </div>
+      </div>
+      <div class="ev-card">
+        <div class="row1">
+          <div><span class="tag last">Last Week</span></div>
+          <span class="day">Apr 24 · Day 3/3</span>
+        </div>
+        <h3>Smith Jewelers</h3>
+        <div class="loc">Norfolk, VA</div>
+        <div class="stats">
+          <span><span class="num">51</span><span class="lbl">purchases</span></span>
+          <span><span class="num">80</span><span class="lbl">customers</span></span>
+          <span><span class="num">64%</span><span class="lbl">close</span></span>
+        </div>
+      </div>
+      <div class="ev-card">
+        <div class="row1">
+          <div><span class="tag this">This Week</span></div>
+          <span class="day">Apr 28 · Day 2/3</span>
+        </div>
+        <h3>Alan Miller Jewelers</h3>
+        <div class="loc">Oregon, OH</div>
+        <div class="stats">
+          <span><span class="num">42</span><span class="lbl">purchases</span></span>
+          <span><span class="num">56</span><span class="lbl">customers</span></span>
+          <span><span class="num">75%</span><span class="lbl">close</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────────── OPTION C ─────────────── -->
+<div class="option">
+  <h2 class="option-title"><span class="badge-letter">C</span> Personal Greeting + Event Cards</h2>
+  <div class="option-meta">Keeps the warm green hero with the buyer's name and date. No aggregate $; just the per-event cards below.</div>
+  <div class="toggle">
+    <button class="active" onclick="setMode('c','desk')">Desktop</button>
+    <button onclick="setMode('c','mob')">Mobile</button>
+  </div>
+
+  <div id="frame-c" class="preview-frame opt-c">
+    <div class="ticker">
+      <span class="met"><span class="lbl">Gold</span> $2,047.32 <span class="pct up">▲ 0.84%</span></span>
+      <span class="met"><span class="lbl">Silver</span> $24.81 <span class="pct dn">▼ 1.12%</span></span>
+      <span class="met"><span class="lbl">Platinum</span> $928.40 <span class="pct up">▲ 0.32%</span></span>
+    </div>
+    <div class="greeting-hero">
+      <div class="small">Good morning</div>
+      <h2>Alan</h2>
+      <div class="meta">Saturday, May 2 · last 2 weeks of work</div>
+    </div>
+    <div class="events">
+      <div class="ev-card">
+        <div class="row1">
+          <div><span class="tag last">Last Week</span></div>
+          <span class="day">Apr 21 · Day 3/3</span>
+        </div>
+        <h3>Goodman &amp; Sons</h3>
+        <div class="loc">Hampton, VA</div>
+        <div class="stats">
+          <span><span class="num">87</span><span class="lbl">purchases</span></span>
+          <span><span class="num">110</span><span class="lbl">customers</span></span>
+          <span><span class="num">79%</span><span class="lbl">close</span></span>
+        </div>
+      </div>
+      <div class="ev-card">
+        <div class="row1">
+          <div><span class="tag last">Last Week</span></div>
+          <span class="day">Apr 24 · Day 3/3</span>
+        </div>
+        <h3>Smith Jewelers</h3>
+        <div class="loc">Norfolk, VA</div>
+        <div class="stats">
+          <span><span class="num">51</span><span class="lbl">purchases</span></span>
+          <span><span class="num">80</span><span class="lbl">customers</span></span>
+          <span><span class="num">64%</span><span class="lbl">close</span></span>
+        </div>
+      </div>
+      <div class="ev-card">
+        <div class="row1">
+          <div><span class="tag this">This Week</span></div>
+          <span class="day">Apr 28 · Day 2/3</span>
+        </div>
+        <h3>Alan Miller Jewelers</h3>
+        <div class="loc">Oregon, OH</div>
+        <div class="stats">
+          <span><span class="num">42</span><span class="lbl">purchases</span></span>
+          <span><span class="num">56</span><span class="lbl">customers</span></span>
+          <span><span class="num">75%</span><span class="lbl">close</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function setMode(opt, mode) {
+  const frame = document.getElementById('frame-' + opt);
+  if (mode === 'mob') frame.classList.add('mobile-mode');
+  else frame.classList.remove('mobile-mode');
+  // toggle button active state
+  const btns = frame.parentElement.querySelector('.toggle').children;
+  btns[0].classList.toggle('active', mode === 'desk');
+  btns[1].classList.toggle('active', mode === 'mob');
+}
+</script>
+
+</body>
+</html>

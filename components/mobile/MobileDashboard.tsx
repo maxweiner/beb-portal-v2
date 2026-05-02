@@ -90,17 +90,73 @@ export default function MobileDashboard({ setNav }: Props) {
     setNav?.('dayentry')
   }
 
+  // Buyer-scoped data: last + this week, only the buyer's events.
+  const isBuyer = user?.role === 'buyer'
+  const myId = user?.id
+  const lastWs = new Date(ws); lastWs.setDate(ws.getDate() - 7)
+  const lastWe = new Date(we); lastWe.setDate(we.getDate() - 7)
+  const myLastWeek = (isBuyer && myId)
+    ? events.filter(e => isWorkerAssigned(e, myId) && eventOverlapsWeek(e, lastWs, lastWe))
+    : []
+  const myThisWeek = (isBuyer && myId)
+    ? events.filter(e => isWorkerAssigned(e, myId) && eventOverlapsWeek(e, ws, we))
+    : []
+  const fmtRange = (s: Date, e: Date) =>
+    `${s.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${e.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+
   return (
     <div style={{ background: 'var(--cream2)', minHeight: '100%' }}>
       {/* Metals ticker — buyer-only. Sits above the hero so the
           three spots are visible without scrolling. */}
-      {user?.role === 'buyer' && (
+      {isBuyer && (
         <div style={{ padding: '10px 12px 0' }}>
           <MetalsTicker variant="mobile" />
         </div>
       )}
 
-      {/* Slim hero — greeting + tappable name */}
+      {/* Buyer-only mobile hero: compact greeting + Last Week / This
+          Week stacked cards. No money, no team-wide stats. */}
+      {isBuyer && (
+        <div style={{ padding: '10px 12px 4px' }}>
+          <div style={{
+            background: 'linear-gradient(160deg, var(--sidebar-bg) 0%, var(--green-dark) 50%, var(--green) 100%)',
+            color: '#fff', borderRadius: 14, padding: '14px 18px',
+            display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8,
+          }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, opacity: 0.85, textTransform: 'uppercase', letterSpacing: '.08em' }}>
+                Good {greet}
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 900, marginTop: 2 }}>
+                {user?.name?.split(' ')[0]}
+              </div>
+            </div>
+            <div style={{ marginLeft: 'auto', fontSize: 11, opacity: 0.65 }}>
+              {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+            <BuyerWeekCardMobile
+              label="Last Week"
+              range={fmtRange(lastWs, lastWe)}
+              events={myLastWeek}
+              stores={stores}
+              onTap={(ev) => openEvent(ev)}
+            />
+            <BuyerWeekCardMobile
+              label="This Week"
+              range={fmtRange(ws, we)}
+              events={myThisWeek}
+              stores={stores}
+              onTap={(ev) => openEvent(ev)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Slim hero — admins / superadmins / etc. (buyers get the
+          replacement above). */}
+      {!isBuyer && (
       <div style={{
         background: 'linear-gradient(160deg, var(--sidebar-bg) 0%, var(--green-dark) 50%, var(--green) 100%)',
         padding: '22px 18px 20px', borderRadius: '0 0 24px 24px',
@@ -210,11 +266,15 @@ export default function MobileDashboard({ setNav }: Props) {
           </div>
         </div>
       </div>
+      )}
 
-      {/* Next event hero — buyer's soonest upcoming/in-progress event. */}
+      {/* Next event hero — admin / superadmin only. Buyers' BuyerWeekCardMobile already
+          covers their current event. */}
+      {!isBuyer && (
       <div style={{ padding: '14px 14px 0' }}>
         <NextEventCard setNav={setNav} variant="mobile" />
       </div>
+      )}
 
       {/* Leaderboard (unchanged) */}
       <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -345,6 +405,79 @@ export default function MobileDashboard({ setNav }: Props) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/* ── Buyer week card (mobile) — used by the buyer-only mobile hero. ── */
+function BuyerWeekCardMobile({
+  label, range, events, stores, onTap,
+}: {
+  label: string
+  range: string
+  events: any[]
+  stores: any[]
+  onTap: (ev: any) => void
+}) {
+  const empty = events.length === 0
+  return (
+    <div style={{
+      background: '#fff',
+      border: empty ? '1px dashed var(--cream2)' : '1px solid var(--green3)',
+      borderRadius: 12,
+      padding: '12px 14px',
+      display: 'flex', flexDirection: 'column', gap: 8,
+      boxShadow: empty ? 'none' : '0 2px 10px rgba(0,0,0,.06)',
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'baseline', gap: 8,
+        fontSize: 10, fontWeight: 800, color: 'var(--mist)',
+        textTransform: 'uppercase', letterSpacing: '.06em',
+      }}>
+        <span>{label}</span>
+        <span style={{ fontWeight: 700, color: 'var(--ash)' }}>{range}</span>
+      </div>
+      {empty ? (
+        <div style={{
+          color: 'var(--mist)', fontStyle: 'italic', fontSize: 12,
+          textAlign: 'center', padding: '14px 0',
+        }}>No event {label.toLowerCase()}</div>
+      ) : events.map(ev => {
+        const store = stores.find((s: any) => s.id === ev.store_id)
+        const totals = (ev.days || []).reduce((acc: any, d: any) => {
+          acc.purchases += d.purchases || 0
+          acc.customers += d.customers || 0
+          return acc
+        }, { purchases: 0, customers: 0 })
+        const close = totals.customers > 0
+          ? Math.round(totals.purchases / totals.customers * 100)
+          : null
+        const enteredDays = (ev.days || []).filter(dayHasData).length
+        const dayStatus = enteredDays === 0 ? '' : `Day ${enteredDays} of 3`
+        return (
+          <button key={ev.id} onClick={() => onTap(ev)} style={{
+            background: 'transparent', border: 'none', padding: 0,
+            textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
+            display: 'flex', flexDirection: 'column', gap: 4,
+          }}>
+            <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--green-dark)', lineHeight: 1.2 }}>
+              {eventDisplayName(ev, stores)}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--green-dark)', opacity: 0.65 }}>
+              {store?.city}{store?.state ? ', ' + store.state : ''}
+              {dayStatus && <span style={{ marginLeft: 6 }}>· {dayStatus}</span>}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
+              <span><span style={{ fontSize: 16, fontWeight: 900, color: 'var(--green-dark)' }}>{totals.purchases}</span>
+                <span style={{ fontSize: 10, opacity: 0.65, marginLeft: 3, color: 'var(--green-dark)' }}>purchases</span></span>
+              <span><span style={{ fontSize: 16, fontWeight: 900, color: 'var(--green-dark)' }}>{totals.customers}</span>
+                <span style={{ fontSize: 10, opacity: 0.65, marginLeft: 3, color: 'var(--green-dark)' }}>customers</span></span>
+              <span><span style={{ fontSize: 16, fontWeight: 900, color: 'var(--green-dark)' }}>{close === null ? '—' : `${close}%`}</span>
+                <span style={{ fontSize: 10, opacity: 0.65, marginLeft: 3, color: 'var(--green-dark)' }}>close</span></span>
+            </div>
+          </button>
+        )
+      })}
     </div>
   )
 }
