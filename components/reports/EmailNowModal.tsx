@@ -7,9 +7,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
+import Checkbox from '@/components/ui/Checkbox'
 
 const MAX_RECIPIENTS = 25
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+type AttachFormat = 'csv' | 'xlsx'
 
 export default function EmailNowModal({
   open, onClose, reportId, reportName, rowCount,
@@ -27,6 +30,7 @@ export default function EmailNowModal({
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
+  const [formats, setFormats] = useState<AttachFormat[]>(['csv'])
 
   // Reset state when the modal opens.
   useEffect(() => {
@@ -37,6 +41,7 @@ export default function EmailNowModal({
     setMessage(defaultMessage(user?.name, reportName, rowCount))
     setStatus(null)
     setBusy(false)
+    setFormats(['csv'])
   }, [open, reportName, rowCount, user?.name])
 
   // Combobox suggestions: app users with an email, minus already-picked.
@@ -74,11 +79,12 @@ export default function EmailNowModal({
       if (!token) throw new Error('Not signed in')
       if (picked.length === 0) throw new Error('Add at least one recipient')
       if (picked.length > MAX_RECIPIENTS) throw new Error(`Too many recipients (max ${MAX_RECIPIENTS})`)
+      if (formats.length === 0) throw new Error('Pick at least one attachment format')
       const res = await fetch(`/api/reports/${reportId}/email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          recipients: picked, subject, message, brand,
+          recipients: picked, subject, message, brand, formats,
         }),
       })
       const json = await res.json().catch(() => ({}))
@@ -183,15 +189,27 @@ export default function EmailNowModal({
           />
         </div>
 
-        {/* Format — CSV only for v1 */}
+        {/* Format — CSV + Excel. PDF still deferred. */}
         <div className="field" style={{ marginBottom: 18 }}>
           <label className="fl">Attach</label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 13, color: 'var(--ink)' }}>
-            <span style={{
-              padding: '4px 10px', borderRadius: 6, fontWeight: 700,
-              background: 'var(--green-pale)', color: 'var(--green-dark)',
-            }}>CSV (always)</span>
-            <span style={{ color: 'var(--mist)', fontSize: 12 }}>Excel + PDF coming next</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 18, fontSize: 13, color: 'var(--ink)' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+              <Checkbox
+                checked={formats.includes('csv')}
+                onChange={() => setFormats(p => p.includes('csv') ? p.filter(f => f !== 'csv') : [...p, 'csv'])}
+                size={18}
+              />
+              CSV
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+              <Checkbox
+                checked={formats.includes('xlsx')}
+                onChange={() => setFormats(p => p.includes('xlsx') ? p.filter(f => f !== 'xlsx') : [...p, 'xlsx'])}
+                size={18}
+              />
+              Excel (.xlsx)
+            </label>
+            <span style={{ color: 'var(--mist)', fontSize: 12 }}>PDF coming next</span>
           </div>
         </div>
 
@@ -210,7 +228,7 @@ export default function EmailNowModal({
         {/* Actions */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button onClick={onClose} disabled={busy} className="btn-outline btn-sm">Cancel</button>
-          <button onClick={send} disabled={busy || picked.length === 0} className="btn-primary btn-sm">
+          <button onClick={send} disabled={busy || picked.length === 0 || formats.length === 0} className="btn-primary btn-sm">
             {busy ? 'Sending…' : `Send${picked.length > 0 ? ` (${picked.length})` : ''}`}
           </button>
         </div>
