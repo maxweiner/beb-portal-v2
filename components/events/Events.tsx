@@ -1451,6 +1451,13 @@ function SpendPanel({ ev, onClose, refetchEvents }: { ev: Event; onClose: () => 
     spend_spiffs:    String(ev.spend_spiffs    || ''),
   })
 
+  // Save on autosave WITHOUT refetching the events list — refetching
+  // re-renders the parent, drops input focus on mobile, and the page
+  // appears to "jump back" to the top of the events list. The DB save
+  // is enough; the local `spend` state mirrors what was written. The
+  // global events context (used by other surfaces like the dashboard
+  // event card spend totals) gets refreshed once the user closes the
+  // panel via Done.
   const status = useAutosave(
     spend,
     async (s) => {
@@ -1463,10 +1470,16 @@ function SpendPanel({ ev, onClose, refetchEvents }: { ev: Event; onClose: () => 
         }).eq('id', ev.id)
       )
       if (error) throw error
-      await refetchEvents()
     },
     { delay: 1000 }
   )
+
+  async function handleDone() {
+    // One refetch on close so other surfaces (dashboard event cards,
+    // schedule, etc.) pick up the new totals immediately.
+    try { await refetchEvents() } catch { /* swallow — state is already saved */ }
+    onClose()
+  }
 
   const totalSpend = (parseFloat(spend.spend_vdp) || 0) +
     (parseFloat(spend.spend_newspaper) || 0) +
@@ -1506,7 +1519,7 @@ function SpendPanel({ ev, onClose, refetchEvents }: { ev: Event; onClose: () => 
         {inp('Spiffs Paid', 'spend_spiffs')}
       </div>
       <div style={{ display: 'flex', gap: 8 }}>
-        <button className="btn-outline btn-sm" onClick={onClose}>Done</button>
+        <button className="btn-outline btn-sm" onClick={handleDone}>Done</button>
       </div>
     </div>
   )
