@@ -283,21 +283,24 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
     : { id: 'dashboard' as NavPage, label: 'Scan ID', icon: '📷', isScan: true }
 
   const ALL_PAGES: { id: NavPage; label: string; icon: string; isScan?: boolean }[] = [
-    { id: 'dashboard',    label: 'Dashboard',      icon: '⌂' },
-    { id: 'events',       label: 'Events',         icon: '◆' },
-    { id: 'dayentry',     label: 'Enter Day Data', icon: '📝' },
-    { id: 'calendar',     label: 'Appointments',   icon: '📅' },
-    { id: 'schedule',     label: 'Calendar',       icon: '🗓' },
+    { id: 'dashboard',    label: 'Dashboard',           icon: '⌂' },
+    { id: 'events',       label: 'Events',              icon: '◆' },
+    { id: 'dayentry',     label: 'Enter Day Data',      icon: '📝' },
+    { id: 'calendar',     label: 'Buying Bookings',     icon: '📅' },
+    { id: 'schedule',     label: 'Calendar',            icon: '🗓' },
     swapItem,
-    { id: 'staff',        label: 'Staff',          icon: '👥' },
-    { id: 'shipping',     label: 'Shipping',       icon: '📦' },
-    { id: 'reports',      label: 'Reports',        icon: '📊' },
-    { id: 'expenses',     label: 'Expenses',       icon: '🧾' },
-    { id: 'financials',   label: 'Financials',     icon: '💼' },
-    { id: 'marketing',    label: 'Marketing',      icon: '📣' },
-    { id: 'settings',     label: 'Settings',       icon: '⚙️' },
+    { id: 'staff',        label: 'Staff',               icon: '👥' },
+    { id: 'trade-shows',  label: 'Trade Shows',         icon: '🎪' },
+    { id: 'trunk-shows',  label: 'Trunk Shows',         icon: '🛍️' },
+    { id: 'leads',        label: 'Leads',               icon: '🎯' },
+    { id: 'shipping',     label: 'Shipping',            icon: '📦' },
+    { id: 'reports',      label: 'Reports',             icon: '📊' },
+    { id: 'expenses',     label: 'Expenses',            icon: '🧾' },
+    { id: 'financials',   label: 'Financials',          icon: '💼' },
+    { id: 'marketing',    label: 'Marketing',           icon: '📣' },
+    { id: 'settings',     label: 'Settings',            icon: '⚙️' },
     { id: isLiberty ? 'libertyadmin' : 'admin', label: isLiberty ? 'LEB Admin' : 'Admin', icon: '🔧' },
-    { id: 'stores',       label: 'Stores',         icon: '🏪' },
+    { id: 'stores',       label: 'Stores',              icon: '🏪' },
   ]
 
   // role_modules drives access. Hide everything until modules load

@@ -28,6 +28,11 @@ const ICONS: Record<string, JSX.Element> = {
   settings:  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>,
   expenses:  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2.5" y="1" width="11" height="14" rx="1" stroke="currentColor" strokeWidth="1.5"/><path d="M5.5 4.5h5M5.5 7.5h5M5.5 10.5h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>,
   financials:<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 13V6M6 13V3M10 13V8M14 13V5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>,
+  // Selling-side icons. Trade shows = booth/tent silhouette,
+  // trunk shows = open suitcase, leads = magnet/target.
+  tradeshows:<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 7l6-5 6 5v7H2V7z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M6 14V9h4v5" stroke="currentColor" strokeWidth="1.5"/></svg>,
+  trunkshows:<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="5" width="12" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><path d="M6 5V3.5A1.5 1.5 0 0 1 7.5 2h1A1.5 1.5 0 0 1 10 3.5V5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M2 9h12" stroke="currentColor" strokeWidth="1.5"/></svg>,
+  leads:     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/><circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.5"/><circle cx="8" cy="8" r="1" fill="currentColor"/></svg>,
 }
 
 interface NavItem {
@@ -39,24 +44,30 @@ interface NavItem {
 
 const BEB_NAV: NavItem[] = [
   { label: 'Daily', section: true },
-  { id: 'dashboard',    label: 'Dashboard',      iconKey: 'dashboard' },
-  { id: 'calendar',     label: 'Bookings',       iconKey: 'calendar' },
-  { id: 'events',       label: 'Buying Events',  iconKey: 'events' },
-  { id: 'schedule',     label: 'Schedule',       iconKey: 'schedule' },
-  { id: 'travel',       label: 'Travel Share',   iconKey: 'travel' },
-  { id: 'dayentry',     label: 'Enter Day Data', iconKey: 'dayentry' },
-  { id: 'staff',        label: 'Staff',          iconKey: 'staff' },
+  { id: 'dashboard',    label: 'Dashboard',         iconKey: 'dashboard' },
+  // Renamed from "Bookings" so it's not confused with the new
+  // selling-side "Trunk Customer Bookings" inside Trunk Shows.
+  { id: 'calendar',     label: 'Buying Bookings',   iconKey: 'calendar' },
+  { id: 'events',       label: 'Buying Events',     iconKey: 'events' },
+  { id: 'schedule',     label: 'Schedule',          iconKey: 'schedule' },
+  { id: 'travel',       label: 'Travel Share',      iconKey: 'travel' },
+  { id: 'dayentry',     label: 'Enter Day Data',    iconKey: 'dayentry' },
+  { id: 'staff',        label: 'Staff',             iconKey: 'staff' },
+  { label: 'Selling', section: true },
+  { id: 'trade-shows',  label: 'Trade Shows',       iconKey: 'tradeshows' },
+  { id: 'trunk-shows',  label: 'Trunk Shows',       iconKey: 'trunkshows' },
+  { id: 'leads',        label: 'Leads',             iconKey: 'leads' },
   { label: 'Operations', section: true },
-  { id: 'marketing',    label: 'Marketing',      iconKey: 'marketing' },
-  { id: 'shipping',     label: 'Shipping',       iconKey: 'shipping' },
-  { id: 'expenses',     label: 'Expenses',       iconKey: 'expenses' },
-  { id: 'reports',      label: 'Reports',        iconKey: 'reports' },
+  { id: 'marketing',    label: 'Marketing',         iconKey: 'marketing' },
+  { id: 'shipping',     label: 'Shipping',          iconKey: 'shipping' },
+  { id: 'expenses',     label: 'Expenses',          iconKey: 'expenses' },
+  { id: 'reports',      label: 'Reports',           iconKey: 'reports' },
   { label: 'Admin', section: true },
-  { id: 'admin',         label: 'Admin Panel',    iconKey: 'admin' },
-  { id: 'stores',        label: 'Stores',         iconKey: 'stores' },
-  { id: 'customers',     label: 'Customers',      iconKey: 'staff' },
-  { id: 'data-research', label: 'Data Research',  iconKey: 'reports' },
-  { id: 'financials',    label: 'Financials',     iconKey: 'financials' },
+  { id: 'admin',         label: 'Admin Panel',      iconKey: 'admin' },
+  { id: 'stores',        label: 'Stores',           iconKey: 'stores' },
+  { id: 'customers',     label: 'Customers',        iconKey: 'staff' },
+  { id: 'data-research', label: 'Data Research',    iconKey: 'reports' },
+  { id: 'financials',    label: 'Financials',       iconKey: 'financials' },
 ]
 
 const LIBERTY_NAV: NavItem[] = [
