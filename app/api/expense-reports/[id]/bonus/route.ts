@@ -8,6 +8,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthedUser } from '@/lib/expenses/serverAuth'
+import { blockIfImpersonating } from '@/lib/impersonation/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +24,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const me = await getAuthedUser(req)
   if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!me.is_partner) return NextResponse.json({ error: 'Partners only' }, { status: 403 })
+
+  const blocked = await blockIfImpersonating(req)
+  if (blocked) return blocked
 
   let body: any
   try { body = await req.json() }

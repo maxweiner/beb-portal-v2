@@ -9,6 +9,7 @@ import LicenseScanner from '@/components/scan/LicenseScanner'
 import { useCenterButtonMode } from '@/lib/centerButtonMode'
 import { usePendingApprovals } from '@/components/expenses/usePendingApprovals'
 import { useRoleModules } from '@/lib/useRoleModules'
+import ViewAsSwitcher from '@/components/impersonation/ViewAsSwitcher'
 
 /* ── ICONS ── */
 
@@ -362,6 +363,7 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
                 </button>
               ))}
               <div style={{ borderTop: '1px solid rgba(255,255,255,.1)', margin: '12px 0 0' }} />
+              <ViewAsSwitcher variant="mobile" />
               <button onClick={() => supabase.auth.signOut()} style={{ width: '100%', padding: '14px 20px', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 12, color: '#FCA5A5', fontWeight: 700, fontSize: 14, textAlign: 'left', minHeight: 44 }}>
                 <span style={{ fontSize: 16, width: 20, textAlign: 'center', flexShrink: 0 }}>🚪</span>Sign Out
               </button>

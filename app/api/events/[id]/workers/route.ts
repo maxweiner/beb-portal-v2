@@ -11,6 +11,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { enqueueNotification, cancelPendingNotification } from '@/lib/notifications/enqueue'
+import { blockIfImpersonating } from '@/lib/impersonation/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +28,9 @@ interface Worker { id: string; name: string }
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   const eventId = params.id
   if (!eventId) return NextResponse.json({ error: 'Missing event id' }, { status: 400 })
+
+  const blocked = await blockIfImpersonating(req)
+  if (blocked) return blocked
 
   let body: any
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }

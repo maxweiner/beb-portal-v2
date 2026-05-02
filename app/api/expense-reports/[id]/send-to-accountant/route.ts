@@ -9,6 +9,7 @@
 
 import { NextResponse } from 'next/server'
 import { getAuthedUser, isAdminLike } from '@/lib/expenses/serverAuth'
+import { blockIfImpersonating } from '@/lib/impersonation/server'
 import { sendAccountantEmailForReport } from '@/lib/expenses/sendAccountantEmail'
 
 export const dynamic = 'force-dynamic'
@@ -17,6 +18,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const me = await getAuthedUser(req)
   if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!isAdminLike(me)) return NextResponse.json({ error: 'Admins only' }, { status: 403 })
+
+  const blocked = await blockIfImpersonating(req)
+  if (blocked) return blocked
 
   const portalBaseUrl =
     process.env.NEXT_PUBLIC_BOOKING_BASE_URL

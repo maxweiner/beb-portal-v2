@@ -12,6 +12,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthedUser } from '@/lib/expenses/serverAuth'
+import { blockIfImpersonating } from '@/lib/impersonation/server'
 import { sendAccountantEmailForReport } from '@/lib/expenses/sendAccountantEmail'
 import { nextBusinessHoursMomentEt } from '@/lib/expenses/quietHours'
 
@@ -31,6 +32,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (!me.is_partner) {
     return NextResponse.json({ error: 'Only partners can approve reports' }, { status: 403 })
   }
+
+  const blocked = await blockIfImpersonating(req)
+  if (blocked) return blocked
 
   const sb = admin()
   const { data: report, error: rErr } = await sb

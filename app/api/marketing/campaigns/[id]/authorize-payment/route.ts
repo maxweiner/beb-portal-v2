@@ -15,6 +15,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { randomBytes } from 'crypto'
 import { sendEmail } from '@/lib/email'
 import { getAuthedUser } from '@/lib/expenses/serverAuth'
+import { blockIfImpersonating } from '@/lib/impersonation/server'
 import { fmtDateRange, appBaseUrl, escapeHtml } from '@/lib/marketing/notify'
 
 export const dynamic = 'force-dynamic'
@@ -32,6 +33,9 @@ function admin() {
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const me = await getAuthedUser(req)
   if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const blocked = await blockIfImpersonating(req)
+  if (blocked) return blocked
 
   const sb = admin()
   const { data: meRow } = await sb.from('users').select('marketing_access').eq('id', me.id).maybeSingle()

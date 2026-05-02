@@ -9,6 +9,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthedUser, isAdminLike } from '@/lib/expenses/serverAuth'
+import { blockIfImpersonating } from '@/lib/impersonation/server'
 import { runLookalike } from '@/lib/customers/lookalike'
 import { POSTCARD_CSV_COLUMNS, type ExportFilters } from '@/lib/customers/exportFilters'
 
@@ -40,6 +41,9 @@ export async function POST(req: Request) {
   const me = await getAuthedUser(req)
   if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!isAdminLike(me)) return NextResponse.json({ error: 'Admin required' }, { status: 403 })
+
+  const blocked = await blockIfImpersonating(req)
+  if (blocked) return blocked
 
   let body: Body
   try { body = await req.json() }

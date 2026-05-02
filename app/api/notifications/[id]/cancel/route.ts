@@ -4,6 +4,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { blockIfImpersonating } from '@/lib/impersonation/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,8 +16,12 @@ function admin() {
   )
 }
 
-export async function POST(_req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, { params }: { params: { id: string } }) {
   if (!params.id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+
+  const blocked = await blockIfImpersonating(req)
+  if (blocked) return blocked
+
   const sb = admin()
 
   const { data: row } = await sb.from('scheduled_notifications')

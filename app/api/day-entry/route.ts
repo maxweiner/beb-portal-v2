@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendSMS, formatPhone } from '@/lib/sms'
+import { blockIfImpersonating } from '@/lib/impersonation/server'
 
 const sb = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -34,6 +35,9 @@ async function sendEmail(cfg: any, to: string[], subject: string, html: string) 
 }
 
 export async function POST(request: NextRequest) {
+  const blocked = await blockIfImpersonating(request)
+  if (blocked) return blocked
+
   try {
     const body = await request.json()
     const { event_id, day_number, entered_by_name } = body

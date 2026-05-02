@@ -13,6 +13,7 @@ import { createClient } from '@supabase/supabase-js'
 import { randomBytes } from 'crypto'
 import { sendEmail } from '@/lib/email'
 import { getAuthedUser } from '@/lib/expenses/serverAuth'
+import { blockIfImpersonating } from '@/lib/impersonation/server'
 import { eventEndIso } from '@/lib/eventDates'
 
 export const dynamic = 'force-dynamic'
@@ -49,6 +50,9 @@ function fmtDateRange(startIso: string): string {
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const me = await getAuthedUser(req)
   if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const blocked = await blockIfImpersonating(req)
+  if (blocked) return blocked
 
   const sb = admin()
 

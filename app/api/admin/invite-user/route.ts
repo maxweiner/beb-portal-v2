@@ -19,6 +19,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthedUser } from '@/lib/expenses/serverAuth'
+import { blockIfImpersonating } from '@/lib/impersonation/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,6 +40,9 @@ export async function POST(req: Request) {
   if (me.role !== 'admin' && me.role !== 'superadmin') {
     return NextResponse.json({ error: 'Admin required' }, { status: 403 })
   }
+
+  const blocked = await blockIfImpersonating(req)
+  if (blocked) return blocked
 
   let body: any
   try { body = await req.json() }

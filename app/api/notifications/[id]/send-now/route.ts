@@ -10,6 +10,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { dispatchOne } from '@/lib/notifications/dispatcher'
+import { blockIfImpersonating } from '@/lib/impersonation/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +24,10 @@ function admin() {
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   if (!params.id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+
+  const blocked = await blockIfImpersonating(req)
+  if (blocked) return blocked
+
   const body = await req.json().catch(() => ({}))
   const bypassQH = !!body?.bypass_quiet_hours
 

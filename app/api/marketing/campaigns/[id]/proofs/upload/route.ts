@@ -12,6 +12,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { resolveMarketingActor } from '@/lib/marketing/auth'
+import { blockIfImpersonating } from '@/lib/impersonation/server'
 import { notifyApprovers, fmtDateRange, appBaseUrl } from '@/lib/marketing/notify'
 
 export const dynamic = 'force-dynamic'
@@ -38,6 +39,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: auth.reason }, { status })
   }
   const actor = auth.actor
+
+  const blocked = await blockIfImpersonating(req)
+  if (blocked) return blocked
 
   let form: FormData
   try { form = await req.formData() }

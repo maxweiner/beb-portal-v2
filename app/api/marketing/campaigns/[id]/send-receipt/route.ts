@@ -10,6 +10,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthedUser } from '@/lib/expenses/serverAuth'
+import { blockIfImpersonating } from '@/lib/impersonation/server'
 import { sendMarketingReceiptForCampaign } from '@/lib/marketing/sendAccountantReceipt'
 
 export const dynamic = 'force-dynamic'
@@ -26,6 +27,9 @@ function admin() {
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const me = await getAuthedUser(req)
   if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const blocked = await blockIfImpersonating(req)
+  if (blocked) return blocked
 
   const sb = admin()
   const { data: meRow } = await sb.from('users').select('marketing_access').eq('id', me.id).maybeSingle()

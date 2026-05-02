@@ -8,6 +8,7 @@ import type { Theme, BuyerVacation } from '@/types'
 import AvatarPicker from './AvatarPicker'
 import BrandLogosPanel from './BrandLogosPanel'
 import RoleManagerPanel from './RoleManagerPanel'
+import ImpersonationLogPanel from '@/components/impersonation/ImpersonationLogPanel'
 import Checkbox from '@/components/ui/Checkbox'
 import AddressAutocompleteInput from '@/components/ui/AddressAutocompleteInput'
 import CollapsibleCard from '@/components/ui/CollapsibleCard'
@@ -371,6 +372,17 @@ export default function Settings() {
           subtitle="Create roles and choose which modules each one unlocks. Drives the sidebar + page guards (PRs C/D in this initiative wire them in)."
         >
           <RoleManagerPanel />
+        </CollapsibleCard>
+      )}
+
+      {/* Impersonation history (max@bebllp.com only — server route hard-rejects others) */}
+      {user?.email?.toLowerCase() === 'max@bebllp.com' && (
+        <CollapsibleCard
+          storageKey="settings-impersonation-log"
+          title="👁️ View-As History"
+          subtitle="Every time you've impersonated another user. Your own audit trail."
+        >
+          <ImpersonationLogPanel />
         </CollapsibleCard>
       )}
 

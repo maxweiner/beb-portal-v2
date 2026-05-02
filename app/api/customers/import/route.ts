@@ -23,6 +23,7 @@
 import { NextResponse } from 'next/server'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { getAuthedUser, isAdminLike } from '@/lib/expenses/serverAuth'
+import { blockIfImpersonating } from '@/lib/impersonation/server'
 import {
   parseCsv, normalizeHeader, normalizePhone, normalizeEmail,
   normalizeDate, parseYesNo,
@@ -209,6 +210,11 @@ export async function POST(req: Request) {
       errors,
     })
   }
+
+  // Block destructive actions while max@bebllp.com is in view-as mode.
+  // Preview mode above is read-only and intentionally allowed.
+  const blocked = await blockIfImpersonating(req)
+  if (blocked) return blocked
 
   // ── Commit mode ────────────────────────────────────────────
   // Insert/update one row at a time. Slow for huge imports but

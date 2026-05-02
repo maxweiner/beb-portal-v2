@@ -18,6 +18,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthedUser, isAdminLike } from '@/lib/expenses/serverAuth'
+import { blockIfImpersonating } from '@/lib/impersonation/server'
 import { sendEmail } from '@/lib/email'
 
 export const dynamic = 'force-dynamic'
@@ -43,6 +44,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const me = await getAuthedUser(req)
   if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!isAdminLike(me)) return NextResponse.json({ error: 'Admin required' }, { status: 403 })
+
+  const blocked = await blockIfImpersonating(req)
+  if (blocked) return blocked
 
   const sb = admin()
   const { data: customer } = await sb.from('customers').select('*').eq('id', params.id).maybeSingle()

@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email'
 import { buildEventRecap } from '@/lib/reports/eventRecap'
+import { blockIfImpersonating } from '@/lib/impersonation/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,6 +22,9 @@ function admin() {
 }
 
 export async function POST(req: Request) {
+  const blocked = await blockIfImpersonating(req)
+  if (blocked) return blocked
+
   let body: any
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
   const { event_id, to } = body ?? {}

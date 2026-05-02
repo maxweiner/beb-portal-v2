@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import type { NavPage } from '@/app/page'
 import { usePendingApprovals } from '@/components/expenses/usePendingApprovals'
 import { useRoleModules } from '@/lib/useRoleModules'
+import ViewAsSwitcher from '@/components/impersonation/ViewAsSwitcher'
 
 const COLLAPSE_KEY = 'beb-sidebar-collapsed'
 
@@ -411,6 +412,7 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
           </button>
         </div>
         <div className="sidebar-user-role">{user?.role?.replace('_', ' ')}</div>
+        <ViewAsSwitcher variant="desktop" />
         <button onClick={() => supabase.auth.signOut()} className="btn-outline btn-xs btn-full">Sign Out</button>
       </div>
     </aside>

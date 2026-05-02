@@ -13,6 +13,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { resolveMarketingActor } from '@/lib/marketing/auth'
+import { blockIfImpersonating } from '@/lib/impersonation/server'
 import { sendMarketingReceiptForCampaign } from '@/lib/marketing/sendAccountantReceipt'
 
 export const dynamic = 'force-dynamic'
@@ -35,6 +36,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: auth.reason }, { status })
   }
   const actor = auth.actor
+
+  const blocked = await blockIfImpersonating(req)
+  if (blocked) return blocked
 
   const { data: campaign } = await sb.from('marketing_campaigns')
     .select('id, status, sub_status, payment_method_label').eq('id', params.id).maybeSingle()

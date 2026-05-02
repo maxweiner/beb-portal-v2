@@ -15,6 +15,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { blockIfImpersonating } from '@/lib/impersonation/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,7 +27,10 @@ function admin() {
   )
 }
 
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+  const blocked = await blockIfImpersonating(req)
+  if (blocked) return blocked
+
   const sb = admin()
   const { error } = await sb.from('qr_codes')
     .update({ deleted_at: new Date().toISOString(), active: false })
@@ -39,6 +43,9 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
 const VALID_TYPES = new Set(['channel', 'custom', 'employee', 'group'])
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
+  const blocked = await blockIfImpersonating(req)
+  if (blocked) return blocked
+
   let body: any
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
