@@ -52,6 +52,11 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
   const [loaded, setLoaded] = useState(false)
   const [statusFilter, setStatusFilter] = useState<'all' | ExpenseReportStatus>('all')
   const [userFilter, setUserFilter] = useState<string>('all')
+  // Hide upcoming events by default — buyers don't expense against
+  // a show that hasn't happened yet, so cluttering the list with
+  // future-dated reports just creates noise. Dropdown lets the user
+  // peek at upcoming or see all.
+  const [timeFilter, setTimeFilter] = useState<'past' | 'upcoming' | 'all'>('past')
   // Superadmins (Max etc.) default the User filter to themselves
   // — they almost always want their own queue first, and can flip
   // to "All users" in the dropdown when they need the cross-user
@@ -172,12 +177,24 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
     return () => { cancelled = true }
   }, [])
 
+  const todayIsoLocal = useMemo(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  }, [])
+
   const filtered = useMemo(() => {
     return rows.filter(r => {
       // Accounting never sees drafts ("active") — those reports
       // haven't been submitted yet and aren't ready for AP.
       if (isAccounting && r.status === 'active') return false
       if (statusFilter !== 'all' && r.status !== statusFilter) return false
+      // Time gate: past = event already started (incl. running),
+      // upcoming = strictly future.
+      if (timeFilter !== 'all' && r.event_start) {
+        const isUpcoming = r.event_start > todayIsoLocal
+        if (timeFilter === 'past' && isUpcoming) return false
+        if (timeFilter === 'upcoming' && !isUpcoming) return false
+      }
       if (canSeeAll) {
         // Superadmin: respect the dropdown ('all' shows everyone).
         if (userFilter !== 'all' && r.user_id !== userFilter) return false
@@ -187,7 +204,7 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
       }
       return true
     })
-  }, [rows, statusFilter, userFilter, canSeeAll, isAccounting, user?.id])
+  }, [rows, statusFilter, userFilter, timeFilter, todayIsoLocal, canSeeAll, isAccounting, user?.id])
 
   // For the new-report picker: events the user can see, minus events
   // that already have a report for this user.
@@ -232,7 +249,9 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
       <div className="card" style={{ marginBottom: 12, padding: 12 }}>
         <div style={{
           display: 'grid',
-          gridTemplateColumns: canSeeAll ? 'minmax(180px,1fr) minmax(200px,1fr)' : 'minmax(180px,1fr)',
+          gridTemplateColumns: canSeeAll
+            ? 'minmax(160px,1fr) minmax(160px,1fr) minmax(180px,1fr)'
+            : 'minmax(160px,1fr) minmax(160px,1fr)',
           gap: 10,
         }}>
           <div>
@@ -241,6 +260,14 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
               {(isAccounting ? STATUS_FILTERS_ACCOUNTING : STATUS_FILTERS).map(s => (
                 <option key={s.id} value={s.id}>{s.label}</option>
               ))}
+            </select>
+          </div>
+          <div>
+            <label className="fl">When</label>
+            <select value={timeFilter} onChange={e => setTimeFilter(e.target.value as any)} style={{ width: '100%' }}>
+              <option value="past">Past &amp; current events</option>
+              <option value="upcoming">Upcoming events</option>
+              <option value="all">All</option>
             </select>
           </div>
           {canSeeAll && (

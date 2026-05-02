@@ -18,6 +18,7 @@ import {
   STATUS_LABEL, STATUS_COLOR,
   formatCurrency, formatDateLong, todayIso,
 } from './expensesUtils'
+import { eventEndDate } from '@/lib/eventDates'
 import { broadcastExpenseStatusChanged } from './usePendingApprovals'
 import AddReceiptButton from './AddReceiptButton'
 import AddMileageButton from './AddMileageButton'
@@ -59,15 +60,23 @@ export default function ExpenseReportDetail({
   const hasContent = expenses.length > 0
     || Number(report?.comp_rate || 0) > 0
     || Number(report?.bonus_amount || 0) > 0
-  const canSubmit = isOwner && report?.status === 'active' && hasContent
-  const canApprove = isPartner && report?.status === 'submitted_pending_review'
-  const canRecall  = isOwner && report?.status === 'submitted_pending_review'
-  const canMarkPaid = (isPartner || isOwner || isAccounting) && report?.status === 'approved'
 
   const event: Event | undefined = useMemo(
     () => events.find(e => e.id === report?.event_id),
     [events, report?.event_id],
   )
+
+  // Owner can't submit until the event has ended. Prevents
+  // pre-event filing of expenses that may still change during the
+  // show. Admins / superadmins still gate on status only — they
+  // sometimes file on a buyer's behalf and may need an early path.
+  const eventHasEnded = event?.start_date
+    ? eventEndDate(event.start_date).getTime() < Date.now()
+    : false
+  const canSubmit = isOwner && report?.status === 'active' && hasContent && eventHasEnded
+  const canApprove = isPartner && report?.status === 'submitted_pending_review'
+  const canRecall  = isOwner && report?.status === 'submitted_pending_review'
+  const canMarkPaid = (isPartner || isOwner || isAccounting) && report?.status === 'approved'
 
   // Saved-indicator fade.
   const fadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -538,7 +547,12 @@ export default function ExpenseReportDetail({
             <button className="btn-primary"
               onClick={submitForReview}
               disabled={!canSubmit || submitting}
-              title={canSubmit ? '' : 'Add at least one expense or set a compensation amount before submitting.'}>
+              title={
+                canSubmit ? '' :
+                !hasContent ? 'Add at least one expense or set a compensation amount before submitting.' :
+                !eventHasEnded ? 'Submission unlocks once the event has ended.' :
+                ''
+              }>
               {submitting ? 'Submitting…' : 'Submit for Review'}
             </button>
           )}

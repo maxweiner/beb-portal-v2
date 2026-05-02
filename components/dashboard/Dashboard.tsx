@@ -311,8 +311,10 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Store performance table */}
+      <div className={user?.role === 'buyer' ? 'grid grid-cols-1 gap-6' : 'grid grid-cols-1 lg:grid-cols-3 gap-6'}>
+        {/* Store performance — admin / superadmin only. Buyers
+            don't need a team-wide store breakdown on their dash. */}
+        {user?.role !== 'buyer' && (
         <div className="lg:col-span-2 rounded-xl overflow-hidden" style={{ background: 'var(--card-bg)', border: '1px solid var(--pearl)', boxShadow: '0 2px 10px rgba(0,0,0,.04)' }}>
           <div style={{ background: 'var(--green-pale)', padding: '12px 20px', borderBottom: '1px solid var(--green3)', fontWeight: 900, fontSize: 13, color: 'var(--green-dark)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
             Store Performance — {year}
@@ -351,6 +353,7 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
             </div>
           )}
         </div>
+        )}
 
         {/* Lead sources */}
         <div className="card">
