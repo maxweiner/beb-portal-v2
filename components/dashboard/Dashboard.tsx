@@ -516,11 +516,11 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
         </div>
       </div>
 
-      {/* Top-3 podium leaderboard — admin / superadmin only. Buyers
-          rely on the "Standings" block above (full list with every
-          name); the podium hides everyone past 3rd, which made the
-          buyer dash feel like the leaderboard was missing names. */}
-      {!isBuyer && <Leaderboard events={events} users={users} buyers={buyers} />}
+      {/* Top-3 podium leaderboard. Visible to everyone, including
+          buyers — the sidebar "Standings" block above shows the
+          comprehensive list, and this podium gives the prize-tier
+          highlight. */}
+      <Leaderboard events={events} users={users} buyers={buyers} />
     </div>
   )
 }
