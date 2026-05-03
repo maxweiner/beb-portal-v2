@@ -62,7 +62,7 @@ WITH first_token AS (
      AND trunk_rep_user_id IS NULL
 ),
 unique_match AS (
-  SELECT ft.id AS store_id, MAX(u.id) AS user_id
+  SELECT ft.id AS store_id, (array_agg(u.id))[1] AS user_id
     FROM first_token ft
     JOIN public.users u
       ON u.active = TRUE
