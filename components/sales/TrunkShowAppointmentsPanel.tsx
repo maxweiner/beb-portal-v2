@@ -6,13 +6,15 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
+import { QRCodeSVG } from 'qrcode.react'
 import {
   listSlots, createSlot, bulkCreateSlots, bookSlot, setStatus,
   deleteSlot, generateBookingToken,
   type TrunkShowSlot, type TrunkShowAppointmentStatus,
 } from '@/lib/sales/trunkShowAppointments'
+import { makeSquareLogoDataUrl } from '@/lib/qr/squareLogo'
 import { supabase } from '@/lib/supabase'
-import type { TrunkShowHours } from '@/types'
+import type { TrunkShowHours, Store } from '@/types'
 
 const STATUS_LABEL: Record<TrunkShowAppointmentStatus, string> = {
   available: 'Open', booked: 'Booked', completed: 'Done', cancelled: 'Cancelled', no_show: 'No-show',
@@ -29,9 +31,10 @@ interface Props {
   trunkShowId: string
   hours: TrunkShowHours[]
   canWrite: boolean
+  store?: Store | null
 }
 
-export default function TrunkShowAppointmentsPanel({ trunkShowId, hours, canWrite }: Props) {
+export default function TrunkShowAppointmentsPanel({ trunkShowId, hours, canWrite, store }: Props) {
   const { user } = useApp()
   const [rows, setRows] = useState<TrunkShowSlot[]>([])
   const [loaded, setLoaded] = useState(false)
@@ -40,6 +43,23 @@ export default function TrunkShowAppointmentsPanel({ trunkShowId, hours, canWrit
   const [adderOpen, setAdderOpen] = useState(false)
   const [tokenUrl, setTokenUrl] = useState<string | null>(null)
   const [tokenBusy, setTokenBusy] = useState(false)
+  const [qrLogo, setQrLogo] = useState<string | null>(null)
+
+  // Build a square center-logo for the QR (store logo letterboxed, or
+  // initials on the store's primary color). Mirrors the buying-side QR
+  // pattern in StorePortalAccessCard.
+  useEffect(() => {
+    if (!tokenUrl || !store) return
+    let cancelled = false
+    void makeSquareLogoDataUrl({
+      logoUrl: store.store_image_url || null,
+      storeName: store.name || 'Store',
+      color: store.color_primary || '#1D6B44',
+      size: 256,
+    }).then(url => { if (!cancelled) setQrLogo(url) })
+      .catch(() => { if (!cancelled) setQrLogo(null) })
+    return () => { cancelled = true }
+  }, [tokenUrl, store])
 
   async function reload() {
     setError(null)
@@ -124,12 +144,30 @@ export default function TrunkShowAppointmentsPanel({ trunkShowId, hours, canWrit
       {tokenUrl && (
         <div style={{
           background: 'var(--green-pale)', border: '1px solid var(--green3)',
-          borderRadius: 8, padding: 10, marginBottom: 10,
-          display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+          borderRadius: 8, padding: 12, marginBottom: 10,
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
         }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--green-dark)' }}>📎 Share with the store:</span>
-          <code style={{ flex: 1, minWidth: 180, fontSize: 11, color: 'var(--ink)', overflow: 'auto', whiteSpace: 'nowrap' }}>{tokenUrl}</code>
-          <button onClick={() => navigator.clipboard?.writeText(tokenUrl).catch(() => {})} className="btn-outline btn-xs">Copy</button>
+          <div style={{ background: '#fff', padding: 6, borderRadius: 6, flexShrink: 0 }}>
+            <QRCodeSVG
+              value={tokenUrl}
+              size={104}
+              includeMargin={false}
+              level="H"
+              imageSettings={qrLogo ? {
+                src: qrLogo,
+                height: 104 * 0.22,
+                width: 104 * 0.22,
+                excavate: true,
+              } : undefined}
+            />
+          </div>
+          <div style={{ flex: 1, minWidth: 200, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--green-dark)' }}>📎 Share with the store:</span>
+            <code style={{ fontSize: 11, color: 'var(--ink)', overflow: 'auto', whiteSpace: 'nowrap', background: '#fff', padding: '6px 8px', borderRadius: 4 }}>{tokenUrl}</code>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={() => navigator.clipboard?.writeText(tokenUrl).catch(() => {})} className="btn-outline btn-xs">Copy link</button>
+            </div>
+          </div>
         </div>
       )}
 
