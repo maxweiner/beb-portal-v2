@@ -676,12 +676,12 @@ function TravelMatchSettings() {
     } finally { setSavingRadius(false) }
   }
 
-  async function runBackfill(force: boolean) {
+  async function runBackfill(endpoint: string, force: boolean) {
     setBusy(true); setErr(null); setResult(null)
     try {
       const { data: sess } = await supabase.auth.getSession()
       const token = sess?.session?.access_token
-      const res = await fetch('/api/admin/geocode-stores', {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -717,16 +717,24 @@ function TravelMatchSettings() {
       </div>
 
       <div style={{ paddingTop: 12, borderTop: '1px solid var(--pearl)' }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginBottom: 6 }}>One-time setup: geocode stores</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginBottom: 6 }}>One-time setup: geocode stores &amp; trade-show venues</div>
         <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 10 }}>
-          Distance matching needs lat/lon on each store. Click below to geocode everything that doesn't have coordinates yet (~$0.005 per lookup, takes ~5 seconds per 100 stores).
+          Distance matching needs lat/lon on each store and trade-show venue. Run the backfill once for each (~$0.005 per lookup, ~5 seconds per 100 rows).
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+          <button onClick={() => runBackfill('/api/admin/geocode-stores', false)} disabled={busy} className="btn-primary btn-sm">
+            {busy ? '…' : 'Geocode missing stores'}
+          </button>
+          <button onClick={() => runBackfill('/api/admin/geocode-stores', true)} disabled={busy} className="btn-outline btn-sm">
+            Force re-geocode stores
+          </button>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button onClick={() => runBackfill(false)} disabled={busy} className="btn-primary btn-sm">
-            {busy ? 'Geocoding…' : 'Geocode missing stores'}
+          <button onClick={() => runBackfill('/api/admin/geocode-trade-shows', false)} disabled={busy} className="btn-primary btn-sm">
+            {busy ? '…' : 'Geocode missing trade shows'}
           </button>
-          <button onClick={() => runBackfill(true)} disabled={busy} className="btn-outline btn-sm">
-            {busy ? '…' : 'Force re-geocode all'}
+          <button onClick={() => runBackfill('/api/admin/geocode-trade-shows', true)} disabled={busy} className="btn-outline btn-sm">
+            Force re-geocode trade shows
           </button>
         </div>
         {err && (
@@ -736,7 +744,7 @@ function TravelMatchSettings() {
         )}
         {result && (
           <div style={{ marginTop: 10, background: 'var(--green-pale)', border: '1px solid var(--green3)', color: 'var(--green-dark)', padding: '8px 10px', borderRadius: 6, fontSize: 13 }}>
-            Geocoded <strong>{result.geocoded}</strong> of <strong>{result.total}</strong> stores.
+            Geocoded <strong>{result.geocoded}</strong> of <strong>{result.total}</strong> rows.
             {result.failed.length > 0 && (
               <details style={{ marginTop: 6 }}>
                 <summary style={{ cursor: 'pointer' }}>{result.failed.length} need attention</summary>

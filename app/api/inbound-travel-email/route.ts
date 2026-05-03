@@ -158,73 +158,95 @@ Return this exact JSON structure:
       if (!Number.isNaN(raw) && raw > 0) radiusMiles = raw
     }
 
-    // Match to event by date range first, then geographic radius (when
-    // we have hotel coords + store coords), then city/state text.
-    const { data: events } = await sb.from('events')
-      .select('id, store_name, start_date, stores(city, state, lat, lon)')
-      .order('start_date', { ascending: false })
+    // Match against both buying events AND trade shows. We unify them
+    // into a single candidate list with a normalized shape so the
+    // date+radius/city logic runs once.
+    const [{ data: events }, { data: tradeShows }] = await Promise.all([
+      sb.from('events')
+        .select('id, store_name, start_date, stores(city, state, lat, lon)')
+        .order('start_date', { ascending: false }),
+      sb.from('trade_shows')
+        .select('id, name, venue_city, venue_state, lat, lon, start_date, end_date')
+        .is('deleted_at', null)
+        .order('start_date', { ascending: false }),
+    ])
 
-    let matchedEvent = null
+    type Candidate = {
+      kind: 'event' | 'trade_show'
+      ev: any
+      start: Date
+      end: Date
+      city: string
+      state: string
+      lat: number | null
+      lon: number | null
+    }
+    const candidates: Candidate[] = [
+      ...(events || []).map(ev => {
+        const start = new Date(ev.start_date + 'T12:00:00')
+        const end = new Date(ev.start_date + 'T12:00:00'); end.setDate(end.getDate() + 4)
+        const s = (ev.stores as any)
+        return { kind: 'event' as const, ev, start, end,
+          city: (s?.city || '').toLowerCase(), state: (s?.state || '').toLowerCase(),
+          lat: s?.lat ?? null, lon: s?.lon ?? null }
+      }),
+      ...(tradeShows || []).map(ts => ({
+        kind: 'trade_show' as const, ev: ts,
+        start: new Date(ts.start_date + 'T12:00:00'),
+        end: new Date(ts.end_date + 'T12:00:00'),
+        city: ((ts as any).venue_city || '').toLowerCase(),
+        state: ((ts as any).venue_state || '').toLowerCase(),
+        lat: (ts as any).lat ?? null, lon: (ts as any).lon ?? null,
+      })),
+    ]
+
+    let matched: Candidate | null = null
     if (parsed.travel_dates?.length > 0) {
       const travelDate = new Date(parsed.travel_dates[0])
+      const inDateRange = (c: Candidate) =>
+        travelDate >= new Date(c.start.getTime() - 3 * 86400000) && travelDate <= c.end
 
-      const inDateRange = (ev: any) => {
-        const evStart = new Date(ev.start_date + 'T12:00:00')
-        const evEnd = new Date(ev.start_date + 'T12:00:00')
-        evEnd.setDate(evEnd.getDate() + 4)
-        return travelDate >= new Date(evStart.getTime() - 3 * 86400000) && travelDate <= evEnd
-      }
-
-      // Hotel + radius path: when we have a geocoded hotel, require
-      // the candidate event's store to be within the radius. This is
-      // strictly stronger than the city/state text match.
       if (hotelGeo) {
-        const candidates = (events || [])
+        // Hotel with coords — require radius match. Pick closest.
+        const within = candidates
           .filter(inDateRange)
-          .map(ev => {
-            const s = (ev.stores as any)
-            const dist = distanceMiles(hotelGeo!, { lat: s?.lat ?? null, lon: s?.lon ?? null })
-            return { ev, dist }
-          })
+          .map(c => ({ c, dist: distanceMiles(hotelGeo!, { lat: c.lat, lon: c.lon }) }))
           .filter(x => x.dist <= radiusMiles)
           .sort((a, b) => a.dist - b.dist)
-        if (candidates.length > 0) matchedEvent = candidates[0].ev
-        // If no event is within radius, leave matchedEvent null so the
-        // reservation lands in the unassigned queue. Don't fall back to
-        // the looser city/state matching — that would defeat the radius.
+        if (within.length > 0) matched = within[0].c
       } else {
-        // Non-hotel reservation (flight, rental, or hotel without a
-        // geocodable address) — keep the original city/state + date
-        // logic so we don't regress flight/rental matching.
+        // Flight / rental / un-geocodable hotel — fall back to city/state.
         if (parsed.city) {
-          matchedEvent = events?.find(ev => {
-            if (!inDateRange(ev)) return false
-            const storeCity = (ev.stores as any)?.city?.toLowerCase() || ''
-            const storeState = (ev.stores as any)?.state?.toLowerCase() || ''
-            const parsedCity = parsed.city.toLowerCase()
-            const parsedState = (parsed.state || '').toLowerCase()
-            const cityMatch = storeCity.includes(parsedCity) || parsedCity.includes(storeCity)
-            const stateMatch = parsedState && (storeState.includes(parsedState) || parsedState.includes(storeState))
+          const parsedCity = parsed.city.toLowerCase()
+          const parsedState = (parsed.state || '').toLowerCase()
+          matched = candidates.find(c => {
+            if (!inDateRange(c)) return false
+            const cityMatch = c.city.includes(parsedCity) || parsedCity.includes(c.city)
+            const stateMatch = parsedState && (c.state.includes(parsedState) || parsedState.includes(c.state))
             return cityMatch || stateMatch
-          })
+          }) || null
         }
-        if (!matchedEvent) {
-          const dateMatches = (events || []).filter(inDateRange)
-          if (dateMatches.length === 1) matchedEvent = dateMatches[0]
+        if (!matched) {
+          const dateMatches = candidates.filter(inDateRange)
+          if (dateMatches.length === 1) matched = dateMatches[0]
           else if (dateMatches.length > 1) {
-            matchedEvent = dateMatches.reduce((closest, ev) => {
-              const evDiff = Math.abs(new Date(ev.start_date + 'T12:00:00').getTime() - travelDate.getTime())
-              const closestDiff = Math.abs(new Date(closest.start_date + 'T12:00:00').getTime() - travelDate.getTime())
-              return evDiff < closestDiff ? ev : closest
+            matched = dateMatches.reduce((closest, c) => {
+              const cDiff = Math.abs(c.start.getTime() - travelDate.getTime())
+              const closestDiff = Math.abs(closest.start.getTime() - travelDate.getTime())
+              return cDiff < closestDiff ? c : closest
             })
           }
         }
       }
     }
 
+    const matchedEvent = matched?.kind === 'event' ? matched.ev : null
+    const matchedTradeShow = matched?.kind === 'trade_show' ? matched.ev : null
+
     // Save reservation
     const { error } = await sb.from('travel_reservations').insert({
       event_id: matchedEvent?.id || null,
+      trade_show_id: matchedTradeShow?.id || null,
       buyer_id: buyer?.id || null,
       buyer_name: buyer?.name || fromEmail,
       type: parsed.type,
@@ -249,7 +271,9 @@ Return this exact JSON structure:
     const { data: resendKey } = await sb.from('settings').select('value').eq('key', 'resend_api_key').single()
     if (resendKey?.value && buyer) {
       const key = resendKey.value.replace(/"/g, '')
-      const eventName = matchedEvent?.store_name || 'an upcoming event'
+      const eventName = matchedEvent?.store_name
+        || matchedTradeShow?.name
+        || (buyer ? 'your unassigned travel queue (we couldn\'t auto-match an event)' : 'an upcoming event')
       await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
