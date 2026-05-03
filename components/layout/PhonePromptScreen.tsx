@@ -13,7 +13,7 @@ import type { User } from '@/types'
  * self-update path. Hidden once the user fills it in.
  */
 export default function PhonePromptScreen({ user }: { user: User }) {
-  const { reload } = useApp()
+  const { reload, setUser } = useApp()
   const [phone, setPhone] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -33,9 +33,13 @@ export default function PhonePromptScreen({ user }: { user: User }) {
       setBusy(false)
       return
     }
-    await reload()
-    // The context refresh will surface the updated user with phone set;
-    // the page-level guard in app/page.tsx will then route normally.
+    // The page-level guard in app/page.tsx checks `user.phone` directly.
+    // reload() refreshes the users[] array but does NOT re-derive the
+    // singular `user`, so we'd still be stuck on this screen. Patch
+    // the singular user immediately so the guard advances; reload()
+    // syncs the rest of the context in the background.
+    setUser({ ...user, phone })
+    void reload()
     setBusy(false)
   }
 
