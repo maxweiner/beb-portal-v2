@@ -3,6 +3,7 @@
 import { useApp } from '@/lib/context'
 import Login from '@/components/layout/Login'
 import PendingApprovalScreen from '@/components/layout/PendingApprovalScreen'
+import PhonePromptScreen from '@/components/layout/PhonePromptScreen'
 import Sidebar from '@/components/layout/Sidebar'
 import Dashboard from '@/components/dashboard/Dashboard'
 import AdminPanel from '@/components/admin/AdminPanel'
@@ -155,6 +156,9 @@ export default function Home() {
 
   if (!user) return <Login />
   if (user.role === 'pending') return <PendingApprovalScreen user={user} />
+  // Capture missing phone numbers after sign-in. Pending users skip this
+  // since they can't reach anywhere meaningful in the app yet.
+  if (!user.phone || user.phone.trim() === '') return <PhonePromptScreen user={user} />
 
   // Mobile layout
   if (isMobile) {
