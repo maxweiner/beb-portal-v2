@@ -8,11 +8,20 @@ import type { Event } from '@/types'
 interface TravelFolder { id: string; event_id: string; name: string; sort_order: number }
 interface TravelItem { id: string; folder_id: string; event_id: string; type: 'note' | 'image'; content: string; image_url: string; file_name: string }
 interface Reservation {
-  id: string; event_id: string; buyer_id: string; buyer_name: string
+  id: string; event_id: string | null; trade_show_id: string | null
+  buyer_id: string; buyer_name: string
   type: 'flight' | 'hotel' | 'rental_car'; vendor: string; confirmation_number: string
   details: any; check_in: string; check_out: string; departure_at: string; arrival_at: string
   amount: number; created_at: string
 }
+interface TradeShow {
+  id: string; name: string; venue_city: string | null; venue_state: string | null
+  start_date: string; end_date: string
+}
+type Selection =
+  | { kind: 'event'; id: string }
+  | { kind: 'trade_show'; id: string }
+  | { kind: 'unassigned' }
 interface Acknowledgment { id: string; event_id: string; buyer_id: string; type: string }
 
 const TYPE_LABELS: Record<string, { label: string; icon: string; color: string }> = {
@@ -23,12 +32,19 @@ const TYPE_LABELS: Record<string, { label: string; icon: string; color: string }
 
 export default function Travel() {
   const { events, stores, user } = useApp()
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
+  const [selection, setSelection] = useState<Selection | null>(null)
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState<'reservations' | 'folders'>('reservations')
   // Default to "my events" — what most users want to see; persists across sessions.
   const [scope, setScope] = useState<'mine' | 'all'>('mine')
   const [showPast, setShowPast] = useState(false)
+  const [tradeShows, setTradeShows] = useState<TradeShow[]>([])
+  const [unassignedCount, setUnassignedCount] = useState(0)
+  // Bumped to force ReservationsView/UnassignedView to re-fetch after a
+  // manual placement, so the unassigned badge + lists stay in sync.
+  const [refreshTick, setRefreshTick] = useState(0)
+  const bumpRefresh = () => setRefreshTick(t => t + 1)
+
   useEffect(() => {
     if (typeof window === 'undefined') return
     const saved = window.localStorage.getItem('beb-travel-scope')
@@ -39,6 +55,34 @@ export default function Travel() {
     window.localStorage.setItem('beb-travel-scope', scope)
   }, [scope])
 
+  // Load trade shows once. They're a small list, no need for context.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const { data } = await supabase.from('trade_shows')
+        .select('id, name, venue_city, venue_state, start_date, end_date')
+        .is('deleted_at', null)
+        .order('start_date', { ascending: false })
+      if (!cancelled) setTradeShows((data as TradeShow[]) || [])
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  // Live count of "unassigned to me" — drives the sidebar badge.
+  useEffect(() => {
+    if (!user?.id) return
+    let cancelled = false
+    ;(async () => {
+      const { count } = await supabase.from('travel_reservations')
+        .select('id', { count: 'exact', head: true })
+        .eq('buyer_id', user.id)
+        .is('event_id', null)
+        .is('trade_show_id', null)
+      if (!cancelled) setUnassignedCount(count || 0)
+    })()
+    return () => { cancelled = true }
+  }, [user?.id, refreshTick])
+
   const todayStr = new Date().toISOString().slice(0, 10)
   // An event has fully passed if today is after its last day. Events run
   // 3 days from start_date (matches the convention used elsewhere).
@@ -47,6 +91,7 @@ export default function Travel() {
     last.setDate(last.getDate() + 2)
     return last.toISOString().slice(0, 10) < todayStr
   }
+  const isPastTradeShow = (ts: TradeShow) => ts.end_date < todayStr
 
   const sorted = [...events].sort((a, b) => b.start_date.localeCompare(a.start_date))
   const scoped = scope === 'mine'
@@ -55,7 +100,12 @@ export default function Travel() {
   const pastCount = scoped.filter(isPast).length
   const visible = showPast ? scoped : scoped.filter(ev => !isPast(ev))
   const filtered = visible.filter(ev => ev.store_name?.toLowerCase().includes(search.toLowerCase()))
+  const visibleTradeShows = (showPast ? tradeShows : tradeShows.filter(ts => !isPastTradeShow(ts)))
+    .filter(ts => ts.name.toLowerCase().includes(search.toLowerCase()))
   const fmt = (ds: string) => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+
+  const selectedEvent = selection?.kind === 'event' ? events.find(e => e.id === selection.id) || null : null
+  const selectedTradeShow = selection?.kind === 'trade_show' ? tradeShows.find(t => t.id === selection.id) || null : null
 
   return (
     <div style={{ display: 'flex', height: 'calc(100vh - 60px)', overflow: 'hidden' }}>
@@ -91,11 +141,40 @@ export default function Travel() {
           )}
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
+          {/* Unassigned pin — only when there's something to action */}
+          {unassignedCount > 0 && (() => {
+            const sel = selection?.kind === 'unassigned'
+            return (
+              <div onClick={() => setSelection({ kind: 'unassigned' })}
+                style={{
+                  padding: '10px 16px', cursor: 'pointer', borderBottom: '1px solid var(--cream2)',
+                  background: sel ? '#FEF3C7' : '#FFFBEB',
+                  borderLeft: sel ? '3px solid #D97706' : '3px solid transparent',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
+                }}>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 13, color: '#92400E' }}>🛂 Unassigned</div>
+                  <div style={{ fontSize: 11, color: '#A16207', marginTop: 2 }}>Place these on an event or trade show</div>
+                </div>
+                <span style={{
+                  background: '#D97706', color: '#fff', fontSize: 11, fontWeight: 800,
+                  padding: '2px 8px', borderRadius: 999,
+                }}>{unassignedCount}</span>
+              </div>
+            )
+          })()}
+
+          {/* Buying events */}
+          {filtered.length > 0 && (
+            <div style={{ padding: '10px 16px 4px', fontSize: 10, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+              Buying Events
+            </div>
+          )}
           {filtered.map(ev => {
             const store = stores.find(s => s.id === ev.store_id)
-            const sel = selectedEvent?.id === ev.id
+            const sel = selection?.kind === 'event' && selection.id === ev.id
             return (
-              <div key={ev.id} onClick={() => setSelectedEvent(ev)}
+              <div key={ev.id} onClick={() => setSelection({ kind: 'event', id: ev.id })}
                 style={{
                   padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid var(--cream2)',
                   background: sel ? 'var(--green-pale)' : 'transparent',
@@ -106,27 +185,64 @@ export default function Travel() {
               </div>
             )
           })}
+
+          {/* Trade shows */}
+          {visibleTradeShows.length > 0 && (
+            <div style={{ padding: '10px 16px 4px', fontSize: 10, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+              Trade Shows
+            </div>
+          )}
+          {visibleTradeShows.map(ts => {
+            const sel = selection?.kind === 'trade_show' && selection.id === ts.id
+            return (
+              <div key={ts.id} onClick={() => setSelection({ kind: 'trade_show', id: ts.id })}
+                style={{
+                  padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid var(--cream2)',
+                  background: sel ? 'var(--green-pale)' : 'transparent',
+                  borderLeft: sel ? '3px solid var(--green)' : '3px solid transparent',
+                }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: sel ? 'var(--green-dark)' : 'var(--ink)' }}>🏢 {ts.name}</div>
+                <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>
+                  {[ts.venue_city, ts.venue_state].filter(Boolean).join(', ')}{(ts.venue_city || ts.venue_state) ? ' · ' : ''}{fmt(ts.start_date)}
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
 
       {/* Main content */}
       <div style={{ flex: 1, overflowY: 'auto', background: 'var(--cream2)' }}>
-        {!selectedEvent ? (
+        {!selection ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--mist)' }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>✈️</div>
             <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>Travel Share</div>
-            <div style={{ fontSize: 14 }}>Select an event to view travel details</div>
+            <div style={{ fontSize: 14 }}>Select an event or trade show to view travel details</div>
           </div>
-        ) : (
+        ) : selection.kind === 'unassigned' ? (
           <div style={{ padding: 24, maxWidth: 900, margin: '0 auto' }}>
-            {/* Header */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: '#A16207', marginBottom: 4 }}>Needs assignment</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)' }}>🛂 Your unassigned reservations</div>
+              <div style={{ fontSize: 13, color: 'var(--mist)', marginTop: 2 }}>The inbound parser couldn't auto-match these. Place each one on the right event or trade show.</div>
+            </div>
+            <UnassignedView
+              user={user}
+              events={events}
+              tradeShows={tradeShows}
+              stores={stores}
+              refreshTick={refreshTick}
+              onPlaced={bumpRefresh}
+            />
+          </div>
+        ) : selectedEvent ? (
+          <div style={{ padding: 24, maxWidth: 900, margin: '0 auto' }}>
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', marginBottom: 4 }}>Travel</div>
               <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)' }}>◆ {selectedEvent.store_name}</div>
               <div style={{ fontSize: 13, color: 'var(--mist)', marginTop: 2 }}>{selectedEvent.start_date}</div>
             </div>
 
-            {/* Tabs */}
             <div style={{ display: 'flex', gap: 4, background: 'var(--cream)', padding: 4, borderRadius: 'var(--r)', border: '1px solid var(--pearl)', width: 'fit-content', marginBottom: 20 }}>
               {([['reservations', '🗓 Reservations'], ['folders', '📁 Notes & Files']] as const).map(([id, label]) => (
                 <button key={id} onClick={() => setTab(id)} style={{
@@ -140,8 +256,209 @@ export default function Travel() {
             {tab === 'reservations' && <ReservationsView ev={selectedEvent} user={user} />}
             {tab === 'folders' && <FoldersView ev={selectedEvent} user={user} />}
           </div>
-        )}
+        ) : selectedTradeShow ? (
+          <div style={{ padding: 24, maxWidth: 900, margin: '0 auto' }}>
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', marginBottom: 4 }}>Trade Show</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)' }}>🏢 {selectedTradeShow.name}</div>
+              <div style={{ fontSize: 13, color: 'var(--mist)', marginTop: 2 }}>
+                {[selectedTradeShow.venue_city, selectedTradeShow.venue_state].filter(Boolean).join(', ')}
+                {(selectedTradeShow.venue_city || selectedTradeShow.venue_state) ? ' · ' : ''}
+                {fmt(selectedTradeShow.start_date)} – {fmt(selectedTradeShow.end_date)}
+              </div>
+            </div>
+            <TradeShowReservationsView ts={selectedTradeShow} user={user} />
+          </div>
+        ) : null}
       </div>
+    </div>
+  )
+}
+
+/* ── UNASSIGNED VIEW ── */
+function UnassignedView({ user, events, tradeShows, stores, refreshTick, onPlaced }: {
+  user: any; events: Event[]; tradeShows: TradeShow[]; stores: any[];
+  refreshTick: number; onPlaced: () => void
+}) {
+  const [rows, setRows] = useState<Reservation[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!user?.id) return
+    let cancelled = false
+    ;(async () => {
+      setLoading(true)
+      const { data } = await supabase.from('travel_reservations')
+        .select('*').eq('buyer_id', user.id).is('event_id', null).is('trade_show_id', null)
+        .order('created_at', { ascending: false })
+      if (!cancelled) {
+        setRows((data as Reservation[]) || [])
+        setLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [user?.id, refreshTick])
+
+  async function place(id: string, target: string) {
+    if (!target) return
+    const [kind, targetId] = target.split(':')
+    const body: Record<string, string> = {}
+    if (kind === 'event') body.event_id = targetId
+    if (kind === 'trade_show') body.trade_show_id = targetId
+    const { data: sess } = await supabase.auth.getSession()
+    const token = sess?.session?.access_token
+    const res = await fetch(`/api/travel-reservations/${id}/assign`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify(body),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) { alert(json?.error || 'Could not assign'); return }
+    setRows(p => p.filter(r => r.id !== id))
+    onPlaced()
+  }
+
+  if (loading) return <div style={{ padding: 24, textAlign: 'center', color: 'var(--mist)' }}>Loading…</div>
+  if (rows.length === 0) return (
+    <div style={{ padding: 30, textAlign: 'center', color: 'var(--mist)', background: '#fff', borderRadius: 8, border: '1px solid var(--pearl)' }}>
+      You're all caught up — no unassigned reservations.
+    </div>
+  )
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {rows.map(r => {
+        const meta = TYPE_LABELS[r.type] || { label: r.type, icon: '📌', color: '#374151' }
+        const date = r.check_in || r.departure_at || r.created_at
+        return (
+          <div key={r.id} style={{ background: '#fff', border: '1px solid var(--pearl)', borderRadius: 8, padding: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+              <div style={{ background: meta.color, borderRadius: 8, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: '#fff' }}>{meta.icon}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 800, fontSize: 14, color: 'var(--ink)' }}>{r.vendor || meta.label}</div>
+                <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>
+                  {r.confirmation_number && <>conf: <code style={{ fontSize: 11 }}>{r.confirmation_number}</code> · </>}
+                  {date && new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  {r.details?.city && <> · {r.details.city}{r.details.state ? `, ${r.details.state}` : ''}</>}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--ash)' }}>Place on:</label>
+              <select defaultValue="" onChange={e => place(r.id, e.target.value)}
+                style={{ flex: 1, padding: '6px 8px', fontSize: 13 }}>
+                <option value="">— Pick an event or trade show —</option>
+                {events.length > 0 && <optgroup label="Buying events">
+                  {events
+                    .slice()
+                    .sort((a, b) => b.start_date.localeCompare(a.start_date))
+                    .map(ev => {
+                      const s = stores.find(x => x.id === ev.store_id)
+                      return <option key={ev.id} value={`event:${ev.id}`}>
+                        {ev.store_name}{s?.city ? ` · ${s.city}, ${s.state}` : ''} · {ev.start_date}
+                      </option>
+                    })}
+                </optgroup>}
+                {tradeShows.length > 0 && <optgroup label="Trade shows">
+                  {tradeShows.map(ts => (
+                    <option key={ts.id} value={`trade_show:${ts.id}`}>
+                      {ts.name}{ts.venue_city ? ` · ${ts.venue_city}, ${ts.venue_state}` : ''} · {ts.start_date}
+                    </option>
+                  ))}
+                </optgroup>}
+              </select>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ── TRADE SHOW RESERVATIONS VIEW ──
+   Lighter than the event-side view: trade shows don't have a workers
+   roster, so we skip the missing-booking alerts and acknowledgments. */
+function TradeShowReservationsView({ ts, user }: { ts: TradeShow; user: any }) {
+  const [reservations, setReservations] = useState<Reservation[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filterType, setFilterType] = useState<string>('all')
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      setLoading(true)
+      const { data } = await supabase.from('travel_reservations')
+        .select('*').eq('trade_show_id', ts.id).order('created_at')
+      if (!cancelled) {
+        setReservations((data as Reservation[]) || [])
+        setLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [ts.id])
+
+  async function deleteReservation(id: string) {
+    if (!confirm('Delete this reservation?')) return
+    await supabase.from('travel_reservations').delete().eq('id', id)
+    setReservations(p => p.filter(r => r.id !== id))
+  }
+
+  const filtered = filterType === 'all' ? reservations : reservations.filter(r => r.type === filterType)
+  const totalCost = reservations.reduce((s, r) => s + (r.amount || 0), 0)
+
+  if (loading) return <div style={{ padding: 24, textAlign: 'center', color: 'var(--mist)' }}>Loading…</div>
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 4, background: 'var(--cream)', padding: 3, borderRadius: 'var(--r)', border: '1px solid var(--pearl)' }}>
+          {(['all', 'flight', 'hotel', 'rental_car'] as const).map(t => (
+            <button key={t} onClick={() => setFilterType(t)} style={{
+              padding: '4px 12px', borderRadius: 'calc(var(--r) - 2px)', border: 'none', cursor: 'pointer',
+              background: filterType === t ? 'var(--sidebar-bg)' : 'transparent',
+              color: filterType === t ? '#fff' : 'var(--ash)', fontWeight: 700, fontSize: 12,
+            }}>{t === 'all' ? 'All' : TYPE_LABELS[t].label}</button>
+          ))}
+        </div>
+        <div style={{ flex: 1 }} />
+        <div style={{ fontSize: 12, color: 'var(--mist)' }}>
+          {reservations.length} reservation{reservations.length === 1 ? '' : 's'}
+          {totalCost > 0 && <> · ${totalCost.toFixed(2)}</>}
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div style={{ padding: 24, textAlign: 'center', background: '#fff', border: '1px solid var(--pearl)', borderRadius: 8, color: 'var(--mist)' }}>
+          No reservations yet. Forward travel confirmations to <strong>travel@bebllp.com</strong> and they'll auto-attach by date + venue.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {filtered.map(r => {
+            const meta = TYPE_LABELS[r.type] || { label: r.type, icon: '📌', color: '#374151' }
+            const date = r.check_in || r.departure_at || r.created_at
+            return (
+              <div key={r.id} style={{ background: '#fff', border: '1px solid var(--pearl)', borderRadius: 8, padding: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ background: meta.color, borderRadius: 8, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: '#fff' }}>{meta.icon}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: 14, color: 'var(--ink)' }}>{r.vendor || meta.label}</div>
+                    <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>
+                      {r.buyer_name && <>{r.buyer_name} · </>}
+                      {r.confirmation_number && <>conf: <code style={{ fontSize: 11 }}>{r.confirmation_number}</code> · </>}
+                      {date && new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {r.amount > 0 && <> · ${r.amount.toFixed(2)}</>}
+                    </div>
+                  </div>
+                  <button onClick={() => deleteReservation(r.id)}
+                    style={{ background: 'transparent', border: '1px solid var(--pearl)', borderRadius: 6, padding: '4px 8px', fontSize: 11, color: 'var(--mist)', cursor: 'pointer' }}>
+                    Delete
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
