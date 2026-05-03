@@ -2,6 +2,7 @@
 
 import { useApp } from '@/lib/context'
 import Login from '@/components/layout/Login'
+import PendingApprovalScreen from '@/components/layout/PendingApprovalScreen'
 import Sidebar from '@/components/layout/Sidebar'
 import Dashboard from '@/components/dashboard/Dashboard'
 import AdminPanel from '@/components/admin/AdminPanel'
@@ -153,6 +154,7 @@ export default function Home() {
   }
 
   if (!user) return <Login />
+  if (user.role === 'pending') return <PendingApprovalScreen user={user} />
 
   // Mobile layout
   if (isMobile) {

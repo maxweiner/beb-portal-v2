@@ -145,8 +145,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const { users: loadedUsers } = await reloadRef.current(cachedBrand)
       if (!mounted) return
 
-      const userData = loadedUsers.find(u => u.email === email)
-      if (!userData || !userData.active) {
+      let userData = loadedUsers.find(u => u.email === email)
+
+      // First-time Google sign-in (no public.users row yet) — self-provision
+      // a row with role='pending', active=false. The Pending Approval screen
+      // surfaces them; an admin promotes via Admin Panel → Users & Roles.
+      if (!userData) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession()
+          const token = session?.access_token
+          const res = await fetch('/api/auth/self-provision', {
+            method: 'POST',
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          })
+          if (res.ok) {
+            const refetch = await reloadRef.current(cachedBrand)
+            userData = refetch.users.find(u => u.email === email)
+          }
+        } catch { /* fall through to bounce below */ }
+      }
+
+      // Bounce only if there's still no row, OR the user is inactive AND
+      // not in the 'pending' state (deactivated accounts shouldn't see the
+      // pending screen — they get the same blank-login bounce as before).
+      if (!userData || (!userData.active && userData.role !== 'pending')) {
         setUserState(null)
         setLoading(false)
         return
