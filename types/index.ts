@@ -35,6 +35,10 @@ export interface User {
   /** NavPage IDs the user has pinned to the top of their sidebar. Order
    *  is preserved (display order in the ★ Pinned section). Empty = no pins. */
   pinned_pages?: string[]
+  /** Multi-role: every role assigned to this user via the user_roles
+   *  join table. Always includes the primary `role` field. Used by
+   *  useRoleModules() to UNION module access across roles. */
+  roles?: string[]
 }
 
 // ── Expenses & Invoicing module ──────────────────────────────

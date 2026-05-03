@@ -59,6 +59,41 @@ function UsersTab() {
   const [mergeTargetId, setMergeTargetId] = useState<string>('')
   const [mergeBusy, setMergeBusy] = useState(false)
   const [mergeError, setMergeError] = useState<string | null>(null)
+  const [allRoles, setAllRoles] = useState<Array<{ id: string; label: string }>>([])
+  const [addingRoleFor, setAddingRoleFor] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const { data } = await supabase.from('roles').select('id, label').order('id')
+      if (!cancelled && data) setAllRoles(data as Array<{ id: string; label: string }>)
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  const addExtraRole = async (uid: string, roleId: string) => {
+    setAddingRoleFor(null)
+    const { error } = await supabase.from('user_roles').insert({ user_id: uid, role_id: roleId })
+    if (error) {
+      alert(`Failed to add role: ${error.message}`)
+      return
+    }
+    reload()
+  }
+
+  const removeExtraRole = async (uid: string, roleId: string) => {
+    if (!confirm(`Remove the "${roleId}" role from this user?`)) return
+    const { error } = await supabase
+      .from('user_roles')
+      .delete()
+      .eq('user_id', uid)
+      .eq('role_id', roleId)
+    if (error) {
+      alert(`Failed to remove role: ${error.message}`)
+      return
+    }
+    reload()
+  }
 
   useEffect(() => {
     const sorted = [...users].sort((a, b) => ((a as any).sort_order || 0) - ((b as any).sort_order || 0))
@@ -80,8 +115,17 @@ function UsersTab() {
   }
 
   const changeRole = async (uid: string, newRole: Role) => {
-    if (!confirm(`Change role to ${newRole}?`)) return
+    if (!confirm(`Change primary role to ${newRole}?`)) return
+    // Find the current primary so we can drop it from user_roles.
+    // Without this the user accumulates a stale `roles` entry every
+    // time they're promoted (since the sync trigger only inserts).
+    const target = orderedUsers.find(u => u.id === uid)
+    const oldRole = target?.role
     await supabase.from('users').update({ role: newRole }).eq('id', uid)
+    if (oldRole && oldRole !== newRole) {
+      await supabase.from('user_roles').delete()
+        .eq('user_id', uid).eq('role_id', oldRole)
+    }
     reload()
   }
 
@@ -325,15 +369,76 @@ function UsersTab() {
 
               {u.id !== me?.id && (
                 <select value={u.role} onChange={e => changeRole(u.id, e.target.value as Role)}
-                  style={{ fontSize: 12, padding: '5px 28px 5px 10px', width: 'auto', fontWeight: 700 }}>
-                  <option value="pending">Pending</option>
-                  <option value="buyer">Buyer</option>
-                  <option value="admin">Buyer Admin</option>
-                  {isSuperAdmin && <option value="superadmin">Superadmin</option>}
-                  <option value="marketing">Marketing</option>
-                  <option value="accounting">Accounting</option>
+                  style={{ fontSize: 12, padding: '5px 28px 5px 10px', width: 'auto', fontWeight: 700 }}
+                  title="Primary role">
+                  {allRoles
+                    .filter(r => r.id !== 'superadmin' || isSuperAdmin)
+                    .map(r => (
+                      <option key={r.id} value={r.id}>{r.label || r.id}</option>
+                    ))
+                  }
                 </select>
               )}
+
+              {/* Additional roles (multi-role) */}
+              {(() => {
+                const extras = (u.roles || []).filter(r => r !== u.role)
+                const available = allRoles
+                  .filter(r => r.id !== u.role && !extras.includes(r.id))
+                  .filter(r => r.id !== 'superadmin' || isSuperAdmin)
+                return (
+                  <>
+                    {extras.map(roleId => {
+                      const def = allRoles.find(r => r.id === roleId)
+                      return (
+                        <span key={roleId} style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 6,
+                          background: '#EDE9FE', color: '#5B21B6',
+                          padding: '3px 4px 3px 10px', borderRadius: 99,
+                          fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap',
+                        }}>
+                          {def?.label || roleId}
+                          {u.id !== me?.id && (
+                            <button
+                              onClick={() => removeExtraRole(u.id, roleId)}
+                              style={{
+                                border: 'none', background: 'rgba(91,33,182,.15)',
+                                color: '#5B21B6', borderRadius: '50%',
+                                width: 18, height: 18, padding: 0,
+                                fontSize: 11, lineHeight: '16px', cursor: 'pointer',
+                              }}
+                              title={`Remove ${def?.label || roleId} role`}
+                            >×</button>
+                          )}
+                        </span>
+                      )
+                    })}
+                    {u.id !== me?.id && available.length > 0 && (
+                      addingRoleFor === u.id ? (
+                        <select
+                          autoFocus
+                          defaultValue=""
+                          onChange={e => e.target.value && addExtraRole(u.id, e.target.value)}
+                          onBlur={() => setAddingRoleFor(null)}
+                          style={{ fontSize: 12, padding: '5px 28px 5px 10px', width: 'auto', fontWeight: 700 }}
+                        >
+                          <option value="">Pick role…</option>
+                          {available.map(r => (
+                            <option key={r.id} value={r.id}>+ {r.label || r.id}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <button
+                          onClick={() => setAddingRoleFor(u.id)}
+                          className="btn-outline btn-xs"
+                          title="Grant an additional role"
+                          style={{ borderStyle: 'dashed' }}
+                        >+ role</button>
+                      )
+                    )}
+                  </>
+                )
+              })()}
 
               <button onClick={() => toggleActive(u.id, u.active)} className="btn-outline btn-xs">
                 {u.active ? 'Deactivate' : 'Activate'}

@@ -73,8 +73,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const [usersRes, storesRes, eventsRes, shipmentsRes] = await Promise.all([
+        const [usersRes, userRolesRes, storesRes, eventsRes, shipmentsRes] = await Promise.all([
           supabase.from('users').select('*').order('name'),
+          supabase.from('user_roles').select('user_id, role_id'),
           supabase.from('stores').select('*').eq('brand', currentBrand).order('name'),
           supabase
             .from('events')
@@ -94,7 +95,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           continue
         }
 
-        const nextUsers = usersRes.data && usersRes.data.length > 0 ? usersRes.data : []
+        // Group user_roles by user_id and merge onto each user as `roles`.
+        // Always include `users.role` (primary) so first-load before the
+        // sync trigger backfill can't strand an existing user without
+        // their primary granting access.
+        const rolesByUser = new Map<string, string[]>()
+        for (const row of (userRolesRes.data || []) as { user_id: string; role_id: string }[]) {
+          if (!rolesByUser.has(row.user_id)) rolesByUser.set(row.user_id, [])
+          rolesByUser.get(row.user_id)!.push(row.role_id)
+        }
+        const baseUsers = usersRes.data && usersRes.data.length > 0 ? usersRes.data : []
+        const nextUsers = baseUsers.map((u: any) => {
+          const fromTable = rolesByUser.get(u.id) || []
+          const merged = u.role ? Array.from(new Set([...fromTable, u.role])) : fromTable
+          return { ...u, roles: merged }
+        })
         if (nextUsers.length > 0) setUsers(nextUsers)
         if (storesRes.data) setStoresState(storesRes.data)
         if (eventsRes.data) {

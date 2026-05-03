@@ -43,8 +43,17 @@ export function useRoleModules(): RoleModulesState {
   const { user } = useApp()
   const [state, setState] = useState<RoleModulesState>(EMPTY_STATE)
 
+  // UNION across every role the user has (multi-role).
+  // user.roles is populated by lib/context.tsx and always includes
+  // user.role. Read-write wins: if any role grants WRITE, the module
+  // is read-write even when a different role grants only read.
+  const allRoles = (user?.roles && user.roles.length > 0)
+    ? user.roles
+    : (user?.role ? [user.role] : [])
+  const rolesKey = allRoles.slice().sort().join(',')
+
   useEffect(() => {
-    if (!user?.role) {
+    if (allRoles.length === 0) {
       const modules = new Set<ModuleId>(ALWAYS_ALLOWED)
       const readOnly = new Set<ModuleId>()
       setState({
@@ -56,20 +65,22 @@ export function useRoleModules(): RoleModulesState {
     let cancelled = false
     ;(async () => {
       const { data, error } = await supabase.from('role_modules')
-        .select('module_id, can_write').eq('role_id', user.role)
+        .select('module_id, can_write').in('role_id', allRoles)
       if (cancelled) return
       const modules = new Set<ModuleId>(ALWAYS_ALLOWED)
-      const readOnly = new Set<ModuleId>()
+      const writableModules = new Set<ModuleId>()
       if (!error && data) {
         for (const row of data as { module_id: string; can_write: boolean | null }[]) {
           modules.add(row.module_id)
-          if (row.can_write === false) readOnly.add(row.module_id)
+          if (row.can_write !== false) writableModules.add(row.module_id)
         }
       }
-      // Per-user flag bonuses — additive on top of role grants.
-      // Bonuses always grant write (can't read-only via flag).
-      if (user.is_partner) { modules.add('financials'); readOnly.delete('financials') }
-      if (user.marketing_access) { modules.add('marketing'); readOnly.delete('marketing') }
+      const readOnly = new Set<ModuleId>()
+      modules.forEach(m => {
+        if (!writableModules.has(m) && !ALWAYS_ALLOWED.includes(m)) readOnly.add(m)
+      })
+      if (user?.is_partner) { modules.add('financials'); readOnly.delete('financials') }
+      if (user?.marketing_access) { modules.add('marketing'); readOnly.delete('marketing') }
       setState({
         modules, readOnly, loaded: true,
         canWrite: (id) => modules.has(id) && !readOnly.has(id),
@@ -77,7 +88,7 @@ export function useRoleModules(): RoleModulesState {
     })()
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, user?.role, user?.is_partner, user?.marketing_access])
+  }, [user?.id, rolesKey, user?.is_partner, user?.marketing_access])
 
   return state
 }
