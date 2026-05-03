@@ -318,6 +318,14 @@ function UnassignedView({ user, events, tradeShows, stores, refreshTick, onPlace
     onPlaced()
   }
 
+  async function deleteReservation(id: string) {
+    if (!confirm('Delete this reservation? This cannot be undone.')) return
+    const { error } = await supabase.from('travel_reservations').delete().eq('id', id)
+    if (error) { alert(error.message); return }
+    setRows(p => p.filter(r => r.id !== id))
+    onPlaced()
+  }
+
   if (loading) return <div style={{ padding: 24, textAlign: 'center', color: 'var(--mist)' }}>Loading…</div>
   if (rows.length === 0) return (
     <div style={{ padding: 30, textAlign: 'center', color: 'var(--mist)', background: '#fff', borderRadius: 8, border: '1px solid var(--pearl)' }}>
@@ -342,6 +350,11 @@ function UnassignedView({ user, events, tradeShows, stores, refreshTick, onPlace
                   {r.details?.city && <> · {r.details.city}{r.details.state ? `, ${r.details.state}` : ''}</>}
                 </div>
               </div>
+              <button onClick={() => deleteReservation(r.id)}
+                title="Delete reservation"
+                style={{ background: 'transparent', border: '1px solid var(--pearl)', borderRadius: 6, padding: '4px 10px', fontSize: 12, color: '#B91C1C', cursor: 'pointer', fontWeight: 700 }}>
+                Delete
+              </button>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--ash)' }}>Place on:</label>
