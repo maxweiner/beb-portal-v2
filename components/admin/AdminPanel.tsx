@@ -55,6 +55,10 @@ function UsersTab() {
   const [orderedUsers, setOrderedUsers] = useState<typeof users>([])
   const [dragId, setDragId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
+  const [mergeFor, setMergeFor] = useState<any>(null)
+  const [mergeTargetId, setMergeTargetId] = useState<string>('')
+  const [mergeBusy, setMergeBusy] = useState(false)
+  const [mergeError, setMergeError] = useState<string | null>(null)
 
   useEffect(() => {
     const sorted = [...users].sort((a, b) => ((a as any).sort_order || 0) - ((b as any).sort_order || 0))
@@ -113,6 +117,35 @@ function UsersTab() {
     }).catch(() => {})
     setEditingUser(null)
     reload()
+  }
+
+  const submitMerge = async () => {
+    if (!mergeFor || !mergeTargetId) return
+    setMergeBusy(true)
+    setMergeError(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      const res = await fetch('/api/admin/merge-pending', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ pendingUserId: mergeFor.id, targetUserId: mergeTargetId }),
+      })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        throw new Error(json?.error || `Merge failed (${res.status})`)
+      }
+      setMergeFor(null)
+      setMergeTargetId('')
+      reload()
+    } catch (e: any) {
+      setMergeError(e?.message || 'Merge failed')
+    } finally {
+      setMergeBusy(false)
+    }
   }
 
   const deleteUser = async (uid: string, name: string) => {
@@ -306,6 +339,17 @@ function UsersTab() {
                 {u.active ? 'Deactivate' : 'Activate'}
               </button>
 
+              {u.role === 'pending' && (
+                <button
+                  onClick={() => { setMergeFor(u); setMergeTargetId(''); setMergeError(null) }}
+                  className="btn-outline btn-xs"
+                  style={{ borderColor: '#92400E', color: '#92400E' }}
+                  title="If this user already exists under another email, merge their new login into the existing account."
+                >
+                  🔗 Merge
+                </button>
+              )}
+
               {isAdmin && (
                 <label onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', userSelect: 'none' }}>
                   <div onClick={() => toggleBuyer(u)} style={{
@@ -330,6 +374,70 @@ function UsersTab() {
         ))}
       </div>
       ))}
+
+      {/* Merge Pending User Modal */}
+      {mergeFor && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => mergeBusy ? null : setMergeFor(null)}
+        >
+          <div
+            style={{ background: '#fff', borderRadius: 12, padding: 28, width: 480, maxWidth: '90vw' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 8 }}>Merge into existing user</div>
+            <div style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 18, lineHeight: 1.5 }}>
+              Pick the existing user that <strong>{mergeFor.email}</strong> should be merged into.
+              The pending row will be deleted and <strong>{mergeFor.email}</strong> will be added as
+              an alternate email on the chosen user — they&apos;ll be able to sign in with either
+              address going forward.
+            </div>
+            <div className="field">
+              <label>Existing user</label>
+              <select
+                value={mergeTargetId}
+                onChange={e => setMergeTargetId(e.target.value)}
+                disabled={mergeBusy}
+              >
+                <option value="">Select a user…</option>
+                {orderedUsers
+                  .filter(u => u.role !== 'pending' && u.id !== mergeFor.id)
+                  .sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email))
+                  .map(u => (
+                    <option key={u.id} value={u.id}>
+                      {u.name || '(no name)'} — {u.email} ({u.role})
+                    </option>
+                  ))
+                }
+              </select>
+            </div>
+            {mergeError && (
+              <div style={{
+                background: '#FEE2E2', color: '#991B1B',
+                padding: '10px 14px', borderRadius: 8,
+                fontSize: 13, marginTop: 10,
+              }}>{mergeError}</div>
+            )}
+            <div style={{ display: 'flex', gap: 12, marginTop: 22 }}>
+              <button
+                onClick={submitMerge}
+                disabled={!mergeTargetId || mergeBusy}
+                className="btn-primary"
+                style={{ opacity: (!mergeTargetId || mergeBusy) ? .6 : 1 }}
+              >
+                {mergeBusy ? 'Merging…' : 'Merge'}
+              </button>
+              <button
+                onClick={() => setMergeFor(null)}
+                disabled={mergeBusy}
+                className="btn-outline"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit User Modal */}
       {editingUser && (

@@ -145,7 +145,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const { users: loadedUsers } = await reloadRef.current(cachedBrand)
       if (!mounted) return
 
-      let userData = loadedUsers.find(u => u.email === email)
+      // Case-insensitive primary-email match + alternate_emails match.
+      // Google normalizes JWT emails to lowercase; existing user rows
+      // may have mixed-case primary emails or list this email as an
+      // alternate (e.g. work + personal alias).
+      const lcEmail = email.toLowerCase()
+      const matchesEmail = (u: typeof loadedUsers[number]) =>
+        u.email.toLowerCase() === lcEmail ||
+        (u.alternate_emails || []).some(a => (a || '').toLowerCase() === lcEmail)
+      let userData = loadedUsers.find(matchesEmail)
 
       // First-time Google sign-in (no public.users row yet) — self-provision
       // a row with role='pending', active=false. The Pending Approval screen
@@ -160,7 +168,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           })
           if (res.ok) {
             const refetch = await reloadRef.current(cachedBrand)
-            userData = refetch.users.find(u => u.email === email)
+            userData = refetch.users.find(matchesEmail)
           }
         } catch { /* fall through to bounce below */ }
       }

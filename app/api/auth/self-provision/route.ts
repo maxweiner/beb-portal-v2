@@ -46,10 +46,19 @@ export async function POST(req: Request) {
   const email = authUser.email.toLowerCase()
   const auth_id = authUser.id
 
-  const { data: existing } = await sb.from('users')
-    .select('id, role, active')
-    .eq('email', email)
-    .maybeSingle()
+  // Case-insensitive primary OR alternate_emails match. Mirrors
+  // lib/context.tsx so a user whose row stores mixed-case email,
+  // or whose Google address is in alternate_emails, doesn't get
+  // a duplicate pending stub created. Fetches with service-role
+  // and filters in JS — the user count is small enough that the
+  // round-trip cost beats fighting PostgREST's array-contains
+  // syntax on a one-off lookup.
+  const { data: allUsers } = await sb.from('users')
+    .select('id, role, active, email, alternate_emails')
+  const existing = (allUsers || []).find(u =>
+    (u.email || '').toLowerCase() === email ||
+    (u.alternate_emails || []).some((a: string) => (a || '').toLowerCase() === email)
+  )
   if (existing) {
     return NextResponse.json({ ok: true, status: 'existing', userId: existing.id })
   }
