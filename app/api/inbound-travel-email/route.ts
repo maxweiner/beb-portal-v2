@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
+import { geocodeAddress, distanceMiles } from '@/lib/geocoding'
 
 const sb = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -136,50 +137,87 @@ Return this exact JSON structure:
       }) || buyer
     }
 
-    // Match to event by date range first, then city/state
+    // Geocode the hotel address (only meaningful for type=hotel; flights
+    // and rentals don't have a useful address to geocode). Failures are
+    // non-fatal — we just skip the radius filter for that reservation.
+    let hotelGeo: { lat: number; lon: number } | null = null
+    if (parsed.type === 'hotel') {
+      const addr = (parsed.details?.address || '').trim()
+      if (addr) {
+        const r = await geocodeAddress(addr)
+        if (r) hotelGeo = { lat: r.lat, lon: r.lon }
+      }
+    }
+
+    // Resolve the radius from settings (default 25mi). Stored as raw
+    // JSON number string (e.g. '25') by the Settings UI.
+    let radiusMiles = 25
+    const { data: radiusSetting } = await sb.from('settings').select('value').eq('key', 'travel.match_radius_miles').maybeSingle()
+    if (radiusSetting?.value != null) {
+      const raw = typeof radiusSetting.value === 'number' ? radiusSetting.value : parseInt(String(radiusSetting.value).replace(/[^\d]/g, ''))
+      if (!Number.isNaN(raw) && raw > 0) radiusMiles = raw
+    }
+
+    // Match to event by date range first, then geographic radius (when
+    // we have hotel coords + store coords), then city/state text.
     const { data: events } = await sb.from('events')
-      .select('id, store_name, start_date, stores(city, state)')
+      .select('id, store_name, start_date, stores(city, state, lat, lon)')
       .order('start_date', { ascending: false })
 
     let matchedEvent = null
     if (parsed.travel_dates?.length > 0) {
       const travelDate = new Date(parsed.travel_dates[0])
-      
-      // First try: match by city name (exact or partial)
-      if (parsed.city) {
-        matchedEvent = events?.find(ev => {
-          const evStart = new Date(ev.start_date + 'T12:00:00')
-          const evEnd = new Date(ev.start_date + 'T12:00:00')
-          evEnd.setDate(evEnd.getDate() + 4)
-          const dateMatch = travelDate >= new Date(evStart.getTime() - 3 * 86400000) && travelDate <= evEnd
-          const storeCity = (ev.stores as any)?.city?.toLowerCase() || ''
-          const storeState = (ev.stores as any)?.state?.toLowerCase() || ''
-          const parsedCity = parsed.city.toLowerCase()
-          const parsedState = (parsed.state || '').toLowerCase()
-          const cityMatch = storeCity.includes(parsedCity) || parsedCity.includes(storeCity)
-          const stateMatch = parsedState && (storeState.includes(parsedState) || parsedState.includes(storeState))
-          return dateMatch && (cityMatch || stateMatch)
-        })
+
+      const inDateRange = (ev: any) => {
+        const evStart = new Date(ev.start_date + 'T12:00:00')
+        const evEnd = new Date(ev.start_date + 'T12:00:00')
+        evEnd.setDate(evEnd.getDate() + 4)
+        return travelDate >= new Date(evStart.getTime() - 3 * 86400000) && travelDate <= evEnd
       }
 
-      // Second try: if no city match, just match by date range (closest event)
-      if (!matchedEvent) {
-        const dateMatches = events?.filter(ev => {
-          const evStart = new Date(ev.start_date + 'T12:00:00')
-          const evEnd = new Date(ev.start_date + 'T12:00:00')
-          evEnd.setDate(evEnd.getDate() + 4)
-          return travelDate >= new Date(evStart.getTime() - 3 * 86400000) && travelDate <= evEnd
-        })
-        // Pick the closest event by date
-        if (dateMatches && dateMatches.length === 1) {
-          matchedEvent = dateMatches[0]
-        } else if (dateMatches && dateMatches.length > 1) {
-          // Multiple events on same dates - pick closest by start date
-          matchedEvent = dateMatches.reduce((closest, ev) => {
-            const evDiff = Math.abs(new Date(ev.start_date + 'T12:00:00').getTime() - travelDate.getTime())
-            const closestDiff = Math.abs(new Date(closest.start_date + 'T12:00:00').getTime() - travelDate.getTime())
-            return evDiff < closestDiff ? ev : closest
+      // Hotel + radius path: when we have a geocoded hotel, require
+      // the candidate event's store to be within the radius. This is
+      // strictly stronger than the city/state text match.
+      if (hotelGeo) {
+        const candidates = (events || [])
+          .filter(inDateRange)
+          .map(ev => {
+            const s = (ev.stores as any)
+            const dist = distanceMiles(hotelGeo!, { lat: s?.lat ?? null, lon: s?.lon ?? null })
+            return { ev, dist }
           })
+          .filter(x => x.dist <= radiusMiles)
+          .sort((a, b) => a.dist - b.dist)
+        if (candidates.length > 0) matchedEvent = candidates[0].ev
+        // If no event is within radius, leave matchedEvent null so the
+        // reservation lands in the unassigned queue. Don't fall back to
+        // the looser city/state matching — that would defeat the radius.
+      } else {
+        // Non-hotel reservation (flight, rental, or hotel without a
+        // geocodable address) — keep the original city/state + date
+        // logic so we don't regress flight/rental matching.
+        if (parsed.city) {
+          matchedEvent = events?.find(ev => {
+            if (!inDateRange(ev)) return false
+            const storeCity = (ev.stores as any)?.city?.toLowerCase() || ''
+            const storeState = (ev.stores as any)?.state?.toLowerCase() || ''
+            const parsedCity = parsed.city.toLowerCase()
+            const parsedState = (parsed.state || '').toLowerCase()
+            const cityMatch = storeCity.includes(parsedCity) || parsedCity.includes(storeCity)
+            const stateMatch = parsedState && (storeState.includes(parsedState) || parsedState.includes(storeState))
+            return cityMatch || stateMatch
+          })
+        }
+        if (!matchedEvent) {
+          const dateMatches = (events || []).filter(inDateRange)
+          if (dateMatches.length === 1) matchedEvent = dateMatches[0]
+          else if (dateMatches.length > 1) {
+            matchedEvent = dateMatches.reduce((closest, ev) => {
+              const evDiff = Math.abs(new Date(ev.start_date + 'T12:00:00').getTime() - travelDate.getTime())
+              const closestDiff = Math.abs(new Date(closest.start_date + 'T12:00:00').getTime() - travelDate.getTime())
+              return evDiff < closestDiff ? ev : closest
+            })
+          }
         }
       }
     }
@@ -198,6 +236,9 @@ Return this exact JSON structure:
       arrival_at: parsed.arrival_at || null,
       check_in: parsed.check_in || null,
       check_out: parsed.check_out || null,
+      lat: hotelGeo?.lat ?? null,
+      lon: hotelGeo?.lon ?? null,
+      geocoded_at: hotelGeo ? new Date().toISOString() : null,
       raw_email: (cleanText || cleanHtml).slice(0, 5000),
       parsed_at: new Date().toISOString(),
     })
