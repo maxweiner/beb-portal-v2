@@ -393,27 +393,27 @@ export default function Settings() {
       )}
 
       {/* Office Staff Notifications — admin / superadmin / partner.
-          Configure who gets emailed when a sales rep submits a
+          Configure who gets emailed when a trunk rep submits a
           special request on a trunk show. */}
       {(user?.role === 'admin' || user?.role === 'superadmin' || user?.is_partner) && (
         <CollapsibleCard
           storageKey="settings-office-staff-recipients"
           title="📣 Office Staff Notifications"
-          subtitle="Who gets emailed when a sales rep submits a special request on a trunk show. Add portal users (uses their portal email) or external addresses."
+          subtitle="Who gets emailed when a trunk rep submits a special request on a trunk show. Add portal users (uses their portal email) or external addresses."
         >
           <OfficeStaffRecipientsPanel />
         </CollapsibleCard>
       )}
 
-      {/* Sales Rep Territories — admin / superadmin / partner.
+      {/* Trunk Rep Territories — admin / superadmin / partner.
           Maps states → reps so newly-created leads with a
           matching state auto-assign on save. Existing leads
           aren't re-routed. */}
       {(user?.role === 'admin' || user?.role === 'superadmin' || user?.is_partner) && (
         <CollapsibleCard
           storageKey="settings-sales-rep-territories"
-          title="🗺️ Sales Rep Territories"
-          subtitle="Assign each state to a sales rep so new leads with a matching state auto-route on creation. Existing leads keep their current rep."
+          title="🗺️ Trunk Rep Territories"
+          subtitle="Assign each state to a trunk rep so new leads with a matching state auto-route on creation. Existing leads keep their current rep."
         >
           <SalesRepTerritoriesPanel />
         </CollapsibleCard>

@@ -285,7 +285,7 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
   const ALL_PAGES: { id: NavPage; label: string; icon: string; isScan?: boolean }[] = [
     { id: 'dashboard',    label: 'Dashboard',           icon: '⌂' },
     { id: 'events',       label: 'Events',              icon: '◆' },
-    { id: 'dayentry',     label: 'Enter Day Data',      icon: '📝' },
+    { id: 'dayentry',     label: 'Enter Buying Data',   icon: '📝' },
     { id: 'calendar',     label: 'Buying Bookings',     icon: '📅' },
     { id: 'schedule',     label: 'Calendar',            icon: '🗓' },
     swapItem,

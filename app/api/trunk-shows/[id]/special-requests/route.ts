@@ -87,7 +87,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   // Best-effort: don't fail the request insert if emails throw.
   if (toAddrs.length > 0) {
-    const repName  = (rep?.name || me.name || 'A sales rep')
+    const repName  = (rep?.name || me.name || 'A trunk rep')
     const storeName = store?.name || 'a store'
     const dates = fmtRange(show.start_date, show.end_date)
     const subject = `Special request from ${repName} for ${storeName} trunk show (${dates})`

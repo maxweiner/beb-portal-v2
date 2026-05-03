@@ -38,9 +38,12 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
     assigned_rep_id: '', status: 'scheduled' as TrunkShowStatus, notes: '',
   })
 
+  // Trunk rep pool only — admins, partners, and other roles are NOT
+  // implicitly trunk reps. To appear here, a user must have the
+  // is_trunk_rep flag toggled in Admin → Users.
   const repOptions = useMemo(() => users
     .filter(u => u.active !== false)
-    .filter(u => u.role === 'sales_rep' || u.role === 'admin' || u.role === 'superadmin' || u.is_partner)
+    .filter(u => (u as any).is_trunk_rep === true)
     .sort((a, b) => (a.name || '').localeCompare(b.name || '')),
   [users])
 
@@ -162,7 +165,7 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
           <Field label="Assigned rep" required>
             <select value={draft.assigned_rep_id} onChange={e => setDraft(p => ({ ...p, assigned_rep_id: e.target.value }))} disabled={!canMutate}>
               {repOptions.map(u => (
-                <option key={u.id} value={u.id}>{u.name} · {u.role.replace('_', ' ')}</option>
+                <option key={u.id} value={u.id}>{u.name}</option>
               ))}
             </select>
           </Field>
