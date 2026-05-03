@@ -37,7 +37,6 @@ const sb = createClient(
   // Instead, just print the policies via information_schema.
   const { data: pol } = await sb
     .rpc('exec_sql' as any, { sql: "SELECT polname, pg_get_expr(polqual, polrelid) AS using_expr FROM pg_policy WHERE polrelid='customers'::regclass" })
-    .then(r => r).catch((e) => { return { data: null, error: e } as any })
   if (pol) console.log('Customer RLS policies:', pol)
 
   // 2. user_roles join table (multi-role initiative)
@@ -48,7 +47,7 @@ const sb = createClient(
   console.log('\nuser_roles entries:', ur)
 
   // 3. Does Customers RLS still gate on role IN ('admin','superadmin')?
-  const { data: pols } = await sb.rpc('pg_policies_for', { tbl: 'customers' }).then(r => r).catch(() => ({ data: null }))
+  const { data: pols } = await sb.rpc('pg_policies_for', { tbl: 'customers' })
   if (pols) console.log('\nRLS policies on customers:', pols)
 
   // 4. Sample two stores' customer counts
