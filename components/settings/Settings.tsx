@@ -457,6 +457,11 @@ export default function Settings() {
         <PostmarkSettings />
       )}
 
+      {/* Travel Match Radius (admin/superadmin only) */}
+      {(user?.role === 'admin' || user?.role === 'superadmin') && (
+        <TravelMatchSettings />
+      )}
+
       {/* Expense Settings (admin/superadmin only) */}
       {(user?.role === 'admin' || user?.role === 'superadmin') && (
         <ExpenseSettings />
@@ -636,6 +641,116 @@ function PostmarkSettings() {
         </ol>
       </div>
 
+    </CollapsibleCard>
+  )
+}
+
+/* ── TRAVEL MATCH RADIUS (admin) ── */
+// Configures the hotel-to-store mile radius used by the inbound
+// travel-email matcher (PR 3 of the travel-match initiative). Also
+// surfaces the one-shot "Geocode all stores" backfill that
+// populates stores.lat/lon for matching.
+function TravelMatchSettings() {
+  const [radius, setRadius] = useState<number>(25)
+  const [savingRadius, setSavingRadius] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<null | { total: number; geocoded: number; skipped: number; failed: Array<{ id: string; name: string; reason: string }> }>(null)
+  const [err, setErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const { data } = await supabase.from('settings').select('value').eq('key', 'travel.match_radius_miles').maybeSingle()
+      if (cancelled) return
+      const raw = data?.value
+      const n = typeof raw === 'number' ? raw : parseInt(String(raw || '25').replace(/[^\d]/g, ''))
+      if (!Number.isNaN(n) && n > 0) setRadius(n)
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  async function saveRadius(v: number) {
+    setSavingRadius(true)
+    try {
+      await supabase.from('settings').upsert({ key: 'travel.match_radius_miles', value: v as any })
+    } finally { setSavingRadius(false) }
+  }
+
+  async function runBackfill(force: boolean) {
+    setBusy(true); setErr(null); setResult(null)
+    try {
+      const { data: sess } = await supabase.auth.getSession()
+      const token = sess?.session?.access_token
+      const res = await fetch('/api/admin/geocode-stores', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ force }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`)
+      setResult(json)
+    } catch (e: any) {
+      setErr(e?.message || 'Backfill failed')
+    }
+    setBusy(false)
+  }
+
+  return (
+    <CollapsibleCard
+      storageKey="settings-travel-match"
+      title="📍 Travel Match Radius"
+      subtitle="Maximum hotel-to-store distance for inbound travel emails to auto-match an event. Reservations outside the radius land in the unassigned queue."
+    >
+      <div className="field" style={{ marginBottom: 14 }}>
+        <label className="fl">Radius (miles)</label>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input type="number" min={1} max={500} step={1}
+            value={radius}
+            onChange={e => setRadius(Math.max(1, Math.min(500, parseInt(e.target.value) || 25)))}
+            onBlur={() => saveRadius(radius)}
+            style={{ width: 120 }} />
+          {savingRadius && <span style={{ fontSize: 12, color: 'var(--mist)' }}>Saving…</span>}
+        </div>
+      </div>
+
+      <div style={{ paddingTop: 12, borderTop: '1px solid var(--pearl)' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginBottom: 6 }}>One-time setup: geocode stores</div>
+        <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 10 }}>
+          Distance matching needs lat/lon on each store. Click below to geocode everything that doesn't have coordinates yet (~$0.005 per lookup, takes ~5 seconds per 100 stores).
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={() => runBackfill(false)} disabled={busy} className="btn-primary btn-sm">
+            {busy ? 'Geocoding…' : 'Geocode missing stores'}
+          </button>
+          <button onClick={() => runBackfill(true)} disabled={busy} className="btn-outline btn-sm">
+            {busy ? '…' : 'Force re-geocode all'}
+          </button>
+        </div>
+        {err && (
+          <div style={{ marginTop: 10, background: '#FEE2E2', color: '#991B1B', padding: '8px 10px', borderRadius: 6, fontSize: 13 }}>
+            {err}
+          </div>
+        )}
+        {result && (
+          <div style={{ marginTop: 10, background: 'var(--green-pale)', border: '1px solid var(--green3)', color: 'var(--green-dark)', padding: '8px 10px', borderRadius: 6, fontSize: 13 }}>
+            Geocoded <strong>{result.geocoded}</strong> of <strong>{result.total}</strong> stores.
+            {result.failed.length > 0 && (
+              <details style={{ marginTop: 6 }}>
+                <summary style={{ cursor: 'pointer' }}>{result.failed.length} need attention</summary>
+                <ul style={{ marginTop: 6, paddingLeft: 20, fontSize: 12 }}>
+                  {result.failed.slice(0, 20).map(f => (
+                    <li key={f.id}><strong>{f.name}</strong> — {f.reason}</li>
+                  ))}
+                  {result.failed.length > 20 && <li>+ {result.failed.length - 20} more</li>}
+                </ul>
+              </details>
+            )}
+          </div>
+        )}
+      </div>
     </CollapsibleCard>
   )
 }
