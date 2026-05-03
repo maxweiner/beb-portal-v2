@@ -6,6 +6,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
+import { supabase } from '@/lib/supabase'
 import {
   listTrunkShows, createTrunkShow, effectiveStatus,
   type TrunkShowDraft,
@@ -164,6 +165,7 @@ function CreateTrunkShowModal({ onClose, onCreated }: { onClose: () => void; onC
   })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [storeQuery, setStoreQuery] = useState('')
 
   const valid = !!draft.store_id && !!draft.start_date && !!draft.end_date
                  && draft.end_date >= draft.start_date && !!draft.assigned_rep_id
@@ -175,6 +177,40 @@ function CreateTrunkShowModal({ onClose, onCreated }: { onClose: () => void; onC
     .filter(u => u.active !== false)
     .filter(u => (u as any).is_trunk_rep === true || u.is_partner)
     .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+
+  const selectedStore = useMemo(
+    () => stores.find(s => s.id === draft.store_id) || null,
+    [stores, draft.store_id],
+  )
+
+  const filteredStores = useMemo(() => {
+    const q = storeQuery.trim().toLowerCase()
+    const base = stores.filter(s => s.active !== false)
+    const list = q
+      ? base.filter(s =>
+          (s.name || '').toLowerCase().includes(q) ||
+          (s.city || '').toLowerCase().includes(q) ||
+          (s.state || '').toLowerCase().includes(q))
+      : base
+    return list.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+  }, [stores, storeQuery])
+
+  async function pickStore(s: { id: string; name: string }) {
+    setDraft(p => ({ ...p, store_id: s.id }))
+    setStoreQuery('')
+    // Pre-fill assigned rep from the matching trunk_show_stores row
+    // (case-insensitive name match) if it has a trunk_rep_user_id.
+    const { data } = await supabase
+      .from('trunk_show_stores')
+      .select('trunk_rep_user_id')
+      .ilike('name', s.name)
+      .not('trunk_rep_user_id', 'is', null)
+      .limit(1)
+      .maybeSingle()
+    if (data?.trunk_rep_user_id) {
+      setDraft(p => ({ ...p, assigned_rep_id: data.trunk_rep_user_id }))
+    }
+  }
 
   async function submit() {
     if (!valid || busy) return
@@ -203,12 +239,46 @@ function CreateTrunkShowModal({ onClose, onCreated }: { onClose: () => void; onC
 
         <div className="field" style={{ marginBottom: 10 }}>
           <label className="fl">Store *</label>
-          <select value={draft.store_id} onChange={e => setDraft(p => ({ ...p, store_id: e.target.value }))}>
-            <option value="">Pick a store…</option>
-            {stores.filter(s => s.active !== false).sort((a, b) => a.name.localeCompare(b.name)).map(s => (
-              <option key={s.id} value={s.id}>{s.name}{s.city ? ` · ${s.city}, ${s.state}` : ''}</option>
-            ))}
-          </select>
+          {selectedStore ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 10px', border: '1px solid var(--pearl)', borderRadius: 6, background: 'var(--pearl-pale, #F8FAFC)' }}>
+              <div style={{ fontSize: 13 }}>
+                <span style={{ fontWeight: 700, color: 'var(--ink)' }}>{selectedStore.name}</span>
+                {selectedStore.city ? <span style={{ color: 'var(--mist)' }}> · {selectedStore.city}, {selectedStore.state}</span> : null}
+              </div>
+              <button type="button" onClick={() => setDraft(p => ({ ...p, store_id: '' }))}
+                style={{ background: 'transparent', border: 'none', color: 'var(--mist)', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
+                change
+              </button>
+            </div>
+          ) : (
+            <>
+              <input type="text" value={storeQuery}
+                onChange={e => setStoreQuery(e.target.value)}
+                placeholder="Search by name, city, or state…"
+                autoFocus />
+              {filteredStores.length > 0 && (
+                <div style={{ marginTop: 4, maxHeight: 220, overflowY: 'auto', border: '1px solid var(--pearl)', borderRadius: 6 }}>
+                  {filteredStores.slice(0, 50).map(s => (
+                    <button key={s.id} type="button" onClick={() => pickStore(s)}
+                      style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px', background: '#fff', border: 'none', borderBottom: '1px solid var(--pearl)', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}>
+                      <span style={{ fontWeight: 700, color: 'var(--ink)' }}>{s.name}</span>
+                      {s.city ? <span style={{ color: 'var(--mist)' }}> · {s.city}, {s.state}</span> : null}
+                    </button>
+                  ))}
+                  {filteredStores.length > 50 && (
+                    <div style={{ padding: '6px 10px', fontSize: 11, color: 'var(--mist)', fontStyle: 'italic' }}>
+                      Showing first 50 — refine your search to see more.
+                    </div>
+                  )}
+                </div>
+              )}
+              {storeQuery && filteredStores.length === 0 && (
+                <div style={{ marginTop: 4, padding: '8px 10px', fontSize: 12, color: 'var(--mist)', fontStyle: 'italic' }}>
+                  No stores match.
+                </div>
+              )}
+            </>
+          )}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3" style={{ marginBottom: 10 }}>
           <div className="field">
