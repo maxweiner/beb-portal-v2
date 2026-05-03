@@ -129,6 +129,15 @@ export default function Login() {
             </>
           )}
         </div>
+
+        <div style={{
+          textAlign: 'center', marginTop: 20,
+          fontSize: 12, color: 'var(--mist)',
+        }}>
+          <a href="/privacy" style={{ color: 'inherit', textDecoration: 'underline' }}>Privacy Policy</a>
+          <span style={{ margin: '0 8px', opacity: .5 }}>·</span>
+          <a href="/terms" style={{ color: 'inherit', textDecoration: 'underline' }}>Terms of Service</a>
+        </div>
       </div>
     </div>
   )
