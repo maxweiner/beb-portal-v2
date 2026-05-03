@@ -11,6 +11,8 @@ import {
   deleteSlot, generateBookingToken,
   type TradeShowAppointment, type TradeShowAppointmentStatus,
 } from '@/lib/sales/tradeShowAppointments'
+import DatePicker from '@/components/ui/DatePicker'
+import TimePicker from '@/components/ui/TimePicker'
 
 const STATUS_LABEL: Record<TradeShowAppointmentStatus, string> = {
   available: 'Open', booked: 'Booked', completed: 'Done', cancelled: 'Cancelled', no_show: 'No-show',
@@ -382,16 +384,16 @@ function AddSlotRow({
       <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', marginBottom: 8 }}>
         <div className="field" style={{ marginBottom: 0 }}>
           <label className="fl">Date</label>
-          <input type="date" value={date} min={startDate} max={endDate}
-            onChange={e => setDate(e.target.value)} />
+          <DatePicker value={date} min={startDate} max={endDate}
+            onChange={setDate} />
         </div>
         <div className="field" style={{ marginBottom: 0 }}>
           <label className="fl">Start</label>
-          <input type="time" value={start} onChange={e => setStart(e.target.value)} />
+          <TimePicker value={start} onChange={setStart} />
         </div>
         <div className="field" style={{ marginBottom: 0 }}>
           <label className="fl">End</label>
-          <input type="time" value={end} onChange={e => setEnd(e.target.value)} />
+          <TimePicker value={end} onChange={setEnd} />
         </div>
         <div className="field" style={{ marginBottom: 0 }}>
           <label className="fl">Staffer (optional)</label>

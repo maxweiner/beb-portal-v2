@@ -11,6 +11,7 @@ import {
 } from '@/lib/sales/tradeshows'
 import type { TradeShow } from '@/types'
 import TradeShowDetail from './TradeShowDetail'
+import DatePicker from '@/components/ui/DatePicker'
 
 type Filter = 'all' | 'upcoming' | 'past'
 
@@ -209,13 +210,13 @@ function CreateTradeShowModal({ onClose, onCreated }: { onClose: () => void; onC
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3" style={{ marginBottom: 10 }}>
           <div className="field">
             <label className="fl">Start *</label>
-            <input type="date" value={draft.start_date}
-              onChange={e => setDraft(p => ({ ...p, start_date: e.target.value }))} />
+            <DatePicker value={draft.start_date}
+              onChange={v => setDraft(p => ({ ...p, start_date: v }))} />
           </div>
           <div className="field">
             <label className="fl">End *</label>
-            <input type="date" value={draft.end_date}
-              onChange={e => setDraft(p => ({ ...p, end_date: e.target.value }))} />
+            <DatePicker value={draft.end_date}
+              onChange={v => setDraft(p => ({ ...p, end_date: v }))} />
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3" style={{ marginBottom: 10 }}>

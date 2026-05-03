@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import Checkbox from '@/components/ui/Checkbox'
+import TimePicker from '@/components/ui/TimePicker'
 
 interface BookingConfigState {
   slot_interval_minutes: number
@@ -183,10 +184,10 @@ export default function BookingConfigCard({
               alignItems: 'center', marginBottom: 6,
             }}>
               <span style={{ fontSize: 13, fontWeight: 600 }}>Day {n}</span>
-              <input type="time" value={config[startKey] as string}
-                onChange={e => setConfig(p => p && ({ ...p, [startKey]: e.target.value }))} />
-              <input type="time" value={config[endKey] as string}
-                onChange={e => setConfig(p => p && ({ ...p, [endKey]: e.target.value }))} />
+              <TimePicker value={config[startKey] as string}
+                onChange={v => setConfig(p => p && ({ ...p, [startKey]: v }))} />
+              <TimePicker value={config[endKey] as string}
+                onChange={v => setConfig(p => p && ({ ...p, [endKey]: v }))} />
             </div>
           )
         })}

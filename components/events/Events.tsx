@@ -8,6 +8,7 @@ import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import { isMobileDevice } from '@/lib/mobile'
 import { canEditEvent, isAdmin as roleIsAdmin, isWorkerAssigned } from '@/lib/permissions'
 import { fmtMoney } from '@/lib/format'
+import DatePicker from '@/components/ui/DatePicker'
 import { eventSpend, eventCommission, daySpend, dayHasData } from '@/lib/eventSpend'
 import type { Event, BuyerVacation } from '@/types'
 import type { NavPage } from '@/app/page'
@@ -542,7 +543,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
             </div>
             <div className="field">
               <label className="fl">Start Date</label>
-              <input type="date" value={newEvent.start_date} onChange={e => setNewEvent(p => ({ ...p, start_date: e.target.value }))} required />
+              <DatePicker value={newEvent.start_date} onChange={v => setNewEvent(p => ({ ...p, start_date: v }))} />
             </div>
             <div className="field" style={{ minWidth: 110 }}>
               <label className="fl">Buyers Needed</label>

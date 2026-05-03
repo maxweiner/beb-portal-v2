@@ -21,6 +21,7 @@ import {
 import { eventEndDate } from '@/lib/eventDates'
 import { broadcastExpenseStatusChanged } from './usePendingApprovals'
 import AddReceiptButton from './AddReceiptButton'
+import DatePicker from '@/components/ui/DatePicker'
 import AddMileageButton from './AddMileageButton'
 import TemplateChecklist from './TemplateChecklist'
 
@@ -699,8 +700,8 @@ function AddExpenseForm({ onAdd }: { onAdd: (d: NewExpenseDraft) => Promise<void
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, alignItems: 'end' }}>
         <div>
           <label style={lbl}>Date</label>
-          <input type="date" value={draft.expense_date}
-            onChange={e => setDraft(d => ({ ...d, expense_date: e.target.value }))} />
+          <DatePicker value={draft.expense_date}
+            onChange={v => setDraft(d => ({ ...d, expense_date: v }))} />
         </div>
         <div>
           <label style={lbl}>Category</label>
@@ -807,9 +808,8 @@ function ExpenseRow({ expense, canMutate, onUpdate, onDelete }: {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, alignItems: 'end' }}>
         <div>
           <label style={lbl}>Date</label>
-          <input type="date" value={local.expense_date} disabled={!canMutate}
-            onChange={e => setLocal(p => ({ ...p, expense_date: e.target.value }))}
-            onBlur={() => maybeSave('expense_date', local.expense_date)} />
+          <DatePicker value={local.expense_date} disabled={!canMutate}
+            onChange={v => { setLocal(p => ({ ...p, expense_date: v })); maybeSave('expense_date', v) }} />
         </div>
         <div>
           <label style={lbl}>Category</label>

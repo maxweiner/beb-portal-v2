@@ -18,6 +18,7 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { ExpenseReport, ExpenseReportStatus, User } from '@/types'
 import { STATUS_LABEL, STATUS_COLOR, formatCurrency, formatDateLong } from '@/components/expenses/expensesUtils'
+import DatePicker from '@/components/ui/DatePicker'
 
 const STATUS_OPTIONS: { id: 'all' | ExpenseReportStatus; label: string }[] = [
   { id: 'all',                      label: 'All' },
@@ -202,11 +203,11 @@ export default function PartnerFinancials({ onOpenReport }: { onOpenReport: (rep
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
           <div>
             <label className="fl">From</label>
-            <input type="date" value={from} onChange={e => setFrom(e.target.value)} max={to} />
+            <DatePicker value={from} onChange={setFrom} max={to} />
           </div>
           <div>
             <label className="fl">To</label>
-            <input type="date" value={to} onChange={e => setTo(e.target.value)} min={from} />
+            <DatePicker value={to} onChange={setTo} min={from} />
           </div>
           <div>
             <label className="fl">User</label>

@@ -14,6 +14,7 @@ import { supabase } from '@/lib/supabase'
 import type { HowDidYouHear } from '@/lib/customers/types'
 import { HOW_DID_YOU_HEAR_LABELS } from '@/lib/customers/types'
 import { logCustomerEvent } from '@/lib/customers/events'
+import DatePicker from '@/components/ui/DatePicker'
 
 const HOW_DID_YOU_HEAR_OPTIONS: HowDidYouHear[] = [
   'large_postcard', 'small_postcard', 'newspaper',
@@ -160,7 +161,7 @@ export default function NewCustomerForm({ storeId, storeName, onClose, onCreated
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div className="field" style={{ margin: 0 }}>
               <label className="fl">Date of birth</label>
-              <input type="date" value={dob} onChange={e => setDob(e.target.value)} />
+              <DatePicker value={dob} onChange={setDob} />
             </div>
             <div className="field" style={{ margin: 0 }}>
               <label className="fl">How did you hear?</label>

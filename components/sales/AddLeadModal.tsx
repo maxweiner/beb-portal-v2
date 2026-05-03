@@ -9,6 +9,7 @@ import { useRef, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { createLead } from '@/lib/sales/leads'
 import type { Lead, LeadInterestLevel, LeadStatus } from '@/types'
+import DatePicker from '@/components/ui/DatePicker'
 
 interface Props {
   /** When set, the new lead is pre-linked to this trade show. */
@@ -238,8 +239,8 @@ export default function AddLeadModal({ tradeShowId, onCreated, onClose }: Props)
             </select>
           </Field>
           <Field label="Follow-up date">
-            <input type="date" value={draft.follow_up_date}
-              onChange={e => setDraft(p => ({ ...p, follow_up_date: e.target.value }))} />
+            <DatePicker value={draft.follow_up_date}
+              onChange={v => setDraft(p => ({ ...p, follow_up_date: v }))} />
           </Field>
         </div>
         <Field label="What were they interested in?">

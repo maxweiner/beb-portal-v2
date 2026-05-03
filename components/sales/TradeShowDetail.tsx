@@ -13,6 +13,7 @@ import { useApp } from '@/lib/context'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import { getTradeShow, updateTradeShow, softDeleteTradeShow } from '@/lib/sales/tradeshows'
 import type { TradeShow } from '@/types'
+import DatePicker from '@/components/ui/DatePicker'
 import BoothCostsPanel from './BoothCostsPanel'
 import TradeShowStaffPanel from './TradeShowStaffPanel'
 import TradeShowAppointmentsPanel from './TradeShowAppointmentsPanel'
@@ -144,12 +145,12 @@ export default function TradeShowDetail({ tradeShowId, onBack, onDeleted }: Prop
         </Field>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Field label="Start date" required>
-            <input type="date" value={draft.start_date}
-              onChange={e => setDraft(p => ({ ...p, start_date: e.target.value }))} />
+            <DatePicker value={draft.start_date}
+              onChange={v => setDraft(p => ({ ...p, start_date: v }))} />
           </Field>
           <Field label="End date" required>
-            <input type="date" value={draft.end_date}
-              onChange={e => setDraft(p => ({ ...p, end_date: e.target.value }))} />
+            <DatePicker value={draft.end_date}
+              onChange={v => setDraft(p => ({ ...p, end_date: v }))} />
           </Field>
         </div>
         <Field label="Booth number">

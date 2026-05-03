@@ -13,6 +13,7 @@ import { HOW_DID_YOU_HEAR_LABELS, ENGAGEMENT_TIER_LABELS, ENGAGEMENT_TIER_COLORS
 import { fmtPhone, fmtDateLong } from '@/lib/customers/format'
 import { logCustomerEvent } from '@/lib/customers/events'
 import CustomerTimeline from './CustomerTimeline'
+import DatePicker from '@/components/ui/DatePicker'
 
 const HOW_DID_YOU_HEAR_OPTIONS: HowDidYouHear[] = [
   'large_postcard', 'small_postcard', 'newspaper',
@@ -208,7 +209,7 @@ export default function CustomerDetail({ customer, tagDefs, storeName, onClose, 
               <Field label="Email"><input type="email" value={draft.email || ''} onChange={e => patch('email', e.target.value)} /></Field>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 8 }}>
-              <Field label="Date of birth"><input type="date" value={draft.date_of_birth || ''} onChange={e => patch('date_of_birth', e.target.value)} /></Field>
+              <Field label="Date of birth"><DatePicker value={draft.date_of_birth || ''} onChange={v => patch('date_of_birth', v)} /></Field>
               <Field label="How did you hear?">
                 <select value={draft.how_did_you_hear || ''} onChange={e => patch('how_did_you_hear', (e.target.value || null) as HowDidYouHear | null)}>
                   <option value="">— none —</option>

@@ -15,6 +15,7 @@ import {
 import { makeSquareLogoDataUrl } from '@/lib/qr/squareLogo'
 import { supabase } from '@/lib/supabase'
 import type { TrunkShowHours, Store } from '@/types'
+import TimePicker from '@/components/ui/TimePicker'
 
 const STATUS_LABEL: Record<TrunkShowAppointmentStatus, string> = {
   available: 'Open', booked: 'Booked', completed: 'Done', cancelled: 'Cancelled', no_show: 'No-show',
@@ -434,11 +435,11 @@ function SlotAdder({ trunkShowId, hours, onCancel, onAdded }: {
           <>
             <div className="field" style={{ marginBottom: 0 }}>
               <label className="fl">Start</label>
-              <input type="time" value={start} onChange={e => setStart(e.target.value)} />
+              <TimePicker value={start} onChange={setStart} />
             </div>
             <div className="field" style={{ marginBottom: 0 }}>
               <label className="fl">End</label>
-              <input type="time" value={end} onChange={e => setEnd(e.target.value)} />
+              <TimePicker value={end} onChange={setEnd} />
             </div>
           </>
         ) : (

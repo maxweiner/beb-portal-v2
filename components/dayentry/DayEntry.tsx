@@ -8,6 +8,7 @@ import { canEditEvent } from '@/lib/permissions'
 import { isEventCurrent } from '@/lib/eventDates'
 import { searchEvents } from '@/lib/eventSearch'
 import EventNotesNudge from '@/components/events/EventNotesNudge'
+import DatePicker from '@/components/ui/DatePicker'
 import Checkbox from '@/components/ui/Checkbox'
 
 /* ── Lead sources — day-level aggregates on event_days ── */
@@ -631,7 +632,7 @@ export default function DayEntry() {
               </div>
               <div className="field">
                 <label className="fl">Start date</label>
-                <input type="date" value={pastStartDate} onChange={e => setPastStartDate(e.target.value)} />
+                <DatePicker value={pastStartDate} onChange={setPastStartDate} />
               </div>
               <button className="btn-primary btn-sm" disabled={!pastStoreId || !pastStartDate || creatingSaving} onClick={createOrFindPastEvent}>
                 {creatingSaving ? 'Saving…' : 'Create & select'}

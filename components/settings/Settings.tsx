@@ -8,6 +8,7 @@ import type { Theme, BuyerVacation } from '@/types'
 import AvatarPicker from './AvatarPicker'
 import BrandLogosPanel from './BrandLogosPanel'
 import RoleManagerPanel from './RoleManagerPanel'
+import DatePicker from '@/components/ui/DatePicker'
 import ImpersonationLogPanel from '@/components/impersonation/ImpersonationLogPanel'
 import BoothCostCategoriesPanel from '@/components/sales/BoothCostCategoriesPanel'
 import SalesRepTerritoriesPanel from '@/components/sales/SalesRepTerritoriesPanel'
@@ -232,11 +233,11 @@ export default function Settings() {
             <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
               <div className="field" style={{ flex: 1, minWidth: 130, marginBottom: 0 }}>
                 <label className="fl">Start date</label>
-                <input type="date" value={vacStart} onChange={e => { setVacStart(e.target.value); if (!vacEnd) setVacEnd(e.target.value) }} />
+                <DatePicker value={vacStart} onChange={v => { setVacStart(v); if (!vacEnd) setVacEnd(v) }} />
               </div>
               <div className="field" style={{ flex: 1, minWidth: 130, marginBottom: 0 }}>
                 <label className="fl">End date</label>
-                <input type="date" value={vacEnd} onChange={e => setVacEnd(e.target.value)} min={vacStart} />
+                <DatePicker value={vacEnd} onChange={setVacEnd} min={vacStart} />
               </div>
             </div>
             <div className="field" style={{ marginTop: 8, marginBottom: 8 }}>
