@@ -207,7 +207,7 @@ function UsersTab() {
   // roles fall through to a generic group at the bottom.
   const ROLE_ORDER: Array<{ role: Role; label: string }> = [
     { role: 'superadmin', label: 'Superadmins' },
-    { role: 'admin',      label: 'Admins' },
+    { role: 'admin',      label: 'Buyer Admins' },
     { role: 'marketing',  label: 'Marketing' },
     { role: 'accounting', label: 'Accounting' },
     { role: 'buyer',      label: 'Buyers' },
@@ -328,7 +328,7 @@ function UsersTab() {
                   style={{ fontSize: 12, padding: '5px 28px 5px 10px', width: 'auto', fontWeight: 700 }}>
                   <option value="pending">Pending</option>
                   <option value="buyer">Buyer</option>
-                  <option value="admin">Admin</option>
+                  <option value="admin">Buyer Admin</option>
                   {isSuperAdmin && <option value="superadmin">Superadmin</option>}
                   <option value="marketing">Marketing</option>
                   <option value="accounting">Accounting</option>
@@ -560,7 +560,7 @@ function InviteTab() {
               className="w-full px-3 py-2.5 rounded-lg text-sm"
               style={{ background: 'var(--cream2)', border: '1px solid var(--pearl)', color: 'var(--ink)' }}>
               <option value="buyer">Buyer</option>
-              <option value="admin">Admin</option>
+              <option value="admin">Buyer Admin</option>
               {isSuperAdmin && <option value="superadmin">Superadmin</option>}
               <option value="marketing">Marketing</option>
               <option value="accounting">Accounting</option>

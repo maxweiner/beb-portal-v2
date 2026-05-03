@@ -2,7 +2,15 @@
 
 import { useApp } from '@/lib/context'
 
+// Display labels override the auto title-cased version. Keep this map
+// in sync with the labels stored in the `roles` table (Settings →
+// Role Manager) so the badge text matches what admins see there.
+const ROLE_LABEL_OVERRIDE: Record<string, string> = {
+  admin: 'Buyer Admin',
+}
+
 function formatRole(role: string): string {
+  if (ROLE_LABEL_OVERRIDE[role]) return ROLE_LABEL_OVERRIDE[role]
   return (role || '').split('_')
     .map(w => w.length === 0 ? w : w[0].toUpperCase() + w.slice(1))
     .join(' ')
@@ -36,7 +44,7 @@ function RoleBadge({ role }: { role: string }) {
 // to a generic group at the bottom (alphabetized).
 const ROLE_ORDER: Array<{ role: string; label: string }> = [
   { role: 'superadmin',  label: 'Superadmins' },
-  { role: 'admin',       label: 'Admins' },
+  { role: 'admin',       label: 'Buyer Admins' },
   { role: 'trunk_admin', label: 'Trunk Admins' },
   { role: 'sales_rep',   label: 'Sales Reps' },
   { role: 'trunk_rep',   label: 'Trunk Reps' },

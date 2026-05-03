@@ -54,7 +54,7 @@ export default function ProfileTrigger({
 
   const initial = (user?.name?.charAt(0) || '?').toUpperCase()
   const roleLabel = user?.role === 'superadmin' ? 'Super Admin'
-    : user?.role === 'admin' ? 'Admin'
+    : user?.role === 'admin' ? 'Buyer Admin'
     : user?.role === 'buyer' ? 'Buyer'
     : user?.role === 'pending' ? 'Pending' : ''
 
