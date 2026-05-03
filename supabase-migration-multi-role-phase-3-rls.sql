@@ -455,11 +455,20 @@ BEGIN
 END $$;
 
 
--- ── marketing_emails_sent ──────────────────────────────────────
-DROP POLICY IF EXISTS "Admins can read marketing email log" ON marketing_emails_sent;
-CREATE POLICY "Admins can read marketing email log"
-  ON marketing_emails_sent FOR SELECT
-  USING (public.has_any_role('admin','superadmin'));
+-- ── marketing_emails_sent (optional table) ────────────────────
+-- This table only exists in environments where an older marketing
+-- email log was created. Skip if missing.
+DO $$
+BEGIN
+  IF to_regclass('public.marketing_emails_sent') IS NOT NULL THEN
+    EXECUTE $sql$
+      DROP POLICY IF EXISTS "Admins can read marketing email log" ON marketing_emails_sent;
+      CREATE POLICY "Admins can read marketing email log"
+        ON marketing_emails_sent FOR SELECT
+        USING (public.has_any_role('admin','superadmin'));
+    $sql$;
+  END IF;
+END $$;
 
 
 -- ── custom_reports ─────────────────────────────────────────────
