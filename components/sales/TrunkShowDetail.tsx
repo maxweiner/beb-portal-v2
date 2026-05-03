@@ -16,6 +16,8 @@ import type { TrunkShow, TrunkShowHours, TrunkShowStatus } from '@/types'
 import SpecialRequestsPanel from './SpecialRequestsPanel'
 import TrunkShowAppointmentsPanel from './TrunkShowAppointmentsPanel'
 import SpiffsPanel from './SpiffsPanel'
+import DatePicker from '@/components/ui/DatePicker'
+import TimePicker from '@/components/ui/TimePicker'
 
 interface Props {
   trunkShowId: string
@@ -165,10 +167,10 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
             </select>
           </Field>
           <Field label="Start date" required>
-            <input type="date" value={draft.start_date} onChange={e => setDraft(p => ({ ...p, start_date: e.target.value }))} disabled={!canMutate} />
+            <DatePicker value={draft.start_date} onChange={v => setDraft(p => ({ ...p, start_date: v }))} disabled={!canMutate} />
           </Field>
           <Field label="End date" required>
-            <input type="date" value={draft.end_date} onChange={e => setDraft(p => ({ ...p, end_date: e.target.value }))} disabled={!canMutate} />
+            <DatePicker value={draft.end_date} onChange={v => setDraft(p => ({ ...p, end_date: v }))} disabled={!canMutate} />
           </Field>
           <Field label="Status">
             <select value={draft.status} onChange={e => setDraft(p => ({ ...p, status: e.target.value as TrunkShowStatus }))} disabled={!canMutate}>
@@ -236,15 +238,13 @@ function HoursRow({ h, canWrite, onChange }: {
       padding: '8px 12px', background: 'var(--cream)', borderRadius: 6,
     }}>
       <div style={{ minWidth: 200, fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{fmtDay}</div>
-      <input type="time" value={open}
-        onChange={e => setOpen(e.target.value)}
-        onBlur={() => onChange(h.show_date, open, close)}
-        disabled={!canWrite} style={{ width: 110 }} />
+      <TimePicker value={open}
+        onChange={v => { setOpen(v); onChange(h.show_date, v, close) }}
+        disabled={!canWrite} style={{ width: 200 }} />
       <span style={{ color: 'var(--mist)' }}>–</span>
-      <input type="time" value={close}
-        onChange={e => setClose(e.target.value)}
-        onBlur={() => onChange(h.show_date, open, close)}
-        disabled={!canWrite} style={{ width: 110 }} />
+      <TimePicker value={close}
+        onChange={v => { setClose(v); onChange(h.show_date, open, v) }}
+        disabled={!canWrite} style={{ width: 200 }} />
     </div>
   )
 }

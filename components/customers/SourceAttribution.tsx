@@ -20,6 +20,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { Store } from '@/types'
 import { HOW_DID_YOU_HEAR_LABELS } from '@/lib/customers/types'
+import DatePicker from '@/components/ui/DatePicker'
 
 interface CustomerRow {
   how_did_you_hear: string | null
@@ -127,11 +128,11 @@ export default function SourceAttribution({ stores }: { stores: Store[] }) {
         </div>
         <div className="field" style={{ margin: 0 }}>
           <label className="fl">Acquired since</label>
-          <input type="date" value={sinceDate} onChange={e => setSinceDate(e.target.value)} />
+          <DatePicker value={sinceDate} onChange={setSinceDate} />
         </div>
         <div className="field" style={{ margin: 0 }}>
           <label className="fl">Acquired until</label>
-          <input type="date" value={untilDate} onChange={e => setUntilDate(e.target.value)} />
+          <DatePicker value={untilDate} onChange={setUntilDate} />
         </div>
       </div>
 

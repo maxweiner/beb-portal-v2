@@ -10,6 +10,7 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { todayIso } from './expensesUtils'
+import DatePicker from '@/components/ui/DatePicker'
 
 interface Breakdown {
   homeAddress: string
@@ -117,7 +118,7 @@ export default function AddMileageButton({
 
         <div className="field" style={{ marginBottom: 10 }}>
           <label className="fl">Date</label>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)} />
+          <DatePicker value={date} onChange={setDate} />
         </div>
 
         <div className="field" style={{ marginBottom: 10 }}>

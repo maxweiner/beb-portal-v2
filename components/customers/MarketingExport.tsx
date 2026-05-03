@@ -15,6 +15,7 @@ import type { Store } from '@/types'
 import type { CustomerTagDefinition, EngagementTier, HowDidYouHear } from '@/lib/customers/types'
 import { ENGAGEMENT_TIER_LABELS, HOW_DID_YOU_HEAR_LABELS } from '@/lib/customers/types'
 import type { ExportFilters } from '@/lib/customers/exportFilters'
+import DatePicker from '@/components/ui/DatePicker'
 
 const TIER_OPTIONS: EngagementTier[] = ['active', 'lapsed', 'cold', 'vip']
 const HOW_HEARD_OPTIONS: HowDidYouHear[] = [
@@ -264,18 +265,18 @@ export default function MarketingExport({ stores, storeId, setStoreId, initialFi
           {/* First appointment date range */}
           <FilterRow label="First appointment date">
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input type="date" value={firstStart} onChange={e => setFirstStart(e.target.value)} />
+              <DatePicker value={firstStart} onChange={setFirstStart} />
               <span style={{ color: 'var(--mist)' }}>—</span>
-              <input type="date" value={firstEnd} onChange={e => setFirstEnd(e.target.value)} />
+              <DatePicker value={firstEnd} onChange={setFirstEnd} />
             </div>
           </FilterRow>
 
           {/* Last contact date range */}
           <FilterRow label="Last contact date">
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input type="date" value={lastContactStart} onChange={e => setLastContactStart(e.target.value)} />
+              <DatePicker value={lastContactStart} onChange={setLastContactStart} />
               <span style={{ color: 'var(--mist)' }}>—</span>
-              <input type="date" value={lastContactEnd} onChange={e => setLastContactEnd(e.target.value)} />
+              <DatePicker value={lastContactEnd} onChange={setLastContactEnd} />
             </div>
           </FilterRow>
 

@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
+import DatePicker from '@/components/ui/DatePicker'
 
 const CARRIERS: Record<string, string> = {
   '1Z': 'UPS', 'UPS': 'UPS',
@@ -69,9 +70,7 @@ export default function LegacyShipmentsTab() {
           </div>
           <div>
             <label className="fl">Ship Date</label>
-            <input type="date" value={form.ship_date} onChange={e => setForm(p => ({ ...p, ship_date: e.target.value }))}
-              className="w-full px-3 py-2.5 rounded-lg text-sm"
-              style={{ background: 'var(--cream2)', border: '1px solid var(--pearl)', color: 'var(--ink)' }} />
+            <DatePicker value={form.ship_date} onChange={v => setForm(p => ({ ...p, ship_date: v }))} />
           </div>
           <div>
             <label className="fl">From Store</label>

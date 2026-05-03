@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { User, Role } from '@/types'
+import DatePicker from '@/components/ui/DatePicker'
 
 type Tab = 'users' | 'invite' | 'merge' | 'email' | 'sms' | 'events'
 
@@ -1088,7 +1089,7 @@ function EditEventSection() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, maxWidth: 600 }}>
               <div>
                 <label className="fl">Start date (Day 1)</label>
-                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+                <DatePicker value={startDate} onChange={setStartDate} />
                 <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
                   Event runs 3 days. New range: <strong>{fmtRange(startDate)}</strong>
                 </div>

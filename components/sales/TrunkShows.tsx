@@ -13,6 +13,7 @@ import {
 } from '@/lib/sales/trunkShows'
 import type { TrunkShow, TrunkShowStatus } from '@/types'
 import TrunkShowDetail from './TrunkShowDetail'
+import DatePicker from '@/components/ui/DatePicker'
 
 const STATUS_LABEL: Record<TrunkShowStatus, string> = {
   scheduled: 'Scheduled', in_progress: 'In Progress',
@@ -283,13 +284,13 @@ function CreateTrunkShowModal({ onClose, onCreated }: { onClose: () => void; onC
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3" style={{ marginBottom: 10 }}>
           <div className="field">
             <label className="fl">Start *</label>
-            <input type="date" value={draft.start_date}
-              onChange={e => setDraft(p => ({ ...p, start_date: e.target.value }))} />
+            <DatePicker value={draft.start_date}
+              onChange={v => setDraft(p => ({ ...p, start_date: v }))} />
           </div>
           <div className="field">
             <label className="fl">End *</label>
-            <input type="date" value={draft.end_date}
-              onChange={e => setDraft(p => ({ ...p, end_date: e.target.value }))} />
+            <DatePicker value={draft.end_date}
+              onChange={v => setDraft(p => ({ ...p, end_date: v }))} />
           </div>
         </div>
         <div className="field" style={{ marginBottom: 14 }}>

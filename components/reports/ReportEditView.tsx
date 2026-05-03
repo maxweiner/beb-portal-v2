@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import type { Event } from '@/types'
 import Checkbox from '@/components/ui/Checkbox'
+import TimePicker from '@/components/ui/TimePicker'
 
 export interface ReportDef {
   id: string                 // matches report_templates.id
@@ -539,8 +540,8 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
                 <div style={{ display: 'grid', gridTemplateColumns: schedule.frequency === 'daily' ? '1fr' : '1fr 1fr', gap: 12 }}>
                   <div className="field">
                     <label className="fl">Time of day (UTC)</label>
-                    <input type="time" value={schedule.time_of_day.slice(0, 5)}
-                      onChange={e => setScheduleField('time_of_day', e.target.value + ':00')} />
+                    <TimePicker value={schedule.time_of_day.slice(0, 5)}
+                      onChange={v => setScheduleField('time_of_day', v + ':00')} />
                   </div>
                   {schedule.frequency === 'weekly' && (
                     <div className="field">

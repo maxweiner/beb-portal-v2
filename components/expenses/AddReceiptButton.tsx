@@ -17,6 +17,7 @@ import { supabase } from '@/lib/supabase'
 import { compressImage } from '@/lib/imageUtils'
 import { CATEGORY_OPTIONS, todayIso } from './expensesUtils'
 import type { ExpenseCategory } from '@/types'
+import DatePicker from '@/components/ui/DatePicker'
 
 interface Suggestion {
   vendor: string | null
@@ -183,8 +184,8 @@ export default function AddReceiptButton({
               )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <Field label="Date *">
-                  <input type="date" value={draft.expense_date}
-                    onChange={e => setDraft(d => d ? { ...d, expense_date: e.target.value } : d)} />
+                  <DatePicker value={draft.expense_date}
+                    onChange={v => setDraft(d => d ? { ...d, expense_date: v } : d)} />
                 </Field>
                 <Field label="Category *">
                   <select value={draft.category}

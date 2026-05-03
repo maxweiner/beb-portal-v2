@@ -13,6 +13,7 @@ import { getLead, updateLead, softDeleteLead } from '@/lib/sales/leads'
 import { createTrunkShow } from '@/lib/sales/trunkShows'
 import type { Lead, LeadInterestLevel, LeadStatus } from '@/types'
 import type { NavPage } from '@/app/page'
+import DatePicker from '@/components/ui/DatePicker'
 
 interface Props {
   leadId: string
@@ -277,8 +278,8 @@ export default function LeadDetail({ leadId, onBack, onChanged, onDeleted, setNa
             </select>
           </Field>
           <Field label="Follow-up date">
-            <input type="date" value={draft.follow_up_date}
-              onChange={e => setDraft(p => ({ ...p, follow_up_date: e.target.value }))} disabled={!canMutate} />
+            <DatePicker value={draft.follow_up_date}
+              onChange={v => setDraft(p => ({ ...p, follow_up_date: v }))} disabled={!canMutate} />
           </Field>
         </div>
         <Field label="Interest description">
@@ -414,10 +415,10 @@ function ConvertModal({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3" style={{ marginBottom: 8 }}>
           <Field label="Start date" required>
-            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+            <DatePicker value={startDate} onChange={setStartDate} />
           </Field>
           <Field label="End date" required>
-            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+            <DatePicker value={endDate} onChange={setEndDate} />
           </Field>
         </div>
         <Field label="Assigned rep" required>
