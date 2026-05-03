@@ -15,8 +15,8 @@ import { logCustomerEvent } from '@/lib/customers/events'
 import CustomerTimeline from './CustomerTimeline'
 
 const HOW_DID_YOU_HEAR_OPTIONS: HowDidYouHear[] = [
-  'postcard', 'newspaper', 'word_of_mouth', 'walk_in',
-  'online', 'referral', 'other',
+  'large_postcard', 'small_postcard', 'newspaper',
+  'email', 'text', 'the_store_told_me',
 ]
 
 export default function CustomerDetail({ customer, tagDefs, storeName, onClose, onChanged }: {
@@ -63,9 +63,6 @@ export default function CustomerDetail({ customer, tagDefs, storeName, onClose, 
       email: draft.email?.trim() || null,
       date_of_birth: draft.date_of_birth || null,
       how_did_you_hear: draft.how_did_you_hear,
-      how_did_you_hear_other_text: draft.how_did_you_hear === 'other'
-        ? (draft.how_did_you_hear_other_text?.trim() || null)
-        : null,
       notes: draft.notes?.trim() || null,
       do_not_contact: draft.do_not_contact,
       vip_override: draft.vip_override,
@@ -221,14 +218,6 @@ export default function CustomerDetail({ customer, tagDefs, storeName, onClose, 
                 </select>
               </Field>
             </div>
-            {draft.how_did_you_hear === 'other' && (
-              <div style={{ marginTop: 8 }}>
-                <Field label='Specify "other"'>
-                  <input value={draft.how_did_you_hear_other_text || ''}
-                    onChange={e => patch('how_did_you_hear_other_text', e.target.value)} />
-                </Field>
-              </div>
-            )}
             {customer.how_did_you_hear_legacy && (
               <div style={{
                 marginTop: 8, padding: '8px 12px',

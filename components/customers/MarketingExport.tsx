@@ -18,8 +18,8 @@ import type { ExportFilters } from '@/lib/customers/exportFilters'
 
 const TIER_OPTIONS: EngagementTier[] = ['active', 'lapsed', 'cold', 'vip']
 const HOW_HEARD_OPTIONS: HowDidYouHear[] = [
-  'postcard', 'newspaper', 'word_of_mouth', 'walk_in',
-  'online', 'referral', 'other',
+  'large_postcard', 'small_postcard', 'newspaper',
+  'email', 'text', 'the_store_told_me',
 ]
 
 export default function MarketingExport({ stores, storeId, setStoreId, initialFilters }: {

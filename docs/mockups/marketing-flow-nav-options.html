@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Marketing Flow Nav — 5 mockups</title>
+<style>
+  /* Pulled from globals.css color tokens so the mockups feel authentic. */
+  :root {
+    --green:#1D6B44; --green-dark:#155538; --green-pale:#E8F2EC; --green3:#7FB295;
+    --ink:#1C2128; --ash:#475569; --mist:#94A3B8; --pearl:#E2E8F0;
+    --cream:#FAF7F0; --cream2:#F2EBDB;
+    --red:#DC2626; --red-pale:#FEE2E2;
+    --r:8px; --r2:14px;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.06);
+    --shadow-md: 0 4px 12px rgba(0,0,0,.08);
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; padding:0; font-family: -apple-system, "SF Pro Text", "Lato", sans-serif; color: var(--ink); background:#F5F0E8; }
+  .page { max-width: 1200px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 24px; font-weight: 900; margin: 0 0 8px; }
+  .lede { color: var(--mist); font-size: 14px; margin: 0 0 24px; max-width: 720px; line-height: 1.5; }
+  .opt {
+    background: var(--cream); border:1px solid var(--pearl); border-radius: var(--r2);
+    margin-bottom: 28px; padding: 0; overflow: hidden;
+    box-shadow: var(--shadow-sm);
+  }
+  .opt-hd {
+    padding: 14px 20px; border-bottom: 1px solid var(--pearl);
+    background: #fff;
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  }
+  .opt-hd h2 { margin: 0; font-size: 17px; font-weight: 900; }
+  .opt-hd .effort { font-size: 11px; font-weight: 800; color: var(--mist); text-transform: uppercase; letter-spacing: .06em; }
+  .opt-body { padding: 20px; background: #F5F0E8; }
+  .opt-note { font-size: 12px; color: var(--ash); padding: 12px 20px; background: var(--cream2); border-top: 1px solid var(--pearl); line-height: 1.5; }
+
+  /* shared bits */
+  .card { background:#fff; border:1px solid var(--pearl); border-radius: var(--r); box-shadow: var(--shadow-sm); }
+  .pill { display: inline-flex; align-items: center; gap:4px; font-size:10px; font-weight:800; padding:2px 8px; border-radius: 99px; text-transform: uppercase; letter-spacing: .05em; }
+  .pill.done { background: var(--green-pale); color: var(--green-dark); }
+  .pill.now { background: #FEF3C7; color: #92400E; }
+  .pill.next { background: var(--cream2); color: var(--mist); }
+  .row { display:flex; gap:10px; align-items:center; }
+  h3 { margin: 0 0 4px; font-size: 16px; font-weight: 900; }
+  .label-tiny { font-size: 10px; font-weight: 800; color: var(--mist); text-transform: uppercase; letter-spacing: .06em; }
+  .btn { background: var(--green); color:#fff; border:none; border-radius: 6px; padding: 8px 14px; font-weight: 700; font-size: 13px; cursor: pointer; }
+  .btn-ghost { background: transparent; border: 1px solid var(--pearl); color: var(--ash); }
+  .stub-text { color: var(--mist); font-size: 12px; line-height: 1.5; }
+
+  /* ─── Option 1: Sticky stepper + smart collapse ─── */
+  .o1 .stepper {
+    position: sticky; top: 0;
+    background:#fff; border-bottom: 2px solid var(--green-pale); border-radius: var(--r) var(--r) 0 0;
+    padding: 14px 18px;
+    display: flex; gap: 12px; align-items: center; box-shadow: var(--shadow-sm);
+  }
+  .o1 .step-node {
+    display:flex; align-items:center; gap:6px; cursor:pointer;
+    padding: 4px 10px; border-radius: 99px;
+    font-size: 12px; font-weight: 700; color: var(--mist);
+  }
+  .o1 .step-node.done { color: var(--green-dark); }
+  .o1 .step-node.now { background: var(--green); color:#fff; padding: 6px 12px; }
+  .o1 .step-node .num {
+    display:inline-flex; align-items:center; justify-content:center;
+    width: 18px; height:18px; border-radius:50%; font-size:10px; font-weight:900;
+    background: var(--cream2); color: var(--mist);
+  }
+  .o1 .step-node.done .num { background: var(--green-pale); color: var(--green-dark); }
+  .o1 .step-node.now .num { background:#fff; color: var(--green); }
+  .o1 .arrow { color: var(--pearl); font-size: 11px; }
+  .o1 .stack { display:flex; flex-direction:column; gap: 12px; padding: 16px; }
+  .o1 .step-card { padding: 14px 16px; }
+  .o1 .step-card.collapsed { display:flex; align-items:center; gap:10px; opacity: .85; }
+  .o1 .step-card.now { padding: 18px; border: 2px solid var(--green); background: #FBFFF6; }
+  .o1 .step-card.future { color: var(--mist); }
+  .o1 .step-card.future .body { font-size: 12px; font-style: italic; opacity: .6; }
+
+  /* ─── Option 2: Two-pane vertical stepper ─── */
+  .o2 .layout { display: grid; grid-template-columns: 240px 1fr; gap: 16px; }
+  .o2 .rail { background:#fff; border-radius: var(--r); padding: 14px 8px; border: 1px solid var(--pearl); }
+  .o2 .rail-step { padding: 10px 12px; border-radius: 6px; cursor: pointer; display:flex; gap:10px; align-items:flex-start; margin-bottom: 4px; }
+  .o2 .rail-step.now { background: var(--green-pale); }
+  .o2 .icon-circle { width:22px; height:22px; border-radius:50%; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; font-size: 11px; font-weight: 900; }
+  .o2 .icon-circle.done { background: var(--green); color:#fff; }
+  .o2 .icon-circle.now { background: #FEF3C7; color: #92400E; border: 2px solid #f59e0b; }
+  .o2 .icon-circle.next { background: var(--cream2); color: var(--mist); border: 1.5px dashed var(--pearl); }
+  .o2 .step-label { font-size: 13px; font-weight: 700; line-height: 1.3; }
+  .o2 .step-sub { font-size: 11px; color: var(--mist); }
+  .o2 .pane { background:#fff; border-radius: var(--r); padding: 24px; border: 1px solid var(--pearl); }
+
+  /* ─── Option 3: Next action hero + chips ─── */
+  .o3 .hero {
+    background: linear-gradient(135deg, #fff 0%, var(--green-pale) 100%);
+    border: 1px solid var(--green3); border-radius: var(--r2);
+    padding: 24px; display: flex; gap: 20px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  }
+  .o3 .hero-eyebrow { font-size: 11px; font-weight: 800; color: var(--green-dark); text-transform: uppercase; letter-spacing: .08em; }
+  .o3 .hero h3 { font-size: 22px; margin-top: 4px; }
+  .o3 .hero .meta { color: var(--ash); font-size: 13px; margin-top: 4px; }
+  .o3 .hero-actions { display: flex; gap: 8px; }
+  .o3 .chips {
+    margin-top: 14px;
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;
+  }
+  .o3 .chip {
+    background:#fff; border:1px solid var(--pearl); border-radius: var(--r);
+    padding: 12px; cursor:pointer; font-size: 12px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .o3 .chip .label-tiny { color: var(--mist); }
+  .o3 .chip .name { font-weight: 800; color: var(--ink); font-size: 13px; }
+  .o3 .chip .pill { align-self: flex-start; margin-top: 2px; }
+  .o3 .chip.now { border-color: var(--green); }
+
+  /* ─── Option 4: Wizard with breadcrumb + Next/Prev ─── */
+  .o4 .crumbs { display: flex; gap: 6px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+  .o4 .crumb { font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 99px; background:#fff; border: 1px solid var(--pearl); color: var(--mist); cursor: pointer; }
+  .o4 .crumb.done { background: var(--green-pale); color: var(--green-dark); border-color: var(--green3); }
+  .o4 .crumb.now { background: var(--green); color:#fff; border-color: var(--green); }
+  .o4 .crumb-sep { color: var(--pearl); font-size: 12px; }
+  .o4 .pane { background:#fff; padding: 24px; border-radius: var(--r); border:1px solid var(--pearl); }
+  .o4 .nav-btns { display: flex; justify-content: space-between; margin-top: 16px; padding: 14px; background: var(--cream2); border-radius: var(--r); }
+
+  /* ─── Option 5: Kanban swim lanes ─── */
+  .o5 .columns { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; align-items: start; }
+  .o5 .col { background:#fff; border-radius: var(--r); border:1px solid var(--pearl); padding: 12px; min-height: 200px; }
+  .o5 .col.now { border-color: var(--green); box-shadow: 0 0 0 2px var(--green-pale); }
+  .o5 .col.done { background: var(--green-pale); border-color: var(--green3); }
+  .o5 .col-hd { font-size: 11px; font-weight: 800; color: var(--ash); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; display:flex; justify-content:space-between; align-items:center; }
+  .o5 .task {
+    background: var(--cream2); border-radius: 6px; padding: 8px 10px; font-size: 12px; margin-bottom: 6px;
+    color: var(--ink); cursor: pointer;
+  }
+  .o5 .task.done { background: var(--green); color:#fff; text-decoration: line-through; opacity: .85; }
+  .o5 .task.active { background:#fff; border: 1.5px solid var(--green); font-weight: 800; }
+  .o5 .col.future .task { opacity: .5; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Marketing campaign flow — 5 navigation mockups</h1>
+  <p class="lede">All five share the same content (Setup → Planning → Proofing → Payment → Done) and use real color tokens from <code>globals.css</code>. Sample state: a campaign at <strong>Step 3 (Proofing)</strong>, awaiting approver review of v3.</p>
+
+  <!-- ─── Option 1 ─── -->
+  <div class="opt o1">
+    <div class="opt-hd"><h2>① Sticky stepper + smart collapse</h2><span class="effort">Low effort · High payoff</span></div>
+    <div class="opt-body">
+      <div class="card">
+        <div class="stepper">
+          <div class="step-node done"><span class="num">✓</span> Setup</div>
+          <span class="arrow">▶</span>
+          <div class="step-node done"><span class="num">✓</span> Planning</div>
+          <span class="arrow">▶</span>
+          <div class="step-node now"><span class="num">3</span> Proofing</div>
+          <span class="arrow">▶</span>
+          <div class="step-node"><span class="num">4</span> Payment</div>
+          <span class="arrow">▶</span>
+          <div class="step-node"><span class="num">5</span> Done</div>
+        </div>
+        <div class="stack">
+          <div class="card step-card collapsed">
+            <span class="pill done">✓ Done</span>
+            <strong style="font-size:13px;">1. Setup</strong>
+            <span style="font-size:12px; color:var(--ash);">$5,000 budget · Notified Apr 28</span>
+          </div>
+          <div class="card step-card collapsed">
+            <span class="pill done">✓ Done</span>
+            <strong style="font-size:13px;">2. Planning</strong>
+            <span style="font-size:12px; color:var(--ash);">5,000 VDPs · 12 zip codes · Approved Apr 29</span>
+          </div>
+          <div class="card step-card now">
+            <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+              <h3>3. Proofing <span style="font-size:11px; color:var(--mist); font-weight:600;">(Marketing Team)</span></h3>
+              <span class="pill now">⏱ Awaiting approval</span>
+            </div>
+            <div class="stub-text" style="margin-bottom:10px;">Latest proof: <strong>v3</strong> · 2 files · uploaded by Joe at Collected, Apr 30 4:12pm</div>
+            <div style="background: var(--cream2); border-radius:6px; padding:10px; margin-bottom:10px;">
+              <div class="label-tiny" style="margin-bottom:4px;">Marketing team note</div>
+              <div style="font-size:12px;">v3 — fixed the offer headline contrast and bumped the call-out box.</div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
+              <div style="background:#FAF7F0; border:1px dashed var(--pearl); padding:18px; text-align:center; font-size:11px; color:var(--mist);">[ proof v3 — front ]</div>
+              <div style="background:#FAF7F0; border:1px dashed var(--pearl); padding:18px; text-align:center; font-size:11px; color:var(--mist);">[ proof v3 — back ]</div>
+            </div>
+            <button class="btn">✓ Approve</button>
+            <button class="btn btn-ghost">✎ Request Revision</button>
+          </div>
+          <div class="card step-card collapsed future">
+            <span class="pill next">Locked</span>
+            <strong style="font-size:13px;">4. Payment</strong>
+            <span class="body">Unlocks once proof is approved.</span>
+          </div>
+          <div class="card step-card collapsed future">
+            <span class="pill next">Locked</span>
+            <strong style="font-size:13px;">5. Done</strong>
+            <span class="body">Unlocks after payment.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="opt-note"><strong>How it feels:</strong> usually one tall card + 4 thin summary rows. Sticky stepper at top means jumping to any step is one click. Click a collapsed row to expand it inline. Mobile-friendly.</div>
+  </div>
+
+  <!-- ─── Option 2 ─── -->
+  <div class="opt o2">
+    <div class="opt-hd"><h2>② Two-pane vertical stepper</h2><span class="effort">Medium effort · Project-mgmt feel</span></div>
+    <div class="opt-body">
+      <div class="layout">
+        <div class="rail">
+          <div class="rail-step"><span class="icon-circle done">✓</span><div><div class="step-label">Setup</div><div class="step-sub">$5,000 · Notified</div></div></div>
+          <div class="rail-step"><span class="icon-circle done">✓</span><div><div class="step-label">Planning</div><div class="step-sub">5,000 VDPs · Approved</div></div></div>
+          <div class="rail-step now"><span class="icon-circle now">3</span><div><div class="step-label">Proofing</div><div class="step-sub" style="color:var(--green-dark); font-weight:700;">Awaiting approval</div></div></div>
+          <div class="rail-step"><span class="icon-circle next">4</span><div><div class="step-label">Payment</div><div class="step-sub">Locked</div></div></div>
+          <div class="rail-step"><span class="icon-circle next">5</span><div><div class="step-label">Done</div><div class="step-sub">Locked</div></div></div>
+        </div>
+        <div class="pane">
+          <h3>Proofing <span style="font-size:11px; color:var(--mist); font-weight:600;">(Marketing Team)</span></h3>
+          <div class="stub-text" style="margin-bottom:12px;">Upload one or more proof files. Approvers can review here or by replying "approve" to the notification email.</div>
+          <div style="background:var(--cream2); padding:12px; border-radius:6px; margin-bottom:12px;">
+            <div class="label-tiny" style="margin-bottom:4px;">Marketing team note (v3)</div>
+            <div style="font-size:12px;">v3 — fixed the offer headline contrast and bumped the call-out box.</div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
+            <div style="background:#FAF7F0; border:1px dashed var(--pearl); padding:24px; text-align:center; font-size:11px; color:var(--mist);">[ proof v3 — front ]</div>
+            <div style="background:#FAF7F0; border:1px dashed var(--pearl); padding:24px; text-align:center; font-size:11px; color:var(--mist);">[ proof v3 — back ]</div>
+          </div>
+          <button class="btn">✓ Approve</button>
+          <button class="btn btn-ghost">✎ Request Revision</button>
+        </div>
+      </div>
+    </div>
+    <div class="opt-note"><strong>How it feels:</strong> classic project-management tool layout. Always know where you are. Click any step on the left to switch panes. On mobile, the rail collapses to a top tab strip.</div>
+  </div>
+
+  <!-- ─── Option 3 ─── -->
+  <div class="opt o3">
+    <div class="opt-hd"><h2>③ "Next action" hero + chips</h2><span class="effort">Low effort · Bold UX</span></div>
+    <div class="opt-body">
+      <div class="hero">
+        <div>
+          <div class="hero-eyebrow">⏱ Next action</div>
+          <h3>Approve Proof v3</h3>
+          <div class="meta">Joe at Collected uploaded 2 files · Apr 30 4:12pm · Mail by <strong>Fri, May 2</strong></div>
+        </div>
+        <div class="hero-actions">
+          <button class="btn">Open proof</button>
+          <button class="btn btn-ghost">View campaign</button>
+        </div>
+      </div>
+      <div class="chips">
+        <div class="chip"><span class="label-tiny">Step 1</span><span class="name">Setup</span><span class="pill done">✓ Done</span></div>
+        <div class="chip"><span class="label-tiny">Step 2</span><span class="name">Planning</span><span class="pill done">✓ Done</span></div>
+        <div class="chip now"><span class="label-tiny">Step 3</span><span class="name">Proofing</span><span class="pill now">⏱ You</span></div>
+        <div class="chip"><span class="label-tiny">Step 4</span><span class="name">Payment</span><span class="pill next">Locked</span></div>
+        <div class="chip"><span class="label-tiny">Step 5</span><span class="name">Done</span><span class="pill next">Locked</span></div>
+      </div>
+    </div>
+    <div class="opt-note"><strong>How it feels:</strong> 80% of the time you came here to do <em>the next thing</em> — surface it immediately. The chip strip is a glance-able overview; click any chip to jump to that step's full UI.</div>
+  </div>
+
+  <!-- ─── Option 4 ─── -->
+  <div class="opt o4">
+    <div class="opt-hd"><h2>④ Wizard — breadcrumb + Next/Prev</h2><span class="effort">Medium effort · Most opinionated</span></div>
+    <div class="opt-body">
+      <div class="crumbs">
+        <span class="crumb done">✓ Setup</span>
+        <span class="crumb-sep">›</span>
+        <span class="crumb done">✓ Planning</span>
+        <span class="crumb-sep">›</span>
+        <span class="crumb now">3. Proofing</span>
+        <span class="crumb-sep">›</span>
+        <span class="crumb">4. Payment</span>
+        <span class="crumb-sep">›</span>
+        <span class="crumb">5. Done</span>
+      </div>
+      <div class="pane">
+        <h3>Proofing <span style="font-size:11px; color:var(--mist); font-weight:600;">(Marketing Team)</span></h3>
+        <div class="stub-text" style="margin-bottom:12px;">Upload one or more proof files. Approvers can review here or by replying "approve" to the notification email.</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
+          <div style="background:#FAF7F0; border:1px dashed var(--pearl); padding:24px; text-align:center; font-size:11px; color:var(--mist);">[ proof v3 — front ]</div>
+          <div style="background:#FAF7F0; border:1px dashed var(--pearl); padding:24px; text-align:center; font-size:11px; color:var(--mist);">[ proof v3 — back ]</div>
+        </div>
+        <button class="btn">✓ Approve</button>
+      </div>
+      <div class="nav-btns">
+        <button class="btn btn-ghost">← Back to Planning</button>
+        <button class="btn" disabled style="opacity:.5;">Continue to Payment →</button>
+      </div>
+    </div>
+    <div class="opt-note"><strong>How it feels:</strong> cleanest visual. One thing at a time. Risk: hides parallel context — sometimes you want to see budget while in the payment phase.</div>
+  </div>
+
+  <!-- ─── Option 5 ─── -->
+  <div class="opt o5">
+    <div class="opt-hd"><h2>⑤ Kanban swim lanes</h2><span class="effort">Higher effort · Strong visual identity</span></div>
+    <div class="opt-body">
+      <div class="columns">
+        <div class="col done">
+          <div class="col-hd">1. Setup <span class="pill done">✓</span></div>
+          <div class="task done">Set budget — $5,000</div>
+          <div class="task done">Notify team</div>
+        </div>
+        <div class="col done">
+          <div class="col-hd">2. Planning <span class="pill done">✓</span></div>
+          <div class="task done">Submit VDP plan</div>
+          <div class="task done">Approve plan</div>
+        </div>
+        <div class="col now">
+          <div class="col-hd">3. Proofing <span class="pill now">⏱ Now</span></div>
+          <div class="task done">Upload proof v1</div>
+          <div class="task done">Upload proof v2</div>
+          <div class="task done">Upload proof v3</div>
+          <div class="task active">Approve proof v3</div>
+        </div>
+        <div class="col future">
+          <div class="col-hd">4. Payment <span class="pill next">⏳</span></div>
+          <div class="task">Request payment</div>
+          <div class="task">Authorize</div>
+          <div class="task">Mark paid</div>
+        </div>
+        <div class="col future">
+          <div class="col-hd">5. Done <span class="pill next">⏳</span></div>
+          <div class="task">Send accountant receipt</div>
+        </div>
+      </div>
+    </div>
+    <div class="opt-note"><strong>How it feels:</strong> reads as "stages of a pipeline" instantly. Visually strong on desktop. Mobile would stack vertically — different layout, more code.</div>
+  </div>
+
+</div>
+</body>
+</html>

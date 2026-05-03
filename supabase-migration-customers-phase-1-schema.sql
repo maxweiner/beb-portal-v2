@@ -25,8 +25,8 @@
 -- ── 1. Enums ────────────────────────────────────────────────
 DO $$ BEGIN
   CREATE TYPE customer_how_did_you_hear AS ENUM (
-    'postcard', 'newspaper', 'word_of_mouth', 'walk_in',
-    'online', 'referral', 'other'
+    'large_postcard', 'small_postcard', 'newspaper',
+    'email', 'text', 'the_store_told_me'
   );
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 

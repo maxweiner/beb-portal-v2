@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Commission rate UI options — mockup</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: #FAF7F0;
+    color: #1F2937;
+    padding: 32px;
+    max-width: 980px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 22px; margin: 0 0 6px; color: #11432B; }
+  h2 { font-size: 16px; margin: 28px 0 10px; color: #11432B; }
+  .sub { color: #6B7280; font-size: 13px; margin-bottom: 18px; }
+  .card {
+    background: #fff;
+    border: 1px solid #E5E7EB;
+    border-radius: 12px;
+    padding: 18px;
+    box-shadow: 0 1px 0 rgba(0,0,0,.02);
+    margin-bottom: 22px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: #F3EFE6; }
+  th {
+    text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 800;
+    color: #6B7280; text-transform: uppercase; letter-spacing: .04em;
+  }
+  td { padding: 8px 10px; border-bottom: 1px solid #F3EFE6; vertical-align: middle; }
+  td input[type=text], td input[type=number] {
+    width: 100%; padding: 6px 8px; border: 1px solid #D1D5DB; border-radius: 6px;
+    font: inherit;
+  }
+  .num { width: 30px; color: #6B7280; font-weight: 700; }
+  .typesel select {
+    width: 100%; padding: 6px 8px; border: 1px solid #D1D5DB; border-radius: 6px;
+    font: inherit; background: #fff;
+  }
+
+  /* ─── OPTION A: 3-segment pill ─── */
+  .seg {
+    display: inline-flex; padding: 2px; gap: 2px;
+    background: #F3EFE6; border-radius: 999px;
+    font-weight: 700; font-size: 11px;
+  }
+  .seg button {
+    border: none; cursor: pointer; padding: 5px 12px;
+    border-radius: 999px; background: transparent;
+    color: #4B5563; font: inherit;
+  }
+  .seg button.on {
+    background: #1D6B44; color: #fff;
+    box-shadow: 0 1px 0 rgba(0,0,0,.06);
+  }
+  .seg button.on.zero { background: #6B7280; }
+  .seg button.on.five { background: #1D6B44; }
+  .seg button.on.ten  { background: #1D6B44; }
+
+  /* ─── OPTION B: two checkboxes ─── */
+  .twochk { display: inline-flex; gap: 10px; align-items: center; }
+  .twochk label {
+    display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
+    padding: 4px 8px; border-radius: 6px; border: 1px solid #E5E7EB;
+    font-size: 11px; font-weight: 700; color: #4B5563;
+  }
+  .twochk label.on5  { background: #ECFDF5; border-color: #6EE7B7; color: #065F46; }
+  .twochk label.on0  { background: #F3F4F6; border-color: #9CA3AF; color: #1F2937; }
+  .twochk input { margin: 0; }
+
+  .delbtn {
+    background: transparent; border: 1px solid #FCA5A5; color: #B91C1C;
+    border-radius: 6px; padding: 4px 8px; cursor: pointer; font-weight: 700;
+  }
+
+  .legend {
+    background: #F3F4F6; border-radius: 8px; padding: 12px 14px;
+    color: #4B5563; font-size: 13px; margin-top: 6px;
+  }
+  .legend strong { color: #1F2937; }
+  .pro  { color: #047857; font-weight: 700; }
+  .con  { color: #B91C1C; font-weight: 700; }
+
+  .preview-totals {
+    margin-top: 12px; padding: 10px 12px; background: #ECFDF5;
+    border: 1px solid #6EE7B7; border-radius: 8px;
+    font-size: 12px; color: #065F46; font-weight: 700;
+  }
+</style>
+</head>
+<body>
+
+<h1>Per-check 0% commission — UI options</h1>
+<p class="sub">
+  Same data either way (<code>buyer_checks.commission_rate ∈ {0, 5, 10}</code>).
+  Just two ways to expose the third option in the existing per-row check editor.
+</p>
+
+<!-- ─────────── OPTION A ─────────── -->
+<h2>Option A · 3-state segmented pill</h2>
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Type</th>
+        <th>Check #</th>
+        <th>Amount</th>
+        <th>Buy Form #</th>
+        <th>Rate</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="num">1</td>
+        <td class="typesel"><select><option>Check</option></select></td>
+        <td><input type="text" value="1042"></td>
+        <td><input type="text" value="2,450.00"></td>
+        <td><input type="text" value="48271"></td>
+        <td>
+          <div class="seg">
+            <button class="on ten">10%</button>
+            <button>5%</button>
+            <button>0%</button>
+          </div>
+        </td>
+        <td><button class="delbtn">×</button></td>
+      </tr>
+      <tr>
+        <td class="num">2</td>
+        <td class="typesel"><select><option>Check</option></select></td>
+        <td><input type="text" value="1043"></td>
+        <td><input type="text" value="780.00"></td>
+        <td><input type="text" value="48272"></td>
+        <td>
+          <div class="seg">
+            <button>10%</button>
+            <button class="on five">5%</button>
+            <button>0%</button>
+          </div>
+        </td>
+        <td><button class="delbtn">×</button></td>
+      </tr>
+      <tr>
+        <td class="num">3</td>
+        <td class="typesel"><select><option>Check</option></select></td>
+        <td><input type="text" value="1044"></td>
+        <td><input type="text" value="320.00"></td>
+        <td><input type="text" value="48273"></td>
+        <td>
+          <div class="seg">
+            <button>10%</button>
+            <button>5%</button>
+            <button class="on zero">0%</button>
+          </div>
+        </td>
+        <td><button class="delbtn">×</button></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="preview-totals">
+    $2,450 @ 10%  ·  $780 @ 5%  ·  $320 @ 0% (store purchase)
+  </div>
+</div>
+
+<div class="legend">
+  <strong>Pros:</strong> <span class="pro">Mutually exclusive by construction</span> — can't accidentally tag a check as both 5% and 0%. One visual element. Mobile-friendly. <br>
+  <strong>Cons:</strong> A row is taller (pill is wider than a single checkbox). Harder to skim a long list — every row shows three pills.
+</div>
+
+<!-- ─────────── OPTION B ─────────── -->
+<h2>Option B · Keep the 5% checkbox, add a 0% checkbox next to it</h2>
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Type</th>
+        <th>Check #</th>
+        <th>Amount</th>
+        <th>Buy Form #</th>
+        <th>Rate</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="num">1</td>
+        <td class="typesel"><select><option>Check</option></select></td>
+        <td><input type="text" value="1042"></td>
+        <td><input type="text" value="2,450.00"></td>
+        <td><input type="text" value="48271"></td>
+        <td>
+          <div class="twochk">
+            <label><input type="checkbox"> 5%</label>
+            <label><input type="checkbox"> 0%</label>
+          </div>
+        </td>
+        <td><button class="delbtn">×</button></td>
+      </tr>
+      <tr>
+        <td class="num">2</td>
+        <td class="typesel"><select><option>Check</option></select></td>
+        <td><input type="text" value="1043"></td>
+        <td><input type="text" value="780.00"></td>
+        <td><input type="text" value="48272"></td>
+        <td>
+          <div class="twochk">
+            <label class="on5"><input type="checkbox" checked> 5%</label>
+            <label><input type="checkbox"> 0%</label>
+          </div>
+        </td>
+        <td><button class="delbtn">×</button></td>
+      </tr>
+      <tr>
+        <td class="num">3</td>
+        <td class="typesel"><select><option>Check</option></select></td>
+        <td><input type="text" value="1044"></td>
+        <td><input type="text" value="320.00"></td>
+        <td><input type="text" value="48273"></td>
+        <td>
+          <div class="twochk">
+            <label><input type="checkbox"> 5%</label>
+            <label class="on0"><input type="checkbox" checked> 0%</label>
+          </div>
+        </td>
+        <td><button class="delbtn">×</button></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="preview-totals">
+    $2,450 @ 10%  ·  $780 @ 5%  ·  $320 @ 0% (store purchase)
+  </div>
+</div>
+
+<div class="legend">
+  <strong>Pros:</strong> Smallest visual change from today (5% checkbox is already in production). Compact rows. Familiar to existing users. <br>
+  <strong>Cons:</strong> <span class="con">Two checkboxes that should be mutually exclusive</span> — need to handle the case where both get ticked. Either auto-uncheck the other or grey it out. More logic + a small UX gotcha. Default state of "both unchecked" still means 10% (implicit) — slightly less self-explanatory than Option A's segmented pill where the active state is always visible.
+</div>
+
+<h2>My recommendation</h2>
+<div class="legend">
+  <strong>Option A.</strong> The mutual-exclusion is enforced by the control itself — no logic to write, no edge case where a row ends up flagged 5% AND 0%. The visual cost (slightly wider) is worth the correctness guarantee, especially with money on the line. Mobile cell where space is tight is the only place I'd reconsider — the pill could be stacked vertically there.
+</div>
+
+</body>
+</html>

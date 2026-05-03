@@ -168,9 +168,12 @@ function CreateTrunkShowModal({ onClose, onCreated }: { onClose: () => void; onC
   const valid = !!draft.store_id && !!draft.start_date && !!draft.end_date
                  && draft.end_date >= draft.start_date && !!draft.assigned_rep_id
 
+  // Trunk-rep pool: anyone with is_trunk_rep=TRUE (admin-toggled flag),
+  // plus any partner so they can self-assign. Replaces the old role-based
+  // filter — see users.is_trunk_rep migration.
   const repOptions = users
     .filter(u => u.active !== false)
-    .filter(u => u.role === 'sales_rep' || u.role === 'admin' || u.role === 'superadmin' || u.is_partner)
+    .filter(u => (u as any).is_trunk_rep === true || u.is_partner)
     .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
 
   async function submit() {

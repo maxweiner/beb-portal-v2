@@ -47,6 +47,8 @@ function UsersTab() {
   const { users, user: me, reload } = useApp()
   const isSuperAdmin = me?.role === 'superadmin'
   const isAdmin = me?.role === 'admin' || me?.role === 'superadmin'
+  const myRoles: string[] = (me as any)?.roles || (me?.role ? [me.role] : [])
+  const canEditTrunkRep = isSuperAdmin || myRoles.includes('trunk_admin')
   const [editingName, setEditingName] = useState<string | null>(null)
   const [nameVal, setNameVal] = useState('')
   const [editingUser, setEditingUser] = useState<any>(null)
@@ -109,6 +111,22 @@ function UsersTab() {
     if (error) {
       alert('Failed to update buyer status: ' + error.message)
       setBuyerStates(p => ({ ...p, [u.id]: !next }))
+      return
+    }
+    reload()
+  }
+
+  // Mirror of the Buyer toggle for the new is_trunk_rep flag. Default
+  // is FALSE (no special handling for `!== false` like is_buyer).
+  const [trunkRepStates, setTrunkRepStates] = useState<Record<string, boolean>>({})
+  const getTrunkRep = (u: any) => trunkRepStates[u.id] !== undefined ? trunkRepStates[u.id] : !!u.is_trunk_rep
+  const toggleTrunkRep = async (u: any) => {
+    const next = !getTrunkRep(u)
+    setTrunkRepStates(p => ({ ...p, [u.id]: next }))
+    const { error } = await supabase.from('users').update({ is_trunk_rep: next }).eq('id', u.id)
+    if (error) {
+      alert('Failed to update trunk rep status: ' + error.message)
+      setTrunkRepStates(p => ({ ...p, [u.id]: !next }))
       return
     }
     reload()
@@ -471,6 +489,25 @@ function UsersTab() {
                     )}
                   </div>
                   <span style={{ fontSize: 13, fontWeight: 600, color: getBuyer(u) ? 'var(--green-dark)' : 'var(--ash)' }}>Buyer</span>
+                </label>
+              )}
+
+              {canEditTrunkRep && (
+                <label onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', userSelect: 'none' }}>
+                  <div onClick={() => toggleTrunkRep(u)} style={{
+                    width: 20, height: 20, borderRadius: 4, flexShrink: 0,
+                    border: `2px solid ${getTrunkRep(u) ? 'var(--green)' : 'var(--pearl)'}`,
+                    background: getTrunkRep(u) ? 'var(--green)' : '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer', transition: 'all .15s',
+                  }}>
+                    {getTrunkRep(u) && (
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                        <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: getTrunkRep(u) ? 'var(--green-dark)' : 'var(--ash)' }}>Trunk Rep</span>
                 </label>
               )}
             </div>

@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Notifications placement — 6 mockups</title>
+<style>
+  :root {
+    --sidebar-bg: #2D3B2D;
+    --sidebar-active: #3F5240;
+    --green: #1D6B44;
+    --green-pale: #E8F2EC;
+    --green-dark: #155538;
+    --green-mute: #7EC8A0;
+    --ink: #1C2128;
+    --ash: #475569;
+    --mist: #94A3B8;
+    --pearl: #E2E8F0;
+    --cream: #FAF7F0;
+    --cream2: #F2EBDB;
+    --red: #DC2626;
+    --r: 8px;
+    --r2: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; font-family: -apple-system, "SF Pro Text", "Lato", sans-serif; color: var(--ink); background: #F5F0E8; }
+  .page { max-width: 1400px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 24px; font-weight: 900; margin: 0 0 8px; }
+  .lede { color: var(--mist); font-size: 14px; margin: 0 0 24px; max-width: 820px; line-height: 1.5; }
+
+  .grid {
+    display: grid; gap: 20px;
+    grid-template-columns: repeat(2, 1fr);
+  }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+  .opt {
+    background: #fff; border: 1px solid var(--pearl); border-radius: var(--r2);
+    overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.06);
+    display: flex; flex-direction: column;
+  }
+  .opt-hd { padding: 14px 16px; border-bottom: 1px solid var(--pearl); }
+  .opt-hd .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--green); color: #fff; font-size: 11px; font-weight: 900;
+    margin-right: 6px;
+  }
+  .opt-hd h2 { display: inline; font-size: 15px; font-weight: 800; margin: 0; }
+  .opt-hd .effort {
+    display: block; margin-top: 4px;
+    font-size: 10px; font-weight: 800; color: var(--mist);
+    text-transform: uppercase; letter-spacing: .06em;
+  }
+  .opt-note {
+    padding: 10px 16px; background: var(--cream2);
+    border-top: 1px solid var(--pearl);
+    font-size: 11px; color: var(--ash); line-height: 1.5;
+  }
+
+  /* App-shell preview — miniature sidebar + main area */
+  .preview {
+    background: #F5F0E8; padding: 14px;
+    height: 380px; position: relative;
+    display: flex; gap: 0;
+  }
+  .sb {
+    background: var(--sidebar-bg); color: #fff;
+    width: 130px; flex-shrink: 0;
+    padding: 8px 0;
+    font-size: 10px;
+    border-radius: var(--r);
+    display: flex; flex-direction: column;
+  }
+  .sb-brand {
+    padding: 4px 10px 8px;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+    margin-bottom: 4px;
+  }
+  .sb-brand .name { font-size: 10px; font-weight: 900; }
+  .sb-brand .sub { font-size: 7px; color: var(--green-mute); text-transform: uppercase; letter-spacing: .08em; }
+  .sb-section {
+    padding: 5px 10px 3px; font-size: 7px; color: rgba(255,255,255,.45);
+    text-transform: uppercase; letter-spacing: .1em; font-weight: 700;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .sb-item {
+    display: flex; align-items: center; gap: 5px;
+    padding: 3px 10px; color: rgba(255,255,255,.85);
+  }
+  .sb-item.active { background: var(--sidebar-active); color: #fff; font-weight: 800; }
+  .sb-item .ic { width: 12px; flex-shrink: 0; }
+  .sb-spacer { flex: 1; }
+  .sb-footer {
+    padding: 6px 10px; border-top: 1px solid rgba(255,255,255,.06);
+    font-size: 9px;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .sb-footer .gear, .sb-footer .bell {
+    width: 16px; height: 16px;
+    border-radius: 4px; background: rgba(255,255,255,.05);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 9px; position: relative;
+  }
+  .sb-footer .bell .badge,
+  .top-bar .bell .badge,
+  .float-bell .badge,
+  .palette .badge,
+  .slide-trigger .badge {
+    position: absolute; top: -2px; right: -2px;
+    background: var(--red); color: #fff;
+    font-size: 7px; font-weight: 900;
+    border-radius: 99px; padding: 0 3px;
+    line-height: 1.4; min-width: 9px; text-align: center;
+  }
+
+  .main {
+    flex: 1; min-width: 0;
+    background: #fff; margin-left: 14px;
+    border-radius: var(--r);
+    border: 1px solid var(--pearl);
+    padding: 14px;
+    position: relative;
+    overflow: hidden;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .stub-line { height: 8px; background: var(--cream2); border-radius: 4px; }
+  .stub-line.short { width: 60%; }
+  .stub-line.mid { width: 80%; }
+
+  /* Top bar (option 1) */
+  .top-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 12px;
+    background: var(--cream); border: 1px solid var(--pearl); border-radius: 6px;
+    font-size: 10px; margin-bottom: 6px;
+    gap: 8px;
+  }
+  .top-bar .left { display: flex; align-items: center; gap: 8px; }
+  .top-bar .brand-badge {
+    background: var(--green-pale); color: var(--green-dark);
+    padding: 2px 8px; border-radius: 99px;
+    font-size: 9px; font-weight: 800; letter-spacing: .04em;
+  }
+  .top-bar .search {
+    background: #fff; border: 1px solid var(--pearl);
+    padding: 3px 10px; border-radius: 5px;
+    font-size: 9px; color: var(--mist);
+    width: 130px;
+  }
+  .top-bar .right { display: flex; align-items: center; gap: 6px; }
+  .top-bar .bell, .top-bar .gear, .top-bar .avatar {
+    width: 20px; height: 20px;
+    border-radius: 4px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; position: relative;
+  }
+  .top-bar .bell { background: var(--cream2); color: var(--ink); border: 1px solid var(--pearl); }
+  .top-bar .gear { background: transparent; color: var(--ash); }
+  .top-bar .avatar {
+    background: var(--green); color: #fff; font-weight: 800; font-size: 9px;
+  }
+
+  /* Floating bell (option 2) */
+  .float-bell {
+    position: absolute; bottom: 14px; right: 14px;
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--sidebar-bg); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; box-shadow: 0 4px 12px rgba(0,0,0,.2);
+    z-index: 5;
+  }
+
+  /* Slide-in panel trigger (option 3) */
+  .slide-trigger {
+    position: absolute; top: 14px; right: 14px;
+    width: 24px; height: 24px;
+    background: var(--cream2); border: 1px solid var(--pearl);
+    border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+    z-index: 5;
+  }
+  .slide-panel {
+    position: absolute; top: 0; right: 0; bottom: 0;
+    width: 200px;
+    background: #fff;
+    border-left: 1px solid var(--pearl);
+    box-shadow: -8px 0 24px rgba(0,0,0,.08);
+    padding: 10px;
+    transform: translateX(100%);
+    animation: slideIn 1.4s ease forwards;
+  }
+  @keyframes slideIn {
+    50% { transform: translateX(100%); }
+    100% { transform: translateX(0); }
+  }
+  .slide-panel .ph {
+    font-size: 9px; font-weight: 800; color: var(--ash);
+    text-transform: uppercase; letter-spacing: .06em;
+    padding-bottom: 6px; border-bottom: 1px solid var(--pearl);
+    margin-bottom: 6px;
+  }
+  .slide-panel .ni {
+    padding: 5px 6px; font-size: 9px;
+    border-bottom: 1px solid var(--cream2);
+    color: var(--ink);
+  }
+  .slide-panel .ni .meta { color: var(--mist); font-size: 8px; }
+  .slide-panel .ni.unread { background: var(--green-pale); border-radius: 4px; }
+
+  /* Cmd+K palette (option 4) */
+  .palette-overlay {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,.5);
+    display: flex; align-items: flex-start; justify-content: center;
+    padding-top: 50px;
+  }
+  .palette {
+    background: #fff; border-radius: 8px;
+    width: 240px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.4);
+    padding: 8px;
+    position: relative;
+  }
+  .palette input {
+    width: 100%; padding: 5px 8px; font-size: 10px;
+    border: none; border-bottom: 1px solid var(--pearl);
+    outline: none;
+  }
+  .palette .ph {
+    font-size: 8px; font-weight: 800; color: var(--mist);
+    text-transform: uppercase; letter-spacing: .06em;
+    padding: 6px 8px 2px;
+  }
+  .palette .row {
+    padding: 4px 8px; font-size: 10px;
+    display: flex; gap: 6px; align-items: center;
+    border-radius: 3px;
+  }
+  .palette .row.active { background: var(--green-pale); color: var(--green-dark); font-weight: 700; }
+  .palette .badge { position: static; margin-left: auto; }
+
+  /* Pinned section badge (option 5) */
+  .sb-section.with-badge { position: relative; }
+  .sb-section.with-badge::after {
+    content: ''; position: absolute;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--red);
+    margin-left: 4px;
+    display: inline-block;
+    position: relative;
+  }
+
+  .sb-pinned-panel {
+    background: var(--sidebar-active);
+    margin: 4px 6px;
+    padding: 6px 8px; border-radius: 4px;
+    font-size: 8px; color: rgba(255,255,255,.85);
+  }
+  .sb-pinned-panel .head { font-weight: 800; color: #fff; margin-bottom: 4px; font-size: 9px; }
+  .sb-pinned-panel .row { display: flex; justify-content: space-between; margin-bottom: 2px; }
+
+  /* Footer next to gear (option 6) */
+  .sb-footer .bell.large {
+    width: 18px; height: 18px;
+    background: rgba(220, 38, 38, .25);
+  }
+
+  /* Caption inside main */
+  .caption {
+    font-size: 11px; color: var(--mist);
+    margin-top: 6px;
+  }
+  .anno {
+    background: var(--cream); border: 1px solid var(--pearl); border-radius: 6px;
+    padding: 8px 10px; font-size: 10px; color: var(--ash);
+    margin-top: 8px;
+  }
+  .anno strong { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Notifications placement — 6 mockups</h1>
+  <p class="lede">Today's notifications bell sits in the sidebar footer above the user name. Each option below shows where it could move to. Each preview is a miniature app shell (real BeneficialOS dark sidebar + content area) with the notifications integration highlighted.</p>
+
+  <div class="grid">
+
+    <!-- ① Top-right header bar -->
+    <div class="opt">
+      <div class="opt-hd">
+        <span class="num">1</span><h2>Top-right header bar</h2>
+        <span class="effort">Medium effort · Most conventional</span>
+      </div>
+      <div class="preview">
+        <div class="sb">
+          <div class="sb-brand"><div class="name">★ BeneficialOS</div><div class="sub">Buyer Portal</div></div>
+          <div class="sb-section">DAILY</div>
+          <div class="sb-item active"><span class="ic">⌂</span>Dashboard</div>
+          <div class="sb-item"><span class="ic">📅</span>Bookings</div>
+          <div class="sb-item"><span class="ic">📝</span>Day Data</div>
+          <div class="sb-spacer"></div>
+          <div class="sb-footer">Max W.<span class="gear">⚙</span></div>
+        </div>
+        <div class="main">
+          <div class="top-bar">
+            <div class="left">
+              <span class="brand-badge">BEB</span>
+              <span class="search">⌕ Search…</span>
+            </div>
+            <div class="right">
+              <span class="bell">🔔<span class="badge">3</span></span>
+              <span class="gear">⚙</span>
+              <span class="avatar">M</span>
+            </div>
+          </div>
+          <div style="font-size: 13px; font-weight: 900;">Dashboard</div>
+          <div class="stub-line mid"></div>
+          <div class="stub-line short"></div>
+          <div class="stub-line"></div>
+          <div class="anno">Bell + gear + avatar all live up here. Sidebar drops both. <strong>Costs ~40px vertical</strong> but unlocks a top-bar pattern (Cmd+K, brand badge, etc.).</div>
+        </div>
+      </div>
+      <div class="opt-note"><strong>Pros:</strong> standard SaaS pattern (Linear, Notion, Slack). Discoverable. Sets up Cmd+K + avatar dropdown later. <strong>Cons:</strong> takes vertical space; touches every page.</div>
+    </div>
+
+    <!-- ② Floating bottom-right corner -->
+    <div class="opt">
+      <div class="opt-hd">
+        <span class="num">2</span><h2>Floating bottom-right corner</h2>
+        <span class="effort">Low effort · Casual feel</span>
+      </div>
+      <div class="preview">
+        <div class="sb">
+          <div class="sb-brand"><div class="name">★ BeneficialOS</div><div class="sub">Buyer Portal</div></div>
+          <div class="sb-section">DAILY</div>
+          <div class="sb-item active"><span class="ic">⌂</span>Dashboard</div>
+          <div class="sb-item"><span class="ic">📅</span>Bookings</div>
+          <div class="sb-item"><span class="ic">📝</span>Day Data</div>
+          <div class="sb-spacer"></div>
+          <div class="sb-footer">Max W.<span class="gear">⚙</span></div>
+        </div>
+        <div class="main">
+          <div style="font-size: 13px; font-weight: 900;">Dashboard</div>
+          <div class="stub-line mid"></div>
+          <div class="stub-line short"></div>
+          <div class="stub-line"></div>
+          <div class="stub-line mid"></div>
+          <div class="stub-line short"></div>
+          <div class="float-bell">
+            🔔
+            <span class="badge">3</span>
+          </div>
+          <div class="anno">Always visible regardless of scroll. <strong>Zero header / sidebar real estate</strong>. Click → opens a panel.</div>
+        </div>
+      </div>
+      <div class="opt-note"><strong>Pros:</strong> always-on, zero permanent UI cost. <strong>Cons:</strong> casual / chat-widget feel; can clash with other floating buttons (e.g. mobile-toggle).</div>
+    </div>
+
+    <!-- ③ Slide-in panel triggered by icon -->
+    <div class="opt">
+      <div class="opt-hd">
+        <span class="num">3</span><h2>Slide-in panel from the right</h2>
+        <span class="effort">Medium-high effort · Modern feel</span>
+      </div>
+      <div class="preview">
+        <div class="sb">
+          <div class="sb-brand"><div class="name">★ BeneficialOS</div><div class="sub">Buyer Portal</div></div>
+          <div class="sb-section">DAILY</div>
+          <div class="sb-item active"><span class="ic">⌂</span>Dashboard</div>
+          <div class="sb-item"><span class="ic">📅</span>Bookings</div>
+          <div class="sb-item"><span class="ic">📝</span>Day Data</div>
+          <div class="sb-spacer"></div>
+          <div class="sb-footer">Max W.<span class="gear">⚙</span></div>
+        </div>
+        <div class="main">
+          <div style="font-size: 13px; font-weight: 900;">Dashboard</div>
+          <div class="stub-line mid"></div>
+          <div class="stub-line short"></div>
+          <div class="stub-line"></div>
+          <div class="slide-trigger">🔔<span class="badge">3</span></div>
+          <div class="slide-panel">
+            <div class="ph">Notifications</div>
+            <div class="ni unread">3 reports awaiting review<div class="meta">2 min ago</div></div>
+            <div class="ni unread">New travel forwarded<div class="meta">14 min ago</div></div>
+            <div class="ni unread">Marketing budget set<div class="meta">1 hr ago</div></div>
+            <div class="ni">Day 2 entered<div class="meta">Yesterday</div></div>
+          </div>
+          <div class="anno" style="margin-top: 0;">Click the bell (top-right of content) → panel slides in. Linear/Slack/iOS-style.</div>
+        </div>
+      </div>
+      <div class="opt-note"><strong>Pros:</strong> modern, doesn't take persistent space, panel can be rich (filters, mark-all-read, etc). <strong>Cons:</strong> highest effort — panel + animation + state management.</div>
+    </div>
+
+    <!-- ④ Inside Cmd+K palette -->
+    <div class="opt">
+      <div class="opt-hd">
+        <span class="num">4</span><h2>Inside Cmd+K palette</h2>
+        <span class="effort">High effort · Keyboard-first</span>
+      </div>
+      <div class="preview">
+        <div class="sb">
+          <div class="sb-brand"><div class="name">★ BeneficialOS</div><div class="sub">Buyer Portal</div></div>
+          <div class="sb-section">DAILY</div>
+          <div class="sb-item active"><span class="ic">⌂</span>Dashboard</div>
+          <div class="sb-item"><span class="ic">📅</span>Bookings</div>
+          <div class="sb-item"><span class="ic">📝</span>Day Data</div>
+          <div class="sb-spacer"></div>
+          <div class="sb-footer">Max W.<span class="gear">⚙</span></div>
+        </div>
+        <div class="main">
+          <div style="font-size: 13px; font-weight: 900;">Dashboard</div>
+          <div class="stub-line mid"></div>
+          <div class="stub-line short"></div>
+          <div class="palette-overlay">
+            <div class="palette">
+              <input value="" placeholder="⌘K · Search or jump to…" />
+              <div class="ph">🔔 Notifications · 3 unread</div>
+              <div class="row active">3 expense reports awaiting review<span class="badge">!</span></div>
+              <div class="row">New travel forwarded</div>
+              <div class="row">Marketing budget set</div>
+              <div class="ph" style="margin-top: 4px;">Pages</div>
+              <div class="row">Bookings</div>
+            </div>
+          </div>
+          <div class="anno">Notifications appear as a section inside the global palette. Same shortcut as nav search.</div>
+        </div>
+      </div>
+      <div class="opt-note"><strong>Pros:</strong> zero permanent UI; keyboard-first. Pairs with sidebar Cmd+K idea. <strong>Cons:</strong> requires Cmd+K to exist first; discoverability depends on user knowing the shortcut.</div>
+    </div>
+
+    <!-- ⑤ Pinned section header badge -->
+    <div class="opt">
+      <div class="opt-hd">
+        <span class="num">5</span><h2>Pinned section header badge</h2>
+        <span class="effort">Low effort · Subtle</span>
+      </div>
+      <div class="preview">
+        <div class="sb">
+          <div class="sb-brand"><div class="name">★ BeneficialOS</div><div class="sub">Buyer Portal</div></div>
+          <div class="sb-section with-badge">★ PINNED <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--red);margin-left:4px;"></span></div>
+          <div class="sb-pinned-panel">
+            <div class="head">🔔 3 new</div>
+            <div class="row"><span>Reports</span><span style="color:var(--green-mute);">2</span></div>
+            <div class="row"><span>Travel</span><span style="color:var(--green-mute);">1</span></div>
+          </div>
+          <div class="sb-item active"><span class="ic">⌂</span>Dashboard</div>
+          <div class="sb-item"><span class="ic">🧾</span>Expenses</div>
+          <div class="sb-section">DAILY</div>
+          <div class="sb-item"><span class="ic">📅</span>Bookings</div>
+          <div class="sb-spacer"></div>
+          <div class="sb-footer">Max W.<span class="gear">⚙</span></div>
+        </div>
+        <div class="main">
+          <div style="font-size: 13px; font-weight: 900;">Dashboard</div>
+          <div class="stub-line mid"></div>
+          <div class="stub-line short"></div>
+          <div class="stub-line"></div>
+          <div class="anno">Tiny red dot on the "★ PINNED" section header when there are unread items. Click expands a mini-panel inside the sidebar.</div>
+        </div>
+      </div>
+      <div class="opt-note"><strong>Pros:</strong> reuses the brand-new Pinned section. No new UI surface to design. <strong>Cons:</strong> subtle to the point of invisible. Tiny click target.</div>
+    </div>
+
+    <!-- ⑥ Tiny indicator next to gear -->
+    <div class="opt">
+      <div class="opt-hd">
+        <span class="num">6</span><h2>Tiny indicator next to the gear</h2>
+        <span class="effort">Lowest effort · Closest to today</span>
+      </div>
+      <div class="preview">
+        <div class="sb">
+          <div class="sb-brand"><div class="name">★ BeneficialOS</div><div class="sub">Buyer Portal</div></div>
+          <div class="sb-section">DAILY</div>
+          <div class="sb-item active"><span class="ic">⌂</span>Dashboard</div>
+          <div class="sb-item"><span class="ic">📅</span>Bookings</div>
+          <div class="sb-item"><span class="ic">📝</span>Day Data</div>
+          <div class="sb-item"><span class="ic">🧾</span>Expenses</div>
+          <div class="sb-spacer"></div>
+          <div class="sb-footer" style="gap:6px;">
+            Max W.
+            <span class="bell large">🔔<span class="badge">3</span></span>
+            <span class="gear">⚙</span>
+          </div>
+        </div>
+        <div class="main">
+          <div style="font-size: 13px; font-weight: 900;">Dashboard</div>
+          <div class="stub-line mid"></div>
+          <div class="stub-line short"></div>
+          <div class="stub-line"></div>
+          <div class="anno">Same place (sidebar footer) but the bell shrinks to an icon next to the gear. Frees up the row that the bell currently consumes. Click → notifications panel.</div>
+        </div>
+      </div>
+      <div class="opt-note"><strong>Pros:</strong> minimal change. Quickest win. Same mental model. <strong>Cons:</strong> doesn't unlock anything new; still uses sidebar real estate.</div>
+    </div>
+
+  </div>
+
+  <div style="margin-top: 32px; padding: 16px; background: var(--cream2); border-radius: var(--r);">
+    <strong>Recommendation order:</strong>
+    <ul style="margin: 8px 0 0; padding-left: 20px; line-height: 1.7;">
+      <li><strong>If you want the smallest diff:</strong> ⑥ — bell becomes a tiny icon next to the gear. One PR, one component change.</li>
+      <li><strong>If you want the biggest UX win:</strong> ① — top header bar. Sets up Cmd+K, avatar dropdown, brand badge later.</li>
+      <li><strong>If you want the most polished feel:</strong> ③ — slide-in panel. Pairs nicely with the recently-merged sidebar polish.</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

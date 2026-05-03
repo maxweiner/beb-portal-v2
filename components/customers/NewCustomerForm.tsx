@@ -16,8 +16,8 @@ import { HOW_DID_YOU_HEAR_LABELS } from '@/lib/customers/types'
 import { logCustomerEvent } from '@/lib/customers/events'
 
 const HOW_DID_YOU_HEAR_OPTIONS: HowDidYouHear[] = [
-  'postcard', 'newspaper', 'word_of_mouth', 'walk_in',
-  'online', 'referral', 'other',
+  'large_postcard', 'small_postcard', 'newspaper',
+  'email', 'text', 'the_store_told_me',
 ]
 
 export default function NewCustomerForm({ storeId, storeName, onClose, onCreated }: {
@@ -38,7 +38,6 @@ export default function NewCustomerForm({ storeId, storeName, onClose, onCreated
   const [email, setEmail] = useState('')
   const [dob, setDob] = useState('')
   const [howHeard, setHowHeard] = useState<HowDidYouHear | ''>('')
-  const [howHeardOther, setHowHeardOther] = useState('')
   const [notes, setNotes] = useState('')
   const [dnc, setDnc] = useState(false)
 
@@ -64,7 +63,6 @@ export default function NewCustomerForm({ storeId, storeName, onClose, onCreated
       email: email.trim() || null,
       date_of_birth: dob || null,
       how_did_you_hear: howHeard || null,
-      how_did_you_hear_other_text: howHeard === 'other' ? howHeardOther.trim() || null : null,
       notes: notes.trim() || null,
       do_not_contact: dnc,
     }
@@ -174,13 +172,6 @@ export default function NewCustomerForm({ storeId, storeName, onClose, onCreated
               </select>
             </div>
           </div>
-
-          {howHeard === 'other' && (
-            <div className="field" style={{ margin: 0 }}>
-              <label className="fl">Specify "other"</label>
-              <input value={howHeardOther} onChange={e => setHowHeardOther(e.target.value)} />
-            </div>
-          )}
 
           <div className="field" style={{ margin: 0 }}>
             <label className="fl">Notes</label>

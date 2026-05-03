@@ -8,7 +8,7 @@
 // Phase 2 of the Customers initiative. Phase 3 adds the import +
 // dedup tooling; Phase 6 adds marketing filters / postcard export.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { Customer, CustomerTagDefinition, EngagementTier } from '@/lib/customers/types'
@@ -46,6 +46,42 @@ export default function Customers() {
   const [tagDefs, setTagDefs] = useState<CustomerTagDefinition[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // ── Resizable columns ─────────────────────────────────────────
+  // Widths (in px) keyed by column id. Persisted to localStorage so
+  // a user's chosen layout survives reload. The drag handle on each
+  // <th> updates the matching <col> width on mousemove.
+  const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
+    if (typeof window === 'undefined') return {}
+    try { return JSON.parse(localStorage.getItem(COL_STORAGE_KEY) || '{}') }
+    catch { return {} }
+  })
+  useEffect(() => {
+    try { localStorage.setItem(COL_STORAGE_KEY, JSON.stringify(colWidths)) } catch {}
+  }, [colWidths])
+  const dragRef = useRef<{ id: string; startX: number; startW: number } | null>(null)
+  function startResize(e: React.MouseEvent, id: string) {
+    e.preventDefault(); e.stopPropagation()
+    const col = COLUMNS.find(c => c.id === id)!
+    dragRef.current = {
+      id,
+      startX: e.clientX,
+      startW: colWidths[id] ?? col.defaultWidth,
+    }
+    function onMove(ev: MouseEvent) {
+      if (!dragRef.current) return
+      const delta = ev.clientX - dragRef.current.startX
+      const next = Math.max(40, dragRef.current.startW + delta)
+      setColWidths(prev => ({ ...prev, [dragRef.current!.id]: next }))
+    }
+    function onUp() {
+      dragRef.current = null
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
 
   // Default-pick the first store the moment we have any.
   useEffect(() => {
@@ -180,17 +216,30 @@ export default function Customers() {
             </div>
           ) : (
             <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                <colgroup>
+                  {COLUMNS.map(c => (
+                    <col key={c.id} style={{ width: colWidths[c.id] ?? c.defaultWidth }} />
+                  ))}
+                </colgroup>
                 <thead>
                   <tr style={{ background: 'var(--cream2)' }}>
-                    <th style={th}>Name</th>
-                    <th style={th}>Phone</th>
-                    <th style={th}>Email</th>
-                    <th style={th}>City</th>
-                    <th style={th}>Last appt</th>
-                    <th style={th}>Tier</th>
-                    <th style={th}>Tags</th>
-                    <th style={th}></th>
+                    {COLUMNS.map((c, i) => (
+                      <th key={c.id} style={th}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, position: 'relative', paddingRight: 8 }}>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.label}</span>
+                          {i < COLUMNS.length - 1 && (
+                            <span
+                              onMouseDown={e => startResize(e, c.id)}
+                              style={{
+                                position: 'absolute', right: -6, top: -8, bottom: -8, width: 10,
+                                cursor: 'col-resize', userSelect: 'none', zIndex: 1,
+                              }}
+                            />
+                          )}
+                        </div>
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
@@ -318,7 +367,23 @@ const th: React.CSSProperties = {
 }
 const td: React.CSSProperties = {
   padding: '10px 12px', fontSize: 13, color: 'var(--ink)',
+  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
 }
+
+// Resizable column definitions. defaultWidth seeds the layout the
+// first time a user lands on the page; user-chosen widths override
+// it via localStorage and stick across reloads.
+const COL_STORAGE_KEY = 'customers.list.colwidths.v1'
+const COLUMNS: Array<{ id: string; label: string; defaultWidth: number }> = [
+  { id: 'name',     label: 'Name',      defaultWidth: 240 },
+  { id: 'phone',    label: 'Phone',     defaultWidth: 140 },
+  { id: 'email',    label: 'Email',     defaultWidth: 240 },
+  { id: 'city',     label: 'City',      defaultWidth: 140 },
+  { id: 'lastAppt', label: 'Last appt', defaultWidth: 120 },
+  { id: 'tier',     label: 'Tier',      defaultWidth: 90 },
+  { id: 'tags',     label: 'Tags',      defaultWidth: 200 },
+  { id: 'more',     label: '',          defaultWidth: 32 },
+]
 
 /** Inline chip strip for the list view — fetches tags lazily per row.
  *  Cheap because most customers have 0-2 tags. */

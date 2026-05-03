@@ -10,6 +10,7 @@ import AdminPanel from '@/components/admin/AdminPanel'
 import Events from '@/components/events/Events'
 import DayEntry from '@/components/dayentry/DayEntry'
 import Stores from '@/components/stores/Stores'
+import TrunkShowStores from '@/components/stores/TrunkShowStores'
 import Customers from '@/components/customers/Customers'
 import Shipping from '@/components/shipping/Shipping'
 import Reports from '@/components/reports/Reports'
@@ -42,7 +43,7 @@ import MobileStaff from '@/components/mobile/MobileStaff'
 import BrandSwitchOverlay from '@/components/layout/BrandSwitchOverlay'
 import { shouldUseMobile, setMobilePreference } from '@/lib/mobile'
 
-export type NavPage = 'dashboard' | 'calendar' | 'events' | 'schedule' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'libertyadmin' | 'recipients' | 'notification-templates' | 'data-research' | 'expenses' | 'financials' | 'customers' | 'trade-shows' | 'trunk-shows' | 'leads'
+export type NavPage = 'dashboard' | 'calendar' | 'events' | 'schedule' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'libertyadmin' | 'recipients' | 'notification-templates' | 'data-research' | 'expenses' | 'financials' | 'customers' | 'trade-shows' | 'trunk-shows' | 'trunk-show-stores' | 'leads'
 
 export default function Home() {
   const { user, loading, connectionError, reload } = useApp()
@@ -201,6 +202,7 @@ export default function Home() {
           {nav === 'admin'     && <ModuleGuard moduleId="admin"><ModuleWriteGate moduleId="admin"><AdminPanel key={navKey} /></ModuleWriteGate></ModuleGuard>}
           {nav === 'libertyadmin' && <ModuleGuard moduleId="libertyadmin"><ModuleWriteGate moduleId="libertyadmin"><LibertyAdminPanel key={navKey} /></ModuleWriteGate></ModuleGuard>}
           {nav === 'stores'    && <ModuleGuard moduleId="stores"><ModuleWriteGate moduleId="stores"><Stores key={navKey} /></ModuleWriteGate></ModuleGuard>}
+          {nav === 'trunk-show-stores' && <ModuleGuard moduleId="trunk-show-stores"><ModuleWriteGate moduleId="trunk-show-stores"><TrunkShowStores key={navKey} /></ModuleWriteGate></ModuleGuard>}
           {nav === 'customers' && <ModuleGuard moduleId="customers"><ModuleWriteGate moduleId="customers"><Customers key={navKey} /></ModuleWriteGate></ModuleGuard>}
         </MobileLayout>
       </>
@@ -269,6 +271,13 @@ export default function Home() {
           <ModuleGuard moduleId="stores">
             <ModuleWriteGate moduleId="stores">
               <Stores key={navKey} />
+            </ModuleWriteGate>
+          </ModuleGuard>
+        )}
+        {nav === 'trunk-show-stores' && (
+          <ModuleGuard moduleId="trunk-show-stores">
+            <ModuleWriteGate moduleId="trunk-show-stores">
+              <TrunkShowStores key={navKey} />
             </ModuleWriteGate>
           </ModuleGuard>
         )}

@@ -2,8 +2,8 @@
 // supabase-migration-customers-phase-1-schema.sql.
 
 export type HowDidYouHear =
-  | 'postcard' | 'newspaper' | 'word_of_mouth' | 'walk_in'
-  | 'online' | 'referral' | 'other'
+  | 'large_postcard' | 'small_postcard' | 'newspaper'
+  | 'email' | 'text' | 'the_store_told_me'
 
 export type EngagementTier = 'active' | 'lapsed' | 'cold' | 'vip'
 
@@ -64,13 +64,12 @@ export interface Customer {
 }
 
 export const HOW_DID_YOU_HEAR_LABELS: Record<HowDidYouHear, string> = {
-  postcard:      'Postcard',
-  newspaper:     'Newspaper',
-  word_of_mouth: 'Word of mouth',
-  walk_in:       'Walk-in',
-  online:        'Online',
-  referral:      'Referral',
-  other:         'Other',
+  large_postcard:    'Large Postcard',
+  small_postcard:    'Small Postcard',
+  newspaper:         'Newspaper',
+  email:             'Email',
+  text:              'Text',
+  the_store_told_me: 'The Store Told Me',
 }
 
 export const ENGAGEMENT_TIER_LABELS: Record<EngagementTier, string> = {

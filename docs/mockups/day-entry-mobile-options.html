@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>V6 + Form # — same line vs two lines</title>
+<style>
+  :root {
+    --green: #1D6B44;
+    --green-dark: #11432B;
+    --green-pale: #ECFDF5;
+    --green3: #6EE7B7;
+    --cream: #FAF7F0;
+    --cream2: #F3EFE6;
+    --pearl: #E5E7EB;
+    --silver: #D1D5DB;
+    --ink: #1F2937;
+    --ash: #4B5563;
+    --mist: #9CA3AF;
+    --r: 10px;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: #F1ECE0;
+    color: var(--ink);
+    margin: 0; padding: 32px;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; color: var(--green-dark); text-align: center; }
+  .topnote { color: var(--ash); font-size: 13px; margin-bottom: 28px; text-align: center; max-width: 540px; }
+
+  .stage {
+    display: flex; gap: 32px; align-items: flex-start; flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .iphone {
+    width: 390px;
+    background: #000;
+    border-radius: 48px;
+    padding: 14px;
+    box-shadow: 0 12px 30px rgba(0,0,0,.25), 0 0 0 1px #2a2a2a;
+    margin-bottom: 12px;
+  }
+  .iphone-screen {
+    background: var(--cream);
+    border-radius: 36px;
+    overflow: hidden;
+    height: 720px;
+    position: relative;
+    display: flex; flex-direction: column;
+  }
+  .status-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 22px 6px;
+    font-size: 13px; font-weight: 700; color: #1F2937;
+    height: 38px; box-sizing: border-box;
+  }
+  .notch {
+    position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+    width: 110px; height: 26px; background: #000;
+    border-radius: 14px; z-index: 2;
+  }
+  .home-bar {
+    position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+    width: 130px; height: 4px; background: rgba(0,0,0,.25);
+    border-radius: 4px;
+  }
+  .app-header {
+    background: var(--green-dark); color: #fff;
+    padding: 10px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 14px; font-weight: 800;
+  }
+  .app-header .menu { font-size: 18px; }
+  .app-header .title { font-size: 13px; font-weight: 800; letter-spacing: .02em; }
+  .scroll-area {
+    flex: 1; overflow-y: auto;
+    padding: 14px 14px 24px;
+    box-sizing: border-box;
+  }
+  .section-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 4px 12px;
+    border-bottom: 1px solid var(--cream2);
+    margin-bottom: 12px;
+  }
+  .section-head .title {
+    font-size: 12px; font-weight: 800; color: var(--ash);
+    text-transform: uppercase; letter-spacing: .05em;
+  }
+  .section-head .toggle {
+    font-size: 11px; font-weight: 700; cursor: pointer;
+    background: none; border: none; padding: 0;
+    color: var(--green-dark); text-decoration: underline;
+  }
+
+  .num-input {
+    background: #fff; border: 1px solid var(--pearl);
+    border-radius: 6px; padding: 6px 8px;
+    font-size: 13px; color: var(--ink); font-variant-numeric: tabular-nums;
+    box-sizing: border-box; width: 100%;
+    -webkit-appearance: none; appearance: none;
+  }
+  .num-input.amount { font-size: 14px; font-weight: 800; }
+  .num-input.tiny { font-size: 12px; padding: 5px 6px; }
+  .lbl-mini {
+    font-size: 9px; font-weight: 800; color: var(--mist);
+    text-transform: uppercase; letter-spacing: .05em;
+    margin-bottom: 2px;
+  }
+  .row-num {
+    font-weight: 900; font-size: 11px; color: var(--mist);
+    min-width: 22px; padding-top: 14px; text-align: center;
+  }
+  .ovfl {
+    background: none; border: none; cursor: pointer;
+    color: var(--mist); font-size: 18px; padding: 0 2px;
+    line-height: 1; min-width: 22px;
+  }
+  .add-base {
+    margin-top: 4px; width: 100%; padding: 11px;
+    background: transparent; border: 1.5px dashed var(--silver);
+    border-radius: var(--r); color: var(--green-dark);
+    font-weight: 800; font-size: 13px; cursor: pointer;
+  }
+
+  .rate-pills { display: inline-flex; gap: 4px; flex-shrink: 0; }
+  .rate-pill {
+    border: 1px solid var(--pearl);
+    background: #fff;
+    color: var(--mist);
+    font-size: 11px; font-weight: 800;
+    padding: 5px 8px; border-radius: 6px;
+    cursor: pointer;
+    min-width: 32px;
+    line-height: 1;
+  }
+  .rate-pill.on5 { background: var(--green-pale); border-color: var(--green3); color: var(--green-dark); }
+  .rate-pill.on0 { background: #F3F4F6; border-color: var(--mist); color: var(--ink); }
+
+  /* ─── A: same-line squeeze ─── */
+  .a .row {
+    background: var(--cream); border: 1px solid var(--pearl);
+    border-radius: var(--r); padding: 8px 8px; margin-bottom: 6px;
+    display: grid;
+    grid-template-columns: 22px minmax(60px, 0.9fr) minmax(60px, 0.9fr) minmax(80px, 1.2fr) auto auto;
+    gap: 4px; align-items: center;
+  }
+  .a .row .ovfl { padding: 0; }
+
+  /* ─── B: two-line ─── */
+  .b .row {
+    background: var(--cream); border: 1px solid var(--pearl);
+    border-radius: var(--r); padding: 8px 10px; margin-bottom: 6px;
+  }
+  .b .r1 {
+    display: grid;
+    grid-template-columns: 22px 1fr 1.2fr auto auto;
+    gap: 6px; align-items: center;
+  }
+  .b .r2 {
+    margin-top: 6px;
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    gap: 6px; align-items: center;
+  }
+
+  .lbl-tag {
+    background: var(--cream2); color: var(--ash);
+    padding: 2px 8px; border-radius: 999px;
+    font-size: 10px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: .05em;
+    display: inline-block; margin-bottom: 6px;
+  }
+  .stage-col {
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .pros, .cons {
+    font-size: 12px; color: var(--ash);
+    margin: 2px 0 0; padding: 0 18px; max-width: 360px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Form # toggle ON — two layouts</h1>
+<p class="topnote">
+  Both phones at iPhone 14/15 width. Same data — three checks, all with Form #
+  values. Left phone squeezes Form # onto the same row as Check # / Amount /
+  rate. Right phone gives Form # its own line below each row.
+</p>
+
+<div class="stage">
+
+  <!-- ─── A: Same line ─── -->
+  <div class="stage-col a">
+    <span class="lbl-tag">Option A · same line</span>
+    <div class="iphone">
+      <div class="iphone-screen">
+        <div class="notch"></div>
+        <div class="status-bar"><span>9:41</span><span>●●●● · 100%</span></div>
+        <div class="app-header">
+          <span class="menu">≡</span><span class="title">Enter Day Data</span><span style="width: 18px;"></span>
+        </div>
+        <div class="scroll-area">
+          <div class="section-head">
+            <span class="title">Detailed Checks · Day 1</span>
+            <button class="toggle">− Hide form #</button>
+          </div>
+
+          <div class="row">
+            <div class="row-num">#1</div>
+            <div>
+              <div class="lbl-mini">Check #</div>
+              <input class="num-input tiny" value="1042" inputmode="numeric" />
+            </div>
+            <div>
+              <div class="lbl-mini">Form #</div>
+              <input class="num-input tiny" value="48271" inputmode="numeric" />
+            </div>
+            <div>
+              <div class="lbl-mini">Amount</div>
+              <input class="num-input amount" value="$2,450.00" inputmode="decimal" />
+            </div>
+            <div class="rate-pills">
+              <button class="rate-pill">5%</button>
+              <button class="rate-pill">0%</button>
+            </div>
+            <button class="ovfl">⋯</button>
+          </div>
+
+          <div class="row">
+            <div class="row-num">#2</div>
+            <div>
+              <div class="lbl-mini">Check #</div>
+              <input class="num-input tiny" value="1043" inputmode="numeric" />
+            </div>
+            <div>
+              <div class="lbl-mini">Form #</div>
+              <input class="num-input tiny" value="48272" inputmode="numeric" />
+            </div>
+            <div>
+              <div class="lbl-mini">Amount</div>
+              <input class="num-input amount" value="$780.00" inputmode="decimal" />
+            </div>
+            <div class="rate-pills">
+              <button class="rate-pill on5">5%</button>
+              <button class="rate-pill">0%</button>
+            </div>
+            <button class="ovfl">⋯</button>
+          </div>
+
+          <div class="row">
+            <div class="row-num">#3</div>
+            <div>
+              <div class="lbl-mini">Check #</div>
+              <input class="num-input tiny" value="1044" inputmode="numeric" />
+            </div>
+            <div>
+              <div class="lbl-mini">Form #</div>
+              <input class="num-input tiny" value="48273" inputmode="numeric" />
+            </div>
+            <div>
+              <div class="lbl-mini">Amount</div>
+              <input class="num-input amount" value="$320.00" inputmode="decimal" />
+            </div>
+            <div class="rate-pills">
+              <button class="rate-pill">5%</button>
+              <button class="rate-pill on0">0%</button>
+            </div>
+            <button class="ovfl">⋯</button>
+          </div>
+
+          <button class="add-base">+ Add row</button>
+        </div>
+        <div class="home-bar"></div>
+      </div>
+    </div>
+    <p class="pros">
+      <strong>Pros:</strong> Row height unchanged from Form-#-hidden state — same density.
+    </p>
+    <p class="cons">
+      <strong>Cons:</strong> Inputs get tight (~60px each). Tap accuracy on Check # / Form # drops because the boxes are narrow. Numeric values still fit, but typing 5+ digits is fiddly.
+    </p>
+  </div>
+
+  <!-- ─── B: Two lines ─── -->
+  <div class="stage-col b">
+    <span class="lbl-tag">Option B · second line</span>
+    <div class="iphone">
+      <div class="iphone-screen">
+        <div class="notch"></div>
+        <div class="status-bar"><span>9:41</span><span>●●●● · 100%</span></div>
+        <div class="app-header">
+          <span class="menu">≡</span><span class="title">Enter Day Data</span><span style="width: 18px;"></span>
+        </div>
+        <div class="scroll-area">
+          <div class="section-head">
+            <span class="title">Detailed Checks · Day 1</span>
+            <button class="toggle">− Hide form #</button>
+          </div>
+
+          <div class="row">
+            <div class="r1">
+              <div class="row-num">#1</div>
+              <div>
+                <div class="lbl-mini">Check #</div>
+                <input class="num-input" value="1042" inputmode="numeric" />
+              </div>
+              <div>
+                <div class="lbl-mini">Amount</div>
+                <input class="num-input amount" value="$2,450.00" inputmode="decimal" />
+              </div>
+              <div class="rate-pills">
+                <button class="rate-pill">5%</button>
+                <button class="rate-pill">0%</button>
+              </div>
+              <button class="ovfl">⋯</button>
+            </div>
+            <div class="r2">
+              <div></div>
+              <div>
+                <div class="lbl-mini">Form #</div>
+                <input class="num-input" value="48271" inputmode="numeric" />
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="r1">
+              <div class="row-num">#2</div>
+              <div>
+                <div class="lbl-mini">Check #</div>
+                <input class="num-input" value="1043" inputmode="numeric" />
+              </div>
+              <div>
+                <div class="lbl-mini">Amount</div>
+                <input class="num-input amount" value="$780.00" inputmode="decimal" />
+              </div>
+              <div class="rate-pills">
+                <button class="rate-pill on5">5%</button>
+                <button class="rate-pill">0%</button>
+              </div>
+              <button class="ovfl">⋯</button>
+            </div>
+            <div class="r2">
+              <div></div>
+              <div>
+                <div class="lbl-mini">Form #</div>
+                <input class="num-input" value="48272" inputmode="numeric" />
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="r1">
+              <div class="row-num">#3</div>
+              <div>
+                <div class="lbl-mini">Check #</div>
+                <input class="num-input" value="1044" inputmode="numeric" />
+              </div>
+              <div>
+                <div class="lbl-mini">Amount</div>
+                <input class="num-input amount" value="$320.00" inputmode="decimal" />
+              </div>
+              <div class="rate-pills">
+                <button class="rate-pill">5%</button>
+                <button class="rate-pill on0">0%</button>
+              </div>
+              <button class="ovfl">⋯</button>
+            </div>
+            <div class="r2">
+              <div></div>
+              <div>
+                <div class="lbl-mini">Form #</div>
+                <input class="num-input" value="48273" inputmode="numeric" />
+              </div>
+            </div>
+          </div>
+
+          <button class="add-base">+ Add row</button>
+        </div>
+        <div class="home-bar"></div>
+      </div>
+    </div>
+    <p class="pros">
+      <strong>Pros:</strong> Check # and Amount keep their original generous widths. Form # gets a comfortable input. Easy to scan when scrolling.
+    </p>
+    <p class="cons">
+      <strong>Cons:</strong> Each row is taller (~30% more height). Three rows still fit on screen, but the density gain over today is smaller when Form # is on.
+    </p>
+  </div>
+
+</div>
+
+</body>
+</html>
