@@ -40,7 +40,7 @@ const MODULE_SECTIONS: ModuleSection[] = [
       { id: 'events',    label: 'Events' },
       { id: 'schedule',  label: 'Calendar' },
       { id: 'travel',    label: 'Travel Share' },
-      { id: 'dayentry',  label: 'Enter Day Data' },
+      { id: 'dayentry',  label: 'Enter Buying Data' },
       { id: 'staff',     label: 'Staff' },
     ],
   },

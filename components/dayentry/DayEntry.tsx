@@ -522,7 +522,7 @@ export default function DayEntry() {
       )}
 
       <div className="mb-6">
-        <h1 className="text-2xl font-black" style={{ color: 'var(--ink)' }}>Enter Day Data</h1>
+        <h1 className="text-2xl font-black" style={{ color: 'var(--ink)' }}>Enter Buying Data</h1>
         <div style={{ fontSize: 13, color: 'var(--mist)', marginTop: 4 }}>
           Enter today's sales for the event you're working. Changes autosave.
         </div>

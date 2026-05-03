@@ -132,9 +132,11 @@ export default function LeadDetail({ leadId, onBack, onChanged, onDeleted, setNa
     }
   }
 
+  // Trunk rep pool only — must have is_trunk_rep flag set in
+  // Admin → Users.
   const repOptions = users
     .filter(u => u.active !== false)
-    .filter(u => u.role === 'sales_rep' || u.role === 'admin' || u.role === 'superadmin' || u.is_partner)
+    .filter(u => (u as any).is_trunk_rep === true)
     .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
 
   if (!loaded) return <div className="p-6 text-center" style={{ color: 'var(--mist)' }}>Loading…</div>
@@ -263,7 +265,7 @@ export default function LeadDetail({ leadId, onBack, onChanged, onDeleted, setNa
               disabled={!canMutate}>
               <option value="">Unassigned</option>
               {repOptions.map(u => (
-                <option key={u.id} value={u.id}>{u.name} · {u.role.replace('_', ' ')}</option>
+                <option key={u.id} value={u.id}>{u.name}</option>
               ))}
             </select>
           </Field>
@@ -425,7 +427,7 @@ function ConvertModal({
           <select value={repId} onChange={e => setRepId(e.target.value)}>
             <option value="">Pick a rep…</option>
             {repOptions.map(u => (
-              <option key={u.id} value={u.id}>{u.name} · {u.role.replace('_', ' ')}</option>
+              <option key={u.id} value={u.id}>{u.name}</option>
             ))}
           </select>
         </Field>

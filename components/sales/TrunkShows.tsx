@@ -171,12 +171,12 @@ function CreateTrunkShowModal({ onClose, onCreated }: { onClose: () => void; onC
   const valid = !!draft.store_id && !!draft.start_date && !!draft.end_date
                  && draft.end_date >= draft.start_date && !!draft.assigned_rep_id
 
-  // Trunk-rep pool: anyone with is_trunk_rep=TRUE (admin-toggled flag),
-  // plus any partner so they can self-assign. Replaces the old role-based
-  // filter — see users.is_trunk_rep migration.
+  // Trunk rep pool only — must have is_trunk_rep flag set in
+  // Admin → Users. Admins, partners, and other roles are NOT
+  // implicitly trunk reps.
   const repOptions = users
     .filter(u => u.active !== false)
-    .filter(u => (u as any).is_trunk_rep === true || u.is_partner)
+    .filter(u => (u as any).is_trunk_rep === true)
     .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
 
   const selectedStore = useMemo(
@@ -298,7 +298,7 @@ function CreateTrunkShowModal({ onClose, onCreated }: { onClose: () => void; onC
           <select value={draft.assigned_rep_id} onChange={e => setDraft(p => ({ ...p, assigned_rep_id: e.target.value }))}>
             <option value="">Pick a rep…</option>
             {repOptions.map(u => (
-              <option key={u.id} value={u.id}>{u.name} · {u.role.replace('_', ' ')}</option>
+              <option key={u.id} value={u.id}>{u.name}</option>
             ))}
           </select>
         </div>

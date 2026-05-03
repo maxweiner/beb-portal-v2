@@ -39,10 +39,11 @@ export default function AddLeadModal({ tradeShowId, onCreated, onClose }: Props)
 
   const valid = !!draft.first_name.trim() && !!draft.last_name.trim()
 
-  // Sales reps (and admin / partner — they can self-assign).
+  // Trunk rep pool only — must have is_trunk_rep flag set in
+  // Admin → Users.
   const repOptions = users
     .filter(u => u.active !== false)
-    .filter(u => u.role === 'sales_rep' || u.role === 'admin' || u.role === 'superadmin' || u.is_partner)
+    .filter(u => (u as any).is_trunk_rep === true)
     .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
 
   async function handleScanFile(file: File) {
@@ -253,7 +254,7 @@ export default function AddLeadModal({ tradeShowId, onCreated, onClose }: Props)
             onChange={e => setDraft(p => ({ ...p, assigned_rep_id: e.target.value }))}>
             <option value="">Unassigned (admin will route)</option>
             {repOptions.map(u => (
-              <option key={u.id} value={u.id}>{u.name} · {u.role.replace('_', ' ')}</option>
+              <option key={u.id} value={u.id}>{u.name}</option>
             ))}
           </select>
         </Field>
