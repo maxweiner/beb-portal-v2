@@ -38,7 +38,8 @@ export async function GET(req: Request, { params }: { params: { token: string } 
   if (!show) return NextResponse.json({ error: 'Show not found' }, { status: 404 })
 
   const { data: store } = await sb.from('stores')
-    .select('name, city, state, address').eq('id', show.store_id).maybeSingle()
+    .select('name, city, state, address, color_primary, color_secondary, store_image_url')
+    .eq('id', show.store_id).maybeSingle()
 
   const { data: slots } = await sb.from('trunk_show_appointment_slots')
     .select('id, slot_start, slot_end, status')

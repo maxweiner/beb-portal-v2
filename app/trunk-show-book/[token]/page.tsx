@@ -12,7 +12,15 @@ interface ShowInfo {
   id: string
   start_date: string
   end_date: string
-  store: { name: string; city: string | null; state: string | null; address: string | null } | null
+  store: {
+    name: string
+    city: string | null
+    state: string | null
+    address: string | null
+    color_primary: string | null
+    color_secondary: string | null
+    store_image_url: string | null
+  } | null
 }
 
 interface Slot { id: string; slot_start: string; slot_end: string }
@@ -81,15 +89,39 @@ export default function TrunkShowBookPage() {
     return `${day} · ${t(start)}–${t(end)}`
   }
 
+  const primary = show?.store?.color_primary || '#1D6B44'
+  const secondary = show?.store?.color_secondary || '#F5F0E8'
+
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--cream)', padding: '6vh 16px', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
-      <div style={{ width: 'min(560px, 100%)', background: '#fff', borderRadius: 12, padding: 24, boxShadow: '0 10px 40px rgba(0,0,0,.08)' }}>
+    <div style={{ minHeight: '100vh', background: secondary, padding: '6vh 16px', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
+      <div style={{ width: 'min(560px, 100%)', background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 10px 40px rgba(0,0,0,.08)', borderTop: `4px solid ${primary}` }}>
+        {show?.store && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', borderBottom: '1px solid var(--pearl, #e2e8f0)' }}>
+            {show.store.store_image_url ? (
+              <img src={show.store.store_image_url} alt={`${show.store.name} logo`}
+                style={{ height: 44, width: 'auto', maxWidth: 120, objectFit: 'contain', background: '#fff', borderRadius: 6 }} />
+            ) : (
+              <div style={{ height: 44, width: 44, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: secondary, color: primary, fontWeight: 900, fontSize: 18 }}>
+                💎
+              </div>
+            )}
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontWeight: 800, color: primary, fontSize: 18, lineHeight: 1.2 }}>{show.store.name}</div>
+              {(show.store.city || show.store.state) && (
+                <div style={{ fontSize: 13, color: 'var(--mist, #64748b)', lineHeight: 1.2, marginTop: 2 }}>
+                  {[show.store.city, show.store.state].filter(Boolean).join(', ')}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        <div style={{ padding: 24 }}>
         {bookedSlot ? (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <div style={{ fontSize: 36, marginBottom: 6 }}>✅</div>
-            <h1 style={{ fontSize: 20, fontWeight: 900, color: 'var(--ink)', marginBottom: 6 }}>You're booked</h1>
+            <h1 style={{ fontSize: 20, fontWeight: 900, color: primary, marginBottom: 6 }}>You're booked</h1>
             <div style={{ fontSize: 14, color: 'var(--ash)' }}>{show?.store?.name}</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--green-dark)', marginTop: 10 }}>{fmtSlot(bookedSlot)}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: primary, marginTop: 10 }}>{fmtSlot(bookedSlot)}</div>
             <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 12 }}>See you then.</div>
           </div>
         ) : !loaded ? (
@@ -102,15 +134,14 @@ export default function TrunkShowBookPage() {
         ) : (
           <>
             <div style={{ marginBottom: 18 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: primary, textTransform: 'uppercase', letterSpacing: '.06em' }}>
                 Book a trunk show appointment
               </div>
-              <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)', marginTop: 4 }}>
-                {show?.store?.name || 'Trunk Show'}
-              </h1>
-              <div style={{ fontSize: 13, color: 'var(--ash)', marginTop: 2 }}>
-                {[show?.store?.address, show?.store?.city, show?.store?.state].filter(Boolean).join(', ')}
-              </div>
+              {show?.store?.address && (
+                <div style={{ fontSize: 13, color: 'var(--ash)', marginTop: 4 }}>
+                  {show.store.address}
+                </div>
+              )}
             </div>
 
             {slots.length === 0 ? (
@@ -127,8 +158,8 @@ export default function TrunkShowBookPage() {
                     <label key={slot.id} style={{
                       display: 'flex', alignItems: 'center', gap: 10,
                       padding: '8px 12px', cursor: 'pointer',
-                      background: pickedSlotId === slot.id ? 'var(--green-pale)' : '#fff',
-                      border: '1px solid ' + (pickedSlotId === slot.id ? 'var(--green3)' : 'var(--cream2)'),
+                      background: pickedSlotId === slot.id ? secondary : '#fff',
+                      border: '1px solid ' + (pickedSlotId === slot.id ? primary : 'var(--cream2)'),
                       borderRadius: 6,
                     }}>
                       <input type="radio" name="slot" value={slot.id} checked={pickedSlotId === slot.id} onChange={() => setPickedSlotId(slot.id)} />
@@ -155,14 +186,14 @@ export default function TrunkShowBookPage() {
                 </div>
 
                 <button onClick={submit} disabled={busy || !pickedSlotId || !first.trim()}
-                  className="btn-primary"
-                  style={{ width: '100%', padding: '12px', marginTop: 8 }}>
+                  style={{ width: '100%', padding: '12px', marginTop: 8, border: 'none', borderRadius: 8, background: primary, color: '#fff', fontWeight: 800, fontSize: 14, cursor: busy || !pickedSlotId || !first.trim() ? 'not-allowed' : 'pointer', opacity: busy || !pickedSlotId || !first.trim() ? 0.5 : 1 }}>
                   {busy ? 'Booking…' : 'Book this time'}
                 </button>
               </>
             )}
           </>
         )}
+        </div>
       </div>
     </div>
   )

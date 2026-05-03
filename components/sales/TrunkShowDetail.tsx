@@ -211,6 +211,7 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
         trunkShowId={show.id}
         hours={hours}
         canWrite={!!canMutate}
+        store={stores.find(s => s.id === show.store_id) || null}
       />
 
       {/* Spiffs — Phase 13 */}
