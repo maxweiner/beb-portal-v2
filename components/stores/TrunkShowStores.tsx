@@ -27,11 +27,8 @@ interface TrunkShowStore {
   email_1: string | null
   email_2: string | null
   url: string | null
-  simply_username: string | null
-  quo_phone_number: string | null
   aframe_buying_event: boolean | null
   counter_card_buying_event: boolean | null
-  holds: string | null
   buying_event_questionnaire: string | null
   created_at?: string
   updated_at?: string
@@ -40,8 +37,7 @@ interface TrunkShowStore {
 const COLS = `id, trunk_shows, name, ts_reps, trunk_rep_user_id, comments,
   address_1, address_2, city, state, zip, store_phone,
   contact_1, contact_2, contact_3, email_1, email_2, url,
-  simply_username, quo_phone_number, aframe_buying_event,
-  counter_card_buying_event, holds, buying_event_questionnaire,
+  aframe_buying_event, counter_card_buying_event, buying_event_questionnaire,
   created_at, updated_at`
 
 export default function TrunkShowStores() {
@@ -331,11 +327,8 @@ function Modal({ store, trunkReps, onClose, onSaved, onDelete }: {
         email_1: emptyToNull(d.email_1),
         email_2: emptyToNull(d.email_2),
         url: emptyToNull(d.url),
-        simply_username: emptyToNull(d.simply_username),
-        quo_phone_number: emptyToNull(d.quo_phone_number),
         aframe_buying_event: d.aframe_buying_event ?? null,
         counter_card_buying_event: d.counter_card_buying_event ?? null,
-        holds: emptyToNull(d.holds),
         buying_event_questionnaire: emptyToNull(d.buying_event_questionnaire),
       }
       const { data, error } = await supabase
@@ -458,11 +451,7 @@ function Modal({ store, trunkReps, onClose, onSaved, onDelete }: {
           {/* Trunk Show Details */}
           <div className="card" style={{ margin: 0 }}>
             <div className="card-title">Trunk Show Details<AutosaveIndicator status={status} /></div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <F label="Simply Username" k="simply_username" />
-              <F label="QUO Phone Number" k="quo_phone_number" />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 10 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <Checkbox
                 checked={details.aframe_buying_event === true}
                 onChange={(v) => set('aframe_buying_event', v)}
@@ -477,7 +466,6 @@ function Modal({ store, trunkReps, onClose, onSaved, onDelete }: {
               />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, marginTop: 10 }}>
-              <F label="Holds" k="holds" placeholder="e.g. 30 day, no hold" />
               <TA label="Buying Event Questionnaire" k="buying_event_questionnaire" />
             </div>
           </div>
