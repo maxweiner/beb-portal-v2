@@ -16,17 +16,19 @@ import TrunkShowDetail from './TrunkShowDetail'
 import DatePicker from '@/components/ui/DatePicker'
 
 const STATUS_LABEL: Record<TrunkShowStatus, string> = {
+  reserved: '📌 Reserved',
   scheduled: 'Scheduled', in_progress: 'In Progress',
   completed: 'Completed', cancelled: 'Cancelled',
 }
 const STATUS_COLOR: Record<TrunkShowStatus, { bg: string; fg: string }> = {
+  reserved:    { bg: '#FFFBEB', fg: '#92400E' },
   scheduled:   { bg: '#FEF3C7', fg: '#92400E' },
   in_progress: { bg: '#D1FAE5', fg: '#065F46' },
   completed:   { bg: '#DBEAFE', fg: '#1E40AF' },
   cancelled:   { bg: '#E5E7EB', fg: '#374151' },
 }
 
-type Filter = 'all' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+type Filter = 'all' | 'reserved' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
 
 export default function TrunkShows() {
   const { user, stores, users } = useApp()
@@ -36,7 +38,7 @@ export default function TrunkShows() {
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
-  const [createOpen, setCreateOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState<false | 'scheduled' | 'reserved'>(false)
   const [openId, setOpenId] = useState<string | null>(null)
 
   async function reload() {
@@ -71,12 +73,18 @@ export default function TrunkShows() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
         <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)' }}>🛍️ Trunk Shows</h1>
         {isAdmin && (
-          <button className="btn-primary btn-sm" onClick={() => setCreateOpen(true)}>+ New Trunk Show</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn-primary btn-sm" onClick={() => setCreateOpen('scheduled')}>+ New Trunk Show</button>
+            <button className="btn-outline btn-sm" onClick={() => setCreateOpen('reserved')}
+              title="Tentative date — Save the Date">
+              📌 Save the Date
+            </button>
+          </div>
         )}
       </div>
 
       <div className="card" style={{ marginBottom: 12, padding: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        {(['all', 'scheduled', 'in_progress', 'completed', 'cancelled'] as Filter[]).map(f => (
+        {(['all', 'reserved', 'scheduled', 'in_progress', 'completed', 'cancelled'] as Filter[]).map(f => (
           <button key={f} onClick={() => setFilter(f)}
             className={filter === f ? 'btn-primary btn-xs' : 'btn-outline btn-xs'}
             style={{ textTransform: 'capitalize' }}>{f.replace('_', ' ')}</button>
@@ -138,6 +146,7 @@ export default function TrunkShows() {
 
       {createOpen && (
         <CreateTrunkShowModal
+          mode={createOpen}
           onClose={() => setCreateOpen(false)}
           onCreated={(id) => { setCreateOpen(false); void reload(); setOpenId(id) }}
         />
@@ -158,11 +167,13 @@ function fmtRange(start: string, end: string): string {
 
 /* ── create modal ─────────────────────────────────────── */
 
-function CreateTrunkShowModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
+function CreateTrunkShowModal({ mode, onClose, onCreated }: { mode: 'scheduled' | 'reserved'; onClose: () => void; onCreated: (id: string) => void }) {
   const { stores, users, user } = useApp()
+  const isReserved = mode === 'reserved'
   const [draft, setDraft] = useState<TrunkShowDraft>({
     store_id: '', start_date: '', end_date: '',
     assigned_rep_id: user?.role === 'sales_rep' ? user.id : '',
+    status: mode,
   })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -234,7 +245,9 @@ function CreateTrunkShowModal({ onClose, onCreated }: { onClose: () => void; onC
       }}>
       <div style={{ width: 'min(560px, 100%)', background: '#fff', borderRadius: 12, padding: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)' }}>New Trunk Show</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 800, color: isReserved ? '#92400E' : 'var(--ink)' }}>
+            {isReserved ? '📌 Save the Date — Reserved Trunk Show' : 'New Trunk Show'}
+          </h2>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 22, color: 'var(--mist)' }}>×</button>
         </div>
 
@@ -308,7 +321,7 @@ function CreateTrunkShowModal({ onClose, onCreated }: { onClose: () => void; onC
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button onClick={onClose} className="btn-outline btn-sm">Cancel</button>
           <button onClick={submit} disabled={!valid || busy} className="btn-primary btn-sm">
-            {busy ? 'Creating…' : 'Create'}
+            {busy ? 'Creating…' : (isReserved ? 'Save the Date' : 'Create')}
           </button>
         </div>
         <div style={{ marginTop: 10, fontSize: 11, color: 'var(--mist)' }}>

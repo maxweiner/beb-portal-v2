@@ -209,6 +209,9 @@ export interface Event {
   /** Required staffing for the event. NULL = not specified (no
    *  hazard). New events enforce non-null at the form layer. */
   buyers_needed?: number | null
+  /** Save-the-Date / lifecycle status. Defaults to 'scheduled' for
+   *  every event before this column existed. */
+  status?: EventStatus
 }
 
 export interface Shipment {
@@ -310,7 +313,14 @@ export interface TradeShow {
   deleted_at: string | null
 }
 
-export type TrunkShowStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+export type TrunkShowStatus = 'reserved' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+
+/** Buying-event lifecycle. 'scheduled' is the default and is what
+ *  every existing event was implicitly. 'reserved' = Save the Date
+ *  (planning stage, not yet confirmed). 'cancelled' = decided not to
+ *  run, kept visible with strikethrough. Hard-deletion is also
+ *  available via the Delete action. */
+export type EventStatus = 'reserved' | 'scheduled' | 'cancelled'
 
 export interface TrunkShow {
   id: string

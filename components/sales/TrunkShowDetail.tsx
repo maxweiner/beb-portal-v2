@@ -120,6 +120,36 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
     catch (err: any) { alert(err?.message || 'Could not delete') }
   }
 
+  // Promote a Reserved trunk show → scheduled. Allowed for admins
+  // and the assigned rep on this show. The verify-worker-list (B2)
+  // happens via the confirm dialog naming the rep explicitly.
+  async function handlePromote() {
+    if (!show) return
+    const canPromote = isAdmin || user?.id === show.assigned_rep_id
+    if (!canPromote) { alert('Only an admin or the assigned rep can promote this trunk show.'); return }
+    const repName = users.find(u => u.id === show.assigned_rep_id)?.name || '(unassigned)'
+    if (!confirm(`Promote to Booked?\n\nAssigned rep: ${repName}\n\nThis confirms the trunk show is going forward.`)) return
+    try {
+      await updateTrunkShow(show.id, { status: 'scheduled' })
+      setShow({ ...show, status: 'scheduled' })
+      setDraft(p => ({ ...p, status: 'scheduled' }))
+      onChanged()
+    } catch (err: any) { alert(err?.message || 'Could not promote') }
+  }
+
+  // Cancel — keep visible with a strikethrough, or hard-delete via
+  // the existing Delete button. Only shown for Reserved (Q6).
+  async function handleCancelKeep() {
+    if (!show || !isAdmin) return
+    if (!confirm('Cancel this trunk show but keep it visible (with a strikethrough)?')) return
+    try {
+      await updateTrunkShow(show.id, { status: 'cancelled' })
+      setShow({ ...show, status: 'cancelled' })
+      setDraft(p => ({ ...p, status: 'cancelled' }))
+      onChanged()
+    } catch (err: any) { alert(err?.message || 'Could not cancel') }
+  }
+
   if (!loaded) return <div className="p-6 text-center" style={{ color: 'var(--mist)' }}>Loading…</div>
   if (error || !show) return (
     <div className="p-6" style={{ maxWidth: 720, margin: '0 auto' }}>
@@ -137,6 +167,14 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
         <button onClick={onBack} className="btn-outline btn-sm">← Trunk Shows</button>
         <div style={{ flex: 1 }} />
         <AutosaveIndicator status={status} />
+        {show.status === 'reserved' && (isAdmin || user?.id === show.assigned_rep_id) && (
+          <button onClick={handlePromote} className="btn-primary btn-sm" title="Confirm this trunk show is going forward">
+            ✅ Promote to Booked
+          </button>
+        )}
+        {show.status === 'reserved' && isAdmin && (
+          <button onClick={handleCancelKeep} className="btn-outline btn-sm">Cancel (keep visible)</button>
+        )}
         {isAdmin && (
           <button onClick={handleDelete} className="btn-outline btn-sm" style={{ color: '#B91C1C', borderColor: '#FCA5A5' }}>Delete</button>
         )}
@@ -177,6 +215,7 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
           </Field>
           <Field label="Status">
             <select value={draft.status} onChange={e => setDraft(p => ({ ...p, status: e.target.value as TrunkShowStatus }))} disabled={!canMutate}>
+              <option value="reserved">📌 Reserved</option>
               <option value="scheduled">Scheduled</option>
               <option value="in_progress">In progress</option>
               <option value="completed">Completed</option>

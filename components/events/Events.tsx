@@ -95,7 +95,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   const [filter, setFilter] = useState<Filter>('thisweek')
   const [sort, setSort] = useState<Sort>('date-asc')
   const [search, setSearch] = useState('')
-  const [showForm, setShowForm] = useState(false)
+  const [showForm, setShowForm] = useState<false | 'scheduled' | 'reserved'>(false)
   const [newEvent, setNewEvent] = useState<{ store_id: string; start_date: string; buyers_needed: string }>({ store_id: '', start_date: '', buyers_needed: '3' })
   const [saving, setSaving] = useState(false)
   const [workersOpen, setWorkersOpen] = useState<string | null>(null)
@@ -296,6 +296,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
           start_date: newEvent.start_date,
           buyers_needed: buyersNeeded,
           created_by: user?.id,
+          status: showForm === 'reserved' ? 'reserved' : 'scheduled',
         }).select().single()
       )
       if (error) { alert('Failed to create event: ' + error.message); return }
@@ -525,14 +526,26 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
             <option value="name-asc">Store Name</option>
           </select>
           {isAdmin && (
-            <button onClick={() => setShowForm(true)} className="btn-primary btn-sm">+ New Event</button>
+            <>
+              <button onClick={() => setShowForm('scheduled')} className="btn-primary btn-sm">+ New Event</button>
+              <button onClick={() => setShowForm('reserved')} className="btn-outline btn-sm" title="Tentative date — Save the Date">
+                📌 Save the Date
+              </button>
+            </>
           )}
         </div>
       </div>
 
       {showForm && (
-        <div className="card mb-5" style={{ border: '2px solid var(--green3)', marginBottom: 20 }}>
-          <div className="card-title">New Event</div>
+        <div className="card mb-5" style={{ border: showForm === 'reserved' ? '2px dashed #D97706' : '2px solid var(--green3)', marginBottom: 20 }}>
+          <div className="card-title">
+            {showForm === 'reserved' ? '📌 Save the Date — Reserved Event' : 'New Event'}
+          </div>
+          {showForm === 'reserved' && (
+            <div style={{ fontSize: 12, color: '#92400E', marginBottom: 10 }}>
+              Tentative — won't trigger normal notifications until promoted to Booked.
+            </div>
+          )}
           <form onSubmit={createEvent} className="flex gap-3 flex-wrap items-end">
             <div className="field" style={{ minWidth: 200 }}>
               <label className="fl">Store</label>
@@ -552,7 +565,9 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                 onChange={e => setNewEvent(p => ({ ...p, buyers_needed: e.target.value }))} />
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button type="submit" disabled={saving} className="btn-primary btn-sm">{saving ? 'Creating…' : 'Create Event'}</button>
+              <button type="submit" disabled={saving} className="btn-primary btn-sm">
+                {saving ? 'Creating…' : (showForm === 'reserved' ? 'Save the Date' : 'Create Event')}
+              </button>
               <button type="button" onClick={() => setShowForm(false)} className="btn-outline btn-sm">Cancel</button>
             </div>
           </form>
