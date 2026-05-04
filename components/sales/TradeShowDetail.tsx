@@ -17,7 +17,9 @@ import DatePicker from '@/components/ui/DatePicker'
 import BoothCostsPanel from './BoothCostsPanel'
 import TradeShowStaffPanel from './TradeShowStaffPanel'
 import TradeShowAppointmentsPanel from './TradeShowAppointmentsPanel'
+import TradeShowHoursPanel from './TradeShowHoursPanel'
 import AddLeadModal from './AddLeadModal'
+import type { TradeShowHours } from '@/lib/sales/tradeshows'
 
 interface Props {
   tradeShowId: string
@@ -32,6 +34,7 @@ export default function TradeShowDetail({ tradeShowId, onBack, onDeleted }: Prop
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [addLeadOpen, setAddLeadOpen] = useState(false)
+  const [hours, setHours] = useState<TradeShowHours[]>([])
   const [draft, setDraft] = useState({
     name: '', venue_name: '', venue_city: '', venue_state: '',
     venue_address: '', start_date: '', end_date: '',
@@ -222,12 +225,22 @@ export default function TradeShowDetail({ tradeShowId, onBack, onDeleted }: Prop
         canWrite={isAdmin}
       />
 
+      {/* Per-day show hours — drives the booking grid */}
+      <TradeShowHoursPanel
+        tradeShowId={show!.id}
+        startDate={draft.start_date || show!.start_date}
+        endDate={draft.end_date || show!.end_date}
+        canWrite={isAdmin}
+        onHoursChange={setHours}
+      />
+
       {/* Booth appointments — Phase 9 */}
       <TradeShowAppointmentsPanel
         tradeShowId={show!.id}
         startDate={draft.start_date || show!.start_date}
         endDate={draft.end_date || show!.end_date}
         canWrite={isAdmin}
+        hours={hours}
       />
     </div>
   )

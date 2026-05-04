@@ -66,6 +66,28 @@ export async function createSlot(tradeShowId: string, draft: AppointmentDraft): 
   return data as TradeShowAppointment
 }
 
+export async function bulkCreateSlots(
+  tradeShowId: string,
+  drafts: AppointmentDraft[],
+): Promise<number> {
+  if (drafts.length === 0) return 0
+  const { error, count } = await supabase
+    .from('trade_show_appointments')
+    .insert(
+      drafts.map(d => ({
+        trade_show_id: tradeShowId,
+        slot_start: d.slot_start,
+        slot_end:   d.slot_end,
+        status: 'available',
+        assigned_staff_id: d.assigned_staff_id || null,
+        notes: d.notes?.trim() || null,
+      })),
+      { count: 'exact' },
+    )
+  if (error) throw new Error(error.message)
+  return count || 0
+}
+
 export interface BookingDraft {
   booked_by_lead_id?: string | null
   booked_by_external_name?: string | null
