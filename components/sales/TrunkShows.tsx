@@ -30,6 +30,7 @@ const STATUS_COLOR: Record<TrunkShowStatus, { bg: string; fg: string }> = {
 
 type Filter = 'all' | 'reserved' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
 type Sort = 'date-desc' | 'date-asc' | 'rep' | 'store'
+type View = 'cards' | 'columns' | 'list'
 
 export default function TrunkShows() {
   const { user, stores, users } = useApp()
@@ -40,6 +41,7 @@ export default function TrunkShows() {
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
   const [sort, setSort] = useState<Sort>('date-desc')
+  const [view, setView] = useState<View>('cards')
   const [createOpen, setCreateOpen] = useState<false | 'scheduled' | 'reserved'>(false)
   const [openId, setOpenId] = useState<string | null>(null)
 
@@ -102,6 +104,20 @@ export default function TrunkShows() {
             style={{ textTransform: 'capitalize' }}>{f.replace('_', ' ')}</button>
         ))}
         <div style={{ flex: 1 }} />
+        <div style={{ display: 'flex', gap: 4, background: 'var(--cream2)', padding: 2, borderRadius: 6 }}>
+          {([['cards', '🗂'], ['columns', '🧱'], ['list', '☰']] as [View, string][]).map(([v, icon]) => (
+            <button key={v} onClick={() => setView(v)}
+              title={v}
+              style={{
+                background: view === v ? '#fff' : 'transparent',
+                border: 'none', borderRadius: 4, padding: '2px 8px',
+                cursor: 'pointer', fontSize: 13,
+                boxShadow: view === v ? '0 1px 2px rgba(0,0,0,.06)' : 'none',
+              }}>
+              {icon}
+            </button>
+          ))}
+        </div>
         <label style={{ fontSize: 11, color: 'var(--mist)', display: 'flex', alignItems: 'center', gap: 6 }}>
           Sort:
           <select value={sort} onChange={e => setSort(e.target.value as Sort)} style={{ fontSize: 12, padding: '2px 6px' }}>
@@ -126,7 +142,7 @@ export default function TrunkShows() {
             ? 'No trunk shows yet.' + (isAdmin ? ' Click "+ New Trunk Show".' : '')
             : 'Nothing matches the current filter.'}
         </div>
-      ) : (
+      ) : view === 'cards' ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {filtered.map(r => {
             const status = effectiveStatus(r)
@@ -165,6 +181,10 @@ export default function TrunkShows() {
             )
           })}
         </div>
+      ) : view === 'columns' ? (
+        <ColumnsView shows={filtered} usersById={usersById} storesById={storesById} onOpen={setOpenId} />
+      ) : (
+        <ListView shows={filtered} usersById={usersById} storesById={storesById} onOpen={setOpenId} />
       )}
 
       {createOpen && (
@@ -369,6 +389,125 @@ function CreateTrunkShowModal({ mode, onClose, onCreated }: { mode: 'scheduled' 
           Defaults each show day to 10am–5pm; edit per-day on the detail page.
         </div>
       </div>
+    </div>
+  )
+}
+
+/* ── columns view (kanban by rep) ─────────────────────────── */
+
+function ColumnsView({ shows, usersById, storesById, onOpen }: {
+  shows: TrunkShow[]
+  usersById: Map<string, any>
+  storesById: Map<string, any>
+  onOpen: (id: string) => void
+}) {
+  // Bucket by rep id. Reps with no shows in the filtered set don't
+  // get a column; an "(unassigned)" column appears only if some row
+  // has no rep.
+  const buckets = new Map<string, TrunkShow[]>()
+  for (const r of shows) {
+    const key = r.assigned_rep_id || '__unassigned__'
+    if (!buckets.has(key)) buckets.set(key, [])
+    buckets.get(key)!.push(r)
+  }
+  const cols = Array.from(buckets.entries())
+    .map(([key, list]) => ({
+      key,
+      name: key === '__unassigned__'
+        ? '(unassigned)'
+        : usersById.get(key)?.name || '(unknown rep)',
+      list,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  return (
+    <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8 }}>
+      {cols.map(col => (
+        <div key={col.key} style={{ minWidth: 240, flex: '0 0 240px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--ink)', padding: '6px 8px', background: 'var(--cream2)', borderRadius: 6 }}>
+            {col.name} <span style={{ color: 'var(--mist)', fontWeight: 600 }}>· {col.list.length}</span>
+          </div>
+          {col.list.map(r => {
+            const status = effectiveStatus(r)
+            const sc = STATUS_COLOR[status]
+            const store = storesById.get(r.store_id)
+            return (
+              <button key={r.id} onClick={() => onOpen(r.id)}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  padding: 10, cursor: 'pointer', fontFamily: 'inherit',
+                  background: status === 'reserved' ? '#FFFBEB' : '#fff',
+                  border: status === 'reserved' ? '2px dashed #D97706' : '1px solid var(--pearl)',
+                  borderRadius: 6,
+                  opacity: status === 'cancelled' ? 0.6 : 1,
+                }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {store?.name || '(unknown)'}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>
+                  {fmtRange(r.start_date, r.end_date)}
+                </div>
+                <span style={{ background: sc.bg, color: sc.fg, padding: '1px 6px', borderRadius: 999, fontSize: 9, fontWeight: 800, marginTop: 4, display: 'inline-block', letterSpacing: '.04em' }}>
+                  {STATUS_LABEL[status]}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/* ── compact list view (spreadsheet-pretty) ──────────────── */
+
+function ListView({ shows, usersById, storesById, onOpen }: {
+  shows: TrunkShow[]
+  usersById: Map<string, any>
+  storesById: Map<string, any>
+  onOpen: (id: string) => void
+}) {
+  return (
+    <div style={{ background: '#fff', border: '1px solid var(--pearl)', borderRadius: 8, overflow: 'hidden' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <thead>
+          <tr style={{ background: 'var(--cream2)', textAlign: 'left' }}>
+            <th style={{ padding: '8px 12px', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--mist)' }}>Date</th>
+            <th style={{ padding: '8px 12px', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--mist)' }}>Store</th>
+            <th style={{ padding: '8px 12px', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--mist)' }}>City / State</th>
+            <th style={{ padding: '8px 12px', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--mist)' }}>Rep</th>
+            <th style={{ padding: '8px 12px', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--mist)' }}>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {shows.map(r => {
+            const status = effectiveStatus(r)
+            const sc = STATUS_COLOR[status]
+            const store = storesById.get(r.store_id)
+            const rep = usersById.get(r.assigned_rep_id)
+            return (
+              <tr key={r.id}
+                onClick={() => onOpen(r.id)}
+                style={{
+                  cursor: 'pointer',
+                  background: status === 'reserved' ? '#FFFBEB' : '#fff',
+                  borderTop: '1px solid var(--pearl)',
+                  opacity: status === 'cancelled' ? 0.6 : 1,
+                }}>
+                <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', fontWeight: 600 }}>{fmtRange(r.start_date, r.end_date)}</td>
+                <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--ink)' }}>{store?.name || '—'}</td>
+                <td style={{ padding: '10px 12px', color: 'var(--mist)' }}>{[store?.city, store?.state].filter(Boolean).join(', ') || '—'}</td>
+                <td style={{ padding: '10px 12px', color: 'var(--ink)' }}>{rep?.name || '—'}</td>
+                <td style={{ padding: '10px 12px' }}>
+                  <span style={{ background: sc.bg, color: sc.fg, padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 800, letterSpacing: '.04em' }}>
+                    {STATUS_LABEL[status]}
+                  </span>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }
