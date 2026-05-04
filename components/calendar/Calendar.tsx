@@ -449,13 +449,14 @@ function EventCards({ activeEvents, stores, appointments, bookingHours, loading,
             <div key={ev.id}
               onClick={handleCardClick}
               style={{
-                background: '#fff',
-                border: '1.5px solid var(--pearl)',
+                background: ev.status === 'reserved' ? '#FFFBEB' : '#fff',
+                border: ev.status === 'reserved' ? '2px dashed #D97706' : '1.5px solid var(--pearl)',
                 borderRadius: 14,
                 cursor: 'pointer',
                 transition: 'all .15s',
                 display: 'flex', flexDirection: 'column',
                 overflow: 'hidden',
+                opacity: ev.status === 'cancelled' ? 0.6 : 1,
               }}
               onMouseEnter={e => {
                 if (isMobile) return

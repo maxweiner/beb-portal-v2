@@ -1212,7 +1212,12 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
 
       {/* Detail Modal */}
       {detail && (
-        <EventDetailModal ev={detail} stores={stores} onClose={() => setDetail(null)} fmtDollars={fmtDollars} />
+        <EventDetailModal ev={detail} stores={stores} onClose={() => setDetail(null)} fmtDollars={fmtDollars}
+          onStatusChanged={(newStatus) => {
+            const updated = events.map(e => e.id === detail.id ? { ...e, status: newStatus } : e)
+            setEvents(updated); setContextEvents(updated)
+            setDetail(null)
+          }} />
       )}
 
       {/* Notes panel */}
@@ -1331,11 +1336,12 @@ function MarketingCampaignPrompt({ ev, onYes, onNo }: {
 }
 
 /* ══ EVENT DETAIL MODAL ══ */
-function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
+function EventDetailModal({ ev, stores, onClose, fmtDollars, onStatusChanged }: {
   ev: Event
   stores: any[]
   onClose: () => void
   fmtDollars: (n: number) => string
+  onStatusChanged?: (newStatus: 'scheduled' | 'cancelled') => void
 }) {
   const { user } = useApp()
   const store = stores.find(s => s.id === ev.store_id)
@@ -1345,19 +1351,16 @@ function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
     if (!confirm(`Promote to Booked?\n\nWorkers currently assigned: ${(ev.workers || []).map(w => w.name).join(', ') || '(none)'}\n\nThis flips the status to scheduled and triggers the normal notifications.`)) return
     const { error } = await supabase.from('events').update({ status: 'scheduled' }).eq('id', ev.id)
     if (error) { alert(error.message); return }
-    onClose()
-    // Trigger a refresh by reloading the page — the parent doesn't
-    // expose a reload callback to the modal, so this is the simplest
-    // way to make the change visible without a deeper refactor.
-    if (typeof window !== 'undefined') window.location.reload()
+    if (onStatusChanged) onStatusChanged('scheduled')
+    else onClose()
   }
 
   async function cancelKeep() {
     if (!confirm('Cancel this event but keep it visible (with strikethrough)?')) return
     const { error } = await supabase.from('events').update({ status: 'cancelled' }).eq('id', ev.id)
     if (error) { alert(error.message); return }
-    onClose()
-    if (typeof window !== 'undefined') window.location.reload()
+    if (onStatusChanged) onStatusChanged('cancelled')
+    else onClose()
   }
   // "Customers at this Store" panel: admins always; buyers only when
   // they're assigned to this event AND today is in the 3-day window.
