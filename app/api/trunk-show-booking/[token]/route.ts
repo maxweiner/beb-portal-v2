@@ -38,9 +38,22 @@ export async function GET(req: Request, { params }: { params: { token: string } 
     .eq('id', t.trunk_show_id).is('deleted_at', null).maybeSingle()
   if (!show) return NextResponse.json({ error: 'Show not found' }, { status: 404 })
 
-  const { data: store } = await sb.from('stores')
-    .select('name, city, state, address, color_primary, color_secondary, store_image_url')
+  // trunk_shows.store_id now references trunk_show_stores. Branding
+  // columns (color_primary, color_secondary, store_image_url) live
+  // on the buying-side `stores` table and don't exist here, so we
+  // fall back to defaults for the public booking page.
+  const { data: store } = await sb.from('trunk_show_stores')
+    .select('name, city, state, address_1, address_2')
     .eq('id', show.store_id).maybeSingle()
+  const branded = store ? {
+    name: (store as any).name,
+    city: (store as any).city,
+    state: (store as any).state,
+    address: [(store as any).address_1, (store as any).address_2].filter(Boolean).join(', ') || null,
+    color_primary: null,
+    color_secondary: null,
+    store_image_url: null,
+  } : null
 
   // Slots are pure time blocks now. A slot is "available to this
   // token" iff no booking exists for (slot, token). Bookings via
@@ -63,7 +76,7 @@ export async function GET(req: Request, { params }: { params: { token: string } 
     .update({ last_used_at: new Date().toISOString() }).eq('id', t.id)
 
   return NextResponse.json({
-    show: { ...show, store: store || null },
+    show: { ...show, store: branded },
     slots: available.map(s => ({ id: s.id, slot_start: s.slot_start, slot_end: s.slot_end })),
     // When the token has a salesperson tagged, the booking page can
     // display that and skip prompting for it.

@@ -28,7 +28,7 @@ interface Props {
 }
 
 export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDeleted }: Props) {
-  const { user, stores, users } = useApp()
+  const { user, trunkShowStores, users } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || !!user?.is_partner
   const [show, setShow] = useState<TrunkShow | null>(null)
   const [hours, setHours] = useState<TrunkShowHours[]>([])
@@ -37,6 +37,13 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
   const [draft, setDraft] = useState({
     store_id: '', start_date: '', end_date: '',
     assigned_rep_id: '', status: 'scheduled' as TrunkShowStatus, notes: '',
+    vip_showing: false,
+    confirmation_letter_sent_at: '' as string,
+    postcards_email_sent_at: '' as string,
+    postcards_ordered_at: '' as string,
+    proofed_at: '' as string,
+    final_files_sent_at: '' as string,
+    post_event_questionnaire_sent_at: '' as string,
   })
 
   // Trunk rep pool only — admins, partners, and other roles are NOT
@@ -62,9 +69,16 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
           store_id: row.store_id,
           start_date: row.start_date,
           end_date: row.end_date,
-          assigned_rep_id: row.assigned_rep_id,
+          assigned_rep_id: row.assigned_rep_id || '',
           status: row.status,
           notes: row.notes || '',
+          vip_showing: !!row.vip_showing,
+          confirmation_letter_sent_at: row.confirmation_letter_sent_at || '',
+          postcards_email_sent_at:     row.postcards_email_sent_at     || '',
+          postcards_ordered_at:        row.postcards_ordered_at        || '',
+          proofed_at:                  row.proofed_at                  || '',
+          final_files_sent_at:         row.final_files_sent_at         || '',
+          post_event_questionnaire_sent_at: row.post_event_questionnaire_sent_at || '',
         })
         const hrs = await listHours(trunkShowId)
         if (cancelled) return
@@ -101,7 +115,7 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
           const repName = users.find(u => u.id === d.assigned_rep_id)?.name || 'this rep'
           alert(`${repName} is already on a Reserved trunk show ${c.start_date}–${c.end_date}. Revert this change or resolve that show first.`)
           // Roll back the rep field locally so the UI doesn't lie.
-          setDraft(p => ({ ...p, assigned_rep_id: show.assigned_rep_id }))
+          setDraft(p => ({ ...p, assigned_rep_id: show.assigned_rep_id || '' }))
           return
         }
       }
@@ -112,6 +126,13 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
         assigned_rep_id: d.assigned_rep_id,
         status: d.status,
         notes: d.notes,
+        vip_showing: d.vip_showing,
+        confirmation_letter_sent_at:      d.confirmation_letter_sent_at      || null,
+        postcards_email_sent_at:          d.postcards_email_sent_at          || null,
+        postcards_ordered_at:             d.postcards_ordered_at             || null,
+        proofed_at:                       d.proofed_at                       || null,
+        final_files_sent_at:              d.final_files_sent_at              || null,
+        post_event_questionnaire_sent_at: d.post_event_questionnaire_sent_at || null,
       })
       if (datesChanged) {
         await reconcileHours(show.id, d.start_date, d.end_date)
@@ -138,7 +159,7 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
 
   async function handleDelete() {
     if (!show || !isAdmin) return
-    if (!confirm(`Delete trunk show at ${stores.find(s => s.id === show.store_id)?.name || 'store'}?`)) return
+    if (!confirm(`Delete trunk show at ${trunkShowStores.find(s => s.id === show.store_id)?.name || 'store'}?`)) return
     try { await softDeleteTrunkShow(show.id); onDeleted() }
     catch (err: any) { alert(err?.message || 'Could not delete') }
   }
@@ -181,7 +202,7 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
     </div>
   )
 
-  const store = stores.find(s => s.id === show.store_id)
+  const store = trunkShowStores.find(s => s.id === show.store_id)
   const eff = effectiveStatus({ ...show, status: draft.status })
 
   return (
@@ -218,7 +239,7 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Field label="Store" required>
             <select value={draft.store_id} onChange={e => setDraft(p => ({ ...p, store_id: e.target.value }))} disabled={!canMutate}>
-              {stores.filter(s => s.active !== false).sort((a, b) => a.name.localeCompare(b.name)).map(s => (
+              {trunkShowStores.slice().sort((a, b) => a.name.localeCompare(b.name)).map(s => (
                 <option key={s.id} value={s.id}>{s.name}{s.city ? ` · ${s.city}, ${s.state}` : ''}</option>
               ))}
             </select>
@@ -270,6 +291,38 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
         )}
       </div>
 
+      {/* Marketing checklist — milestones from the legacy spreadsheet */}
+      <div className="card" style={{ padding: 20, marginBottom: 14 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink)', marginBottom: 4 }}>📬 Marketing Checklist</div>
+        <div style={{ fontSize: 11, color: 'var(--mist)', marginBottom: 10 }}>
+          Track the show prep workflow. Pick a date when each milestone is done; clear to mark not done.
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <input id="ts-vip" type="checkbox" checked={draft.vip_showing}
+            onChange={e => setDraft(p => ({ ...p, vip_showing: e.target.checked }))}
+            disabled={!canMutate} />
+          <label htmlFor="ts-vip" style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>⭐ VIP Showing</label>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+          {([
+            ['Confirmation Letter Sent',     'confirmation_letter_sent_at'],
+            ['Postcards Email Sent',         'postcards_email_sent_at'],
+            ['Postcards Ordered',            'postcards_ordered_at'],
+            ['Proofed',                      'proofed_at'],
+            ['Final Files Sent',             'final_files_sent_at'],
+            ['Post-Event Questionnaire Sent', 'post_event_questionnaire_sent_at'],
+          ] as const).map(([label, key]) => (
+            <Field key={key} label={label}>
+              <DatePicker
+                value={(draft as any)[key] || ''}
+                onChange={v => setDraft(p => ({ ...p, [key]: v } as any))}
+                disabled={!canMutate}
+              />
+            </Field>
+          ))}
+        </div>
+      </div>
+
       {/* Special requests — Phase 11 */}
       <SpecialRequestsPanel trunkShowId={show.id} canWrite={!!canMutate} />
 
@@ -278,7 +331,7 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
         trunkShowId={show.id}
         hours={hours}
         canWrite={!!canMutate}
-        store={stores.find(s => s.id === show.store_id) || null}
+        store={trunkShowStores.find(s => s.id === show.store_id) as any || null}
       />
 
       {/* Spiffs — Phase 13 */}
