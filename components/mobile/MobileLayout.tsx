@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
 import { setMobilePreference } from '@/lib/mobile'
 import { supabase } from '@/lib/supabase'
+import { eventDisplayName } from '@/lib/eventName'
 import type { NavPage } from '@/app/page'
 import LicenseScanner from '@/components/scan/LicenseScanner'
 import { useCenterButtonMode } from '@/lib/centerButtonMode'
@@ -404,7 +405,7 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
                 }}>
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>
-                      {ev.store_name || 'Unknown Store'}
+                      {eventDisplayName(ev, stores) || 'Unknown Store'}
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 2 }}>
                       {fmtDate(ev.start_date)} · {ev.days?.length || '?'} days

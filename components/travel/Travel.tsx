@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
+import { eventDisplayName } from '@/lib/eventName'
 import type { Event } from '@/types'
 
 interface TravelFolder { id: string; event_id: string; name: string; sort_order: number }
@@ -99,7 +100,7 @@ export default function Travel() {
     : sorted
   const pastCount = scoped.filter(isPast).length
   const visible = showPast ? scoped : scoped.filter(ev => !isPast(ev))
-  const filtered = visible.filter(ev => ev.store_name?.toLowerCase().includes(search.toLowerCase()))
+  const filtered = visible.filter(ev => eventDisplayName(ev, stores).toLowerCase().includes(search.toLowerCase()))
   const visibleTradeShows = (showPast ? tradeShows : tradeShows.filter(ts => !isPastTradeShow(ts)))
     .filter(ts => ts.name.toLowerCase().includes(search.toLowerCase()))
   const fmt = (ds: string) => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -180,7 +181,7 @@ export default function Travel() {
                   background: sel ? 'var(--green-pale)' : 'transparent',
                   borderLeft: sel ? '3px solid var(--green)' : '3px solid transparent',
                 }}>
-                <div style={{ fontWeight: 700, fontSize: 13, color: sel ? 'var(--green-dark)' : 'var(--ink)' }}>◆ {ev.store_name}</div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: sel ? 'var(--green-dark)' : 'var(--ink)' }}>◆ {eventDisplayName(ev, stores)}</div>
                 <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>{store?.city}, {store?.state} · {fmt(ev.start_date)}</div>
               </div>
             )
@@ -239,7 +240,7 @@ export default function Travel() {
           <div style={{ padding: 24, maxWidth: 900, margin: '0 auto' }}>
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', marginBottom: 4 }}>Travel</div>
-              <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)' }}>◆ {selectedEvent.store_name}</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)' }}>◆ {eventDisplayName(selectedEvent, stores)}</div>
               <div style={{ fontSize: 13, color: 'var(--mist)', marginTop: 2 }}>{selectedEvent.start_date}</div>
             </div>
 
@@ -368,7 +369,7 @@ function UnassignedView({ user, events, tradeShows, stores, refreshTick, onPlace
                     .map(ev => {
                       const s = stores.find(x => x.id === ev.store_id)
                       return <option key={ev.id} value={`event:${ev.id}`}>
-                        {ev.store_name}{s?.city ? ` · ${s.city}, ${s.state}` : ''} · {ev.start_date}
+                        {eventDisplayName(ev, stores)}{s?.city ? ` · ${s.city}, ${s.state}` : ''} · {ev.start_date}
                       </option>
                     })}
                 </optgroup>}
