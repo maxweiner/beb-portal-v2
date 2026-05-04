@@ -27,9 +27,6 @@ interface TrunkShowStore {
   email_1: string | null
   email_2: string | null
   url: string | null
-  aframe_buying_event: boolean | null
-  counter_card_buying_event: boolean | null
-  buying_event_questionnaire: string | null
   created_at?: string
   updated_at?: string
 }
@@ -37,7 +34,6 @@ interface TrunkShowStore {
 const COLS = `id, trunk_shows, name, ts_reps, trunk_rep_user_id, comments,
   address_1, address_2, city, state, zip, store_phone,
   contact_1, contact_2, contact_3, email_1, email_2, url,
-  aframe_buying_event, counter_card_buying_event, buying_event_questionnaire,
   created_at, updated_at`
 
 export default function TrunkShowStores() {
@@ -327,9 +323,6 @@ function Modal({ store, trunkReps, onClose, onSaved, onDelete }: {
         email_1: emptyToNull(d.email_1),
         email_2: emptyToNull(d.email_2),
         url: emptyToNull(d.url),
-        aframe_buying_event: d.aframe_buying_event ?? null,
-        counter_card_buying_event: d.counter_card_buying_event ?? null,
-        buying_event_questionnaire: emptyToNull(d.buying_event_questionnaire),
       }
       const { data, error } = await supabase
         .from('trunk_show_stores').update(patch).eq('id', store.id)
@@ -445,28 +438,6 @@ function Modal({ store, trunkReps, onClose, onSaved, onDelete }: {
               <F label="Contact 3" k="contact_3" />
               <F label="Document Sending Email 1" k="email_1" type="email" />
               <div style={{ gridColumn: 'span 2' }}><F label="Email 2" k="email_2" type="email" /></div>
-            </div>
-          </div>
-
-          {/* Trunk Show Details */}
-          <div className="card" style={{ margin: 0 }}>
-            <div className="card-title">Trunk Show Details<AutosaveIndicator status={status} /></div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <Checkbox
-                checked={details.aframe_buying_event === true}
-                onChange={(v) => set('aframe_buying_event', v)}
-                size={18}
-                label={<span style={{ fontSize: 13 }}>A-Frame — Buying Event</span>}
-              />
-              <Checkbox
-                checked={details.counter_card_buying_event === true}
-                onChange={(v) => set('counter_card_buying_event', v)}
-                size={18}
-                label={<span style={{ fontSize: 13 }}>Counter Card — Buying Event</span>}
-              />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, marginTop: 10 }}>
-              <TA label="Buying Event Questionnaire" k="buying_event_questionnaire" />
             </div>
           </div>
 
