@@ -45,6 +45,15 @@ export async function GET(req: Request, { params }: { params: { token: string } 
     .eq('status', 'available')
     .order('slot_start', { ascending: true })
 
+  // Resolve assigned-staff names for the rep picker. Only fetch
+  // names for staff_ids that actually appear on slots.
+  const staffIds = Array.from(new Set((slots || []).map(s => s.assigned_staff_id).filter(Boolean) as string[]))
+  let staffNames: Record<string, string> = {}
+  if (staffIds.length > 0) {
+    const { data: u } = await sb.from('users').select('id, name').in('id', staffIds)
+    for (const r of (u || [])) staffNames[r.id] = (r as any).name || 'Rep'
+  }
+
   // touch last_used_at as a low-fidelity engagement signal
   await sb.from('trade_show_booking_tokens')
     .update({ last_used_at: new Date().toISOString() }).eq('id', t.id)
@@ -53,6 +62,8 @@ export async function GET(req: Request, { params }: { params: { token: string } 
     show,
     slots: (slots || []).map(s => ({
       id: s.id, slot_start: s.slot_start, slot_end: s.slot_end,
+      assigned_staff_id: s.assigned_staff_id || null,
+      assigned_staff_name: s.assigned_staff_id ? (staffNames[s.assigned_staff_id] || null) : null,
     })),
   })
 }

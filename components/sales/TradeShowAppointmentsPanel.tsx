@@ -7,10 +7,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import {
-  listAppointments, createSlot, bookSlot, setSlotStatus, setAssignedStaff,
+  listAppointments, createSlot, bulkCreateSlots, bookSlot, setSlotStatus, setAssignedStaff,
   deleteSlot, generateBookingToken,
   type TradeShowAppointment, type TradeShowAppointmentStatus,
 } from '@/lib/sales/tradeShowAppointments'
+import { listStaff, type TradeShowStaffer } from '@/lib/sales/tradeShowStaff'
+import type { TradeShowHours } from '@/lib/sales/tradeshows'
 import DatePicker from '@/components/ui/DatePicker'
 import TimePicker from '@/components/ui/TimePicker'
 
@@ -30,11 +32,13 @@ interface Props {
   startDate: string
   endDate: string
   canWrite: boolean
+  hours?: TradeShowHours[]
 }
 
-export default function TradeShowAppointmentsPanel({ tradeShowId, startDate, endDate, canWrite }: Props) {
+export default function TradeShowAppointmentsPanel({ tradeShowId, startDate, endDate, canWrite, hours = [] }: Props) {
   const { users } = useApp()
   const [rows, setRows] = useState<TradeShowAppointment[]>([])
+  const [staff, setStaff] = useState<TradeShowStaffer[]>([])
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [adderOpen, setAdderOpen] = useState(false)
@@ -44,7 +48,13 @@ export default function TradeShowAppointmentsPanel({ tradeShowId, startDate, end
 
   async function reload() {
     setError(null)
-    try { setRows(await listAppointments(tradeShowId)) }
+    try {
+      const [r, s] = await Promise.all([
+        listAppointments(tradeShowId),
+        listStaff(tradeShowId),
+      ])
+      setRows(r); setStaff(s)
+    }
     catch (err: any) { setError(err?.message || 'Failed to load') }
     setLoaded(true)
   }
@@ -187,8 +197,11 @@ export default function TradeShowAppointmentsPanel({ tradeShowId, startDate, end
             startDate={startDate}
             endDate={endDate}
             eligibleStaff={eligibleStaff}
+            hours={hours}
+            staff={staff}
             onCancel={() => setAdderOpen(false)}
             onCreated={(slot) => { setRows(p => [...p, slot].sort((a, b) => a.slot_start.localeCompare(b.slot_start))); setAdderOpen(false) }}
+            onBulkAdded={() => { void reload(); setAdderOpen(false) }}
           />
         ) : (
           <button onClick={() => setAdderOpen(true)} className="btn-outline btn-sm" style={{ marginTop: 10 }}>
@@ -336,19 +349,26 @@ function BookingForm({ slotId, onCancel, onBooked }: {
 /* ── add-slot row ────────────────────────────────────────── */
 
 function AddSlotRow({
-  tradeShowId, startDate, endDate, eligibleStaff, onCancel, onCreated,
+  tradeShowId, startDate, endDate, eligibleStaff, hours, staff, onCancel, onCreated, onBulkAdded,
 }: {
   tradeShowId: string
   startDate: string
   endDate: string
   eligibleStaff: any[]
+  hours: TradeShowHours[]
+  staff: TradeShowStaffer[]
   onCancel: () => void
   onCreated: (slot: TradeShowAppointment) => void
+  onBulkAdded: () => void
 }) {
+  // Default to "All days" mode — fills every day's hours with
+  // 30-min slots per assigned trunk rep working that day.
+  const [mode, setMode] = useState<'single' | 'all'>('all')
   const [date, setDate] = useState(startDate || '')
   const [start, setStart] = useState('10:00')
   const [end, setEnd] = useState('10:30')
   const [staffId, setStaffId] = useState<string>('')
+  const [duration, setDuration] = useState(30)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -359,8 +379,6 @@ function AddSlotRow({
     if (!valid || busy) return
     setBusy(true); setErr(null)
     try {
-      // Build an ISO datetime from the local date + time. Server
-      // stores as TIMESTAMPTZ; supabase-js round-trips fine.
       const slotStart = new Date(`${date}T${start}:00`).toISOString()
       const slotEnd   = new Date(`${date}T${end}:00`).toISOString()
       const created = await createSlot(tradeShowId, {
@@ -375,41 +393,103 @@ function AddSlotRow({
     }
   }
 
+  // For each show day with hours configured, for each assigned rep
+  // whose assigned_dates includes that day, mint back-to-back
+  // duration-minute slots from open to close.
+  async function submitAll() {
+    if (busy || hours.length === 0) return
+    setBusy(true); setErr(null)
+    try {
+      const drafts: { slot_start: string; slot_end: string; assigned_staff_id: string | null }[] = []
+      for (const h of hours) {
+        const repsThatDay = staff.filter(s => (s.assigned_dates || []).includes(h.show_date))
+        const targets = repsThatDay.length > 0 ? repsThatDay.map(r => r.user_id) : [null as string | null]
+        const baseStart = new Date(`${h.show_date}T${h.open_time.slice(0, 5)}:00`)
+        const baseEnd   = new Date(`${h.show_date}T${h.close_time.slice(0, 5)}:00`)
+        for (const repId of targets) {
+          for (let t = new Date(baseStart); t < baseEnd; t.setMinutes(t.getMinutes() + duration)) {
+            const slotEnd = new Date(t.getTime() + duration * 60_000)
+            if (slotEnd > baseEnd) break
+            drafts.push({
+              slot_start: t.toISOString(),
+              slot_end:   slotEnd.toISOString(),
+              assigned_staff_id: repId,
+            })
+          }
+        }
+      }
+      if (drafts.length === 0) { setErr('No hours configured. Set at least one show day in the Show Hours card first.'); setBusy(false); return }
+      await bulkCreateSlots(tradeShowId, drafts)
+      onBulkAdded()
+    } catch (e: any) { setErr(e?.message || 'Could not bulk-create'); setBusy(false) }
+  }
+
+  const repCount = staff.length
+  const dayCount = hours.length
+  const repDayCount = hours.reduce((acc, h) => acc + Math.max(staff.filter(s => (s.assigned_dates || []).includes(h.show_date)).length, 1), 0)
+
   return (
     <div style={{
       marginTop: 10, padding: 12,
       background: 'var(--green-pale)', border: '1px dashed var(--green3)',
       borderRadius: 8,
     }}>
-      <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', marginBottom: 8 }}>
-        <div className="field" style={{ marginBottom: 0 }}>
-          <label className="fl">Date</label>
-          <DatePicker value={date} min={startDate} max={endDate}
-            onChange={setDate} />
-        </div>
-        <div className="field" style={{ marginBottom: 0 }}>
-          <label className="fl">Start</label>
-          <TimePicker value={start} onChange={setStart} />
-        </div>
-        <div className="field" style={{ marginBottom: 0 }}>
-          <label className="fl">End</label>
-          <TimePicker value={end} onChange={setEnd} />
-        </div>
-        <div className="field" style={{ marginBottom: 0 }}>
-          <label className="fl">Staffer (optional)</label>
-          <select value={staffId} onChange={e => setStaffId(e.target.value)}>
-            <option value="">No staffer</option>
-            {eligibleStaff.map(u => (
-              <option key={u.id} value={u.id}>{u.name?.split(' ')[0] || u.name}</option>
-            ))}
-          </select>
-        </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        <button onClick={() => setMode('all')}    className={mode === 'all'    ? 'btn-primary btn-xs' : 'btn-outline btn-xs'}>All days × reps</button>
+        <button onClick={() => setMode('single')} className={mode === 'single' ? 'btn-primary btn-xs' : 'btn-outline btn-xs'}>Single slot</button>
       </div>
+      {mode === 'all' ? (
+        <>
+          <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', marginBottom: 8 }}>
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label className="fl">Duration (min)</label>
+              <input type="number" min={5} max={240} step={5}
+                value={duration}
+                onChange={e => setDuration(Math.max(5, Math.min(240, parseInt(e.target.value) || 30)))} />
+            </div>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--mist)', marginBottom: 6 }}>
+            {dayCount === 0
+              ? 'Set show hours first (no days configured).'
+              : repCount === 0
+                ? `Will fill ${dayCount} day${dayCount === 1 ? '' : 's'} with unassigned slots — assign staff in the Staff card to break out per-rep slots.`
+                : `Will fill ${dayCount} day${dayCount === 1 ? '' : 's'} with ${repCount} rep${repCount === 1 ? '' : 's'} (${repDayCount} rep-day combinations) at ${duration}-minute intervals.`}
+          </div>
+        </>
+      ) : (
+        <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', marginBottom: 8 }}>
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label className="fl">Date</label>
+            <DatePicker value={date} min={startDate} max={endDate} onChange={setDate} />
+          </div>
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label className="fl">Start</label>
+            <TimePicker value={start} onChange={setStart} />
+          </div>
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label className="fl">End</label>
+            <TimePicker value={end} onChange={setEnd} />
+          </div>
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label className="fl">Staffer (optional)</label>
+            <select value={staffId} onChange={e => setStaffId(e.target.value)}>
+              <option value="">No staffer</option>
+              {eligibleStaff.map(u => (
+                <option key={u.id} value={u.id}>{u.name?.split(' ')[0] || u.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
       {err && <div style={{ color: '#991B1B', fontSize: 12, marginBottom: 6 }}>{err}</div>}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <button onClick={onCancel} className="btn-outline btn-sm">Cancel</button>
-        <button onClick={submit} disabled={!valid || busy} className="btn-primary btn-sm">
-          {busy ? 'Adding…' : 'Add slot'}
+        <button onClick={mode === 'single' ? submit : submitAll}
+          disabled={busy || (mode === 'single' ? !valid : dayCount === 0)}
+          className="btn-primary btn-sm">
+          {busy ? 'Adding…' :
+            mode === 'single' ? 'Add slot' :
+            `Fill ${dayCount} day${dayCount === 1 ? '' : 's'} @ ${duration}m`}
         </button>
       </div>
     </div>
