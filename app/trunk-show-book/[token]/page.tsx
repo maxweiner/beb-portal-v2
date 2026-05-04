@@ -40,6 +40,10 @@ export default function TrunkShowBookPage() {
   const [notes, setNotes] = useState('')
   const [busy, setBusy] = useState(false)
   const [bookedSlot, setBookedSlot] = useState<Slot | null>(null)
+  // Salesperson tagged on the booking link the customer landed on.
+  // When set, we display "Booking with X" and skip the salesperson
+  // input — the link itself attributes the booking.
+  const [tokenSalesperson, setTokenSalesperson] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -51,6 +55,7 @@ export default function TrunkShowBookPage() {
         if (!res.ok) { setError(json?.error || 'Could not load'); setLoaded(true); return }
         setShow(json.show)
         setSlots(json.slots || [])
+        setTokenSalesperson(json.token_salesperson_name || null)
         setLoaded(true)
       } catch (err: any) {
         if (!cancelled) { setError(err?.message || 'Could not load'); setLoaded(true) }
@@ -240,10 +245,17 @@ export default function TrunkShowBookPage() {
                   className="w-full px-4 py-3 rounded-lg border text-base"
                   style={{ borderColor: 'var(--pearl, #e2e8f0)' }} />
               </div>
-              <input value={salesperson} onChange={e => setSalesperson(e.target.value)}
-                placeholder="Store salesperson (you, if you're booking)"
-                className="w-full px-4 py-3 rounded-lg border text-base"
-                style={{ borderColor: 'var(--pearl, #e2e8f0)' }} />
+              {tokenSalesperson ? (
+                <div className="rounded-lg px-4 py-3 text-sm"
+                  style={{ background: secondary, border: `1px solid ${primary}`, color: primary, fontWeight: 600 }}>
+                  Booking with <strong>{tokenSalesperson}</strong>
+                </div>
+              ) : (
+                <input value={salesperson} onChange={e => setSalesperson(e.target.value)}
+                  placeholder="Store salesperson (you, if you're booking)"
+                  className="w-full px-4 py-3 rounded-lg border text-base"
+                  style={{ borderColor: 'var(--pearl, #e2e8f0)' }} />
+              )}
               <input value={notes} onChange={e => setNotes(e.target.value)}
                 placeholder="Anything we should know?"
                 className="w-full px-4 py-3 rounded-lg border text-base"

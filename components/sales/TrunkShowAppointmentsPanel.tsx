@@ -35,6 +35,14 @@ interface Props {
   store?: Store | null
 }
 
+interface BookingTokenRow {
+  id: string
+  token: string
+  salesperson_name: string | null
+  created_at: string
+  last_used_at: string | null
+}
+
 export default function TrunkShowAppointmentsPanel({ trunkShowId, hours, canWrite, store }: Props) {
   const { user } = useApp()
   const [rows, setRows] = useState<TrunkShowSlot[]>([])
@@ -42,15 +50,13 @@ export default function TrunkShowAppointmentsPanel({ trunkShowId, hours, canWrit
   const [error, setError] = useState<string | null>(null)
   const [bookingFor, setBookingFor] = useState<string | null>(null)
   const [adderOpen, setAdderOpen] = useState(false)
-  const [tokenUrl, setTokenUrl] = useState<string | null>(null)
+  const [tokens, setTokens] = useState<BookingTokenRow[]>([])
   const [tokenBusy, setTokenBusy] = useState(false)
   const [qrLogo, setQrLogo] = useState<string | null>(null)
 
-  // Build a square center-logo for the QR (store logo letterboxed, or
-  // initials on the store's primary color). Mirrors the buying-side QR
-  // pattern in StorePortalAccessCard.
+  // Build a square center-logo once per store for use in every QR.
   useEffect(() => {
-    if (!tokenUrl || !store) return
+    if (!store) return
     let cancelled = false
     void makeSquareLogoDataUrl({
       logoUrl: store.store_image_url || null,
@@ -60,7 +66,17 @@ export default function TrunkShowAppointmentsPanel({ trunkShowId, hours, canWrit
     }).then(url => { if (!cancelled) setQrLogo(url) })
       .catch(() => { if (!cancelled) setQrLogo(null) })
     return () => { cancelled = true }
-  }, [tokenUrl, store])
+  }, [store])
+
+  async function loadTokens() {
+    const { data } = await supabase.from('trunk_show_booking_tokens')
+      .select('id, token, salesperson_name, created_at, last_used_at')
+      .eq('trunk_show_id', trunkShowId)
+      .is('revoked_at', null)
+      .order('created_at', { ascending: false })
+    setTokens((data as BookingTokenRow[]) || [])
+  }
+  useEffect(() => { void loadTokens() /* eslint-disable-next-line */ }, [trunkShowId])
 
   async function reload() {
     setError(null)
@@ -83,10 +99,31 @@ export default function TrunkShowAppointmentsPanel({ trunkShowId, hours, canWrit
     if (tokenBusy) return
     setTokenBusy(true); setError(null)
     try {
-      const { url } = await generateBookingToken(trunkShowId)
-      setTokenUrl(url)
+      await generateBookingToken(trunkShowId)
+      await loadTokens()
     } catch (err: any) { setError(err?.message || 'Could not generate link') }
     setTokenBusy(false)
+  }
+
+  async function handleRenameToken(id: string, name: string) {
+    const cleaned = name.trim() || null
+    setTokens(p => p.map(t => t.id === id ? { ...t, salesperson_name: cleaned } : t))
+    const { error: e } = await supabase.from('trunk_show_booking_tokens')
+      .update({ salesperson_name: cleaned }).eq('id', id)
+    if (e) { setError(e.message); void loadTokens() }
+  }
+
+  async function handleRevokeToken(id: string) {
+    if (!confirm('Revoke this booking link? The QR and URL will stop working immediately.')) return
+    const { error: e } = await supabase.from('trunk_show_booking_tokens')
+      .update({ revoked_at: new Date().toISOString() }).eq('id', id)
+    if (e) { setError(e.message); return }
+    setTokens(p => p.filter(t => t.id !== id))
+  }
+
+  function tokenUrl(token: string): string {
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
+    return `${origin}/trunk-show-book/${token}`
   }
 
   async function handleStatus(id: string, st: TrunkShowAppointmentStatus) {
@@ -137,38 +174,60 @@ export default function TrunkShowAppointmentsPanel({ trunkShowId, hours, canWrit
         </div>
         {canWrite && (
           <button onClick={handleGenerateToken} disabled={tokenBusy} className="btn-outline btn-sm">
-            {tokenBusy ? '…' : (tokenUrl ? 'New magic link' : 'Generate booking link')}
+            {tokenBusy ? '…' : '+ New link'}
           </button>
         )}
       </div>
 
-      {tokenUrl && (
-        <div style={{
-          background: 'var(--green-pale)', border: '1px solid var(--green3)',
-          borderRadius: 8, padding: 12, marginBottom: 10,
-          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-        }}>
-          <div style={{ background: '#fff', padding: 6, borderRadius: 6, flexShrink: 0 }}>
-            <QRCodeSVG
-              value={tokenUrl}
-              size={104}
-              includeMargin={false}
-              level="H"
-              imageSettings={qrLogo ? {
-                src: qrLogo,
-                height: 104 * 0.22,
-                width: 104 * 0.22,
-                excavate: true,
-              } : undefined}
-            />
-          </div>
-          <div style={{ flex: 1, minWidth: 200, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--green-dark)' }}>📎 Share with the store:</span>
-            <code style={{ fontSize: 11, color: 'var(--ink)', overflow: 'auto', whiteSpace: 'nowrap', background: '#fff', padding: '6px 8px', borderRadius: 4 }}>{tokenUrl}</code>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button onClick={() => navigator.clipboard?.writeText(tokenUrl).catch(() => {})} className="btn-outline btn-xs">Copy link</button>
-            </div>
-          </div>
+      {tokens.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+          {tokens.map(tok => {
+            const url = tokenUrl(tok.token)
+            return (
+              <div key={tok.id} style={{
+                background: 'var(--green-pale)', border: '1px solid var(--green3)',
+                borderRadius: 8, padding: 12,
+                display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+              }}>
+                <div style={{ background: '#fff', padding: 6, borderRadius: 6, flexShrink: 0 }}>
+                  <QRCodeSVG
+                    value={url}
+                    size={104}
+                    includeMargin={false}
+                    level="H"
+                    imageSettings={qrLogo ? {
+                      src: qrLogo,
+                      height: 104 * 0.22,
+                      width: 104 * 0.22,
+                      excavate: true,
+                    } : undefined}
+                  />
+                </div>
+                <div style={{ flex: 1, minWidth: 220, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <input
+                    defaultValue={tok.salesperson_name || ''}
+                    onBlur={e => handleRenameToken(tok.id, e.target.value)}
+                    placeholder="Salesperson name (e.g. Tanya)"
+                    disabled={!canWrite}
+                    style={{ fontSize: 13, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--pearl)', background: '#fff' }}
+                  />
+                  <code style={{ fontSize: 11, color: 'var(--ink)', overflow: 'auto', whiteSpace: 'nowrap', background: '#fff', padding: '6px 8px', borderRadius: 4 }}>{url}</code>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button onClick={() => navigator.clipboard?.writeText(url).catch(() => {})} className="btn-outline btn-xs">Copy link</button>
+                    {canWrite && (
+                      <button onClick={() => handleRevokeToken(tok.id)} className="btn-outline btn-xs"
+                        style={{ color: '#B91C1C', borderColor: '#FCA5A5' }}>Revoke</button>
+                    )}
+                    {tok.last_used_at && (
+                      <span style={{ fontSize: 11, color: 'var(--mist)' }}>
+                        Last used {new Date(tok.last_used_at).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
 

@@ -20,9 +20,10 @@ async function resolveToken(token: string) {
   const sb = admin()
   const { data, error } = await sb
     .from('trunk_show_booking_tokens')
-    .select('id, trunk_show_id, expires_at')
+    .select('id, trunk_show_id, expires_at, revoked_at, salesperson_name')
     .eq('token', token).maybeSingle()
   if (error || !data) return null
+  if (data.revoked_at) return null
   if (data.expires_at && new Date(data.expires_at) < new Date()) return null
   return data
 }
@@ -53,6 +54,9 @@ export async function GET(req: Request, { params }: { params: { token: string } 
   return NextResponse.json({
     show: { ...show, store: store || null },
     slots: (slots || []).map(s => ({ id: s.id, slot_start: s.slot_start, slot_end: s.slot_end })),
+    // When the token has a salesperson tagged, the booking page can
+    // display that and skip prompting for it.
+    token_salesperson_name: t.salesperson_name || null,
   })
 }
 
@@ -80,14 +84,20 @@ export async function POST(req: Request, { params }: { params: { token: string }
   }
 
   const norm = (v: string | null | undefined) => (v && v.trim() ? v.trim() : null)
+  // Salesperson resolution: customer-typed value wins, otherwise
+  // fall back to the salesperson tagged on the token. This makes
+  // per-rep QR codes self-attributing for spiffs without forcing
+  // the customer to know who they're booking with.
+  const resolvedSalesperson = norm(salesperson) || norm(t.salesperson_name as any)
   const { error: upErr } = await sb.from('trunk_show_appointment_slots').update({
     status: 'booked',
     customer_first_name: first_name.trim(),
     customer_last_name:  norm(last_name),
     customer_email:      norm(email),
     customer_phone:      norm(phone),
-    store_salesperson_name: norm(salesperson),
+    store_salesperson_name: resolvedSalesperson,
     notes: norm(notes),
+    booking_token_id: t.id,
   }).eq('id', slot.id)
   if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 })
 
