@@ -615,12 +615,12 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
 
             return (
               <div key={ev.id} id={`event-card-${ev.id}`} style={{
-                background: 'var(--card-bg)',
-                border: '1px solid var(--pearl)',
+                background: ev.status === 'reserved' ? '#FFFBEB' : 'var(--card-bg)',
+                border: ev.status === 'reserved' ? '2px dashed #D97706' : '1px solid var(--pearl)',
                 borderRadius: 10,
                 overflow: 'hidden',
                 marginBottom: 12,
-                opacity: stale ? 0.55 : 1,
+                opacity: stale || ev.status === 'cancelled' ? 0.55 : 1,
                 transition: 'opacity .2s',
               }}>
                 {/* Header — tappable, toggles collapse */}
@@ -634,7 +634,11 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                     <span style={{
                       fontSize: 15, fontWeight: 900, flex: 1, minWidth: 0,
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>{eventDisplayName(ev, stores)}</span>
+                    }}>
+                      {ev.status === 'reserved' && <span style={{ background: '#D97706', color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, marginRight: 8, letterSpacing: '.04em' }}>📌 RESERVED</span>}
+                      {ev.status === 'cancelled' && <span style={{ background: '#6B7280', color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, marginRight: 8, letterSpacing: '.04em', textDecoration: 'line-through' }}>CANCELLED</span>}
+                      {eventDisplayName(ev, stores)}
+                    </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                       {(() => {
                         const s = eventStaffing(ev)
@@ -899,12 +903,12 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
 
           return (
             <div key={ev.id} id={`event-card-${ev.id}`} style={{
-              background: 'var(--card-bg)',
-              border: '1.5px solid var(--pearl)',
+              background: ev.status === 'reserved' ? '#FFFBEB' : 'var(--card-bg)',
+              border: ev.status === 'reserved' ? '2px dashed #D97706' : '1.5px solid var(--pearl)',
               borderRadius: 16,
               overflow: 'hidden',
               marginBottom: 12,
-              opacity: stale ? 0.7 : 1,
+              opacity: stale || ev.status === 'cancelled' ? 0.7 : 1,
               transition: 'box-shadow .15s',
             }}
               onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,.07)' }}
@@ -930,6 +934,8 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                   flex: 1, fontSize: 17, fontWeight: 900, color: '#fff',
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
                 }}>
+                  {ev.status === 'reserved' && <span style={{ background: '#D97706', color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, marginRight: 8, letterSpacing: '.04em' }}>📌 RESERVED</span>}
+                  {ev.status === 'cancelled' && <span style={{ background: '#6B7280', color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, marginRight: 8, letterSpacing: '.04em' }}>CANCELLED</span>}
                   {eventDisplayName(ev, stores)}
                 </span>
                 <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
