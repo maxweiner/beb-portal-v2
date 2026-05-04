@@ -130,7 +130,7 @@ export async function sendConfirmation({ appt, store }: SendArgs) {
 
   if (appt.customer_phone) {
     const tpl = await loadTemplate('sms_confirmation', { subject: null,
-      body: `Hi {{customer_name}}, you're booked at {{store_name}} on {{date}} at {{time}}. Need to change or cancel? {{manage_link}}` })
+      body: `Hi {{customer_name}}, you're booked at {{store_name}} on {{date}} at {{time}}. Need to change or cancel? {{manage_link}} Reply STOP to opt out.` })
     try {
       await sendSMS(appt.customer_phone, sub(tpl.body, vars))
       await logNotification({
@@ -187,7 +187,7 @@ export async function sendCancellation({ appt, store, skipSms = false }: SendArg
 
   if (!skipSms && appt.customer_phone) {
     const tpl = await loadTemplate('sms_cancellation', { subject: null,
-      body: `Your appointment at {{store_name}} on {{date}} at {{time}} has been cancelled.${rebookLink ? ' To rebook: {{rebook_link}}' : ''}` })
+      body: `Your appointment at {{store_name}} on {{date}} at {{time}} has been cancelled.${rebookLink ? ' To rebook: {{rebook_link}}' : ''} Reply STOP to opt out.` })
     try {
       await sendSMS(appt.customer_phone, sub(tpl.body, vars))
       await logNotification({
@@ -248,7 +248,7 @@ export async function sendReminder({ appt, store, hours }: SendArgs & { hours: 2
 
   if (appt.customer_phone) {
     const tpl = await loadTemplate(smsType, { subject: null,
-      body: `Reminder: your appointment at {{store_name}} is ${phrase} ({{date}} at {{time}}). Manage or cancel: {{manage_link}}` })
+      body: `Reminder: your appointment at {{store_name}} is ${phrase} ({{date}} at {{time}}). Manage or cancel: {{manage_link}} Reply STOP to opt out.` })
     try {
       await sendSMS(appt.customer_phone, sub(tpl.body, vars))
       await logNotification({
