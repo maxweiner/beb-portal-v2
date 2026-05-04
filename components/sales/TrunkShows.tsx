@@ -117,7 +117,9 @@ export default function TrunkShows() {
                 style={{
                   display: 'block', width: '100%', textAlign: 'left',
                   padding: '14px 18px', cursor: 'pointer', fontFamily: 'inherit',
-                  background: '#fff',
+                  background: status === 'reserved' ? '#FFFBEB' : '#fff',
+                  border: status === 'reserved' ? '2px dashed #D97706' : undefined,
+                  opacity: status === 'cancelled' ? 0.6 : 1,
                 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
