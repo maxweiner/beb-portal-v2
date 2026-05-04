@@ -8,20 +8,19 @@ import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { QRCodeSVG } from 'qrcode.react'
 import {
-  listSlots, createSlot, bulkCreateSlots, bookSlot, setStatus,
-  deleteSlot, generateBookingToken,
-  type TrunkShowSlot, type TrunkShowAppointmentStatus,
+  listSlots, bulkCreateSlots, createSlot, bookSlot, setBookingStatus,
+  deleteSlot, deleteBooking, generateBookingToken,
+  type TrunkShowSlot, type TrunkShowSlotBooking, type TrunkShowBookingStatus,
 } from '@/lib/sales/trunkShowAppointments'
 import { makeSquareLogoDataUrl } from '@/lib/qr/squareLogo'
 import { supabase } from '@/lib/supabase'
 import type { TrunkShowHours, Store } from '@/types'
 import TimePicker from '@/components/ui/TimePicker'
 
-const STATUS_LABEL: Record<TrunkShowAppointmentStatus, string> = {
-  available: 'Open', booked: 'Booked', completed: 'Done', cancelled: 'Cancelled', no_show: 'No-show',
+const STATUS_LABEL: Record<TrunkShowBookingStatus, string> = {
+  booked: 'Booked', completed: 'Done', cancelled: 'Cancelled', no_show: 'No-show',
 }
-const STATUS_COLOR: Record<TrunkShowAppointmentStatus, { bg: string; fg: string }> = {
-  available: { bg: '#E5E7EB', fg: '#374151' },
+const STATUS_COLOR: Record<TrunkShowBookingStatus, { bg: string; fg: string }> = {
   booked:    { bg: '#DBEAFE', fg: '#1E40AF' },
   completed: { bg: '#D1FAE5', fg: '#065F46' },
   cancelled: { bg: '#FEE2E2', fg: '#991B1B' },
@@ -126,18 +125,19 @@ export default function TrunkShowAppointmentsPanel({ trunkShowId, hours, canWrit
     return `${origin}/trunk-show-book/${token}`
   }
 
-  async function handleStatus(id: string, st: TrunkShowAppointmentStatus) {
-    try { await setStatus(id, st); setRows(p => p.map(r => r.id === id ? { ...r, status: st } : r)) }
-    catch (e: any) { alert(e?.message || 'Could not update') }
+  async function handleBookingStatus(slotId: string, bookingId: string, st: TrunkShowBookingStatus) {
+    try {
+      await setBookingStatus(bookingId, st)
+      setRows(p => p.map(s => s.id === slotId
+        ? { ...s, bookings: s.bookings.map(b => b.id === bookingId ? { ...b, status: st } : b) }
+        : s))
+    } catch (e: any) { alert(e?.message || 'Could not update') }
   }
-  async function handlePurchased(id: string, purchased: boolean) {
-    // Routes through the server endpoint so the spiff row is
-    // created (or removed) in the same call. Spiff writes need
-    // service role per RLS — this keeps the rep's flow simple.
+  async function handlePurchased(slotId: string, bookingId: string, purchased: boolean) {
     try {
       const { data: session } = await supabase.auth.getSession()
       const token = session.session?.access_token
-      const res = await fetch(`/api/trunk-show-slots/${id}/purchase`, {
+      const res = await fetch(`/api/trunk-show-slot-bookings/${bookingId}/purchase`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -147,20 +147,32 @@ export default function TrunkShowAppointmentsPanel({ trunkShowId, hours, canWrit
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json?.error || `Save failed (${res.status})`)
-      setRows(p => p.map(r => r.id === id ? {
-        ...r, purchased,
-        purchased_marked_by: purchased ? user?.id || null : null,
-        purchased_marked_at: purchased ? new Date().toISOString() : null,
-      } : r))
+      setRows(p => p.map(s => s.id === slotId ? {
+        ...s,
+        bookings: s.bookings.map(b => b.id === bookingId ? {
+          ...b, purchased,
+          purchased_marked_by: purchased ? user?.id || null : null,
+          purchased_marked_at: purchased ? new Date().toISOString() : null,
+        } : b),
+      } : s))
       if (json.notice) alert(json.notice)
     } catch (e: any) {
       alert(e?.message || 'Could not save')
     }
   }
-  async function handleDelete(id: string) {
-    if (!confirm('Delete this slot?')) return
+  async function handleDeleteSlot(id: string) {
+    if (!confirm('Delete this slot and all its bookings?')) return
     try { await deleteSlot(id); setRows(p => p.filter(r => r.id !== id)) }
     catch (e: any) { alert(e?.message || 'Could not delete') }
+  }
+  async function handleDeleteBooking(slotId: string, bookingId: string) {
+    if (!confirm('Delete this booking?')) return
+    try {
+      await deleteBooking(bookingId)
+      setRows(p => p.map(s => s.id === slotId
+        ? { ...s, bookings: s.bookings.filter(b => b.id !== bookingId) }
+        : s))
+    } catch (e: any) { alert(e?.message || 'Could not delete') }
   }
 
   return (
@@ -254,14 +266,16 @@ export default function TrunkShowAppointmentsPanel({ trunkShowId, hours, canWrit
                   <SlotRow
                     key={slot.id}
                     slot={slot}
+                    tokens={tokens}
                     canWrite={canWrite}
                     bookingOpen={bookingFor === slot.id}
                     onBookClick={() => setBookingFor(slot.id)}
                     onBookCancel={() => setBookingFor(null)}
                     onBooked={() => { setBookingFor(null); void reload() }}
-                    onStatus={(s) => handleStatus(slot.id, s)}
-                    onTogglePurchased={() => handlePurchased(slot.id, !slot.purchased)}
-                    onDelete={() => handleDelete(slot.id)}
+                    onBookingStatus={(bid, s) => handleBookingStatus(slot.id, bid, s)}
+                    onTogglePurchased={(bid, b) => handlePurchased(slot.id, bid, !b.purchased)}
+                    onDeleteBooking={(bid) => handleDeleteBooking(slot.id, bid)}
+                    onDeleteSlot={() => handleDeleteSlot(slot.id)}
                   />
                 ))}
               </div>
@@ -291,22 +305,25 @@ export default function TrunkShowAppointmentsPanel({ trunkShowId, hours, canWrit
 /* ── single slot row ─────────────────────────────────────── */
 
 function SlotRow({
-  slot, canWrite, bookingOpen, onBookClick, onBookCancel, onBooked,
-  onStatus, onTogglePurchased, onDelete,
+  slot, tokens, canWrite, bookingOpen, onBookClick, onBookCancel, onBooked,
+  onBookingStatus, onTogglePurchased, onDeleteBooking, onDeleteSlot,
 }: {
   slot: TrunkShowSlot
+  tokens: BookingTokenRow[]
   canWrite: boolean
   bookingOpen: boolean
   onBookClick: () => void
   onBookCancel: () => void
   onBooked: () => void
-  onStatus: (s: TrunkShowAppointmentStatus) => void
-  onTogglePurchased: () => void
-  onDelete: () => void
+  onBookingStatus: (bookingId: string, s: TrunkShowBookingStatus) => void
+  onTogglePurchased: (bookingId: string, b: TrunkShowSlotBooking) => void
+  onDeleteBooking: (bookingId: string) => void
+  onDeleteSlot: () => void
 }) {
-  const sc = STATUS_COLOR[slot.status]
   const t = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-  const customerName = [slot.customer_first_name, slot.customer_last_name].filter(Boolean).join(' ')
+  const tokenById = new Map(tokens.map(tk => [tk.id, tk]))
+  const activeBookings = slot.bookings.filter(b => b.status !== 'cancelled')
+  const capacity = Math.max(tokens.length, 1)
 
   return (
     <div style={{
@@ -317,56 +334,74 @@ function SlotRow({
         <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink)', minWidth: 90 }}>
           {t(slot.slot_start)} – {t(slot.slot_end)}
         </span>
-        <span style={{ background: sc.bg, color: sc.fg, padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em' }}>
-          {STATUS_LABEL[slot.status]}
+        <span style={{ fontSize: 11, color: 'var(--mist)' }}>
+          {activeBookings.length} / {capacity} booked
         </span>
-        {slot.purchased && (
-          <span style={{ background: 'var(--green-pale)', color: 'var(--green-dark)', padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', border: '1px solid var(--green3)' }}>
-            💵 Purchased
-          </span>
-        )}
-        {customerName && (
-          <span style={{ fontSize: 12, color: 'var(--ash)' }}>
-            {customerName}
-            {slot.store_salesperson_name && (
-              <span style={{ color: 'var(--mist)', marginLeft: 6 }}>via {slot.store_salesperson_name}</span>
-            )}
-          </span>
-        )}
         <div style={{ flex: 1 }} />
         {canWrite && (
           <>
-            {slot.status === 'available' && (
-              <button onClick={onBookClick} className="btn-outline btn-xs">Book</button>
-            )}
-            {slot.status === 'booked' && (
-              <>
-                <button onClick={onTogglePurchased} className="btn-outline btn-xs">
-                  {slot.purchased ? 'Unmark purchase' : '💵 Mark purchased'}
-                </button>
-                <button onClick={() => onStatus('completed')} className="btn-outline btn-xs">Done</button>
-                <button onClick={() => onStatus('no_show')} className="btn-outline btn-xs">No-show</button>
-                <button onClick={() => onStatus('cancelled')} className="btn-outline btn-xs">Cancel</button>
-              </>
-            )}
-            {slot.status === 'completed' && !slot.purchased && (
-              <button onClick={onTogglePurchased} className="btn-outline btn-xs">💵 Mark purchased</button>
-            )}
-            {slot.status === 'completed' && slot.purchased && (
-              <button onClick={onTogglePurchased} className="btn-outline btn-xs">Unmark purchase</button>
-            )}
-            {slot.status !== 'available' && (
-              <button onClick={() => onStatus('available')} className="btn-outline btn-xs" title="Reset to open">↺</button>
-            )}
-            {slot.status === 'available' && (
-              <button onClick={onDelete} aria-label="Delete slot"
+            <button onClick={onBookClick} className="btn-outline btn-xs">+ Book</button>
+            {slot.bookings.length === 0 && (
+              <button onClick={onDeleteSlot} aria-label="Delete slot"
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--mist)', fontSize: 14 }}>×</button>
             )}
           </>
         )}
       </div>
+
+      {slot.bookings.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingLeft: 8, borderLeft: '2px solid var(--pearl)' }}>
+          {slot.bookings.map(b => {
+            const sc = STATUS_COLOR[b.status]
+            const tok = b.booking_token_id ? tokenById.get(b.booking_token_id) : null
+            const repLabel = tok?.salesperson_name || b.store_salesperson_name || (b.booking_token_id ? '(unnamed link)' : 'manual')
+            const customerName = [b.customer_first_name, b.customer_last_name].filter(Boolean).join(' ')
+            return (
+              <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, padding: '4px 0' }}>
+                <span style={{ fontWeight: 700, color: 'var(--ink)' }}>{customerName || '(no name)'}</span>
+                <span style={{ color: 'var(--mist)' }}>via {repLabel}</span>
+                <span style={{ background: sc.bg, color: sc.fg, padding: '1px 6px', borderRadius: 999, fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                  {STATUS_LABEL[b.status]}
+                </span>
+                {b.purchased && (
+                  <span style={{ background: 'var(--green-pale)', color: 'var(--green-dark)', padding: '1px 6px', borderRadius: 999, fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', border: '1px solid var(--green3)' }}>
+                    💵
+                  </span>
+                )}
+                <div style={{ flex: 1 }} />
+                {canWrite && (
+                  <>
+                    {b.status === 'booked' && (
+                      <>
+                        <button onClick={() => onTogglePurchased(b.id, b)} className="btn-outline btn-xs">
+                          {b.purchased ? 'Unmark' : '💵 Purchased'}
+                        </button>
+                        <button onClick={() => onBookingStatus(b.id, 'completed')} className="btn-outline btn-xs">Done</button>
+                        <button onClick={() => onBookingStatus(b.id, 'no_show')} className="btn-outline btn-xs">No-show</button>
+                        <button onClick={() => onBookingStatus(b.id, 'cancelled')} className="btn-outline btn-xs">Cancel</button>
+                      </>
+                    )}
+                    {b.status === 'completed' && (
+                      <button onClick={() => onTogglePurchased(b.id, b)} className="btn-outline btn-xs">
+                        {b.purchased ? 'Unmark' : '💵 Purchased'}
+                      </button>
+                    )}
+                    {b.status !== 'booked' && (
+                      <button onClick={() => onBookingStatus(b.id, 'booked')} className="btn-outline btn-xs" title="Reset to booked">↺</button>
+                    )}
+                    <button onClick={() => onDeleteBooking(b.id)} aria-label="Delete booking"
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--mist)', fontSize: 14 }}>×</button>
+                  </>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       {bookingOpen && (
-        <BookingForm slotId={slot.id} onCancel={onBookCancel} onBooked={onBooked} />
+        <BookingForm slotId={slot.id} tokens={tokens} existingBookings={slot.bookings}
+          onCancel={onBookCancel} onBooked={onBooked} />
       )}
     </div>
   )
@@ -374,11 +409,19 @@ function SlotRow({
 
 /* ── booking form ────────────────────────────────────────── */
 
-function BookingForm({ slotId, onCancel, onBooked }: {
+function BookingForm({ slotId, tokens, existingBookings, onCancel, onBooked }: {
   slotId: string
+  tokens: BookingTokenRow[]
+  existingBookings: TrunkShowSlotBooking[]
   onCancel: () => void
   onBooked: () => void
 }) {
+  // Tokens that already have a booking in this slot are blocked
+  // by the per-rep capacity rule — gray them out in the picker.
+  const usedTokenIds = new Set(existingBookings
+    .filter(b => b.status !== 'cancelled' && b.booking_token_id)
+    .map(b => b.booking_token_id as string))
+  const [tokenId, setTokenId] = useState<string>('')
   const [first, setFirst] = useState('')
   const [last, setLast] = useState('')
   const [email, setEmail] = useState('')
@@ -388,11 +431,22 @@ function BookingForm({ slotId, onCancel, onBooked }: {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
+  // When the user picks a tagged token, prefill the salesperson
+  // input from the token's name.
+  useEffect(() => {
+    if (!tokenId) return
+    const tok = tokens.find(t => t.id === tokenId)
+    if (tok?.salesperson_name && !salesperson.trim()) setSalesperson(tok.salesperson_name)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tokenId])
+
   async function submit() {
     if (!first.trim() || busy) return
     setBusy(true); setErr(null)
     try {
-      await bookSlot(slotId, {
+      await bookSlot({
+        slot_id: slotId,
+        booking_token_id: tokenId || null,
         customer_first_name: first,
         customer_last_name: last,
         customer_email: email,
@@ -406,6 +460,17 @@ function BookingForm({ slotId, onCancel, onBooked }: {
 
   return (
     <div style={{ background: 'var(--green-pale)', border: '1px dashed var(--green3)', borderRadius: 6, padding: 10 }}>
+      <div className="field" style={{ marginBottom: 6 }}>
+        <label className="fl">Rep / link (optional — for spiff attribution)</label>
+        <select value={tokenId} onChange={e => setTokenId(e.target.value)}>
+          <option value="">Manual booking (no link)</option>
+          {tokens.map(t => (
+            <option key={t.id} value={t.id} disabled={usedTokenIds.has(t.id)}>
+              {t.salesperson_name || '(unnamed link)'}{usedTokenIds.has(t.id) ? ' — already booked this slot' : ''}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2" style={{ marginBottom: 6 }}>
         <input value={first} onChange={e => setFirst(e.target.value)} placeholder="Customer first name *" autoFocus />
         <input value={last} onChange={e => setLast(e.target.value)} placeholder="Last name" />
