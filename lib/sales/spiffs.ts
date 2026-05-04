@@ -1,15 +1,18 @@
 // Spiffs — payouts to store salespeople for trunk-show
-// appointments that resulted in a purchase. Auto-created when an
-// appointment slot is flipped to purchased=true (via the
-// /api/trunk-show-slots/[slotId]/purchase server route, which
-// uses service role since RLS gates spiff writes to admins).
+// appointments that resulted in a purchase. Auto-created when a
+// slot booking is flipped to purchased=true (via
+// /api/trunk-show-slot-bookings/[id]/purchase, service role).
+//
+// Per-rep slot model: a single time slot can hold multiple
+// bookings (one per booking_token), so spiffs reference the
+// booking, not the slot.
 
 import { supabase } from '@/lib/supabase'
 
 export interface Spiff {
   id: string
   trunk_show_id: string
-  appointment_slot_id: string
+  slot_booking_id: string | null
   store_salesperson_name: string
   amount: number
   paid_at: string | null
@@ -25,7 +28,7 @@ export interface SpiffConfig {
   updated_at: string
 }
 
-const COLS = `id, trunk_show_id, appointment_slot_id, store_salesperson_name,
+const COLS = `id, trunk_show_id, slot_booking_id, store_salesperson_name,
   amount, paid_at, paid_by, notes, created_at`
 
 export async function listSpiffsForShow(trunkShowId: string): Promise<Spiff[]> {
