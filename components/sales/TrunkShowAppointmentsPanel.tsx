@@ -185,9 +185,16 @@ export default function TrunkShowAppointmentsPanel({ trunkShowId, hours, canWrit
           </div>
         </div>
         {canWrite && (
-          <button onClick={handleGenerateToken} disabled={tokenBusy} className="btn-outline btn-sm">
-            {tokenBusy ? '…' : '+ New link'}
-          </button>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {tokens.length > 0 && (
+              <a href={`/trunk-show-qr-pack/${trunkShowId}`} target="_blank" rel="noreferrer" className="btn-outline btn-sm">
+                🖨 QR pack
+              </a>
+            )}
+            <button onClick={handleGenerateToken} disabled={tokenBusy} className="btn-outline btn-sm">
+              {tokenBusy ? '…' : '+ New link'}
+            </button>
+          </div>
         )}
       </div>
 
