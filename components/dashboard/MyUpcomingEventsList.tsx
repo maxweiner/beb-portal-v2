@@ -45,7 +45,11 @@ export default function MyUpcomingEventsList({
         <div style={{
           fontSize: 13, fontWeight: 800, color: 'var(--ink)',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>{eventDisplayName(ev, stores)}</div>
+        }}>
+          {ev.status === 'reserved' && <span style={{ background: '#D97706', color: '#fff', fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 999, marginRight: 6, letterSpacing: '.04em' }}>📌 RES</span>}
+          {ev.status === 'cancelled' && <span style={{ background: '#6B7280', color: '#fff', fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 999, marginRight: 6, letterSpacing: '.04em' }}>CXL</span>}
+          {eventDisplayName(ev, stores)}
+        </div>
         {secondary && (
           <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>
             {secondary}
