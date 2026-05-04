@@ -230,6 +230,24 @@ function CreateTrunkShowModal({ mode, onClose, onCreated }: { mode: 'scheduled' 
     if (!valid || busy) return
     setBusy(true); setErr(null)
     try {
+      // Hard block: an assigned rep on a Reserved trunk show can't be
+      // booked on another show whose dates overlap the reserved range.
+      // (Trunk-show dates have no Save-the-Date soft mode for buyers —
+      // each rep can only be in one place.)
+      const { data: conflicts } = await supabase.from('trunk_shows')
+        .select('id, start_date, end_date')
+        .eq('assigned_rep_id', draft.assigned_rep_id)
+        .eq('status', 'reserved')
+        .lte('start_date', draft.end_date)
+        .gte('end_date', draft.start_date)
+        .is('deleted_at', null)
+      if (conflicts && conflicts.length > 0) {
+        const c = conflicts[0]
+        const repName = users.find(u => u.id === draft.assigned_rep_id)?.name || 'this rep'
+        setErr(`${repName} is already on a Reserved trunk show ${c.start_date}–${c.end_date}. Resolve that first (promote, cancel, or reassign) before creating an overlapping show.`)
+        setBusy(false)
+        return
+      }
       const created = await createTrunkShow(draft)
       onCreated(created.id)
     } catch (e: any) {

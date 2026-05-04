@@ -6,6 +6,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
+import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import {
   getTrunkShow, updateTrunkShow, softDeleteTrunkShow,
@@ -82,6 +83,28 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
     async (d) => {
       if (!show || !canMutate) return
       const datesChanged = d.start_date !== show.start_date || d.end_date !== show.end_date
+      const repChanged = d.assigned_rep_id !== show.assigned_rep_id
+      // Hard block: if the rep is being changed (or dates moved), the
+      // new rep can't already be on a Reserved trunk show whose dates
+      // overlap. Surface as an alert + revert local draft.
+      if ((repChanged || datesChanged) && d.assigned_rep_id) {
+        const { data: conflicts } = await supabase.from('trunk_shows')
+          .select('id, start_date, end_date')
+          .eq('assigned_rep_id', d.assigned_rep_id)
+          .eq('status', 'reserved')
+          .neq('id', show.id)
+          .lte('start_date', d.end_date)
+          .gte('end_date', d.start_date)
+          .is('deleted_at', null)
+        if (conflicts && conflicts.length > 0) {
+          const c = conflicts[0]
+          const repName = users.find(u => u.id === d.assigned_rep_id)?.name || 'this rep'
+          alert(`${repName} is already on a Reserved trunk show ${c.start_date}–${c.end_date}. Revert this change or resolve that show first.`)
+          // Roll back the rep field locally so the UI doesn't lie.
+          setDraft(p => ({ ...p, assigned_rep_id: show.assigned_rep_id }))
+          return
+        }
+      }
       await updateTrunkShow(show.id, {
         store_id: d.store_id,
         start_date: d.start_date,
