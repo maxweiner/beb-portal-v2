@@ -9,7 +9,12 @@ const sb = createClient(
 )
 
 export async function POST(req: NextRequest) {
+  // Phase tag for error reporting — every catch updates this so the
+  // 500 body and Vercel logs show exactly which step failed
+  // (postmark activity log surfaces the response body verbatim).
+  let phase = 'init'
   try {
+    phase = 'auth'
     // Verify Postmark webhook secret
     const { data: secretSetting } = await sb.from('settings').select('value').eq('key', 'postmark_webhook_secret').single()
     const secret = secretSetting?.value?.replace(/"/g, '')
@@ -18,10 +23,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    phase = 'parse-body'
     const body = await req.json()
-    
-    // Debug: log raw payload to see what Postmark sends
-    await sb.from('debug_logs').insert({ payload: body })
+
+    // Debug: log raw payload to see what Postmark sends. Best-effort —
+    // a debug-table failure should not 500 the whole webhook.
+    phase = 'debug-log'
+    try { await sb.from('debug_logs').insert({ payload: body }) }
+    catch (e: any) { console.error('[inbound-travel] debug_logs insert failed:', e?.message) }
     
     const fromEmail = body.From?.toLowerCase() || ''
     const subject = body.Subject || ''
@@ -68,8 +77,13 @@ export async function POST(req: NextRequest) {
         const alts = u.alternate_emails || []
         return alts.some((a: string) => a.toLowerCase() === e)
       })
+    phase = 'find-buyer'
     let buyer: any = findByEmail(fromEmail) || findByEmail(replyTo)
 
+    phase = 'claude-parse'
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured', phase }, { status: 500 })
+    }
     // Use Claude to parse the email
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     const parseResponse = await anthropic.messages.create({
@@ -110,7 +124,14 @@ Return this exact JSON structure:
       }]
     })
 
-    const parsed = JSON.parse(parseResponse.content[0].type === 'text' ? parseResponse.content[0].text : '{}')
+    phase = 'claude-json-parse'
+    const claudeText = parseResponse.content[0].type === 'text' ? parseResponse.content[0].text : '{}'
+    let parsed: any
+    try { parsed = JSON.parse(claudeText) }
+    catch (e: any) {
+      console.error('[inbound-travel] Claude returned non-JSON:', claudeText.slice(0, 500))
+      return NextResponse.json({ error: 'Claude returned non-JSON', phase, snippet: claudeText.slice(0, 200) }, { status: 500 })
+    }
     if (parsed.type === 'unknown') {
       return NextResponse.json({ message: 'Could not identify reservation type' })
     }
@@ -140,12 +161,17 @@ Return this exact JSON structure:
     // Geocode the hotel address (only meaningful for type=hotel; flights
     // and rentals don't have a useful address to geocode). Failures are
     // non-fatal — we just skip the radius filter for that reservation.
+    phase = 'geocode-hotel'
     let hotelGeo: { lat: number; lon: number } | null = null
     if (parsed.type === 'hotel') {
       const addr = (parsed.details?.address || '').trim()
       if (addr) {
-        const r = await geocodeAddress(addr)
-        if (r) hotelGeo = { lat: r.lat, lon: r.lon }
+        try {
+          const r = await geocodeAddress(addr)
+          if (r) hotelGeo = { lat: r.lat, lon: r.lon }
+        } catch (e: any) {
+          console.error('[inbound-travel] geocode failed:', e?.message)
+        }
       }
     }
 
@@ -161,7 +187,8 @@ Return this exact JSON structure:
     // Match against both buying events AND trade shows. We unify them
     // into a single candidate list with a normalized shape so the
     // date+radius/city logic runs once.
-    const [{ data: events }, { data: tradeShows }] = await Promise.all([
+    phase = 'fetch-candidates'
+    const [eventsRes, tradeShowsRes] = await Promise.all([
       sb.from('events')
         .select('id, store_name, start_date, stores(city, state, lat, lon)')
         .order('start_date', { ascending: false }),
@@ -170,6 +197,14 @@ Return this exact JSON structure:
         .is('deleted_at', null)
         .order('start_date', { ascending: false }),
     ])
+    if (eventsRes.error) {
+      return NextResponse.json({ error: `events fetch: ${eventsRes.error.message}`, phase }, { status: 500 })
+    }
+    if (tradeShowsRes.error) {
+      return NextResponse.json({ error: `trade_shows fetch: ${tradeShowsRes.error.message}`, phase }, { status: 500 })
+    }
+    const events = eventsRes.data
+    const tradeShows = tradeShowsRes.data
 
     type Candidate = {
       kind: 'event' | 'trade_show'
@@ -244,6 +279,7 @@ Return this exact JSON structure:
     const matchedTradeShow = matched?.kind === 'trade_show' ? matched.ev : null
 
     // Save reservation
+    phase = 'insert-reservation'
     const { error } = await sb.from('travel_reservations').insert({
       event_id: matchedEvent?.id || null,
       trade_show_id: matchedTradeShow?.id || null,
@@ -265,29 +301,44 @@ Return this exact JSON structure:
       parsed_at: new Date().toISOString(),
     })
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-    // Send confirmation back to buyer
-    const { data: resendKey } = await sb.from('settings').select('value').eq('key', 'resend_api_key').single()
-    if (resendKey?.value && buyer) {
-      const key = resendKey.value.replace(/"/g, '')
-      const eventName = matchedEvent?.store_name
-        || matchedTradeShow?.name
-        || (buyer ? 'your unassigned travel queue (we couldn\'t auto-match an event)' : 'an upcoming event')
-      await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: 'BEB Travel <travel@updates.bebllp.com>',
-          to: buyer.email,
-          subject: `✅ ${parsed.vendor || parsed.type} confirmation saved`,
-          html: `<p>Hi ${buyer.name},</p><p>Your <strong>${parsed.vendor || parsed.type}</strong> confirmation <strong>${parsed.confirmation_number}</strong> has been saved to <strong>${eventName}</strong> in the BEB portal.</p><p>View it at <a href="${process.env.NEXT_PUBLIC_APP_URL}/travel">Travel Share</a>.</p>`
-        })
-      })
+    if (error) {
+      console.error('[inbound-travel] insert error:', error.message)
+      return NextResponse.json({ error: error.message, phase }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, type: parsed.type, event: matchedEvent?.store_name })
+    // Send confirmation back to buyer. Best-effort — Resend hiccups
+    // shouldn't 500 the webhook (the reservation is already saved).
+    phase = 'confirmation-email'
+    try {
+      const { data: resendKey } = await sb.from('settings').select('value').eq('key', 'resend_api_key').single()
+      if (resendKey?.value && buyer) {
+        const key = resendKey.value.replace(/"/g, '')
+        const eventName = matchedEvent?.store_name
+          || matchedTradeShow?.name
+          || (buyer ? 'your unassigned travel queue (we couldn\'t auto-match an event)' : 'an upcoming event')
+        await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: 'BEB Travel <travel@updates.bebllp.com>',
+            to: buyer.email,
+            subject: `✅ ${parsed.vendor || parsed.type} confirmation saved`,
+            html: `<p>Hi ${buyer.name},</p><p>Your <strong>${parsed.vendor || parsed.type}</strong> confirmation <strong>${parsed.confirmation_number}</strong> has been saved to <strong>${eventName}</strong> in the BEB portal.</p><p>View it at <a href="${process.env.NEXT_PUBLIC_APP_URL}/travel">Travel Share</a>.</p>`
+          })
+        })
+      }
+    } catch (e: any) {
+      console.error('[inbound-travel] confirmation email failed (non-fatal):', e?.message)
+    }
+
+    return NextResponse.json({
+      success: true,
+      type: parsed.type,
+      event: matchedEvent?.store_name,
+      trade_show: matchedTradeShow?.name,
+    })
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    console.error(`[inbound-travel] uncaught error in phase=${phase}:`, err?.stack || err?.message)
+    return NextResponse.json({ error: err?.message || 'Unknown error', phase }, { status: 500 })
   }
 }
