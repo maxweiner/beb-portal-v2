@@ -798,7 +798,12 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                             const isLead = on && evWorkers[0]?.id === b.id
                             const conflicts = findBuyerConflicts(b.id, ev, events)
                             const hasConflict = conflicts.length > 0
-                            const conflictHint = hasConflict ? conflicts.map(c => c.store_name).join(', ') : ''
+                            const reservedConflicts = conflicts.filter(c => c.status === 'reserved')
+                            const bookedConflicts = conflicts.filter(c => c.status !== 'reserved')
+                            const conflictHint = [
+                              bookedConflicts.length > 0 && `⚠ overlaps ${bookedConflicts.map(c => c.store_name).join(', ')}`,
+                              reservedConflicts.length > 0 && `📌 Reserved on ${reservedConflicts.map(c => c.store_name).join(', ')}`,
+                            ].filter(Boolean).join(' · ')
                             return (
                               <div key={b.id}
                                 title={hasConflict ? `Already on overlapping event(s): ${conflictHint}` : undefined}
@@ -818,7 +823,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                                     <span style={{ fontWeight: on ? 700 : 400, color: on ? 'var(--green-dark)' : 'var(--ash)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</span>
                                     {hasConflict && (
                                       <span style={{ fontSize: 10, color: 'var(--mist)', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                        ⚠ overlaps {conflictHint}
+                                        {conflictHint}
                                       </span>
                                     )}
                                   </span>
@@ -1101,7 +1106,12 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                             const isLead = on && evWorkers[0]?.id === b.id
                             const conflicts = findBuyerConflicts(b.id, ev, events)
                             const hasConflict = conflicts.length > 0
-                            const conflictHint = hasConflict ? conflicts.map(c => c.store_name).join(', ') : ''
+                            const reservedConflicts = conflicts.filter(c => c.status === 'reserved')
+                            const bookedConflicts = conflicts.filter(c => c.status !== 'reserved')
+                            const conflictHint = [
+                              bookedConflicts.length > 0 && `⚠ overlaps ${bookedConflicts.map(c => c.store_name).join(', ')}`,
+                              reservedConflicts.length > 0 && `📌 Reserved on ${reservedConflicts.map(c => c.store_name).join(', ')}`,
+                            ].filter(Boolean).join(' · ')
                             return (
                               <div key={b.id}
                                 title={hasConflict ? `Already on overlapping event(s): ${conflictHint}` : undefined}
@@ -1121,7 +1131,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                                     <span style={{ fontWeight: on ? 700 : 400, color: on ? 'var(--green-dark)' : 'var(--ash)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</span>
                                     {hasConflict && (
                                       <span style={{ fontSize: 10, color: 'var(--mist)', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                        ⚠ overlaps {conflictHint}
+                                        {conflictHint}
                                       </span>
                                     )}
                                   </span>
