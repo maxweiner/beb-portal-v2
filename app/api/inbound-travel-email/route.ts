@@ -93,8 +93,10 @@ export async function POST(req: NextRequest) {
         role: 'user',
         content: `Parse this travel confirmation email and extract the reservation details. Return ONLY valid JSON, no markdown.
 
+The email may be a forwarded itinerary from Apple Mail, Gmail, or Outlook — ignore "Begin forwarded message:" headers and the forwarder's signature, focus on the original confirmation. Subject lines often hint at the type (e.g. "Your reservation at Hilton…", "Flight confirmation…", "Hertz reservation…"). Use BOTH the subject and the body to classify. Only return type='unknown' if there is genuinely no travel content.
+
 Email subject: ${subject}
-Email content: ${emailContent.slice(0, 6000)}
+Email content: ${emailContent.slice(0, 12000)}
 
 Return this exact JSON structure:
 {
@@ -132,8 +134,17 @@ Return this exact JSON structure:
       console.error('[inbound-travel] Claude returned non-JSON:', claudeText.slice(0, 500))
       return NextResponse.json({ error: 'Claude returned non-JSON', phase, snippet: claudeText.slice(0, 200) }, { status: 500 })
     }
-    if (parsed.type === 'unknown') {
-      return NextResponse.json({ message: 'Could not identify reservation type' })
+    // Don't drop unclassified emails on the floor. Insert with
+    // type='unknown' so they land in the user's Unassigned queue
+    // for manual classification + placement. The matcher below
+    // skips trying to find a candidate event for these (no useful
+    // city/date signal we can trust), so they always end up
+    // unassigned by design.
+    const isUnknown = parsed.type === 'unknown'
+    if (isUnknown) {
+      // Normalize fields the type-specific paths assume.
+      parsed.type = 'unknown'
+      parsed.vendor = parsed.vendor || subject || 'Unclassified email'
     }
 
     // Smarter buyer match: if email-based lookup didn't find anyone, try
@@ -236,7 +247,10 @@ Return this exact JSON structure:
     ]
 
     let matched: Candidate | null = null
-    if (parsed.travel_dates?.length > 0) {
+    // Unknown-type emails skip matching by design — we don't trust
+    // the parsed signals enough to risk auto-placing them. They
+    // land in the user's Unassigned queue for manual placement.
+    if (!isUnknown && parsed.travel_dates?.length > 0) {
       const travelDate = new Date(parsed.travel_dates[0])
       const inDateRange = (c: Candidate) =>
         travelDate >= new Date(c.start.getTime() - 3 * 86400000) && travelDate <= c.end
@@ -313,17 +327,21 @@ Return this exact JSON structure:
       const { data: resendKey } = await sb.from('settings').select('value').eq('key', 'resend_api_key').single()
       if (resendKey?.value && buyer) {
         const key = resendKey.value.replace(/"/g, '')
-        const eventName = matchedEvent?.store_name
-          || matchedTradeShow?.name
-          || (buyer ? 'your unassigned travel queue (we couldn\'t auto-match an event)' : 'an upcoming event')
+        const portalUrl = `${process.env.NEXT_PUBLIC_APP_URL}/travel`
+        const subjectLine = isUnknown
+          ? `📬 Email saved — needs your classification`
+          : `✅ ${parsed.vendor || parsed.type} confirmation saved`
+        const html = isUnknown
+          ? `<p>Hi ${buyer.name},</p><p>We saved your forwarded email but couldn't auto-classify it as a flight, hotel, or rental car. It's in your <a href="${portalUrl}">Travel Share → Unassigned</a> queue for you to label and place on the right event or trade show.</p>`
+          : `<p>Hi ${buyer.name},</p><p>Your <strong>${parsed.vendor || parsed.type}</strong> confirmation <strong>${parsed.confirmation_number}</strong> has been saved to <strong>${matchedEvent?.store_name || matchedTradeShow?.name || 'your unassigned travel queue (we couldn\'t auto-match an event)'}</strong> in the BEB portal.</p><p>View it at <a href="${portalUrl}">Travel Share</a>.</p>`
         await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             from: 'BEB Travel <travel@updates.bebllp.com>',
             to: buyer.email,
-            subject: `✅ ${parsed.vendor || parsed.type} confirmation saved`,
-            html: `<p>Hi ${buyer.name},</p><p>Your <strong>${parsed.vendor || parsed.type}</strong> confirmation <strong>${parsed.confirmation_number}</strong> has been saved to <strong>${eventName}</strong> in the BEB portal.</p><p>View it at <a href="${process.env.NEXT_PUBLIC_APP_URL}/travel">Travel Share</a>.</p>`
+            subject: subjectLine,
+            html,
           })
         })
       }
@@ -336,6 +354,7 @@ Return this exact JSON structure:
       type: parsed.type,
       event: matchedEvent?.store_name,
       trade_show: matchedTradeShow?.name,
+      unassigned: isUnknown || (!matchedEvent && !matchedTradeShow),
     })
   } catch (err: any) {
     console.error(`[inbound-travel] uncaught error in phase=${phase}:`, err?.stack || err?.message)
