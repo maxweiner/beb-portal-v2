@@ -29,6 +29,7 @@ const STATUS_COLOR: Record<TrunkShowStatus, { bg: string; fg: string }> = {
 }
 
 type Filter = 'all' | 'reserved' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+type Sort = 'date-desc' | 'date-asc' | 'rep' | 'store'
 
 export default function TrunkShows() {
   const { user, stores, users } = useApp()
@@ -38,6 +39,7 @@ export default function TrunkShows() {
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
+  const [sort, setSort] = useState<Sort>('date-desc')
   const [createOpen, setCreateOpen] = useState<false | 'scheduled' | 'reserved'>(false)
   const [openId, setOpenId] = useState<string | null>(null)
 
@@ -52,10 +54,20 @@ export default function TrunkShows() {
   const storesById = useMemo(() => new Map(stores.map(s => [s.id, s])), [stores])
   const usersById  = useMemo(() => new Map(users.map(u => [u.id, u])), [users])
 
-  const filtered = useMemo(() => rows.filter(r => {
-    if (filter === 'all') return true
-    return effectiveStatus(r) === filter
-  }), [rows, filter])
+  const filtered = useMemo(() => {
+    const base = rows.filter(r => filter === 'all' || effectiveStatus(r) === filter)
+    const repName = (r: TrunkShow) => usersById.get(r.assigned_rep_id)?.name || '~'
+    const storeName = (r: TrunkShow) => storesById.get(r.store_id)?.name || '~'
+    return [...base].sort((a, b) => {
+      switch (sort) {
+        case 'date-asc':  return a.start_date.localeCompare(b.start_date)
+        case 'rep':       return repName(a).localeCompare(repName(b)) || b.start_date.localeCompare(a.start_date)
+        case 'store':     return storeName(a).localeCompare(storeName(b)) || b.start_date.localeCompare(a.start_date)
+        case 'date-desc':
+        default:          return b.start_date.localeCompare(a.start_date)
+      }
+    })
+  }, [rows, filter, sort, usersById, storesById])
 
   if (openId) {
     return (
@@ -90,6 +102,15 @@ export default function TrunkShows() {
             style={{ textTransform: 'capitalize' }}>{f.replace('_', ' ')}</button>
         ))}
         <div style={{ flex: 1 }} />
+        <label style={{ fontSize: 11, color: 'var(--mist)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          Sort:
+          <select value={sort} onChange={e => setSort(e.target.value as Sort)} style={{ fontSize: 12, padding: '2px 6px' }}>
+            <option value="date-desc">Newest first</option>
+            <option value="date-asc">Oldest first</option>
+            <option value="rep">Trunk rep</option>
+            <option value="store">Store name</option>
+          </select>
+        </label>
         <span style={{ fontSize: 11, color: 'var(--mist)' }}>{filtered.length} of {rows.length}</span>
       </div>
 
