@@ -231,6 +231,10 @@ export interface AppState {
   user: User | null
   users: User[]
   stores: Store[]
+  /** Partner jewelry stores we run trunk shows at. Loaded
+   *  alongside `stores` so trunk-show flows can resolve names
+   *  + assigned reps from one place. */
+  trunkShowStores: TrunkShowStore[]
   events: Event[]
   shipments: Shipment[]
   theme: Theme
@@ -324,15 +328,50 @@ export type EventStatus = 'reserved' | 'scheduled' | 'cancelled'
 
 export interface TrunkShow {
   id: string
+  /** FK to trunk_show_stores. Each trunk show happens at one of
+   *  our partner jewelers tracked in that table. */
   store_id: string
   start_date: string
   end_date: string
-  assigned_rep_id: string
+  /** Nullable since import-only rows arrive without a known rep. */
+  assigned_rep_id: string | null
   status: TrunkShowStatus
   notes: string | null
+  /** VIP Showing flag from the marketing tracker. */
+  vip_showing: boolean
+  /** Marketing milestone dates — NULL = not done. */
+  confirmation_letter_sent_at: string | null
+  postcards_email_sent_at: string | null
+  postcards_ordered_at: string | null
+  proofed_at: string | null
+  final_files_sent_at: string | null
+  post_event_questionnaire_sent_at: string | null
   created_at: string
   updated_at: string
   deleted_at: string | null
+}
+
+/** Partner jewelry stores we run trunk shows at. Imported from
+ *  the legacy spreadsheet; each row is the canonical client. */
+export interface TrunkShowStore {
+  id: string
+  name: string
+  trunk_rep_user_id: string | null
+  ts_reps: string | null
+  comments: string | null
+  address_1: string | null
+  address_2: string | null
+  city: string | null
+  state: string | null
+  zip: string | null
+  store_phone: string | null
+  contact_1: string | null
+  contact_2: string | null
+  contact_3: string | null
+  email_1: string | null
+  email_2: string | null
+  url: string | null
+  trunk_shows: boolean | null
 }
 
 export interface TrunkShowHours {

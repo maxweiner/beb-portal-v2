@@ -52,7 +52,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     .eq('id', params.id).is('deleted_at', null).maybeSingle()
   if (!show) return NextResponse.json({ error: 'Trunk show not found' }, { status: 404 })
 
-  const { data: store } = await sb.from('stores').select('name, city, state').eq('id', show.store_id).maybeSingle()
+  const { data: store } = await sb.from('trunk_show_stores').select('name, city, state').eq('id', show.store_id).maybeSingle()
   const { data: rep }   = await sb.from('users').select('name, email').eq('id', show.assigned_rep_id).maybeSingle()
 
   // Insert request.

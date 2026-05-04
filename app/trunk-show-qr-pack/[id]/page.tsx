@@ -60,18 +60,27 @@ export default function TrunkShowQrPackPage() {
       try {
         const { data: showRow, error: e1 } = await supabase
           .from('trunk_shows')
-          .select('id, start_date, end_date, store_id, stores(name, city, state, color_primary, color_secondary, store_image_url)')
+          .select('id, start_date, end_date, store_id, trunk_show_stores(name, city, state)')
           .eq('id', id).maybeSingle()
         if (e1) throw new Error(e1.message)
         if (!showRow) { setError('Trunk show not found.'); setLoaded(true); return }
-        const storeRel = (showRow as any).stores
+        const storeRel = (showRow as any).trunk_show_stores
         if (cancelled) return
         const info: ShowInfo = {
           id: showRow.id,
           start_date: showRow.start_date,
           end_date: showRow.end_date,
           store_name: storeRel?.name || '(unknown store)',
-          store: storeRel || null,
+          // Branding columns don't exist on trunk_show_stores. Fall back
+          // to neutral defaults — caller already handles null fields.
+          store: storeRel ? {
+            name: storeRel.name,
+            city: storeRel.city,
+            state: storeRel.state,
+            color_primary: null,
+            color_secondary: null,
+            store_image_url: null,
+          } : null,
         }
         setShow(info)
 

@@ -33,7 +33,7 @@ type Sort = 'date-desc' | 'date-asc' | 'rep' | 'store'
 type View = 'cards' | 'columns' | 'list'
 
 export default function TrunkShows() {
-  const { user, stores, users } = useApp()
+  const { user, trunkShowStores, users } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || !!user?.is_partner
 
   const [rows, setRows] = useState<TrunkShow[]>([])
@@ -53,12 +53,12 @@ export default function TrunkShows() {
   }
   useEffect(() => { void reload() }, [])
 
-  const storesById = useMemo(() => new Map(stores.map(s => [s.id, s])), [stores])
+  const storesById = useMemo(() => new Map(trunkShowStores.map(s => [s.id, s])), [trunkShowStores])
   const usersById  = useMemo(() => new Map(users.map(u => [u.id, u])), [users])
 
   const filtered = useMemo(() => {
     const base = rows.filter(r => filter === 'all' || effectiveStatus(r) === filter)
-    const repName = (r: TrunkShow) => usersById.get(r.assigned_rep_id)?.name || '~'
+    const repName = (r: TrunkShow) => (r.assigned_rep_id ? usersById.get(r.assigned_rep_id)?.name : null) || '~'
     const storeName = (r: TrunkShow) => storesById.get(r.store_id)?.name || '~'
     return [...base].sort((a, b) => {
       switch (sort) {
@@ -159,7 +159,7 @@ export default function TrunkShows() {
             const status = effectiveStatus(r)
             const sc = STATUS_COLOR[status]
             const store = storesById.get(r.store_id)
-            const rep = usersById.get(r.assigned_rep_id)
+            const rep = r.assigned_rep_id ? usersById.get(r.assigned_rep_id) : null
             return (
               <button key={r.id} onClick={() => setOpenId(r.id)} className="card"
                 style={{
@@ -222,7 +222,7 @@ function fmtRange(start: string, end: string): string {
 /* ── create modal ─────────────────────────────────────── */
 
 function CreateTrunkShowModal({ mode, onClose, onCreated }: { mode: 'scheduled' | 'reserved'; onClose: () => void; onCreated: (id: string) => void }) {
-  const { stores, users, user } = useApp()
+  const { trunkShowStores, users, user } = useApp()
   const isReserved = mode === 'reserved'
   const [draft, setDraft] = useState<TrunkShowDraft>({
     store_id: '', start_date: '', end_date: '',
@@ -245,13 +245,13 @@ function CreateTrunkShowModal({ mode, onClose, onCreated }: { mode: 'scheduled' 
     .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
 
   const selectedStore = useMemo(
-    () => stores.find(s => s.id === draft.store_id) || null,
-    [stores, draft.store_id],
+    () => trunkShowStores.find(s => s.id === draft.store_id) || null,
+    [trunkShowStores, draft.store_id],
   )
 
   const filteredStores = useMemo(() => {
     const q = storeQuery.trim().toLowerCase()
-    const base = stores.filter(s => s.active !== false)
+    const base = trunkShowStores
     const list = q
       ? base.filter(s =>
           (s.name || '').toLowerCase().includes(q) ||
@@ -259,23 +259,17 @@ function CreateTrunkShowModal({ mode, onClose, onCreated }: { mode: 'scheduled' 
           (s.state || '').toLowerCase().includes(q))
       : base
     return list.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-  }, [stores, storeQuery])
+  }, [trunkShowStores, storeQuery])
 
-  async function pickStore(s: { id: string; name: string }) {
-    setDraft(p => ({ ...p, store_id: s.id }))
+  async function pickStore(s: { id: string; name: string; trunk_rep_user_id?: string | null }) {
+    setDraft(p => ({
+      ...p,
+      store_id: s.id,
+      // Inherit the store's tagged trunk rep if the user hasn't
+      // already chosen one.
+      assigned_rep_id: p.assigned_rep_id || s.trunk_rep_user_id || '',
+    }))
     setStoreQuery('')
-    // Pre-fill assigned rep from the matching trunk_show_stores row
-    // (case-insensitive name match) if it has a trunk_rep_user_id.
-    const { data } = await supabase
-      .from('trunk_show_stores')
-      .select('trunk_rep_user_id')
-      .ilike('name', s.name)
-      .not('trunk_rep_user_id', 'is', null)
-      .limit(1)
-      .maybeSingle()
-    if (data?.trunk_rep_user_id) {
-      setDraft(p => ({ ...p, assigned_rep_id: data.trunk_rep_user_id }))
-    }
   }
 
   async function submit() {
@@ -380,7 +374,7 @@ function CreateTrunkShowModal({ mode, onClose, onCreated }: { mode: 'scheduled' 
         </div>
         <div className="field" style={{ marginBottom: 14 }}>
           <label className="fl">Assigned rep *</label>
-          <select value={draft.assigned_rep_id} onChange={e => setDraft(p => ({ ...p, assigned_rep_id: e.target.value }))}>
+          <select value={draft.assigned_rep_id || ''} onChange={e => setDraft(p => ({ ...p, assigned_rep_id: e.target.value }))}>
             <option value="">Pick a rep…</option>
             {repOptions.map(u => (
               <option key={u.id} value={u.id}>{u.name}</option>
@@ -495,7 +489,7 @@ function ListView({ shows, usersById, storesById, onOpen }: {
             const status = effectiveStatus(r)
             const sc = STATUS_COLOR[status]
             const store = storesById.get(r.store_id)
-            const rep = usersById.get(r.assigned_rep_id)
+            const rep = r.assigned_rep_id ? usersById.get(r.assigned_rep_id) : null
             return (
               <tr key={r.id}
                 onClick={() => onOpen(r.id)}

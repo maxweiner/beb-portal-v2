@@ -34,9 +34,16 @@ export interface TrunkShowDraft {
   store_id: string
   start_date: string
   end_date: string
-  assigned_rep_id: string
+  assigned_rep_id: string | null
   status?: TrunkShowStatus
   notes?: string | null
+  vip_showing?: boolean
+  confirmation_letter_sent_at?: string | null
+  postcards_email_sent_at?: string | null
+  postcards_ordered_at?: string | null
+  proofed_at?: string | null
+  final_files_sent_at?: string | null
+  post_event_questionnaire_sent_at?: string | null
 }
 
 export async function createTrunkShow(draft: TrunkShowDraft): Promise<TrunkShow> {
@@ -69,9 +76,14 @@ export async function updateTrunkShow(id: string, patch: Partial<TrunkShowDraft>
   if (patch.store_id !== undefined) update.store_id = patch.store_id
   if (patch.start_date !== undefined) update.start_date = patch.start_date
   if (patch.end_date !== undefined) update.end_date = patch.end_date
-  if (patch.assigned_rep_id !== undefined) update.assigned_rep_id = patch.assigned_rep_id
+  if (patch.assigned_rep_id !== undefined) update.assigned_rep_id = patch.assigned_rep_id || null
   if (patch.status !== undefined) update.status = patch.status
   if (patch.notes !== undefined) update.notes = patch.notes?.trim() || null
+  if (patch.vip_showing !== undefined) update.vip_showing = patch.vip_showing
+  for (const k of ['confirmation_letter_sent_at', 'postcards_email_sent_at', 'postcards_ordered_at',
+                   'proofed_at', 'final_files_sent_at', 'post_event_questionnaire_sent_at'] as const) {
+    if (patch[k] !== undefined) update[k] = patch[k] || null
+  }
   if (Object.keys(update).length === 0) return
   const { error } = await supabase.from('trunk_shows').update(update).eq('id', id)
   if (error) throw new Error(error.message)

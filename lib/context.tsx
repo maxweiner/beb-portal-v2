@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { User, Store, Event, Shipment, Theme, Brand, AppState } from '@/types'
+import type { User, Store, TrunkShowStore, Event, Shipment, Theme, Brand, AppState } from '@/types'
 
 export type DayEntryIntent = {
   eventId: string
@@ -43,6 +43,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [impersonationActor, setImpersonationActor] = useState<User | null>(null)
   const [users, setUsers] = useState<User[]>([])
   const [stores, setStoresState] = useState<Store[]>([])
+  const [trunkShowStores, setTrunkShowStoresState] = useState<TrunkShowStore[]>([])
   const [events, setEventsState] = useState<Event[]>([])
   const [shipments, setShipments] = useState<Shipment[]>([])
   const [theme, setThemeState] = useState<Theme>(() => readLocal('beb-theme', 'original'))
@@ -73,10 +74,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const [usersRes, userRolesRes, storesRes, eventsRes, shipmentsRes] = await Promise.all([
+        const [usersRes, userRolesRes, storesRes, trunkShowStoresRes, eventsRes, shipmentsRes] = await Promise.all([
           supabase.from('users').select('*').order('name'),
           supabase.from('user_roles').select('user_id, role_id'),
           supabase.from('stores').select('*').eq('brand', currentBrand).order('name'),
+          // Trunk-show client list — not brand-scoped (we visit
+          // these jewelers regardless of buying-brand context).
+          supabase.from('trunk_show_stores').select('*').order('name'),
           supabase
             .from('events')
             .select('*, days:event_days(*), buyer_entries(*)')
@@ -112,6 +116,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         })
         if (nextUsers.length > 0) setUsers(nextUsers)
         if (storesRes.data) setStoresState(storesRes.data)
+        if (trunkShowStoresRes.data) setTrunkShowStoresState(trunkShowStoresRes.data as TrunkShowStore[])
         if (eventsRes.data) {
           setEventsState(eventsRes.data.map((e: any) => ({ ...e, days: e.days || [] })))
         }
@@ -444,7 +449,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [themeClass])
 
   const ctxValue = useMemo<AppContextType>(() => ({
-    user, users, stores, events, shipments,
+    user, users, stores, trunkShowStores, events, shipments,
     theme, year, loading, brand, connectionError,
     isSwitching, pendingBrand,
     setTheme, setYear, setBrand, reload, setUser,
@@ -452,7 +457,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     dayEntryIntent, setDayEntryIntent,
     impersonationActor,
   }), [
-    user, users, stores, events, shipments,
+    user, users, stores, trunkShowStores, events, shipments,
     theme, year, loading, brand, connectionError,
     isSwitching, pendingBrand,
     reload, dayEntryIntent,
