@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
+import { eventDisplayName } from '@/lib/eventName'
 import type { Event } from '@/types'
 
 interface Reservation {
@@ -164,7 +165,7 @@ export default function MobileTravel() {
                 style={{ background: 'var(--cream)', borderRadius: 14, padding: '16px', border: '1px solid var(--pearl)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14, boxShadow: '0 2px 6px rgba(0,0,0,.05)' }}>
                 <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--green-pale)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>✈️</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 900, fontSize: 15, color: 'var(--ink)', marginBottom: 2 }}>◆ {ev.store_name}</div>
+                  <div style={{ fontWeight: 900, fontSize: 15, color: 'var(--ink)', marginBottom: 2 }}>◆ {eventDisplayName(ev, stores)}</div>
                   <div style={{ fontSize: 12, color: 'var(--mist)' }}>{store?.city}, {store?.state} · {fmt(ev.start_date)}</div>
                 </div>
                 <div style={{ color: 'var(--mist)', fontSize: 18 }}>›</div>
@@ -189,7 +190,7 @@ export default function MobileTravel() {
           ← All Events
         </button>
         <div style={{ color: '#7EC8A0', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em' }}>Travel</div>
-        <div style={{ color: '#fff', fontSize: 18, fontWeight: 900, marginTop: 2 }}>◆ {selectedEvent.store_name}</div>
+        <div style={{ color: '#fff', fontSize: 18, fontWeight: 900, marginTop: 2 }}>◆ {eventDisplayName(selectedEvent, stores)}</div>
         <div style={{ color: 'rgba(255,255,255,.5)', fontSize: 12, marginTop: 2 }}>{store?.city}, {store?.state} · {fmt(selectedEvent.start_date)}</div>
       </div>
 

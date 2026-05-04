@@ -5,6 +5,7 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { User, Role } from '@/types'
 import DatePicker from '@/components/ui/DatePicker'
+import { eventDisplayName } from '@/lib/eventName'
 
 type Tab = 'users' | 'invite' | 'merge' | 'email' | 'sms' | 'events'
 
@@ -1078,7 +1079,7 @@ function EditEventSection() {
             <option value="">— pick an event —</option>
             {sortedEvents.map(ev => (
               <option key={ev.id} value={ev.id}>
-                {ev.store_name} · {fmtRange(ev.start_date)}
+                {eventDisplayName(ev, stores)} · {fmtRange(ev.start_date)}
               </option>
             ))}
           </select>
@@ -1117,7 +1118,7 @@ function EditEventSection() {
 }
 
 function DeleteEventSection() {
-  const { user: me, events, reload } = useApp()
+  const { user: me, events, stores, reload } = useApp()
   const isSuperAdmin = me?.role === 'superadmin'
   const [selectedId, setSelectedId] = useState('')
   const [confirmText, setConfirmText] = useState('')
@@ -1190,14 +1191,14 @@ function DeleteEventSection() {
         <select value={selectedId} onChange={e => { setSelectedId(e.target.value); setConfirmText('') }} disabled={!isSuperAdmin}>
           <option value="">Choose an event…</option>
           {sortedEvents.map(ev => (
-            <option key={ev.id} value={ev.id}>{ev.store_name} — {fmtDate(ev.start_date)}</option>
+            <option key={ev.id} value={ev.id}>{eventDisplayName(ev, stores)} — {fmtDate(ev.start_date)}</option>
           ))}
         </select>
 
         {selected && (
           <div className="mt-4 p-4 rounded-lg" style={{ background: 'var(--cream2)', border: '1px solid var(--pearl)' }}>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="fl" style={{ marginBottom: 2 }}>Store</span><div style={{ fontWeight: 700, color: 'var(--ink)' }}>{selected.store_name}</div></div>
+              <div><span className="fl" style={{ marginBottom: 2 }}>Store</span><div style={{ fontWeight: 700, color: 'var(--ink)' }}>{eventDisplayName(selected, stores)}</div></div>
               <div><span className="fl" style={{ marginBottom: 2 }}>Dates</span><div style={{ fontWeight: 700, color: 'var(--ink)' }}>{fmtRange(selected.start_date)}</div></div>
               <div><span className="fl" style={{ marginBottom: 2 }}>Workers assigned</span><div style={{ fontWeight: 700, color: 'var(--ink)' }}>{workerCount}</div></div>
               <div><span className="fl" style={{ marginBottom: 2 }}>Days with data</span><div style={{ fontWeight: 700, color: 'var(--ink)' }}>{daysWithData} of 3</div></div>
