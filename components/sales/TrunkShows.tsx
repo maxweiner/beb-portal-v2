@@ -120,7 +120,18 @@ export default function TrunkShows() {
         </div>
         <label style={{ fontSize: 11, color: 'var(--mist)', display: 'flex', alignItems: 'center', gap: 6 }}>
           Sort:
-          <select value={sort} onChange={e => setSort(e.target.value as Sort)} style={{ fontSize: 12, padding: '2px 6px' }}>
+          <select value={sort} onChange={e => setSort(e.target.value as Sort)}
+            style={{
+              fontSize: 12, padding: '4px 24px 4px 8px',
+              width: 'auto', minWidth: 130,
+              border: '1px solid var(--pearl)', borderRadius: 6,
+              background: '#fff', color: 'var(--ink)',
+              fontFamily: 'inherit', cursor: 'pointer',
+              appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none',
+              backgroundImage: 'url("data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'10\' height=\'6\' viewBox=\'0 0 10 6\'><path d=\'M1 1l4 4 4-4\' stroke=\'%2364748b\' stroke-width=\'1.5\' fill=\'none\' stroke-linecap=\'round\' stroke-linejoin=\'round\'/></svg>")',
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'right 8px center',
+            }}>
             <option value="date-desc">Newest first</option>
             <option value="date-asc">Oldest first</option>
             <option value="rep">Trunk rep</option>
