@@ -43,7 +43,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   const sb = admin()
 
   const { data: event, error: getErr } = await sb.from('events')
-    .select('id, brand, workers')
+    .select('id, brand, workers, status, store_name, start_date')
     .eq('id', eventId)
     .maybeSingle()
   if (getErr) return NextResponse.json({ error: getErr.message }, { status: 500 })
@@ -71,16 +71,29 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   let cancelled = 0
   const errors: string[] = []
 
+  // For Reserved (Save-the-Date) events, send a lightweight one-shot
+  // email per Q4=C: buyer is informed to hold the date, but we skip
+  // the operational pipeline (calendar invite, briefing inclusion,
+  // SMS) until promoted to Booked. Standard notifications resume on
+  // promotion via the natural buyer_added_to_event flow.
+  const isReserved = event.status === 'reserved'
+
   await Promise.all(added.map(async w => {
     try {
-      const r = await enqueueNotification({
-        brand,
-        trigger_type: 'buyer_added_to_event',
-        buyer_id: w.id,
-        event_id: eventId,
-      })
-      if (r.enqueued) enqueued++
-      else if (!r.ok) errors.push(`enqueue ${w.name}: ${r.reason}`)
+      if (isReserved) {
+        const lightOk = await sendSaveTheDateEmail(sb, w.id, event.store_name as string, event.start_date as string)
+        if (lightOk) enqueued++
+        else errors.push(`save-the-date email ${w.name}: skipped (no email or Resend not configured)`)
+      } else {
+        const r = await enqueueNotification({
+          brand,
+          trigger_type: 'buyer_added_to_event',
+          buyer_id: w.id,
+          event_id: eventId,
+        })
+        if (r.enqueued) enqueued++
+        else if (!r.ok) errors.push(`enqueue ${w.name}: ${r.reason}`)
+      }
     } catch (e: any) {
       errors.push(`enqueue ${w.name}: ${e?.message || 'unknown'}`)
     }
@@ -107,4 +120,39 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     notifications: { enqueued, cancelled },
     errors: errors.length ? errors : undefined,
   })
+}
+
+/** Lightweight one-shot Save-the-Date email via Resend. Returns
+ *  true if sent, false if skipped (no buyer email, Resend not
+ *  configured). Errors bubble to the caller's catch. */
+async function sendSaveTheDateEmail(
+  sb: ReturnType<typeof admin>, buyerId: string, storeName: string, startDate: string,
+): Promise<boolean> {
+  const { data: u } = await sb.from('users').select('name, email').eq('id', buyerId).maybeSingle()
+  const email = (u as any)?.email
+  const name = (u as any)?.name || 'there'
+  if (!email) return false
+
+  const { data: keyRow } = await sb.from('settings').select('value').eq('key', 'resend_api_key').single()
+  const key = (keyRow?.value || '').toString().replace(/"/g, '')
+  if (!key) return false
+
+  const dt = new Date(startDate + 'T12:00:00')
+  const dateStr = dt.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+  const portal = process.env.NEXT_PUBLIC_APP_URL || 'https://portal.bebllp.com'
+
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: 'BEB Events <events@updates.bebllp.com>',
+      to: email,
+      subject: `📌 Save the Date — ${storeName} on ${dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+      html: `<p>Hi ${name?.split(' ')[0] || 'there'},</p>
+        <p>You've been added to a <strong>tentative</strong> event at <strong>${storeName}</strong> on <strong>${dateStr}</strong>.</p>
+        <p>This is a Save the Date — the event isn't fully confirmed yet, but please hold the day. You'll get the normal calendar invite + reminders once it's promoted to a Booked event.</p>
+        <p><a href="${portal}/?nav=events">Open the portal</a></p>`,
+    }),
+  })
+  return res.ok
 }

@@ -363,9 +363,23 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
         return evDays.some(d => otherDays.includes(d))
       })
       if (conflicts.length > 0) {
-        const conflictNames = conflicts.map(c => `${c.store_name} (${c.start_date})`).join(', ')
-        alert(`⚠️ Conflict! ${name} is already assigned to: ${conflictNames}\n\nA buyer cannot work two events on the same day.`)
-        return
+        // Split conflicts by status. Booked-vs-Booked is a hard block
+        // (a buyer can't physically be in two confirmed places). If
+        // either side is Reserved (Save the Date), soften to a confirm
+        // popup — the user explicitly wanted Save-the-Date dates to be
+        // tentative on the buyer's calendar.
+        const isReservedSide = (c: Event) => c.status === 'reserved' || ev.status === 'reserved'
+        const hard = conflicts.filter(c => !isReservedSide(c))
+        const soft = conflicts.filter(isReservedSide)
+        if (hard.length > 0) {
+          const names = hard.map(c => `${c.store_name} (${c.start_date})`).join(', ')
+          alert(`⚠️ Conflict! ${name} is already assigned to: ${names}\n\nA buyer cannot work two confirmed events on the same day.`)
+          return
+        }
+        if (soft.length > 0) {
+          const names = soft.map(c => `${c.store_name} (${c.start_date})${c.status === 'reserved' ? ' [Reserved]' : ''}`).join(', ')
+          if (!confirm(`${name} is already on a Save-the-Date / Reserved event the same day:\n${names}\n\nReserved dates are tentative — proceed and add ${name} here too?`)) return
+        }
       }
     }
     const updated = exists ? workers.filter(w => w.id !== uid) : [...workers, { id: uid, name }]
@@ -1325,6 +1339,26 @@ function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
 }) {
   const { user } = useApp()
   const store = stores.find(s => s.id === ev.store_id)
+  const isAdminUser = user?.role === 'admin' || user?.role === 'superadmin' || !!user?.is_partner
+
+  async function promote() {
+    if (!confirm(`Promote to Booked?\n\nWorkers currently assigned: ${(ev.workers || []).map(w => w.name).join(', ') || '(none)'}\n\nThis flips the status to scheduled and triggers the normal notifications.`)) return
+    const { error } = await supabase.from('events').update({ status: 'scheduled' }).eq('id', ev.id)
+    if (error) { alert(error.message); return }
+    onClose()
+    // Trigger a refresh by reloading the page — the parent doesn't
+    // expose a reload callback to the modal, so this is the simplest
+    // way to make the change visible without a deeper refactor.
+    if (typeof window !== 'undefined') window.location.reload()
+  }
+
+  async function cancelKeep() {
+    if (!confirm('Cancel this event but keep it visible (with strikethrough)?')) return
+    const { error } = await supabase.from('events').update({ status: 'cancelled' }).eq('id', ev.id)
+    if (error) { alert(error.message); return }
+    onClose()
+    if (typeof window !== 'undefined') window.location.reload()
+  }
   // "Customers at this Store" panel: admins always; buyers only when
   // they're assigned to this event AND today is in the 3-day window.
   // Spec gates this surface tightly — server RLS ALSO enforces (see
@@ -1365,6 +1399,20 @@ function EventDetailModal({ ev, stores, onClose, fmtDollars }: {
         </div>
 
         <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {ev.status === 'reserved' && isAdminUser && (
+            <div style={{ background: '#FFFBEB', border: '2px dashed #D97706', borderRadius: 8, padding: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#92400E' }}>📌 This is a Save the Date — not yet confirmed.</div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={promote} className="btn-primary btn-sm">✅ Promote to Booked</button>
+                <button onClick={cancelKeep} className="btn-outline btn-sm">Cancel (keep visible)</button>
+              </div>
+            </div>
+          )}
+          {ev.status === 'cancelled' && (
+            <div style={{ background: '#F3F4F6', border: '1px solid var(--pearl)', borderRadius: 8, padding: 12, fontSize: 13, color: '#6B7280' }}>
+              This event has been cancelled.
+            </div>
+          )}
           <div className="card card-accent" style={{ margin: 0 }}>
             <div className="card-title">Event Summary</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
