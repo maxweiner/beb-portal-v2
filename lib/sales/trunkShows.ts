@@ -143,11 +143,13 @@ export function enumerateDates(startIso: string, endIso: string): string[] {
   return out
 }
 
-/** Effective status: stored value wins for cancelled; otherwise
- *  computed from today vs. start/end dates. Trunk shows transition
- *  scheduled → in_progress → completed automatically as time
- *  passes; a manual cancellation always overrides. */
+/** Effective status: explicit 'reserved' (Save the Date) and
+ *  'cancelled' always win — they're admin-set lifecycle states.
+ *  Otherwise the status is computed from today vs. start/end
+ *  dates so trunk shows transition scheduled → in_progress →
+ *  completed automatically. */
 export function effectiveStatus(s: TrunkShow, todayIso?: string): TrunkShowStatus {
+  if (s.status === 'reserved') return 'reserved'
   if (s.status === 'cancelled') return 'cancelled'
   const today = todayIso || (() => {
     const d = new Date()
