@@ -81,120 +81,187 @@ export default function TrunkShowBookPage() {
     }
   }
 
-  const fmtSlot = (slot: Slot) => {
-    const start = new Date(slot.slot_start)
-    const end = new Date(slot.slot_end)
-    const day = start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-    const t = (d: Date) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-    return `${day} · ${t(start)}–${t(end)}`
+  const fmtTime = (d: Date) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  const fmtDayHeader = (iso: string) =>
+    new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+
+  // Group slots by day so the picker reads day-by-day instead of one
+  // long flat list — much friendlier on mobile.
+  const slotsByDay: Record<string, Slot[]> = {}
+  for (const s of slots) {
+    const d = s.slot_start.slice(0, 10)
+    ;(slotsByDay[d] ||= []).push(s)
   }
+  const dayKeys = Object.keys(slotsByDay).sort()
 
   const primary = show?.store?.color_primary || '#1D6B44'
   const secondary = show?.store?.color_secondary || '#F5F0E8'
 
-  return (
-    <div style={{ minHeight: '100vh', background: secondary, padding: '6vh 16px', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
-      <div style={{ width: 'min(560px, 100%)', background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 10px 40px rgba(0,0,0,.08)', borderTop: `4px solid ${primary}` }}>
-        {show?.store && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', borderBottom: '1px solid var(--pearl, #e2e8f0)' }}>
-            {show.store.store_image_url ? (
-              <img src={show.store.store_image_url} alt={`${show.store.name} logo`}
-                style={{ height: 44, width: 'auto', maxWidth: 120, objectFit: 'contain', background: '#fff', borderRadius: 6 }} />
-            ) : (
-              <div style={{ height: 44, width: 44, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: secondary, color: primary, fontWeight: 900, fontSize: 18 }}>
-                💎
+  // ── Booked confirmation ───────────────────────────────────────
+  if (bookedSlot) {
+    const start = new Date(bookedSlot.slot_start)
+    return (
+      <div className="min-h-screen pb-12" style={{ background: secondary }}>
+        <header className="px-5 pt-4 pb-3 bg-white flex items-center gap-3 max-w-md mx-auto"
+          style={{ borderTop: `4px solid ${primary}`, paddingTop: 'max(env(safe-area-inset-top), 16px)' }}>
+          {show?.store?.store_image_url ? (
+            <img src={show.store.store_image_url} alt={`${show.store.name} logo`}
+              className="h-10 w-auto max-w-[6rem] rounded-lg object-contain bg-white" />
+          ) : (
+            <div className="h-10 w-10 rounded-lg flex items-center justify-center"
+              style={{ background: '#f3f4f6', color: primary, fontWeight: 900 }}>💎</div>
+          )}
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="font-extrabold leading-tight" style={{ color: primary, fontSize: '1.125rem' }}>{show?.store?.name}</div>
+            {show?.store?.city && (
+              <div className="text-gray-500 leading-tight" style={{ fontSize: '0.8125rem' }}>
+                {show.store.city}{show.store.state ? `, ${show.store.state}` : ''}
               </div>
             )}
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontWeight: 800, color: primary, fontSize: 18, lineHeight: 1.2 }}>{show.store.name}</div>
-              {(show.store.city || show.store.state) && (
-                <div style={{ fontSize: 13, color: 'var(--mist, #64748b)', lineHeight: 1.2, marginTop: 2 }}>
-                  {[show.store.city, show.store.state].filter(Boolean).join(', ')}
-                </div>
-              )}
-            </div>
           </div>
+        </header>
+        <main className="max-w-md mx-auto px-4 pt-10">
+          <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+            <div style={{ fontSize: 44, marginBottom: 6 }}>✅</div>
+            <h2 className="text-2xl font-bold mb-3" style={{ color: primary }}>You're booked!</h2>
+            <p className="text-gray-700 mb-2">
+              We'll see you on <strong>{fmtDayHeader(bookedSlot.slot_start.slice(0, 10))}</strong> at{' '}
+              <strong>{fmtTime(start)}</strong>.
+            </p>
+            <p className="text-sm text-gray-500 mt-4">A confirmation will be sent shortly.</p>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  // ── Loading / error states ────────────────────────────────────
+  if (!loaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: secondary }}>
+        <div className="text-gray-500">Loading…</div>
+      </div>
+    )
+  }
+  if (error) {
+    return (
+      <div className="min-h-screen p-8 text-center" style={{ background: secondary }}>
+        <div style={{ fontSize: 36, marginBottom: 8 }}>🚫</div>
+        <div className="font-bold" style={{ color: '#991B1B' }}>{error}</div>
+      </div>
+    )
+  }
+
+  // ── Booking form ──────────────────────────────────────────────
+  return (
+    <div className="min-h-screen pb-12" style={{ background: secondary }}>
+      <header className="px-5 pt-4 pb-3 bg-white flex items-center gap-3 max-w-md mx-auto"
+        style={{ borderTop: `4px solid ${primary}`, paddingTop: 'max(env(safe-area-inset-top), 16px)' }}>
+        {show?.store?.store_image_url ? (
+          <img src={show.store.store_image_url} alt={`${show.store.name} logo`}
+            className="h-10 w-auto max-w-[6rem] rounded-lg object-contain bg-white" />
+        ) : (
+          <div className="h-10 w-10 rounded-lg flex items-center justify-center"
+            style={{ background: '#f3f4f6', color: primary, fontWeight: 900 }}>💎</div>
         )}
-        <div style={{ padding: 24 }}>
-        {bookedSlot ? (
-          <div style={{ textAlign: 'center', padding: '20px 0' }}>
-            <div style={{ fontSize: 36, marginBottom: 6 }}>✅</div>
-            <h1 style={{ fontSize: 20, fontWeight: 900, color: primary, marginBottom: 6 }}>You're booked</h1>
-            <div style={{ fontSize: 14, color: 'var(--ash)' }}>{show?.store?.name}</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: primary, marginTop: 10 }}>{fmtSlot(bookedSlot)}</div>
-            <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 12 }}>See you then.</div>
-          </div>
-        ) : !loaded ? (
-          <div style={{ padding: 30, textAlign: 'center', color: 'var(--mist)' }}>Loading…</div>
-        ) : error ? (
-          <div style={{ padding: 30, textAlign: 'center' }}>
-            <div style={{ fontSize: 32, marginBottom: 8 }}>🚫</div>
-            <div style={{ color: '#991B1B', fontWeight: 700 }}>{error}</div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="font-extrabold leading-tight" style={{ color: primary, fontSize: '1.125rem' }}>{show?.store?.name || 'Trunk Show'}</div>
+          {show?.store?.city && (
+            <div className="text-gray-500 leading-tight" style={{ fontSize: '0.8125rem' }}>
+              {show.store.city}{show.store.state ? `, ${show.store.state}` : ''}
+            </div>
+          )}
+        </div>
+      </header>
+
+      <main className="max-w-md mx-auto px-4 pt-6 space-y-6">
+        <div>
+          <div className="text-xs font-extrabold uppercase tracking-wider" style={{ color: primary }}>Book a trunk show appointment</div>
+          {show?.store?.address && (
+            <div className="text-sm text-gray-500 mt-1">{show.store.address}</div>
+          )}
+        </div>
+
+        {slots.length === 0 ? (
+          <div className="bg-white rounded-2xl shadow p-6 text-center text-gray-500">
+            No open slots right now. Check back later.
           </div>
         ) : (
           <>
-            <div style={{ marginBottom: 18 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: primary, textTransform: 'uppercase', letterSpacing: '.06em' }}>
-                Book a trunk show appointment
+            {/* Time picker — day-by-day with chip buttons */}
+            <div className="bg-white rounded-2xl shadow overflow-hidden">
+              <div className="px-5 pt-4 pb-1 text-xs font-extrabold uppercase tracking-wider text-gray-400">
+                Pick a time
               </div>
-              {show?.store?.address && (
-                <div style={{ fontSize: 13, color: 'var(--ash)', marginTop: 4 }}>
-                  {show.store.address}
-                </div>
-              )}
+              <div className="px-3 pb-4 pt-2 space-y-4">
+                {dayKeys.map(day => (
+                  <div key={day}>
+                    <div className="px-2 pb-2 text-sm font-bold" style={{ color: primary }}>
+                      {fmtDayHeader(day)}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {slotsByDay[day].map(slot => {
+                        const start = new Date(slot.slot_start)
+                        const sel = pickedSlotId === slot.id
+                        return (
+                          <button key={slot.id} type="button"
+                            onClick={() => setPickedSlotId(slot.id)}
+                            className="rounded-lg py-3 text-sm font-semibold transition-colors"
+                            style={{
+                              background: sel ? primary : '#fff',
+                              color: sel ? '#fff' : 'var(--ink)',
+                              border: `1.5px solid ${sel ? primary : 'var(--pearl, #e2e8f0)'}`,
+                            }}>
+                            {fmtTime(start)}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            {slots.length === 0 ? (
-              <div style={{ padding: 24, textAlign: 'center', color: 'var(--mist)', background: 'var(--cream)', borderRadius: 8 }}>
-                No open slots right now. Check back later.
+            {/* Customer details */}
+            <div className="bg-white rounded-2xl shadow p-5 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <input value={first} onChange={e => setFirst(e.target.value)} placeholder="First name *" autoFocus
+                  className="w-full px-4 py-3 rounded-lg border text-base"
+                  style={{ borderColor: 'var(--pearl, #e2e8f0)' }} />
+                <input value={last} onChange={e => setLast(e.target.value)} placeholder="Last name"
+                  className="w-full px-4 py-3 rounded-lg border text-base"
+                  style={{ borderColor: 'var(--pearl, #e2e8f0)' }} />
               </div>
-            ) : (
-              <>
-                <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>
-                  Pick a time
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 240, overflowY: 'auto', marginBottom: 16, padding: 4, background: 'var(--cream)', borderRadius: 8 }}>
-                  {slots.map(slot => (
-                    <label key={slot.id} style={{
-                      display: 'flex', alignItems: 'center', gap: 10,
-                      padding: '8px 12px', cursor: 'pointer',
-                      background: pickedSlotId === slot.id ? secondary : '#fff',
-                      border: '1px solid ' + (pickedSlotId === slot.id ? primary : 'var(--cream2)'),
-                      borderRadius: 6,
-                    }}>
-                      <input type="radio" name="slot" value={slot.id} checked={pickedSlotId === slot.id} onChange={() => setPickedSlotId(slot.id)} />
-                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{fmtSlot(slot)}</span>
-                    </label>
-                  ))}
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <input value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" type="email"
+                  className="w-full px-4 py-3 rounded-lg border text-base"
+                  style={{ borderColor: 'var(--pearl, #e2e8f0)' }} />
+                <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Phone" type="tel"
+                  className="w-full px-4 py-3 rounded-lg border text-base"
+                  style={{ borderColor: 'var(--pearl, #e2e8f0)' }} />
+              </div>
+              <input value={salesperson} onChange={e => setSalesperson(e.target.value)}
+                placeholder="Store salesperson (you, if you're booking)"
+                className="w-full px-4 py-3 rounded-lg border text-base"
+                style={{ borderColor: 'var(--pearl, #e2e8f0)' }} />
+              <input value={notes} onChange={e => setNotes(e.target.value)}
+                placeholder="Anything we should know?"
+                className="w-full px-4 py-3 rounded-lg border text-base"
+                style={{ borderColor: 'var(--pearl, #e2e8f0)' }} />
+            </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3" style={{ marginBottom: 8 }}>
-                  <input value={first} onChange={e => setFirst(e.target.value)} placeholder="Customer first name *" autoFocus />
-                  <input value={last} onChange={e => setLast(e.target.value)} placeholder="Last name" />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3" style={{ marginBottom: 8 }}>
-                  <input value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" type="email" />
-                  <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Phone" type="tel" />
-                </div>
-                <div className="field" style={{ marginBottom: 8 }}>
-                  <label className="fl">Store salesperson (you, if you're the one booking)</label>
-                  <input value={salesperson} onChange={e => setSalesperson(e.target.value)} placeholder="Your name" />
-                </div>
-                <div className="field" style={{ marginBottom: 8 }}>
-                  <label className="fl">Notes</label>
-                  <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Anything we should know?" />
-                </div>
-
-                <button onClick={submit} disabled={busy || !pickedSlotId || !first.trim()}
-                  style={{ width: '100%', padding: '12px', marginTop: 8, border: 'none', borderRadius: 8, background: primary, color: '#fff', fontWeight: 800, fontSize: 14, cursor: busy || !pickedSlotId || !first.trim() ? 'not-allowed' : 'pointer', opacity: busy || !pickedSlotId || !first.trim() ? 0.5 : 1 }}>
-                  {busy ? 'Booking…' : 'Book this time'}
-                </button>
-              </>
-            )}
+            <button onClick={submit} disabled={busy || !pickedSlotId || !first.trim()}
+              className="block w-full rounded-xl py-4 text-white font-bold text-base"
+              style={{
+                background: primary,
+                opacity: busy || !pickedSlotId || !first.trim() ? 0.5 : 1,
+                cursor: busy || !pickedSlotId || !first.trim() ? 'not-allowed' : 'pointer',
+              }}>
+              {busy ? 'Booking…' : 'Book this time'}
+            </button>
           </>
         )}
-        </div>
-      </div>
+      </main>
     </div>
   )
 }

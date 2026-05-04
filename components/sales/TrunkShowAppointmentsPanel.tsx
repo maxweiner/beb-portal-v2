@@ -180,7 +180,7 @@ export default function TrunkShowAppointmentsPanel({ trunkShowId, hours, canWrit
         <div style={{ padding: 16, textAlign: 'center', color: 'var(--mist)', fontSize: 13 }}>Loading…</div>
       ) : grouped.length === 0 ? (
         <div style={{ padding: 16, textAlign: 'center', color: 'var(--mist)', fontSize: 13, fontStyle: 'italic' }}>
-          No slots yet.{canWrite && ' Use "+ Add slot" or "+ Bulk-create" below.'}
+          No slots yet.{canWrite && ' Click "+ Add slots" to fill every day at 30-minute intervals.'}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -372,7 +372,10 @@ function SlotAdder({ trunkShowId, hours, onCancel, onAdded }: {
   onCancel: () => void
   onAdded: () => void
 }) {
-  const [mode, setMode] = useState<'single' | 'bulk'>('single')
+  // Default to "All days" — the most common setup is to fill the
+  // whole show at 30-minute intervals from each day's open/close
+  // hours. Switch to bulk-day or single for per-day customisation.
+  const [mode, setMode] = useState<'single' | 'bulk' | 'all'>('all')
   const [date, setDate] = useState(hours[0]?.show_date || '')
   const [start, setStart] = useState('10:00')
   const [end, setEnd] = useState('10:30')
@@ -412,25 +415,51 @@ function SlotAdder({ trunkShowId, hours, onCancel, onAdded }: {
     } catch (e: any) { setErr(e?.message || 'Could not bulk-create'); setBusy(false) }
   }
 
+  // Fill every show day with slots at the given duration, using each
+  // day's own open/close hours. The most common setup path.
+  async function submitAllDays() {
+    if (busy || hours.length === 0) return
+    setBusy(true); setErr(null)
+    try {
+      const slots: { slot_start: string; slot_end: string }[] = []
+      for (const h of hours) {
+        if (!h.open_time || !h.close_time) continue
+        const baseStart = new Date(`${h.show_date}T${h.open_time.slice(0, 5)}:00`)
+        const baseEnd   = new Date(`${h.show_date}T${h.close_time.slice(0, 5)}:00`)
+        for (let t = new Date(baseStart); t < baseEnd; t.setMinutes(t.getMinutes() + duration)) {
+          const slotEnd = new Date(t.getTime() + duration * 60_000)
+          if (slotEnd > baseEnd) break
+          slots.push({ slot_start: t.toISOString(), slot_end: slotEnd.toISOString() })
+        }
+      }
+      if (slots.length === 0) { setErr('No days with hours configured.'); setBusy(false); return }
+      await bulkCreateSlots(trunkShowId, slots)
+      onAdded()
+    } catch (e: any) { setErr(e?.message || 'Could not fill all days'); setBusy(false) }
+  }
+
   return (
     <div style={{ marginTop: 10, padding: 12, background: 'var(--green-pale)', border: '1px dashed var(--green3)', borderRadius: 8 }}>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        <button onClick={() => setMode('all')}    className={mode === 'all'    ? 'btn-primary btn-xs' : 'btn-outline btn-xs'}>All days</button>
+        <button onClick={() => setMode('bulk')}   className={mode === 'bulk'   ? 'btn-primary btn-xs' : 'btn-outline btn-xs'}>One day</button>
         <button onClick={() => setMode('single')} className={mode === 'single' ? 'btn-primary btn-xs' : 'btn-outline btn-xs'}>Single slot</button>
-        <button onClick={() => setMode('bulk')}   className={mode === 'bulk'   ? 'btn-primary btn-xs' : 'btn-outline btn-xs'}>Bulk fill day</button>
       </div>
       <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', marginBottom: 8 }}>
-        <div className="field" style={{ marginBottom: 0 }}>
-          <label className="fl">Date</label>
-          <select value={date} onChange={e => setDate(e.target.value)}>
-            <option value="">Pick day…</option>
-            {hours.map(h => (
-              <option key={h.id} value={h.show_date}>
-                {new Date(h.show_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                {' · '}{h.open_time.slice(0,5)}–{h.close_time.slice(0,5)}
-              </option>
-            ))}
-          </select>
-        </div>
+        {mode !== 'all' && (
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label className="fl">Date</label>
+            <select value={date} onChange={e => setDate(e.target.value)}>
+              <option value="">Pick day…</option>
+              {hours.map(h => (
+                <option key={h.id} value={h.show_date}>
+                  {new Date(h.show_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  {' · '}{h.open_time.slice(0,5)}–{h.close_time.slice(0,5)}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         {mode === 'single' ? (
           <>
             <div className="field" style={{ marginBottom: 0 }}>
@@ -451,15 +480,23 @@ function SlotAdder({ trunkShowId, hours, onCancel, onAdded }: {
           </div>
         )}
       </div>
+      {mode === 'all' && (
+        <div style={{ fontSize: 11, color: 'var(--mist)', marginBottom: 6 }}>
+          Fills every show day ({hours.length} day{hours.length === 1 ? '' : 's'}) with back-to-back slots at the duration above, using each day's open/close hours.
+        </div>
+      )}
       {err && <div style={{ color: '#991B1B', fontSize: 12, marginBottom: 6 }}>{err}</div>}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <button onClick={onCancel} className="btn-outline btn-sm">Cancel</button>
         <button
-          onClick={mode === 'single' ? submitSingle : submitBulk}
-          disabled={busy || !date}
+          onClick={mode === 'single' ? submitSingle : mode === 'bulk' ? submitBulk : submitAllDays}
+          disabled={busy || (mode !== 'all' && !date) || (mode === 'all' && hours.length === 0)}
           className="btn-primary btn-sm"
         >
-          {busy ? 'Adding…' : (mode === 'single' ? 'Add slot' : `Fill day @ ${duration}m`)}
+          {busy ? 'Adding…' :
+            mode === 'single' ? 'Add slot' :
+            mode === 'bulk' ? `Fill day @ ${duration}m` :
+            `Fill all ${hours.length} days @ ${duration}m`}
         </button>
       </div>
     </div>
