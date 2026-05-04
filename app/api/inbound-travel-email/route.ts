@@ -186,111 +186,111 @@ Return this exact JSON structure:
       }
     }
 
-    // Resolve the radius from settings (default 25mi). Stored as raw
-    // JSON number string (e.g. '25') by the Settings UI.
-    let radiusMiles = 25
-    const { data: radiusSetting } = await sb.from('settings').select('value').eq('key', 'travel.match_radius_miles').maybeSingle()
-    if (radiusSetting?.value != null) {
-      const raw = typeof radiusSetting.value === 'number' ? radiusSetting.value : parseInt(String(radiusSetting.value).replace(/[^\d]/g, ''))
-      if (!Number.isNaN(raw) && raw > 0) radiusMiles = raw
-    }
+    // Match against both buying events AND trade shows. The whole
+    // matching block is wrapped in try/catch — if any step throws
+    // (missing schema column, geocoder hiccup, weird data shape),
+    // we fall back to leaving the reservation unassigned rather
+    // than 500ing the webhook. The reservation is the load-bearing
+    // thing; matching is a nice-to-have on top.
+    let matchedEvent: any = null
+    let matchedTradeShow: any = null
+    try {
+      // Resolve the radius from settings (default 25mi).
+      let radiusMiles = 25
+      const { data: radiusSetting } = await sb.from('settings').select('value').eq('key', 'travel.match_radius_miles').maybeSingle()
+      if (radiusSetting?.value != null) {
+        const raw = typeof radiusSetting.value === 'number' ? radiusSetting.value : parseInt(String(radiusSetting.value).replace(/[^\d]/g, ''))
+        if (!Number.isNaN(raw) && raw > 0) radiusMiles = raw
+      }
 
-    // Match against both buying events AND trade shows. We unify them
-    // into a single candidate list with a normalized shape so the
-    // date+radius/city logic runs once.
-    phase = 'fetch-candidates'
-    const [eventsRes, tradeShowsRes] = await Promise.all([
-      sb.from('events')
-        .select('id, store_name, start_date, stores(city, state, lat, lon)')
-        .order('start_date', { ascending: false }),
-      sb.from('trade_shows')
-        .select('id, name, venue_city, venue_state, lat, lon, start_date, end_date')
-        .is('deleted_at', null)
-        .order('start_date', { ascending: false }),
-    ])
-    if (eventsRes.error) {
-      return NextResponse.json({ error: `events fetch: ${eventsRes.error.message}`, phase }, { status: 500 })
-    }
-    if (tradeShowsRes.error) {
-      return NextResponse.json({ error: `trade_shows fetch: ${tradeShowsRes.error.message}`, phase }, { status: 500 })
-    }
-    const events = eventsRes.data
-    const tradeShows = tradeShowsRes.data
+      phase = 'fetch-candidates'
+      const [eventsRes, tradeShowsRes] = await Promise.all([
+        sb.from('events')
+          .select('id, store_name, start_date, stores(city, state, lat, lon)')
+          .order('start_date', { ascending: false }),
+        sb.from('trade_shows')
+          .select('id, name, venue_city, venue_state, lat, lon, start_date, end_date')
+          .is('deleted_at', null)
+          .order('start_date', { ascending: false }),
+      ])
+      if (eventsRes.error) throw new Error(`events fetch: ${eventsRes.error.message}`)
+      if (tradeShowsRes.error) throw new Error(`trade_shows fetch: ${tradeShowsRes.error.message}`)
+      const events = eventsRes.data
+      const tradeShows = tradeShowsRes.data
 
-    type Candidate = {
-      kind: 'event' | 'trade_show'
-      ev: any
-      start: Date
-      end: Date
-      city: string
-      state: string
-      lat: number | null
-      lon: number | null
-    }
-    const candidates: Candidate[] = [
-      ...(events || []).map(ev => {
-        const start = new Date(ev.start_date + 'T12:00:00')
-        const end = new Date(ev.start_date + 'T12:00:00'); end.setDate(end.getDate() + 4)
-        const s = (ev.stores as any)
-        return { kind: 'event' as const, ev, start, end,
-          city: (s?.city || '').toLowerCase(), state: (s?.state || '').toLowerCase(),
-          lat: s?.lat ?? null, lon: s?.lon ?? null }
-      }),
-      ...(tradeShows || []).map(ts => ({
-        kind: 'trade_show' as const, ev: ts,
-        start: new Date(ts.start_date + 'T12:00:00'),
-        end: new Date(ts.end_date + 'T12:00:00'),
-        city: ((ts as any).venue_city || '').toLowerCase(),
-        state: ((ts as any).venue_state || '').toLowerCase(),
-        lat: (ts as any).lat ?? null, lon: (ts as any).lon ?? null,
-      })),
-    ]
+      type Candidate = {
+        kind: 'event' | 'trade_show'
+        ev: any
+        start: Date
+        end: Date
+        city: string
+        state: string
+        lat: number | null
+        lon: number | null
+      }
+      const candidates: Candidate[] = [
+        ...(events || []).map(ev => {
+          const start = new Date(ev.start_date + 'T12:00:00')
+          const end = new Date(ev.start_date + 'T12:00:00'); end.setDate(end.getDate() + 4)
+          const s = (ev.stores as any)
+          return { kind: 'event' as const, ev, start, end,
+            city: (s?.city || '').toLowerCase(), state: (s?.state || '').toLowerCase(),
+            lat: s?.lat ?? null, lon: s?.lon ?? null }
+        }),
+        ...(tradeShows || []).map(ts => ({
+          kind: 'trade_show' as const, ev: ts,
+          start: new Date(ts.start_date + 'T12:00:00'),
+          end: new Date(ts.end_date + 'T12:00:00'),
+          city: ((ts as any).venue_city || '').toLowerCase(),
+          state: ((ts as any).venue_state || '').toLowerCase(),
+          lat: (ts as any).lat ?? null, lon: (ts as any).lon ?? null,
+        })),
+      ]
 
-    let matched: Candidate | null = null
-    // Unknown-type emails skip matching by design — we don't trust
-    // the parsed signals enough to risk auto-placing them. They
-    // land in the user's Unassigned queue for manual placement.
-    if (!isUnknown && parsed.travel_dates?.length > 0) {
-      const travelDate = new Date(parsed.travel_dates[0])
-      const inDateRange = (c: Candidate) =>
-        travelDate >= new Date(c.start.getTime() - 3 * 86400000) && travelDate <= c.end
+      let matched: Candidate | null = null
+      // Unknown-type emails skip matching by design.
+      if (!isUnknown && parsed.travel_dates?.length > 0) {
+        const travelDate = new Date(parsed.travel_dates[0])
+        const inDateRange = (c: Candidate) =>
+          travelDate >= new Date(c.start.getTime() - 3 * 86400000) && travelDate <= c.end
 
-      if (hotelGeo) {
-        // Hotel with coords — require radius match. Pick closest.
-        const within = candidates
-          .filter(inDateRange)
-          .map(c => ({ c, dist: distanceMiles(hotelGeo!, { lat: c.lat, lon: c.lon }) }))
-          .filter(x => x.dist <= radiusMiles)
-          .sort((a, b) => a.dist - b.dist)
-        if (within.length > 0) matched = within[0].c
-      } else {
-        // Flight / rental / un-geocodable hotel — fall back to city/state.
-        if (parsed.city) {
-          const parsedCity = parsed.city.toLowerCase()
-          const parsedState = (parsed.state || '').toLowerCase()
-          matched = candidates.find(c => {
-            if (!inDateRange(c)) return false
-            const cityMatch = c.city.includes(parsedCity) || parsedCity.includes(c.city)
-            const stateMatch = parsedState && (c.state.includes(parsedState) || parsedState.includes(c.state))
-            return cityMatch || stateMatch
-          }) || null
-        }
-        if (!matched) {
-          const dateMatches = candidates.filter(inDateRange)
-          if (dateMatches.length === 1) matched = dateMatches[0]
-          else if (dateMatches.length > 1) {
-            matched = dateMatches.reduce((closest, c) => {
-              const cDiff = Math.abs(c.start.getTime() - travelDate.getTime())
-              const closestDiff = Math.abs(closest.start.getTime() - travelDate.getTime())
-              return cDiff < closestDiff ? c : closest
-            })
+        if (hotelGeo) {
+          const within = candidates
+            .filter(inDateRange)
+            .map(c => ({ c, dist: distanceMiles(hotelGeo!, { lat: c.lat, lon: c.lon }) }))
+            .filter(x => x.dist <= radiusMiles)
+            .sort((a, b) => a.dist - b.dist)
+          if (within.length > 0) matched = within[0].c
+        } else {
+          if (parsed.city) {
+            const parsedCity = parsed.city.toLowerCase()
+            const parsedState = (parsed.state || '').toLowerCase()
+            matched = candidates.find(c => {
+              if (!inDateRange(c)) return false
+              const cityMatch = c.city.includes(parsedCity) || parsedCity.includes(c.city)
+              const stateMatch = parsedState && (c.state.includes(parsedState) || parsedState.includes(c.state))
+              return cityMatch || stateMatch
+            }) || null
+          }
+          if (!matched) {
+            const dateMatches = candidates.filter(inDateRange)
+            if (dateMatches.length === 1) matched = dateMatches[0]
+            else if (dateMatches.length > 1) {
+              matched = dateMatches.reduce((closest, c) => {
+                const cDiff = Math.abs(c.start.getTime() - travelDate.getTime())
+                const closestDiff = Math.abs(closest.start.getTime() - travelDate.getTime())
+                return cDiff < closestDiff ? c : closest
+              })
+            }
           }
         }
       }
-    }
 
-    const matchedEvent = matched?.kind === 'event' ? matched.ev : null
-    const matchedTradeShow = matched?.kind === 'trade_show' ? matched.ev : null
+      matchedEvent = matched?.kind === 'event' ? matched.ev : null
+      matchedTradeShow = matched?.kind === 'trade_show' ? matched.ev : null
+    } catch (e: any) {
+      console.error(`[inbound-travel] matching failed in phase=${phase}, falling back to unassigned:`, e?.message)
+    }
 
     // Save reservation
     phase = 'insert-reservation'
