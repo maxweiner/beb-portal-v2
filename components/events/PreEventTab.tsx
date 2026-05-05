@@ -10,6 +10,8 @@
 //   • Travel (per-buyer flight + hotel logged)
 //   • Marketing (VDP / postcard / newspaper milestones)
 //   • Booking system (store has a configured booking_config)
+//   • Counter cards / in-store assets (PR 2.5b)
+//   • Staff briefed (PR 2.5b)
 //
 // "Past events" (3-day window already ended) are excluded — those
 // belong on the Post-Event tab. Cancelled events are also excluded.
@@ -21,7 +23,7 @@ import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import { eventEndIso, formatEventRange } from '@/lib/eventDates'
 import { eventDisplayName } from '@/lib/eventName'
-import type { Event } from '@/types'
+import type { Event, EventPromotionalAssetOrder } from '@/types'
 import type { NavPage } from '@/app/page'
 
 type CampaignRow = {
@@ -49,8 +51,10 @@ export default function PreEventTab({ setNav }: Props) {
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([])
   const [travel, setTravel] = useState<TravelRow[]>([])
   const [bookingConfigs, setBookingConfigs] = useState<BookingRow[]>([])
+  const [assetOrders, setAssetOrders] = useState<EventPromotionalAssetOrder[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [assetEditorFor, setAssetEditorFor] = useState<Event | null>(null)
 
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
 
@@ -61,17 +65,19 @@ export default function PreEventTab({ setNav }: Props) {
     void (async () => {
       setLoading(true)
       const todayIso = new Date().toISOString().slice(0, 10)
-      const [eventsRes, campaignsRes, travelRes, bookingRes] = await Promise.all([
+      const [eventsRes, campaignsRes, travelRes, bookingRes, assetsRes] = await Promise.all([
         supabase.from('events').select('*').order('start_date'),
         supabase.from('marketing_campaigns').select('event_id, flow_type, status, paid_at'),
         supabase.from('travel_reservations').select('event_id, buyer_id, type'),
         supabase.from('booking_config').select('store_id, day1_start'),
+        supabase.from('event_promotional_asset_orders').select('*'),
       ])
       if (cancelled) return
       if (eventsRes.data) setEvents(eventsRes.data.map((e: any) => ({ ...e, days: e.days || [] })))
       if (campaignsRes.data) setCampaigns(campaignsRes.data as CampaignRow[])
       if (travelRes.data) setTravel(travelRes.data as TravelRow[])
       if (bookingRes.data) setBookingConfigs(bookingRes.data as BookingRow[])
+      if (assetsRes.data) setAssetOrders(assetsRes.data as EventPromotionalAssetOrder[])
       void todayIso
       setLoading(false)
     })()
@@ -122,6 +128,28 @@ export default function PreEventTab({ setNav }: Props) {
     return s
   }, [bookingConfigs])
 
+  const assetOrdersByEvent = useMemo(() => {
+    const m = new Map<string, EventPromotionalAssetOrder[]>()
+    for (const o of assetOrders) {
+      const arr = m.get(o.event_id) || []
+      arr.push(o); m.set(o.event_id, arr)
+    }
+    return m
+  }, [assetOrders])
+
+  async function markBriefed(ev: Event, briefed: boolean) {
+    const ok = briefed
+      ? confirm(`Mark staff as briefed for "${eventDisplayName(ev, stores)}"?`)
+      : confirm(`Un-mark staff as briefed for "${eventDisplayName(ev, stores)}"?`)
+    if (!ok) return
+    const update = briefed
+      ? { staff_briefed_at: new Date().toISOString(), staff_briefed_by_user_id: user?.id || null }
+      : { staff_briefed_at: null, staff_briefed_by_user_id: null }
+    const { error } = await supabase.from('events').update(update).eq('id', ev.id)
+    if (error) { alert(error.message); return }
+    setEvents(es => es.map(e => e.id === ev.id ? { ...e, ...update } : e))
+  }
+
   if (loading) {
     return <div style={{ padding: 24, color: 'var(--mist)', fontSize: 13 }}>Loading readiness…</div>
   }
@@ -148,13 +176,29 @@ export default function PreEventTab({ setNav }: Props) {
           campaigns={campaignsByEvent.get(ev.id) || []}
           travel={travelByEvent.get(ev.id) || []}
           bookingLive={liveBookingStores.has(ev.store_id)}
+          assetOrders={assetOrdersByEvent.get(ev.id) || []}
           allEvents={events}
           stores={stores}
           isAdmin={isAdmin}
           setNav={setNav}
           onPromoted={(id) => setEvents(es => es.map(e => e.id === id ? { ...e, status: 'scheduled' } : e))}
+          onAssetEdit={() => setAssetEditorFor(ev)}
+          onMarkBriefed={(briefed) => markBriefed(ev, briefed)}
         />
       ))}
+
+      {assetEditorFor && (
+        <AssetOrderEditor
+          ev={assetEditorFor}
+          orders={assetOrdersByEvent.get(assetEditorFor.id) || []}
+          userId={user?.id}
+          onClose={() => setAssetEditorFor(null)}
+          onChange={(next) => setAssetOrders(prev => {
+            const others = prev.filter(o => o.event_id !== assetEditorFor.id)
+            return [...others, ...next]
+          })}
+        />
+      )}
     </div>
   )
 }
@@ -166,16 +210,19 @@ interface CardProps {
   campaigns: CampaignRow[]
   travel: TravelRow[]
   bookingLive: boolean
+  assetOrders: EventPromotionalAssetOrder[]
   allEvents: Event[]
   stores: ReturnType<typeof useApp>['stores']
   isAdmin: boolean
   setNav?: (n: NavPage) => void
   onPromoted: (id: string) => void
+  onAssetEdit: () => void
+  onMarkBriefed: (briefed: boolean) => void
 }
 
 function EventReadinessCard({
-  ev, campaigns, travel, bookingLive, allEvents, stores,
-  isAdmin, setNav, onPromoted,
+  ev, campaigns, travel, bookingLive, assetOrders, allEvents, stores,
+  isAdmin, setNav, onPromoted, onAssetEdit, onMarkBriefed,
 }: CardProps) {
   const reserved = ev.status === 'reserved'
 
@@ -217,6 +264,18 @@ function EventReadinessCard({
 
   // Booking
   const bookingStatus: GateLevel = bookingLive ? 'green' : 'red'
+
+  // In-store assets — green if all orders delivered, yellow if any
+  // ordered but not all delivered, red if no orders at all.
+  const assetCount = assetOrders.length
+  const deliveredCount = assetOrders.filter(o => o.delivered_at).length
+  const assetStatus: GateLevel =
+    assetCount === 0 ? 'red' :
+    deliveredCount === assetCount ? 'green' : 'yellow'
+
+  // Staff briefed — green if briefed, red otherwise.
+  const briefed = !!ev.staff_briefed_at
+  const briefedStatus: GateLevel = briefed ? 'green' : 'red'
 
   const store = stores.find(s => s.id === ev.store_id)
   const range = ev.start_date ? formatEventRange(ev.start_date) : ''
@@ -293,6 +352,24 @@ function EventReadinessCard({
           onClick={() => setNav?.('calendar')}
           title="Open Calendar / Appointments admin"
         />
+        <Chip
+          level={assetStatus}
+          label={
+            assetCount === 0
+              ? 'In-store assets — none ordered'
+              : `In-store assets ${deliveredCount}/${assetCount} delivered`
+          }
+          icon="📦"
+          onClick={onAssetEdit}
+          title="Manage counter cards / displays / postcards"
+        />
+        <Chip
+          level={briefedStatus}
+          label={briefed ? 'Staff briefed' : 'Staff not yet briefed'}
+          icon="🎓"
+          onClick={() => onMarkBriefed(!briefed)}
+          title={briefed ? 'Click to un-mark briefed' : 'Click to mark staff briefed'}
+        />
       </div>
     </div>
   )
@@ -327,6 +404,169 @@ function Chip({
       <span>{icon}</span>
       <span>{label}</span>
     </button>
+  )
+}
+
+function AssetOrderEditor({
+  ev, orders, userId, onClose, onChange,
+}: {
+  ev: Event
+  orders: EventPromotionalAssetOrder[]
+  userId?: string
+  onClose: () => void
+  onChange: (next: EventPromotionalAssetOrder[]) => void
+}) {
+  const [working, setWorking] = useState<string | null>(null)
+  const [draftType, setDraftType] = useState('counter_card')
+  const [draftDescription, setDraftDescription] = useState('')
+  const [draftQuantity, setDraftQuantity] = useState('')
+  const [draftVendor, setDraftVendor] = useState('')
+
+  async function addOrder() {
+    if (!draftType.trim()) { alert('Asset type is required'); return }
+    setWorking('add')
+    const { data, error } = await supabase
+      .from('event_promotional_asset_orders')
+      .insert({
+        event_id: ev.id,
+        asset_type: draftType.trim(),
+        description: draftDescription.trim() || null,
+        quantity: draftQuantity.trim() ? Number(draftQuantity) : null,
+        vendor: draftVendor.trim() || null,
+        ordered_at: new Date().toISOString(),
+        created_by_user_id: userId || null,
+      })
+      .select()
+      .maybeSingle()
+    setWorking(null)
+    if (error || !data) { alert('Failed to add: ' + (error?.message || 'unknown')); return }
+    onChange([...orders, data as EventPromotionalAssetOrder])
+    setDraftType('counter_card'); setDraftDescription(''); setDraftQuantity(''); setDraftVendor('')
+  }
+
+  async function patchOrder(id: string, patch: Partial<EventPromotionalAssetOrder>) {
+    setWorking(id)
+    const { data, error } = await supabase
+      .from('event_promotional_asset_orders')
+      .update(patch).eq('id', id).select().maybeSingle()
+    setWorking(null)
+    if (error || !data) { alert('Failed: ' + (error?.message || 'unknown')); return }
+    onChange(orders.map(o => o.id === id ? (data as EventPromotionalAssetOrder) : o))
+  }
+
+  async function deleteOrder(id: string) {
+    if (!confirm('Delete this order?')) return
+    setWorking(id)
+    const { error } = await supabase.from('event_promotional_asset_orders').delete().eq('id', id)
+    setWorking(null)
+    if (error) { alert('Failed: ' + error.message); return }
+    onChange(orders.filter(o => o.id !== id))
+  }
+
+  return (
+    <div onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1000,
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+        padding: '40px 16px', overflowY: 'auto',
+      }}>
+      <div style={{
+        background: '#fff', borderRadius: 10, maxWidth: 640, width: '100%',
+        padding: '18px 20px', boxShadow: 'var(--shadow-lg)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div style={{ fontWeight: 800, color: 'var(--ink)' }}>📦 In-store assets</div>
+          <button onClick={onClose} className="btn-outline btn-xs">Close</button>
+        </div>
+
+        {orders.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--mist)', padding: '10px 0', textAlign: 'center' }}>
+            No orders yet. Add one below.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+            {orders.map(o => (
+              <div key={o.id} style={{
+                border: '1px solid var(--cream2)', borderRadius: 8, padding: '8px 10px',
+                background: o.delivered_at ? '#ecfdf5' : (o.shipped_at ? '#fff8e1' : 'var(--cream2)'),
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>
+                    {o.asset_type}
+                    {o.quantity ? <span style={{ color: 'var(--mist)', fontWeight: 500 }}> × {o.quantity}</span> : null}
+                  </div>
+                  <button onClick={() => deleteOrder(o.id)} disabled={working === o.id}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--mist)', cursor: 'pointer', fontSize: 14 }}>✕</button>
+                </div>
+                {(o.description || o.vendor) && (
+                  <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>
+                    {o.description}{o.description && o.vendor ? ' · ' : ''}{o.vendor}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 6, marginTop: 8, fontSize: 11 }}>
+                  <Stage label="Ordered" at={o.ordered_at} />
+                  <Stage label="Shipped" at={o.shipped_at} />
+                  <Stage label="Delivered" at={o.delivered_at} />
+                  <div style={{ flex: 1 }} />
+                  {!o.shipped_at && (
+                    <button onClick={() => patchOrder(o.id, { shipped_at: new Date().toISOString() })}
+                      disabled={working === o.id} className="btn-outline btn-xs">Mark Shipped</button>
+                  )}
+                  {!o.delivered_at && (
+                    <button onClick={() => patchOrder(o.id, { delivered_at: new Date().toISOString(), shipped_at: o.shipped_at || new Date().toISOString() })}
+                      disabled={working === o.id} className="btn-primary btn-xs">Mark Delivered</button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{
+          padding: 10, border: '1px dashed var(--pearl)', borderRadius: 8,
+          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8,
+        }}>
+          <label style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 700 }}>
+            Type
+            <input value={draftType} onChange={e => setDraftType(e.target.value)} placeholder="counter_card"
+              style={{ width: '100%', padding: '6px 8px', fontSize: 13, border: '1px solid var(--cream2)', borderRadius: 6, fontFamily: 'inherit', marginTop: 2 }} />
+          </label>
+          <label style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 700 }}>
+            Quantity
+            <input value={draftQuantity} onChange={e => setDraftQuantity(e.target.value)} type="number" min="1"
+              style={{ width: '100%', padding: '6px 8px', fontSize: 13, border: '1px solid var(--cream2)', borderRadius: 6, fontFamily: 'inherit', marginTop: 2 }} />
+          </label>
+          <label style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 700, gridColumn: 'span 2' }}>
+            Description
+            <input value={draftDescription} onChange={e => setDraftDescription(e.target.value)} placeholder="Holiday counter card design"
+              style={{ width: '100%', padding: '6px 8px', fontSize: 13, border: '1px solid var(--cream2)', borderRadius: 6, fontFamily: 'inherit', marginTop: 2 }} />
+          </label>
+          <label style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 700 }}>
+            Vendor
+            <input value={draftVendor} onChange={e => setDraftVendor(e.target.value)}
+              style={{ width: '100%', padding: '6px 8px', fontSize: 13, border: '1px solid var(--cream2)', borderRadius: 6, fontFamily: 'inherit', marginTop: 2 }} />
+          </label>
+          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+            <button onClick={addOrder} disabled={working === 'add'} className="btn-primary btn-sm" style={{ width: '100%' }}>
+              {working === 'add' ? 'Adding…' : '+ Add order'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Stage({ label, at }: { label: string; at: string | null }) {
+  const done = !!at
+  return (
+    <span style={{
+      fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+      background: done ? '#dcfce7' : 'var(--cream2)',
+      color: done ? '#065f46' : 'var(--mist)',
+    }}>
+      {done ? '✓' : '○'} {label}
+    </span>
   )
 }
 
