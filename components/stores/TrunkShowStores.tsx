@@ -287,6 +287,48 @@ function chip(kind: 'active' | 'inactive'): React.CSSProperties {
   }
 }
 
+/* ── Module-level field components ──
+   Defined outside Modal so React doesn't unmount + remount
+   the underlying <input> on every parent re-render (which
+   stole focus and made typing feel like "saves on every
+   keystroke"). Keep these stable. */
+
+function F({
+  label, value, onChange, type = 'text', placeholder = '',
+}: {
+  label: string
+  value: string | null | undefined
+  onChange: (v: string) => void
+  type?: string
+  placeholder?: string
+}) {
+  return (
+    <div className="field">
+      <label className="fl">{label}</label>
+      <input type={type} value={value ?? ''} placeholder={placeholder}
+        onChange={e => onChange(e.target.value)} />
+    </div>
+  )
+}
+
+function TA({
+  label, value, onChange, placeholder = '',
+}: {
+  label: string
+  value: string | null | undefined
+  onChange: (v: string) => void
+  placeholder?: string
+}) {
+  return (
+    <div className="field">
+      <label className="fl">{label}</label>
+      <textarea value={value ?? ''} placeholder={placeholder} rows={3}
+        onChange={e => onChange(e.target.value)}
+        style={{ width: '100%', minHeight: 60, padding: 8, border: '1px solid var(--pearl)', borderRadius: 'var(--r)', fontFamily: 'inherit', fontSize: 13 }} />
+    </div>
+  )
+}
+
 /* ── DETAIL MODAL ─────────────────────────────────────── */
 function Modal({ store, trunkReps, onClose, onSaved, onDelete }: {
   store: TrunkShowStore
@@ -341,27 +383,6 @@ function Modal({ store, trunkReps, onClose, onSaved, onDelete }: {
   const set = <K extends keyof TrunkShowStore>(k: K, v: TrunkShowStore[K]) =>
     setDetails(p => ({ ...p, [k]: v }))
 
-  const F = ({ label, k, type = 'text', placeholder = '' }: {
-    label: string; k: keyof TrunkShowStore; type?: string; placeholder?: string
-  }) => (
-    <div className="field">
-      <label className="fl">{label}</label>
-      <input type={type} value={(details as any)[k] ?? ''} placeholder={placeholder}
-        onChange={e => set(k, e.target.value as any)} />
-    </div>
-  )
-
-  const TA = ({ label, k, placeholder = '' }: {
-    label: string; k: keyof TrunkShowStore; placeholder?: string
-  }) => (
-    <div className="field">
-      <label className="fl">{label}</label>
-      <textarea value={(details as any)[k] ?? ''} placeholder={placeholder} rows={3}
-        onChange={e => set(k, e.target.value as any)}
-        style={{ width: '100%', minHeight: 60, padding: 8, border: '1px solid var(--pearl)', borderRadius: 'var(--r)', fontFamily: 'inherit', fontSize: 13 }} />
-    </div>
-  )
-
   return (
     <div onClick={e => e.target === e.currentTarget && onClose()}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, overflowY: 'auto', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px' }}>
@@ -394,7 +415,7 @@ function Modal({ store, trunkReps, onClose, onSaved, onDelete }: {
               </span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <F label="Store Name" k="name" placeholder="Jeweler name" />
+              <F label="Store Name" value={details.name} onChange={v => set('name', v)} placeholder="Jeweler name" />
               <div className="field">
                 <label className="fl">Trunk Rep</label>
                 <select value={details.trunk_rep_user_id ?? ''}
@@ -419,13 +440,15 @@ function Modal({ store, trunkReps, onClose, onSaved, onDelete }: {
                   label={<span style={{ fontSize: 13 }}>Yes — actively running trunk shows here</span>}
                 />
               </div>
-              <F label="Street Address" k="address_1" />
-              <F label="Unit" k="address_2" />
-              <F label="City" k="city" />
-              <F label="State" k="state" placeholder="2-letter" />
-              <F label="Zip" k="zip" />
-              <F label="Store Phone" k="store_phone" />
-              <div style={{ gridColumn: 'span 2' }}><F label="URL" k="url" placeholder="https://" /></div>
+              <F label="Street Address" value={details.address_1}  onChange={v => set('address_1', v)} />
+              <F label="Unit"           value={details.address_2}  onChange={v => set('address_2', v)} />
+              <F label="City"           value={details.city}       onChange={v => set('city', v)} />
+              <F label="State"          value={details.state}      onChange={v => set('state', v)} placeholder="2-letter" />
+              <F label="Zip"            value={details.zip}        onChange={v => set('zip', v)} />
+              <F label="Store Phone"    value={details.store_phone} onChange={v => set('store_phone', v)} />
+              <div style={{ gridColumn: 'span 2' }}>
+                <F label="URL" value={details.url} onChange={v => set('url', v)} placeholder="https://" />
+              </div>
             </div>
           </div>
 
@@ -433,18 +456,20 @@ function Modal({ store, trunkReps, onClose, onSaved, onDelete }: {
           <div className="card" style={{ margin: 0 }}>
             <div className="card-title">Contacts<AutosaveIndicator status={status} /></div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <F label="Contact 1" k="contact_1" />
-              <F label="Contact 2" k="contact_2" />
-              <F label="Contact 3" k="contact_3" />
-              <F label="Document Sending Email 1" k="email_1" type="email" />
-              <div style={{ gridColumn: 'span 2' }}><F label="Email 2" k="email_2" type="email" /></div>
+              <F label="Contact 1" value={details.contact_1} onChange={v => set('contact_1', v)} />
+              <F label="Contact 2" value={details.contact_2} onChange={v => set('contact_2', v)} />
+              <F label="Contact 3" value={details.contact_3} onChange={v => set('contact_3', v)} />
+              <F label="Document Sending Email 1" value={details.email_1} onChange={v => set('email_1', v)} type="email" />
+              <div style={{ gridColumn: 'span 2' }}>
+                <F label="Email 2" value={details.email_2} onChange={v => set('email_2', v)} type="email" />
+              </div>
             </div>
           </div>
 
           {/* Comments */}
           <div className="card" style={{ margin: 0 }}>
             <div className="card-title">Comments<AutosaveIndicator status={status} /></div>
-            <TA label="" k="comments" />
+            <TA label="" value={details.comments} onChange={v => set('comments', v)} />
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
