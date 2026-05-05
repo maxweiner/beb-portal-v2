@@ -16,6 +16,7 @@ import { eventDisplayName } from '@/lib/eventName'
 import { daySpend, dayCommission, eventSpend, eventCommission } from '@/lib/eventSpend'
 import type { Event, EventDay } from '@/types'
 import type { NavPage } from '@/app/page'
+import WaitlistPanel from './WaitlistPanel'
 
 interface Props {
   setNav?: (n: NavPage) => void
@@ -160,6 +161,8 @@ export default function DuringEventTab({ setNav }: Props) {
                 )
               })}
             </div>
+
+            <WaitlistPanel ev={ev} />
           </div>
         )
       })}
