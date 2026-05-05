@@ -92,6 +92,20 @@ export async function POST(req: Request) {
 
   const sb = admin()
 
+  // SAFETY: trunk-comms sending is disabled by default. Real
+  // recipient emails are on file in trunk_show_stores; until an
+  // admin explicitly flips the kill switch in Settings, refuse
+  // to send. Returns 503 with a clear message the UI surfaces.
+  const { data: enabledSetting } = await sb
+    .from('settings').select('value').eq('key', 'trunk_comms_send_enabled').maybeSingle()
+  const enabledRaw = ((enabledSetting as any)?.value as string | undefined)?.replace(/^"|"$/g, '')
+  if (enabledRaw !== 'true') {
+    return NextResponse.json({
+      error: 'Trunk-show sends are disabled. An admin must flip Settings → Trunk Comms → Sending enabled before letters can go out.',
+      sending_disabled: true,
+    }, { status: 503 })
+  }
+
   // Authorize: admin/partner OR rep assigned to this show.
   const isAdmin = me.role === 'admin' || me.role === 'superadmin' || !!me.is_partner
   if (!isAdmin) {

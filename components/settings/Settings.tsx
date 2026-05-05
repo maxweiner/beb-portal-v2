@@ -488,6 +488,41 @@ function TrunkCommsDomainSection() {
     | null
   >(null)
 
+  // Kill switch — disabled by default; admin must explicitly
+  // enable before any letters can be sent to real customers.
+  const [sendingEnabled, setSendingEnabled] = useState<boolean | null>(null)
+  const [busyToggle, setBusyToggle] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const { data } = await supabase
+        .from('settings').select('value').eq('key', 'trunk_comms_send_enabled').maybeSingle()
+      if (cancelled) return
+      const raw = ((data as any)?.value as string | undefined)?.replace(/^"|"$/g, '')
+      setSendingEnabled(raw === 'true')
+    })()
+    return () => { cancelled = true }
+  }, [])
+  async function toggleEnabled() {
+    const next = !sendingEnabled
+    if (next) {
+      const ok = confirm(
+        `Enable trunk-show sending?\n\n` +
+        `This unlocks the Send Email button for everyone with comms access. ` +
+        `Real customer emails on file will start receiving letters once a rep clicks Send.\n\n` +
+        `Type-check that the Confirmation Letter template + recipient on the test trunk show is correct first.`
+      )
+      if (!ok) return
+    }
+    setBusyToggle(true)
+    await supabase.from('settings').upsert({
+      key: 'trunk_comms_send_enabled',
+      value: JSON.stringify(next ? 'true' : 'false'),
+    })
+    setSendingEnabled(next)
+    setBusyToggle(false)
+  }
+
   async function send() {
     if (!to.includes('@')) { alert('Enter a valid recipient email'); return }
     setSending(true); setResult(null)
@@ -518,6 +553,36 @@ function TrunkCommsDomainSection() {
       title="📨 Trunk Comms — Domain Verification"
       subtitle={<>Verifies that Resend will send from the <strong>bebllp.com</strong> apex (e.g. <code>tom@bebllp.com</code>). Existing outbound uses <code>updates.bebllp.com</code>; the apex needs separate DKIM + SPF records on GoDaddy before phase 5 send pipeline works.</>}
     >
+      {/* Kill switch — first thing shown, most important control. */}
+      <div style={{
+        padding: 14, borderRadius: 8, marginBottom: 14,
+        background: sendingEnabled ? 'var(--green-pale)' : '#fdecea',
+        border: `2px solid ${sendingEnabled ? 'var(--green)' : '#7a1f0f'}`,
+      }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+        }}>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: sendingEnabled ? 'var(--green-dark)' : '#7a1f0f' }}>
+              {sendingEnabled ? '✅ Sending is ENABLED' : '🔒 Sending is DISABLED'}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--ash)', marginTop: 4, lineHeight: 1.5 }}>
+              {sendingEnabled
+                ? 'The Send Email button is unlocked for everyone with comms access. Real customer emails on file will receive letters once a rep clicks Send.'
+                : 'The Send Email button is locked. Drafting + PDF preview still work, but no email goes out. Default for new deployments — flip when the templates and recipients are reviewed.'}
+            </div>
+          </div>
+          <button
+            onClick={toggleEnabled}
+            disabled={busyToggle || sendingEnabled === null}
+            className={sendingEnabled ? 'btn-outline btn-sm' : 'btn-primary btn-sm'}
+            style={{ flexShrink: 0 }}
+          >
+            {busyToggle ? '…' : sendingEnabled ? '🔒 Disable sending' : '🔓 Enable sending'}
+          </button>
+        </div>
+      </div>
+
       <div style={{ background: 'var(--cream2)', padding: 12, borderRadius: 8, marginBottom: 14, fontSize: 12, lineHeight: 1.6 }}>
         <strong style={{ color: 'var(--ink)' }}>One-time setup on GoDaddy DNS for bebllp.com:</strong>
         <ol style={{ margin: '8px 0 0', paddingLeft: 20 }}>
