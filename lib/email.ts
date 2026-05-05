@@ -23,7 +23,10 @@ export interface EmailAttachment {
 }
 
 export interface SendEmailArgs {
-  to: string
+  /** Single recipient OR an array of recipients. Resend accepts both
+   *  shapes; we pass through unchanged. Each entry may be a bare
+   *  email or a "Name <email@x.com>" string. */
+  to: string | string[]
   subject: string
   html: string
   from?: string

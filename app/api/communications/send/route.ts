@@ -86,9 +86,24 @@ export async function POST(req: Request) {
   if (!subject || !bodyText) {
     return NextResponse.json({ error: 'Subject and body are required' }, { status: 400 })
   }
-  if (!to_email || !to_email.includes('@')) {
-    return NextResponse.json({ error: 'Valid recipient email required' }, { status: 400 })
+
+  // Parse the comma-separated lists. Multiple recipients fan
+  // out to Resend's `to` array. Names are zipped by index when
+  // available; missing names are fine.
+  const emails = to_email.split(',').map(s => s.trim()).filter(Boolean)
+  const names  = (to_name || '').split(',').map(s => s.trim())
+  if (emails.length === 0) {
+    return NextResponse.json({ error: 'At least one recipient email required' }, { status: 400 })
   }
+  for (const e of emails) {
+    if (!e.includes('@')) {
+      return NextResponse.json({ error: `Invalid email: ${e}` }, { status: 400 })
+    }
+  }
+  // Resend accepts either a string or string[] for `to`.
+  const toForResend: string | string[] = emails.length === 1
+    ? (names[0] ? `${names[0]} <${emails[0]}>` : emails[0])
+    : emails.map((e, i) => names[i] ? `${names[i]} <${e}>` : e)
 
   const sb = admin()
 
@@ -146,7 +161,7 @@ export async function POST(req: Request) {
   try {
     messageId = await sendEmail({
       from: fromHeader,
-      to: to_name ? `${to_name} <${to_email}>` : to_email,
+      to: toForResend,
       subject,
       html,
       attachments: pdfBuffer ? [{
