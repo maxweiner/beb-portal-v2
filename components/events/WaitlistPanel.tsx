@@ -259,7 +259,7 @@ function AddWalkInModal({
         <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 12 }}>+ Add walk-in</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <Input label="Name" value={name} onChange={setName} />
-          <Input label="Phone" value={phone} onChange={setPhone} />
+          <Input label="Phone" value={phone} onChange={v => setPhone(formatPhoneInput(v))} />
           <Input label="# Items" value={items} onChange={setItems} type="number" />
           <label style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 700 }}>
             How did they hear?
@@ -295,6 +295,16 @@ function Input({ label, value, onChange, type = 'text' }: { label: string; value
         style={{ width: '100%', padding: '6px 8px', fontSize: 13, border: '1px solid var(--cream2)', borderRadius: 6, fontFamily: 'inherit', marginTop: 2, minHeight: 36 }} />
     </label>
   )
+}
+
+// Auto-format US phone as the user types: 555-123-4567.
+// Strips non-digits and re-inserts dashes after digits 3 and 6.
+// Caps at 10 digits.
+function formatPhoneInput(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 10)
+  if (digits.length <= 3) return digits
+  if (digits.length <= 6) return `${digits.slice(0,3)}-${digits.slice(3)}`
+  return `${digits.slice(0,3)}-${digits.slice(3,6)}-${digits.slice(6)}`
 }
 
 function computeExpiresAt(): string {
