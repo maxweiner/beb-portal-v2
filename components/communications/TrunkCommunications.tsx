@@ -6,7 +6,7 @@
 // content). Schedules, send flow, send log, and the recent-sends
 // landing list arrive in subsequent phases.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useApp } from '@/lib/context'
 import TemplateList from './TemplateList'
 import TemplateEditor from './TemplateEditor'
@@ -19,9 +19,16 @@ type View =
   | { kind: 'send'; trunkShowId?: string | null; templateId?: string | null }
 
 export default function TrunkCommunications() {
-  const { user } = useApp()
+  const { user, commsSendIntent, setCommsSendIntent } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || !!user?.is_partner
   const [view, setView] = useState<View>({ kind: 'list' })
+
+  // Consume deep-link intent from the per-show "Resend" button.
+  useEffect(() => {
+    if (!commsSendIntent) return
+    setView({ kind: 'send', trunkShowId: commsSendIntent.trunkShowId, templateId: commsSendIntent.templateId })
+    setCommsSendIntent(null)
+  }, [commsSendIntent, setCommsSendIntent])
 
   if (!isAdmin && user?.role !== 'sales_rep') {
     return (

@@ -20,6 +20,12 @@ export type TravelIntent = { eventId: string } | null
 export type TradeShowIntent = { tradeShowId: string } | null
 export type TrunkShowIntent = { trunkShowId: string } | null
 
+/** Deep-link intent for the Trunk Communications send flow.
+ *  Set by the per-show Comms section's "Resend" button so the
+ *  module opens directly into the send screen pre-filled with
+ *  the right show + template. */
+export type CommsSendIntent = { trunkShowId: string; templateId: string } | null
+
 interface AppContextType extends AppState {
   setTheme: (t: Theme) => void
   setYear: (y: string) => void
@@ -36,6 +42,8 @@ interface AppContextType extends AppState {
   setTradeShowIntent: (i: TradeShowIntent) => void
   trunkShowIntent: TrunkShowIntent
   setTrunkShowIntent: (i: TrunkShowIntent) => void
+  commsSendIntent: CommsSendIntent
+  setCommsSendIntent: (i: CommsSendIntent) => void
   /** When max@bebllp.com is in "View As" mode, `user` is swapped
    *  to the impersonated target so role-gated UI surfaces render
    *  as that user. `impersonationActor` retains a reference to
@@ -71,6 +79,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [travelIntent, setTravelIntent] = useState<TravelIntent>(null)
   const [tradeShowIntent, setTradeShowIntent] = useState<TradeShowIntent>(null)
   const [trunkShowIntent, setTrunkShowIntent] = useState<TrunkShowIntent>(null)
+  const [commsSendIntent, setCommsSendIntent] = useState<CommsSendIntent>(null)
 
   // Brand-switch coordination. While a switch is in flight, the committed
   // brand/theme stay on the OLD store so colors don't change until the new
@@ -477,13 +486,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     travelIntent, setTravelIntent,
     tradeShowIntent, setTradeShowIntent,
     trunkShowIntent, setTrunkShowIntent,
+    commsSendIntent, setCommsSendIntent,
     impersonationActor,
   }), [
     user, users, stores, trunkShowStores, events, shipments,
     theme, year, loading, brand, connectionError,
     isSwitching, pendingBrand,
     reload, dayEntryIntent, travelIntent,
-    tradeShowIntent, trunkShowIntent,
+    tradeShowIntent, trunkShowIntent, commsSendIntent,
     impersonationActor,
   ])
 

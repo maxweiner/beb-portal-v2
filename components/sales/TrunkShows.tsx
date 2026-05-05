@@ -32,7 +32,7 @@ type Filter = 'all' | 'reserved' | 'scheduled' | 'in_progress' | 'completed' | '
 type Sort = 'date-desc' | 'date-asc' | 'rep' | 'store'
 type View = 'cards' | 'columns' | 'list'
 
-export default function TrunkShows() {
+export default function TrunkShows({ setNav }: { setNav?: (n: import('@/app/page').NavPage) => void } = {}) {
   const { user, trunkShowStores, users, trunkShowIntent, setTrunkShowIntent } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || !!user?.is_partner
 
@@ -86,6 +86,7 @@ export default function TrunkShows() {
         onBack={() => setOpenId(null)}
         onChanged={() => void reload()}
         onDeleted={() => { setOpenId(null); void reload() }}
+        setNav={setNav}
       />
     )
   }
