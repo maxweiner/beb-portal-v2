@@ -42,17 +42,20 @@ interface NavItem {
   section?: boolean
 }
 
+// Dashboard sits above the four section groups (Buying / Selling /
+// Operations / Admin) since it's the home landing — items with no
+// section header preceding them render unconditionally per the
+// loop in the render block.
 const BEB_NAV: NavItem[] = [
-  { label: 'Daily', section: true },
   { id: 'dashboard',    label: 'Dashboard',         iconKey: 'dashboard' },
+  { label: 'Buying', section: true },
   // Renamed from "Bookings" so it's not confused with the new
   // selling-side "Trunk Customer Bookings" inside Trunk Shows.
   { id: 'calendar',     label: 'Buying Bookings',   iconKey: 'calendar' },
   { id: 'events',       label: 'Buying Events',     iconKey: 'events' },
   { id: 'schedule',     label: 'Schedule',          iconKey: 'schedule' },
   { id: 'travel',       label: 'Travel Share',      iconKey: 'travel' },
-  { id: 'dayentry',     label: 'Enter Buying Data',    iconKey: 'dayentry' },
-  { id: 'staff',        label: 'Staff',             iconKey: 'staff' },
+  { id: 'dayentry',     label: 'Enter Buying Data', iconKey: 'dayentry' },
   { label: 'Selling', section: true },
   { id: 'trade-shows',       label: 'Trade Shows',       iconKey: 'tradeshows' },
   { id: 'trunk-shows',       label: 'Trunk Shows',       iconKey: 'trunkshows' },
@@ -63,32 +66,33 @@ const BEB_NAV: NavItem[] = [
   { id: 'shipping',     label: 'Shipping',          iconKey: 'shipping' },
   { id: 'expenses',     label: 'Expenses',          iconKey: 'expenses' },
   { id: 'reports',      label: 'Reports',           iconKey: 'reports' },
+  { id: 'customers',    label: 'Customers',         iconKey: 'staff' },
   { label: 'Admin', section: true },
   { id: 'admin',         label: 'Admin Panel',      iconKey: 'admin' },
+  { id: 'staff',         label: 'Staff',            iconKey: 'staff' },
   { id: 'stores',        label: 'Stores',           iconKey: 'stores' },
-  { id: 'customers',     label: 'Customers',        iconKey: 'staff' },
   { id: 'data-research', label: 'Data Research',    iconKey: 'reports' },
   { id: 'financials',    label: 'Financials',       iconKey: 'financials' },
 ]
 
 const LIBERTY_NAV: NavItem[] = [
-  { label: 'Daily', section: true },
   { id: 'dashboard',    label: 'Dashboard',      iconKey: 'dashboard' },
+  { label: 'Buying', section: true },
   { id: 'calendar',     label: 'Bookings',       iconKey: 'calendar' },
   { id: 'events',       label: 'Buying Events',  iconKey: 'events' },
   { id: 'schedule',     label: 'Schedule',       iconKey: 'schedule' },
   { id: 'travel',       label: 'Travel Share',   iconKey: 'travel' },
   { id: 'dayentry',     label: 'Enter Buying Data', iconKey: 'dayentry' },
-  { id: 'staff',        label: 'Staff',          iconKey: 'staff' },
   { label: 'Operations', section: true },
   { id: 'marketing',    label: 'Marketing',      iconKey: 'marketing' },
   { id: 'shipping',     label: 'Shipping',       iconKey: 'shipping' },
   { id: 'expenses',     label: 'Expenses',       iconKey: 'expenses' },
   { id: 'reports',      label: 'Reports',        iconKey: 'reports' },
+  { id: 'customers',    label: 'Customers',      iconKey: 'staff' },
   { label: 'Admin', section: true },
   { id: 'libertyadmin',  label: 'Liberty Admin',  iconKey: 'admin' },
+  { id: 'staff',         label: 'Staff',          iconKey: 'staff' },
   { id: 'stores',        label: 'Stores',         iconKey: 'stores' },
-  { id: 'customers',     label: 'Customers',      iconKey: 'staff' },
   { id: 'data-research', label: 'Data Research',  iconKey: 'reports' },
   { id: 'financials',    label: 'Financials',     iconKey: 'financials' },
 ]
