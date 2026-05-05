@@ -53,6 +53,7 @@ export default function AddReceiptButton({
   onAdded: () => void | Promise<void>
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null)
+  const cameraRef = useRef<HTMLInputElement | null>(null)
   const [busy, setBusy] = useState<'idle' | 'uploading' | 'extracting' | 'saving'>('idle')
   const [error, setError] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -72,6 +73,7 @@ export default function AddReceiptButton({
     setBusy('idle'); setError(null); setExtractError(null)
     setPreviewUrl(null); setReceiptPath(null); setDraft(null); setRawSuggestion(null)
     if (fileRef.current) fileRef.current.value = ''
+    if (cameraRef.current) cameraRef.current.value = ''
   }
 
   async function authedFetch(input: RequestInfo, init: RequestInit = {}) {
@@ -163,26 +165,58 @@ export default function AddReceiptButton({
     reset()
   }
 
+  // Two file inputs so we can offer the user a real choice
+  // between Camera (capture="environment" forces the device cam)
+  // and Upload (no capture; opens the OS file picker with the
+  // photo library on mobile + general file picker on desktop).
+  // Old single-input UX trapped users into the camera flow on
+  // every mobile browser.
   return (
     <>
-      <input ref={fileRef} type="file" accept="image/*" capture="environment"
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment"
         style={{ display: 'none' }}
         onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
-      <button
-        onClick={() => fileRef.current?.click()}
-        disabled={busy !== 'idle'}
-        style={{
-          width: '100%', padding: '14px 16px', borderRadius: 10,
-          border: '2px dashed var(--green)', background: 'transparent',
-          color: 'var(--green-dark)', fontWeight: 800, fontSize: 14,
-          cursor: busy === 'idle' ? 'pointer' : 'wait',
-          fontFamily: 'inherit',
-        }}>
-        {busy === 'uploading'  ? 'Compressing photo…'
-        : busy === 'extracting' ? 'Reading receipt with AI…'
-        : busy === 'saving'    ? 'Saving expense…'
-        : '📷 Add Receipt (camera or file)'}
-      </button>
+      <input ref={fileRef} type="file" accept="image/*"
+        style={{ display: 'none' }}
+        onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
+      {busy !== 'idle' ? (
+        <button
+          disabled
+          style={{
+            width: '100%', padding: '14px 16px', borderRadius: 10,
+            border: '2px dashed var(--green)', background: 'transparent',
+            color: 'var(--green-dark)', fontWeight: 800, fontSize: 14,
+            cursor: 'wait', fontFamily: 'inherit',
+          }}>
+          {busy === 'uploading'  ? 'Compressing photo…'
+          : busy === 'extracting' ? 'Reading receipt with AI…'
+          : busy === 'saving'    ? 'Saving expense…'
+          : '…'}
+        </button>
+      ) : (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => cameraRef.current?.click()}
+            style={{
+              flex: 1, padding: '14px 12px', borderRadius: 10,
+              border: '2px dashed var(--green)', background: 'transparent',
+              color: 'var(--green-dark)', fontWeight: 800, fontSize: 14,
+              cursor: 'pointer', fontFamily: 'inherit', minHeight: 50,
+            }}>
+            📷 Camera
+          </button>
+          <button
+            onClick={() => fileRef.current?.click()}
+            style={{
+              flex: 1, padding: '14px 12px', borderRadius: 10,
+              border: '2px dashed var(--green)', background: 'transparent',
+              color: 'var(--green-dark)', fontWeight: 800, fontSize: 14,
+              cursor: 'pointer', fontFamily: 'inherit', minHeight: 50,
+            }}>
+            📁 Upload
+          </button>
+        </div>
+      )}
 
       {error && !draft && (
         <div style={{ marginTop: 8, padding: 10, background: '#FEE2E2', color: '#991B1B', borderRadius: 6, fontSize: 13 }}>
