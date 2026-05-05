@@ -8,6 +8,12 @@ import { StoreSearch, type PlaceData } from '@/lib/googlePlaces'
 
 interface TrunkRep { id: string; name: string }
 
+interface TrunkShowStoreContact {
+  name: string
+  email: string | null
+  send_documents: boolean
+}
+
 interface TrunkShowStore {
   id: string
   trunk_shows: boolean | null
@@ -21,12 +27,16 @@ interface TrunkShowStore {
   state: string | null
   zip: string | null
   store_phone: string | null
+  // Legacy columns kept in schema; new UI reads/writes `contacts`.
   contact_1: string | null
   contact_2: string | null
   contact_3: string | null
   email_1: string | null
   email_2: string | null
   url: string | null
+  primary_contact_email: string | null
+  primary_contact_name: string | null
+  contacts: TrunkShowStoreContact[]
   created_at?: string
   updated_at?: string
 }
@@ -34,6 +44,7 @@ interface TrunkShowStore {
 const COLS = `id, trunk_shows, name, ts_reps, trunk_rep_user_id, comments,
   address_1, address_2, city, state, zip, store_phone,
   contact_1, contact_2, contact_3, email_1, email_2, url,
+  primary_contact_email, primary_contact_name, contacts,
   created_at, updated_at`
 
 export default function TrunkShowStores() {
@@ -287,6 +298,22 @@ function chip(kind: 'active' | 'inactive'): React.CSSProperties {
   }
 }
 
+// First contact flagged send_documents=true with an email
+// (in array order) becomes the canonical recipient. Falls back
+// to the first contact with any email if none are flagged.
+function derivePrimaryEmail(contacts: { email: string | null; send_documents: boolean }[]): string | null {
+  const flagged = contacts.find(c => c.send_documents && c.email && c.email.trim())
+  if (flagged) return flagged.email!.trim()
+  const any = contacts.find(c => c.email && c.email.trim())
+  return any ? any.email!.trim() : null
+}
+function derivePrimaryName(contacts: { name: string; email: string | null; send_documents: boolean }[]): string | null {
+  const flagged = contacts.find(c => c.send_documents && c.email && c.email.trim())
+  if (flagged) return flagged.name?.trim() || null
+  const any = contacts.find(c => c.email && c.email.trim())
+  return any?.name?.trim() || null
+}
+
 /* ── Module-level field components ──
    Defined outside Modal so React doesn't unmount + remount
    the underlying <input> on every parent re-render (which
@@ -329,6 +356,93 @@ function TA({
   )
 }
 
+function ContactsList({
+  contacts, onChange,
+}: {
+  contacts: TrunkShowStoreContact[]
+  onChange: (next: TrunkShowStoreContact[]) => void
+}) {
+  function update(idx: number, patch: Partial<TrunkShowStoreContact>) {
+    onChange(contacts.map((c, i) => i === idx ? { ...c, ...patch } : c))
+  }
+  function remove(idx: number) {
+    onChange(contacts.filter((_, i) => i !== idx))
+  }
+  function add() {
+    onChange([...contacts, { name: '', email: '', send_documents: false }])
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 1fr 130px 32px', gap: 8,
+        fontSize: 11, fontWeight: 700, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.04em',
+      }}>
+        <span>Name</span>
+        <span>Email</span>
+        <span style={{ textAlign: 'center' }}>Send Documents</span>
+        <span></span>
+      </div>
+      {contacts.length === 0 ? (
+        <div style={{ fontSize: 12, color: 'var(--mist)', padding: '8px 0', textAlign: 'center' }}>
+          No contacts yet. Click "+ Add contact" below.
+        </div>
+      ) : (
+        contacts.map((c, i) => (
+          <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 130px 32px', gap: 8, alignItems: 'center' }}>
+            <input
+              type="text"
+              value={c.name ?? ''}
+              onChange={e => update(i, { name: e.target.value })}
+              placeholder="Contact name"
+            />
+            <input
+              type="email"
+              value={c.email ?? ''}
+              onChange={e => update(i, { email: e.target.value })}
+              placeholder="contact@example.com"
+            />
+            <label style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              fontSize: 12, color: 'var(--ash)', fontWeight: 600,
+            }}>
+              <input
+                type="checkbox"
+                checked={!!c.send_documents}
+                onChange={e => update(i, { send_documents: e.target.checked })}
+                style={{
+                  width: 18, height: 18, padding: 0, margin: 0,
+                  appearance: 'auto', WebkitAppearance: 'checkbox',
+                  border: 'none', background: 'transparent', borderRadius: 0,
+                } as React.CSSProperties}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => remove(i)}
+              title="Remove contact"
+              style={{
+                background: 'transparent', border: 'none', color: 'var(--mist)',
+                cursor: 'pointer', fontSize: 16, padding: 4, lineHeight: 1,
+              }}
+            >✕</button>
+          </div>
+        ))
+      )}
+      <div>
+        <button
+          type="button"
+          onClick={add}
+          className="btn-outline btn-xs"
+          style={{ marginTop: 4 }}
+        >
+          + Add contact
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /* ── DETAIL MODAL ─────────────────────────────────────── */
 function Modal({ store, trunkReps, onClose, onSaved, onDelete }: {
   store: TrunkShowStore
@@ -365,6 +479,12 @@ function Modal({ store, trunkReps, onClose, onSaved, onDelete }: {
         email_1: emptyToNull(d.email_1),
         email_2: emptyToNull(d.email_2),
         url: emptyToNull(d.url),
+        contacts: (d.contacts || []).filter((c: any) => c && (c.name?.trim() || c.email?.trim())),
+        // Re-derive the canonical "primary" recipient from the first
+        // contact flagged send_documents=true so the trunk-comms
+        // send pipeline picks the right address.
+        primary_contact_email: derivePrimaryEmail(d.contacts || []),
+        primary_contact_name:  derivePrimaryName(d.contacts || []),
       }
       const { data, error } = await supabase
         .from('trunk_show_stores').update(patch).eq('id', store.id)
@@ -455,15 +575,10 @@ function Modal({ store, trunkReps, onClose, onSaved, onDelete }: {
           {/* Contacts */}
           <div className="card" style={{ margin: 0 }}>
             <div className="card-title">Contacts<AutosaveIndicator status={status} /></div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <F label="Contact 1" value={details.contact_1} onChange={v => set('contact_1', v)} />
-              <F label="Contact 2" value={details.contact_2} onChange={v => set('contact_2', v)} />
-              <F label="Contact 3" value={details.contact_3} onChange={v => set('contact_3', v)} />
-              <F label="Document Sending Email 1" value={details.email_1} onChange={v => set('email_1', v)} type="email" />
-              <div style={{ gridColumn: 'span 2' }}>
-                <F label="Email 2" value={details.email_2} onChange={v => set('email_2', v)} type="email" />
-              </div>
-            </div>
+            <ContactsList
+              contacts={details.contacts || []}
+              onChange={(next) => set('contacts', next)}
+            />
           </div>
 
           {/* Comments */}
