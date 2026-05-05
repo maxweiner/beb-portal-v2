@@ -7,7 +7,7 @@ import PhonePromptScreen from '@/components/layout/PhonePromptScreen'
 import Sidebar from '@/components/layout/Sidebar'
 import Dashboard from '@/components/dashboard/Dashboard'
 import AdminPanel from '@/components/admin/AdminPanel'
-import Events from '@/components/events/Events'
+import BuyingEventsView from '@/components/events/BuyingEventsView'
 import DayEntry from '@/components/dayentry/DayEntry'
 import Stores from '@/components/stores/Stores'
 import TrunkShowStores from '@/components/stores/TrunkShowStores'
@@ -185,7 +185,7 @@ export default function Home() {
           {nav === 'trunk-shows' && <ModuleWriteGate moduleId="trunk-shows"><TrunkShows key={navKey} /></ModuleWriteGate>}
           {nav === 'leads'       && <ModuleWriteGate moduleId="leads"><Leads key={navKey} setNav={setNav} /></ModuleWriteGate>}
           {nav === 'dayentry'  && <ModuleWriteGate moduleId="dayentry"><MobileDayEntry key={navKey} /></ModuleWriteGate>}
-          {nav === 'events'    && <ModuleWriteGate moduleId="events"><Events key={navKey} setNav={setNav} /></ModuleWriteGate>}
+          {nav === 'events'    && <ModuleWriteGate moduleId="events"><BuyingEventsView key={navKey} setNav={setNav} /></ModuleWriteGate>}
           {nav === 'calendar'  && <ModuleWriteGate moduleId="calendar"><AppointmentsAdmin key={navKey} /></ModuleWriteGate>}
           {nav === 'schedule'  && <ModuleWriteGate moduleId="schedule"><Schedule key={navKey} /></ModuleWriteGate>}
           {nav === 'travel'    && <ModuleWriteGate moduleId="travel"><MobileTravel key={navKey} /></ModuleWriteGate>}
@@ -239,7 +239,7 @@ export default function Home() {
         {nav === 'trunk-shows' && <ModuleWriteGate moduleId="trunk-shows"><TrunkShows key={navKey} /></ModuleWriteGate>}
         {nav === 'leads'       && <ModuleWriteGate moduleId="leads"><Leads key={navKey} setNav={setNav} /></ModuleWriteGate>}
         {nav === 'calendar'   && <ModuleWriteGate moduleId="calendar"><AppointmentsAdmin key={navKey} /></ModuleWriteGate>}
-        {nav === 'events'     && <ModuleWriteGate moduleId="events"><Events key={navKey} setNav={setNav} /></ModuleWriteGate>}
+        {nav === 'events'     && <ModuleWriteGate moduleId="events"><BuyingEventsView key={navKey} setNav={setNav} /></ModuleWriteGate>}
         {nav === 'dayentry'   && <ModuleWriteGate moduleId="dayentry"><DayEntry key={navKey} /></ModuleWriteGate>}
         {nav === 'shipping'   && <ModuleWriteGate moduleId="shipping"><Shipping key={navKey} /></ModuleWriteGate>}
         {nav === 'reports'    && <ModuleWriteGate moduleId="reports"><Reports key={navKey} /></ModuleWriteGate>}
