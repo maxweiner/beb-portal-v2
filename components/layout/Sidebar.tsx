@@ -60,6 +60,7 @@ const BEB_NAV: NavItem[] = [
   { id: 'trade-shows',       label: 'Trade Shows',       iconKey: 'tradeshows' },
   { id: 'trunk-shows',       label: 'Trunk Shows',       iconKey: 'trunkshows' },
   { id: 'trunk-show-stores', label: 'Trunk Show Stores', iconKey: 'stores' },
+  { id: 'trunk-communications', label: 'Trunk Communications', iconKey: 'marketing' },
   { id: 'leads',             label: 'Leads',             iconKey: 'leads' },
   { label: 'Operations', section: true },
   { id: 'marketing',    label: 'Marketing',         iconKey: 'marketing' },
