@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react'
 import type { NavPage } from '@/app/page'
 import Events from './Events'
 import PreEventTab from './PreEventTab'
+import DuringEventTab from './DuringEventTab'
 
 type ViewMode = 'new' | 'legacy'
 type Phase = 'pre' | 'during' | 'post'
@@ -86,7 +87,7 @@ export default function BuyingEventsView({ setNav }: { setNav?: (n: NavPage) => 
       </div>
 
       {phase === 'pre'    && <PreEventTab setNav={setNav} />}
-      {phase === 'during' && <DuringEventStub />}
+      {phase === 'during' && <DuringEventTab setNav={setNav} />}
       {phase === 'post'   && <PostEventStub />}
     </div>
   )
@@ -131,24 +132,6 @@ function ViewChooser({ view, onChange }: { view: ViewMode; onChange: (v: ViewMod
    Each phase tab will be filled in by PR 2 / 3 / 4. For PR 1 we
    render a placeholder so the structure is testable without
    blocking on the bigger build. */
-
-function DuringEventStub() {
-  return (
-    <PlaceholderCard
-      title="📊 During Event — coming after Pre-Event"
-      lines={[
-        'Will live here:',
-        '• One live event card per event currently in its date window (multiple at once if same week)',
-        '• Today\'s customers / sales / close rate KPI tiles per event',
-        '• Day-by-day spend cards (3-day grid)',
-        '• "Open Day Entry" shortcut',
-        '• Buyer panel (read-only Buyers Needed; "make lead" still active; conflict popup still active)',
-        '• Today\'s appointments count',
-        '• Total spend / commission running total',
-      ]}
-    />
-  )
-}
 
 function PostEventStub() {
   return (
