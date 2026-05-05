@@ -11,12 +11,14 @@ import { useApp } from '@/lib/context'
 import TemplateList from './TemplateList'
 import TemplateEditor from './TemplateEditor'
 import SendFlow from './SendFlow'
+import MasterChecklist from './MasterChecklist'
 import type { CommunicationTemplate } from '@/types'
 
 type View =
   | { kind: 'list' }
   | { kind: 'edit'; template: CommunicationTemplate | null }
   | { kind: 'send'; trunkShowId?: string | null; templateId?: string | null }
+  | { kind: 'master' }
 
 export default function TrunkCommunications() {
   const { user, commsSendIntent, setCommsSendIntent } = useApp()
@@ -64,14 +66,26 @@ export default function TrunkCommunications() {
     )
   }
 
+  if (view.kind === 'master') {
+    return (
+      <MasterChecklist
+        canEdit={isAdmin}
+        onClose={() => setView({ kind: 'list' })}
+      />
+    )
+  }
+
   return (
     <div className="p-6" style={{ maxWidth: 1100, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
         <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)' }}>📨 Trunk Communications</h1>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={() => setView({ kind: 'send' })} className="btn-primary btn-sm">📤 Send a letter</button>
           {isAdmin && (
-            <button onClick={() => setView({ kind: 'edit', template: null })} className="btn-outline btn-sm">+ New Template</button>
+            <>
+              <button onClick={() => setView({ kind: 'master' })} className="btn-outline btn-sm">🗒 Master Checklist</button>
+              <button onClick={() => setView({ kind: 'edit', template: null })} className="btn-outline btn-sm">+ New Template</button>
+            </>
           )}
         </div>
       </div>
