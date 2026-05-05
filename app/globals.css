@@ -427,3 +427,19 @@ tr:last-child td { border-bottom: none; }
   --gradient-primary: linear-gradient(135deg, #3C3B6E 0%, #B22234 100%);
   --gradient-primary-hover: linear-gradient(135deg, #2C2B5E 0%, #3C3B6E 100%);
 }
+
+/* Portal loading animation — jewelry icons pulse in sequence. */
+@keyframes bebJewelPulse {
+  0%, 60%, 100% { transform: translateY(0) scale(1); opacity: .35; }
+  30%           { transform: translateY(-8px) scale(1.2); opacity: 1; }
+}
+@keyframes bebJewelShine {
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(255,215,0,0)); }
+  50%      { filter: drop-shadow(0 0 6px rgba(255,215,0,.6)); }
+}
+.beb-jewel-loader {
+  display: inline-block;
+  font-size: 38px;
+  line-height: 1;
+  animation: bebJewelPulse 1.4s ease-in-out infinite, bebJewelShine 2.8s ease-in-out infinite;
+}
