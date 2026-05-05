@@ -10,6 +10,8 @@ export interface SpecialRequest {
   id: string
   trunk_show_id: string
   request_text: string
+  /** Optional dollar budget. NULL when none specified. */
+  budget: number | null
   created_by: string | null
   created_at: string
   status: SpecialRequestStatus
@@ -17,7 +19,7 @@ export interface SpecialRequest {
   acknowledged_at: string | null
 }
 
-const COLS = `id, trunk_show_id, request_text, created_by, created_at,
+const COLS = `id, trunk_show_id, request_text, budget, created_by, created_at,
   status, acknowledged_by, acknowledged_at`
 
 export async function listRequests(trunkShowId: string): Promise<SpecialRequest[]> {
@@ -34,7 +36,7 @@ export async function listRequests(trunkShowId: string): Promise<SpecialRequest[
  * configured office-staff recipients in the same call. Direct
  * supabase insert would skip the email side-effect.
  */
-export async function createRequest(trunkShowId: string, text: string): Promise<SpecialRequest> {
+export async function createRequest(trunkShowId: string, text: string, budget?: number | null): Promise<SpecialRequest> {
   const { data: session } = await supabase.auth.getSession()
   const token = session.session?.access_token
   const res = await fetch(`/api/trunk-shows/${trunkShowId}/special-requests`, {
@@ -43,7 +45,7 @@ export async function createRequest(trunkShowId: string, text: string): Promise<
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({ request_text: text }),
+    body: JSON.stringify({ request_text: text, budget: budget ?? null }),
   })
   const json = await res.json().catch(() => ({}))
   if (!res.ok || !json?.request) {

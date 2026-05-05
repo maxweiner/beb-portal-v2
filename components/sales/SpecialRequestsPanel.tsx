@@ -32,6 +32,7 @@ export default function SpecialRequestsPanel({ trunkShowId, canWrite }: Props) {
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [text, setText] = useState('')
+  const [budgetInput, setBudgetInput] = useState('')
   const [busy, setBusy] = useState(false)
 
   async function reload() {
@@ -48,9 +49,12 @@ export default function SpecialRequestsPanel({ trunkShowId, canWrite }: Props) {
     if (!text.trim() || busy) return
     setBusy(true); setError(null)
     try {
-      const created = await createRequest(trunkShowId, text.trim())
+      const parsedBudget = budgetInput.trim() === '' ? null : Number(budgetInput.replace(/[$,]/g, ''))
+      const created = await createRequest(trunkShowId, text.trim(),
+        parsedBudget != null && Number.isFinite(parsedBudget) && parsedBudget >= 0 ? parsedBudget : null)
       setRows(p => [created, ...p])
       setText('')
+      setBudgetInput('')
     } catch (err: any) {
       setError(err?.message || 'Could not save')
     }
@@ -92,7 +96,18 @@ export default function SpecialRequestsPanel({ trunkShowId, canWrite }: Props) {
             rows={2}
             style={{ width: '100%' }}
           />
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 12, color: 'var(--mist)' }}>Budget (optional):</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>$</span>
+              <input
+                type="text" inputMode="decimal"
+                value={budgetInput}
+                onChange={e => setBudgetInput(e.target.value)}
+                placeholder="0.00"
+                style={{ width: 100, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--pearl)', fontSize: 13 }}
+              />
+            </div>
             <button onClick={submit} disabled={busy || !text.trim()} className="btn-primary btn-sm">
               {busy ? 'Sending…' : 'Submit request'}
             </button>
@@ -140,6 +155,11 @@ export default function SpecialRequestsPanel({ trunkShowId, canWrite }: Props) {
                   )}
                 </div>
                 <div style={{ fontSize: 14, color: 'var(--ink)', whiteSpace: 'pre-wrap' }}>{r.request_text}</div>
+                {r.budget != null && (
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--green-dark)' }}>
+                    💰 Budget: ${Number(r.budget).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                )}
                 {ackBy && r.status !== 'open' && (
                   <div style={{ fontSize: 11, color: 'var(--mist)' }}>
                     {r.status === 'completed' ? 'Completed' : 'Acknowledged'} by {ackBy.name} · {r.acknowledged_at ? new Date(r.acknowledged_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''}
