@@ -9,7 +9,7 @@
 // When nothing is live, shows an empty state pointing at the next
 // scheduled event.
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { eventEndIso, formatEventRange, isEventCurrent, EVENT_LENGTH_DAYS } from '@/lib/eventDates'
 import { eventDisplayName } from '@/lib/eventName'
@@ -38,8 +38,22 @@ function todayDayNumber(startIso: string): number | null {
   return idx >= 1 && idx <= EVENT_LENGTH_DAYS ? idx : null
 }
 
+function useIsNarrow(breakpoint = 640) {
+  const [narrow, setNarrow] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth <= breakpoint
+  )
+  useEffect(() => {
+    const onResize = () => setNarrow(window.innerWidth <= breakpoint)
+    onResize()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [breakpoint])
+  return narrow
+}
+
 export default function DuringEventTab({ setNav }: Props) {
   const { events, stores, user, setDayEntryIntent } = useApp()
+  const isNarrow = useIsNarrow()
 
   const live = useMemo(
     () => events.filter(e => e.status !== 'cancelled' && isEventCurrent(e)),
@@ -125,27 +139,27 @@ export default function DuringEventTab({ setNav }: Props) {
                   {store?.city}{store?.state ? `, ${store.state}` : ''} · {formatEventRange(ev.start_date!)}
                 </div>
               </div>
-              <div style={{ fontSize: 12, color: 'var(--mist)' }}>
+              <div style={{ fontSize: 12, color: 'var(--mist)', whiteSpace: 'nowrap', flexShrink: 0 }}>
                 {(ev.workers || []).filter(w => !(w as any).deleted).length} buyer{(ev.workers || []).length === 1 ? '' : 's'}
               </div>
             </div>
 
-            {/* Today + running totals */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 14 }}>
+            {/* Today + running totals — 4 cols on desktop, 2 cols on mobile so $139,139 / $13,914 fits */}
+            <div style={{ display: 'grid', gridTemplateColumns: isNarrow ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 8, marginBottom: 14 }}>
               <Kpi label="Today's customers" value={String(tCust)} />
               <Kpi label="Today's purchases" value={String(tPurch)} />
               <Kpi label="Today's close" value={`${tClose}%`} />
               <Kpi label="Today's spend" value={fmtMoney(tSpend)} accent />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isNarrow ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 8, marginBottom: 14 }}>
               <Kpi label="Total customers" value={String(totalCustomers)} subdued />
               <Kpi label="Total purchases" value={String(totalPurchases)} subdued />
               <Kpi label="Overall close" value={`${closeRate}%`} subdued />
               <Kpi label="Total spend / commish" value={`${fmtMoney(totalSpend)} / ${fmtMoney(totalCommission)}`} subdued />
             </div>
 
-            {/* Day breakdown + Day Entry shortcut */}
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${EVENT_LENGTH_DAYS}, 1fr)`, gap: 8 }}>
+            {/* Day breakdown + Day Entry shortcut — stacks vertically on mobile */}
+            <div style={{ display: 'grid', gridTemplateColumns: isNarrow ? '1fr' : `repeat(${EVENT_LENGTH_DAYS}, 1fr)`, gap: 8 }}>
               {Array.from({ length: EVENT_LENGTH_DAYS }, (_, i) => i + 1).map(n => {
                 const row = days.find(d => d.day_number === n)
                 const isToday = n === todayN
@@ -179,6 +193,8 @@ function Kpi({
     <div style={{
       background: subdued ? 'var(--cream2)' : '#fff',
       border: '1px solid var(--cream2)', borderRadius: 8, padding: '8px 10px',
+      minWidth: 0,  // allow grid item to shrink so contents don't blow out the row
+      overflow: 'hidden',
     }}>
       <div style={{ fontSize: 10, color: 'var(--mist)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '.04em' }}>
         {label}
@@ -186,7 +202,8 @@ function Kpi({
       <div style={{
         fontSize: subdued ? 14 : 18, fontWeight: 800,
         color: accent ? 'var(--green-dark)' : 'var(--ink)', marginTop: 2,
-      }}>
+        wordBreak: 'break-word',
+      }} title={value}>
         {value}
       </div>
     </div>
