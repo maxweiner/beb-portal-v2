@@ -220,6 +220,33 @@ export interface Event {
   /** Save-the-Date / lifecycle status. Defaults to 'scheduled' for
    *  every event before this column existed. */
   status?: EventStatus
+  /** Per-event spiff rate (PR 4 schema). NULL falls back to $10. */
+  spiff_amount_per_show?: number | null
+  /** Set when ops marks the buyers + stakeholders as briefed for
+   *  this event. NULL = not yet briefed. */
+  staff_briefed_at?: string | null
+  staff_briefed_by_user_id?: string | null
+}
+
+/** Per-event physical asset order (counter card / countertop
+ *  display / in-store postcard / etc.). One row per discrete
+ *  order; lifecycle timestamps (ordered → shipped → delivered)
+ *  drive the Pre-Event readiness chip. */
+export interface EventPromotionalAssetOrder {
+  id: string
+  event_id: string
+  asset_type: string
+  description: string | null
+  quantity: number | null
+  vendor: string | null
+  ordered_at: string | null
+  shipped_at: string | null
+  delivered_at: string | null
+  tracking_number: string | null
+  notes: string | null
+  created_by_user_id: string | null
+  created_at: string
+  updated_at: string
 }
 
 export interface Shipment {
