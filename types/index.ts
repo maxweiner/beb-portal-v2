@@ -111,6 +111,10 @@ export interface Expense {
   receipt_url: string | null
   source: ExpenseSource
   ocr_extracted_data: Record<string, unknown> | null
+  /** True when the accountant paid this on the company credit card.
+   *  Stays visible on the report (so event-cost reporting includes
+   *  it) but is excluded from total_expenses (reimbursable). */
+  paid_by_credit_card: boolean
   created_at: string
   updated_at: string
 }

@@ -14,6 +14,7 @@ import { useIsNarrow } from './useIsNarrow'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { isWorkerAssigned } from '@/lib/permissions'
+import { isMobileDevice } from '@/lib/mobile'
 import type { Event, ExpenseReport, ExpenseReportStatus, ExpenseReportTemplate, User } from '@/types'
 import {
   STATUS_LABEL, STATUS_COLOR,
@@ -291,6 +292,15 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
   }, [])
 
+  // Mobile narrows the list further: only events the user is
+  // CURRENTLY a worker on. Phantom reports for events the user
+  // was removed from clutter a small screen and aren't actionable.
+  // Desktop keeps the full list so admins/accountants can audit.
+  const mobileWorkerEventIds = useMemo(() => {
+    if (!user || !isMobileDevice()) return null
+    return new Set(events.filter(e => isWorkerAssigned(e, user.id)).map(e => e.id))
+  }, [events, user?.id])
+
   const filtered = useMemo(() => {
     return rows.filter(r => {
       // Accounting never sees drafts ("active") — those reports
@@ -311,9 +321,13 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
         // Everyone else: own reports only.
         if (r.user_id !== user?.id) return false
       }
+      // Mobile: hide buying-event reports where the user is no
+      // longer a worker. Trunk-show / trade-show reports (no event_id)
+      // are unaffected.
+      if (mobileWorkerEventIds && r.event_id && !mobileWorkerEventIds.has(r.event_id)) return false
       return true
     })
-  }, [rows, statusFilter, userFilter, timeFilter, todayIsoLocal, canSeeAll, isAccounting, user?.id])
+  }, [rows, statusFilter, userFilter, timeFilter, todayIsoLocal, canSeeAll, isAccounting, user?.id, mobileWorkerEventIds])
 
   // For the new-report picker: events the user can see, minus events
   // that already have a report for this user.

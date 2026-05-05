@@ -14,10 +14,29 @@
 
 import { useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { compressImage } from '@/lib/imageUtils'
+import { processImageForUpload } from '@/lib/imageUtils'
 import { CATEGORY_OPTIONS, todayIso } from './expensesUtils'
 import type { ExpenseCategory } from '@/types'
 import DatePicker from '@/components/ui/DatePicker'
+
+/** Crude UA mobile detection — desktop uses real photo (color),
+ *  mobile applies the scan-style B&W + contrast curve so receipts
+ *  read like document scans rather than camera snapshots. */
+function isMobileUserAgent(): boolean {
+  if (typeof navigator === 'undefined') return false
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+}
+
+/** Convert a Blob to a data URL — keeps the existing preview +
+ *  base64 POST pipeline unchanged. */
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(r.result as string)
+    r.onerror = () => reject(new Error('Failed to encode image'))
+    r.readAsDataURL(blob)
+  })
+}
 
 interface Suggestion {
   vendor: string | null
@@ -71,8 +90,18 @@ export default function AddReceiptButton({
     setError(null); setExtractError(null)
     setBusy('uploading')
     try {
-      // Compress + convert to JPEG. compressImage returns a data: URL.
-      const dataUrl = await compressImage(file, 1600, 0.7)
+      // Mobile camera: scan-style processing (BT.709 grayscale +
+      // contrast curve) so receipts photographed in-store read
+      // like scans, not glossy snapshots — better OCR accuracy and
+      // a cleaner record. Desktop uses the same pipeline minus
+      // the scanStyle flag (preserves color in case the user is
+      // uploading an existing photo or PDF render).
+      const { blob } = await processImageForUpload(file, {
+        maxEdge: 1600,
+        quality: 0.7,
+        scanStyle: isMobileUserAgent(),
+      })
+      const dataUrl = await blobToDataUrl(blob)
       setPreviewUrl(dataUrl)
 
       const commaIdx = dataUrl.indexOf(',')

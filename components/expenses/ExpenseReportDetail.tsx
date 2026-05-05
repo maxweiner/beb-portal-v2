@@ -149,7 +149,11 @@ export default function ExpenseReportDetail({
   // state reflects the change immediately without a re-fetch.
   const recomputeTotals = useCallback(async (next: Expense[]) => {
     if (!report) return
-    const totalExpenses = next.reduce((sum, e) => sum + Number(e.amount || 0), 0)
+    // Credit-card-paid lines are excluded from the buyer's
+    // reimbursable total. They still appear in the list for
+    // event-cost reporting and audit; the server-side trigger
+    // mirrors this exclusion.
+    const totalExpenses = next.reduce((sum, e) => sum + (e.paid_by_credit_card ? 0 : Number(e.amount || 0)), 0)
     const comp = Number(report.comp_rate || 0)
     const bonus = Number(report.bonus_amount || 0)
     const grand = totalExpenses + comp + bonus
@@ -863,6 +867,24 @@ function ExpenseRow({ expense, canMutate, onUpdate, onDelete }: {
         <textarea rows={2} value={local.notes} disabled={!canMutate}
           onChange={e => setLocal(p => ({ ...p, notes: e.target.value }))}
           onBlur={() => maybeSave('notes', local.notes || (null as any))} />
+      </div>
+
+      {/* Paid-by-credit-card toggle. When checked, the line item
+          stays visible on the report (still appears in the event
+          cost ledger) but is excluded from the buyer's reimbursable
+          total — the accountant has already paid this on the
+          company card. Server-side trigger handles recompute. */}
+      <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <input
+          id={`pbcc-${expense.id}`}
+          type="checkbox"
+          checked={!!expense.paid_by_credit_card}
+          disabled={!canMutate}
+          onChange={e => onUpdate({ paid_by_credit_card: e.target.checked } as Partial<Expense>)}
+        />
+        <label htmlFor={`pbcc-${expense.id}`} style={{ fontSize: 12, fontWeight: 700, color: expense.paid_by_credit_card ? 'var(--green-dark)' : 'var(--ink)', cursor: canMutate ? 'pointer' : 'default' }}>
+          💳 Paid by Credit Card (excluded from reimbursable)
+        </label>
       </div>
     </div>
   )
