@@ -522,6 +522,32 @@ function ReservationsView({ ev, user }: { ev: Event; user: any }) {
     loadData()
   }
 
+  // Mark / clear another buyer's flight or hotel status. Lead buyer
+  // (workers[0]) + admins + partners can mark for the whole team;
+  // any buyer can always mark their own. Mutually-exclusive types
+  // are removed first so a buyer can't be both "self_flight" and
+  // "no_flight" at the same time.
+  const setBuyerStatus = async (
+    buyerId: string,
+    kind: 'flight' | 'hotel',
+    state: 'self' | 'none' | 'clear',
+  ) => {
+    const exclusive = kind === 'flight'
+      ? ['self_flight', 'no_flight']
+      : ['self_hotel', 'no_hotel']
+    await supabase.from('travel_acknowledgments').delete()
+      .eq('event_id', ev.id).eq('buyer_id', buyerId).in('type', exclusive)
+    if (state !== 'clear') {
+      const type = state === 'self'
+        ? (kind === 'flight' ? 'self_flight' : 'self_hotel')
+        : (kind === 'flight' ? 'no_flight' : 'no_hotel')
+      await supabase.from('travel_acknowledgments').insert({
+        event_id: ev.id, buyer_id: buyerId, type,
+      })
+    }
+    loadData()
+  }
+
   const deleteReservation = async (id: string) => {
     if (!confirm('Delete this reservation?')) return
     await supabase.from('travel_reservations').delete().eq('id', id)
@@ -605,28 +631,41 @@ function ReservationsView({ ev, user }: { ev: Event; user: any }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {workers.map(w => {
               const wRes = reservations.filter(r => r.buyer_id === w.id)
-              const hasFlight = wRes.some(r => r.type === 'flight')
-              const hasHotel = wRes.some(r => r.type === 'hotel')
+              const hasFlightRes = wRes.some(r => r.type === 'flight')
+              const hasHotelRes = wRes.some(r => r.type === 'hotel')
               const hasCar = reservations.some(r => r.type === 'rental_car') // team-wide
               const ackNoCar = acknowledgments.some(a => a.buyer_id === w.id && a.type === 'no_rental_car')
+              const flightState = travelItemState(hasFlightRes, acknowledgments, w.id, 'flight')
+              const hotelState  = travelItemState(hasHotelRes, acknowledgments, w.id, 'hotel')
+              const canMark =
+                w.id === user?.id
+                || user?.role === 'admin'
+                || user?.role === 'superadmin'
+                || !!user?.is_partner
+                || workers[0]?.id === user?.id   // lead buyer
               return (
                 <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'var(--cream2)', borderRadius: 'var(--r)', flexWrap: 'wrap' }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--ink)', minWidth: 120 }}>👤 {w.name}</div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {[
-                      { type: 'flight', has: hasFlight, icon: '✈️' },
-                      { type: 'hotel', has: hasHotel, icon: '🏨' },
-                      { type: 'rental_car', has: hasCar || ackNoCar, icon: '🚗' },
-                    ].map(item => (
-                      <span key={item.type} style={{
-                        fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 99,
-                        background: item.has ? 'var(--green-pale)' : 'rgba(239,68,68,.08)',
-                        color: item.has ? 'var(--green-dark)' : '#dc2626',
-                        border: `1px solid ${item.has ? 'var(--green3)' : 'rgba(239,68,68,.2)'}`,
-                      }}>
-                        {item.icon} {item.has ? '✓' : '✗'}
-                      </span>
-                    ))}
+                  <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--ink)', minWidth: 120 }}>
+                    👤 {w.name}
+                    {workers[0]?.id === w.id && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--mist)', fontWeight: 600 }}>· Lead</span>}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <TravelItemControl
+                      icon="✈️" kind="flight" state={flightState} canMark={canMark}
+                      onSet={(s) => setBuyerStatus(w.id, 'flight', s)}
+                    />
+                    <TravelItemControl
+                      icon="🏨" kind="hotel" state={hotelState} canMark={canMark}
+                      onSet={(s) => setBuyerStatus(w.id, 'hotel', s)}
+                    />
+                    <span style={{
+                      fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 99,
+                      background: (hasCar || ackNoCar) ? 'var(--green-pale)' : 'rgba(239,68,68,.08)',
+                      color: (hasCar || ackNoCar) ? 'var(--green-dark)' : '#dc2626',
+                      border: `1px solid ${(hasCar || ackNoCar) ? 'var(--green3)' : 'rgba(239,68,68,.2)'}`,
+                    }}>
+                      🚗 {(hasCar || ackNoCar) ? '✓' : '✗'}
+                    </span>
                   </div>
                   <div style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--mist)' }}>
                     {wRes.length} reservation{wRes.length !== 1 ? 's' : ''} · ${wRes.reduce((s, r) => s + (r.amount || 0), 0).toLocaleString()}
@@ -1194,4 +1233,77 @@ function FolderContent({ folder, eventId, items, onItemsChange }: {
       )}
     </div>
   )
+}
+
+// ── Travel item state helpers (PR: have / don't need) ──────────
+
+type ItemState = 'booked' | 'self' | 'none' | 'missing'
+
+export function travelItemState(
+  hasReservation: boolean,
+  acks: Acknowledgment[],
+  buyerId: string,
+  kind: 'flight' | 'hotel',
+): ItemState {
+  if (hasReservation) return 'booked'
+  const selfType = kind === 'flight' ? 'self_flight' : 'self_hotel'
+  const noType = kind === 'flight' ? 'no_flight' : 'no_hotel'
+  if (acks.some(a => a.buyer_id === buyerId && a.type === selfType)) return 'self'
+  if (acks.some(a => a.buyer_id === buyerId && a.type === noType)) return 'none'
+  return 'missing'
+}
+
+function TravelItemControl({
+  icon, kind, state, canMark, onSet,
+}: {
+  icon: string
+  kind: 'flight' | 'hotel'
+  state: ItemState
+  canMark: boolean
+  onSet: (s: 'self' | 'none' | 'clear') => void
+}) {
+  const styles: Record<ItemState, { bg: string; fg: string; bd: string; label: string }> = {
+    booked:  { bg: 'var(--green-pale)',     fg: 'var(--green-dark)', bd: 'var(--green3)',         label: '✓ Booked' },
+    self:    { bg: 'rgba(59,130,246,.10)',  fg: '#1e40af',           bd: 'rgba(59,130,246,.30)',  label: '✓ Self' },
+    none:    { bg: 'var(--cream2)',         fg: 'var(--mist)',       bd: 'var(--cream2)',         label: 'Not needed' },
+    missing: { bg: 'rgba(239,68,68,.08)',   fg: '#dc2626',           bd: 'rgba(239,68,68,.20)',   label: '✗ None' },
+  }
+  const s = styles[state]
+  const noun = kind === 'flight' ? 'flight' : 'hotel'
+
+  return (
+    <span style={{
+      fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 99,
+      background: s.bg, color: s.fg, border: `1px solid ${s.bd}`,
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+    }}>
+      <span>{icon} {s.label}</span>
+      {canMark && state === 'missing' && (
+        <>
+          <button
+            onClick={() => onSet('self')}
+            title={`Mark "I have a ${noun}" for this buyer`}
+            style={miniBtn('var(--ash)')}
+          >Have</button>
+          <button
+            onClick={() => onSet('none')}
+            title={`Mark "Don't need a ${noun}" for this buyer`}
+            style={miniBtn('var(--ash)')}
+          >Skip</button>
+        </>
+      )}
+      {canMark && (state === 'self' || state === 'none') && (
+        <button onClick={() => onSet('clear')} title="Undo" style={miniBtn(s.fg)}>↺</button>
+      )}
+    </span>
+  )
+}
+
+function miniBtn(color: string): React.CSSProperties {
+  return {
+    fontFamily: 'inherit', fontSize: 10, fontWeight: 700,
+    padding: '1px 6px', borderRadius: 4, cursor: 'pointer',
+    background: '#fff', color, border: `1px solid ${color}`,
+    lineHeight: 1.2,
+  }
 }
