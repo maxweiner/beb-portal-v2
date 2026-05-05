@@ -16,7 +16,7 @@ import DatePicker from '@/components/ui/DatePicker'
 type Filter = 'all' | 'upcoming' | 'past'
 
 export default function TradeShows() {
-  const { user } = useApp()
+  const { user, tradeShowIntent, setTradeShowIntent } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || !!user?.is_partner
 
   const [rows, setRows] = useState<TradeShow[]>([])
@@ -25,6 +25,14 @@ export default function TradeShows() {
   const [filter, setFilter] = useState<Filter>('all')
   const [createOpen, setCreateOpen] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
+
+  // Deep-link from the calendar overlay — open the trade show
+  // detail directly instead of dropping the user on the list.
+  useEffect(() => {
+    if (!tradeShowIntent) return
+    setOpenId(tradeShowIntent.tradeShowId)
+    setTradeShowIntent(null)
+  }, [tradeShowIntent, setTradeShowIntent])
 
   async function reload() {
     setError(null)

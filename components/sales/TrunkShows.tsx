@@ -33,7 +33,7 @@ type Sort = 'date-desc' | 'date-asc' | 'rep' | 'store'
 type View = 'cards' | 'columns' | 'list'
 
 export default function TrunkShows() {
-  const { user, trunkShowStores, users } = useApp()
+  const { user, trunkShowStores, users, trunkShowIntent, setTrunkShowIntent } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || !!user?.is_partner
 
   const [rows, setRows] = useState<TrunkShow[]>([])
@@ -44,6 +44,14 @@ export default function TrunkShows() {
   const [view, setView] = useState<View>('cards')
   const [createOpen, setCreateOpen] = useState<false | 'scheduled' | 'reserved'>(false)
   const [openId, setOpenId] = useState<string | null>(null)
+
+  // Deep-link from the calendar overlay — open the trunk show
+  // detail directly instead of dropping the user on the list.
+  useEffect(() => {
+    if (!trunkShowIntent) return
+    setOpenId(trunkShowIntent.trunkShowId)
+    setTrunkShowIntent(null)
+  }, [trunkShowIntent, setTrunkShowIntent])
 
   async function reload() {
     setError(null)

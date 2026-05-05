@@ -191,7 +191,7 @@ export default function Home() {
           {nav === 'dayentry'  && <ModuleWriteGate moduleId="dayentry"><MobileDayEntry key={navKey} /></ModuleWriteGate>}
           {nav === 'events'    && <ModuleWriteGate moduleId="events"><BuyingEventsView key={navKey} setNav={setNav} /></ModuleWriteGate>}
           {nav === 'calendar'  && <ModuleWriteGate moduleId="calendar"><AppointmentsAdmin key={navKey} /></ModuleWriteGate>}
-          {nav === 'schedule'  && <ModuleWriteGate moduleId="schedule"><Schedule key={navKey} /></ModuleWriteGate>}
+          {nav === 'schedule'  && <ModuleWriteGate moduleId="schedule"><Schedule key={navKey} setNav={setNav} /></ModuleWriteGate>}
           {nav === 'travel'    && <ModuleWriteGate moduleId="travel"><MobileTravel key={navKey} /></ModuleWriteGate>}
           {nav === 'staff'     && <ModuleWriteGate moduleId="staff"><MobileStaff key={navKey} /></ModuleWriteGate>}
           {nav === 'shipping'  && <ModuleWriteGate moduleId="shipping"><Shipping key={navKey} /></ModuleWriteGate>}
@@ -254,7 +254,7 @@ export default function Home() {
         }} /></ModuleWriteGate>}
         {nav === 'settings'   && <Settings key={navKey} />}
         {nav === 'staff'      && <ModuleWriteGate moduleId="staff"><Staff key={navKey} /></ModuleWriteGate>}
-        {nav === 'schedule'   && <ModuleWriteGate moduleId="schedule"><Schedule key={navKey} /></ModuleWriteGate>}
+        {nav === 'schedule'   && <ModuleWriteGate moduleId="schedule"><Schedule key={navKey} setNav={setNav} /></ModuleWriteGate>}
         {nav === 'travel'     && <ModuleWriteGate moduleId="travel"><Travel key={navKey} /></ModuleWriteGate>}
         {nav === 'marketing'  && <ModuleWriteGate moduleId="marketing"><Marketing key={navKey} /></ModuleWriteGate>}
         {nav === 'admin' && (
