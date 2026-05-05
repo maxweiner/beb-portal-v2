@@ -107,6 +107,37 @@ export default function SendFlow({
   const canSend = !!trunkShowId && !!templateId && !!subject.trim() && !!body.trim() && !!toEmail.trim() && !sending
   const senderOk = /@bebllp\.com$/i.test(senderEmail)
 
+  async function previewPdf() {
+    if (!subject.trim() || !body.trim()) return
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/communications/preview-pdf', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({
+          subject,
+          body,
+          to_email: toEmail.trim(),
+          to_name: toName.trim() || null,
+        }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        alert(`Preview failed: ${j.error || res.status}`)
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (e: any) {
+      alert('Preview failed: ' + (e?.message || 'unknown'))
+    }
+  }
+
   async function send() {
     if (!canSend) return
     if (!senderOk) {
@@ -227,8 +258,10 @@ export default function SendFlow({
                   style={{ width: '100%', fontFamily: 'inherit', fontSize: 13, lineHeight: 1.5 }}
                 />
               </div>
-              <div style={{ marginTop: 10, padding: 10, borderRadius: 6, background: 'var(--cream2)', fontSize: 11, color: 'var(--mist)' }}>
-                📄 PDF preview button will appear here in phase 6. For now the email goes out as HTML only.
+              <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end' }}>
+                <button onClick={previewPdf} disabled={!subject.trim() || !body.trim()} className="btn-outline btn-sm">
+                  📄 Preview PDF
+                </button>
               </div>
             </div>
           )}

@@ -24,6 +24,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getAuthedUser } from '@/lib/expenses/serverAuth'
 import { blockIfImpersonating } from '@/lib/impersonation/server'
 import { sendEmail } from '@/lib/email'
+import { renderAndUploadLetter } from '@/lib/communications/generatePdf'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,6 +38,11 @@ function admin() {
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function pdfFilename(subject: string): string {
+  const slug = (subject || 'letter').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'letter'
+  return `${slug}.pdf`
 }
 
 function bodyToHtml(text: string): string {
@@ -99,6 +105,29 @@ export async function POST(req: Request) {
   const fromHeader = `${me.name || me.email} <${me.email}>`
   const html = bodyToHtml(bodyText)
 
+  // Pre-allocate the send id so the PDF can be filed at
+  // communications/{sendId}.pdf before we insert the row.
+  const sendId = crypto.randomUUID()
+
+  // Render the PDF (in memory; not uploaded yet). Failure here
+  // shouldn't block the send — we fall back to no-attachment.
+  let pdfBuffer: Buffer | null = null
+  try {
+    const { renderLetterBuffer } = await import('@/lib/communications/generatePdf')
+    pdfBuffer = await renderLetterBuffer({
+      subject,
+      body: bodyText,
+      storeContact: { name: to_name, email: to_email },
+      rep: {
+        name:  me.name || me.email,
+        email: me.email,
+        phone: (me as any).phone || '',
+      },
+    })
+  } catch (e: any) {
+    console.error('[comms-send] PDF render failed; sending without attachment:', e?.message)
+  }
+
   let messageId: string | null = null
   try {
     messageId = await sendEmail({
@@ -106,6 +135,10 @@ export async function POST(req: Request) {
       to: to_name ? `${to_name} <${to_email}>` : to_email,
       subject,
       html,
+      attachments: pdfBuffer ? [{
+        filename: pdfFilename(subject),
+        content: pdfBuffer.toString('base64'),
+      }] : undefined,
     })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Resend send failed' }, { status: 502 })
@@ -116,10 +149,25 @@ export async function POST(req: Request) {
     }, { status: 503 })
   }
 
-  // Log the send. PDF url stays null until phase 6.
+  // Email succeeded. Upload the PDF (best-effort) so the log
+  // can link to it. Upload failure doesn't roll back the send.
+  let pdfStoragePath: string | null = null
+  if (pdfBuffer) {
+    try {
+      const { error } = await sb.storage.from('communication-pdfs').upload(
+        `communications/${sendId}.pdf`,
+        pdfBuffer,
+        { contentType: 'application/pdf', upsert: true },
+      )
+      if (!error) pdfStoragePath = `communications/${sendId}.pdf`
+    } catch { /* swallow */ }
+  }
+
+  // Log the send.
   const { data: row, error: insErr } = await sb
     .from('communication_sends')
     .insert({
+      id:                    sendId,
       trunk_show_id,
       template_id,
       schedule_id,
@@ -130,7 +178,7 @@ export async function POST(req: Request) {
       to_name,
       subject_line_rendered: subject,
       body_rendered:         bodyText,
-      pdf_url:               null,
+      pdf_url:               pdfStoragePath,
       resend_message_id:     messageId,
       delivery_status:       'sent',
     })
@@ -138,8 +186,6 @@ export async function POST(req: Request) {
     .maybeSingle()
 
   if (insErr || !row) {
-    // Email already went out — surface the bookkeeping error so
-    // operator knows to manually create the log row if needed.
     return NextResponse.json({
       error: `Email sent (Resend id ${messageId}) but log write failed: ${insErr?.message || 'unknown'}`,
       message_id: messageId,
