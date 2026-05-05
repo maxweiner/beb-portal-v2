@@ -45,6 +45,21 @@ export default function SendFlow({
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [autoFilled, setAutoFilled] = useState(false)
+  const [sendingEnabled, setSendingEnabled] = useState<boolean | null>(null)
+
+  // Load the safety kill-switch state. Defaults to disabled
+  // until an admin flips it in Settings.
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const { data } = await supabase
+        .from('settings').select('value').eq('key', 'trunk_comms_send_enabled').maybeSingle()
+      if (cancelled) return
+      const raw = ((data as any)?.value as string | undefined)?.replace(/^"|"$/g, '')
+      setSendingEnabled(raw === 'true')
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   // Load pickers
   useEffect(() => {
@@ -104,7 +119,10 @@ export default function SendFlow({
 
   const selectedShow = shows.find(s => s.id === trunkShowId)
   const senderEmail = user?.email || ''
-  const canSend = !!trunkShowId && !!templateId && !!subject.trim() && !!body.trim() && !!toEmail.trim() && !sending
+  const canSend =
+    !!trunkShowId && !!templateId && !!subject.trim() && !!body.trim()
+    && !!toEmail.trim() && !sending
+    && sendingEnabled === true
   const senderOk = /@bebllp\.com$/i.test(senderEmail)
 
   async function previewPdf() {
@@ -182,6 +200,21 @@ export default function SendFlow({
           {sending ? 'Sending…' : '📤 Send Email'}
         </button>
       </div>
+
+      {sendingEnabled === false && (
+        <div style={{
+          background: '#fdecea', color: '#7a1f0f',
+          border: '2px solid #7a1f0f', borderRadius: 8,
+          padding: 14, marginBottom: 12,
+        }}>
+          <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>🔒 Trunk-show sends are disabled</div>
+          <div style={{ fontSize: 13 }}>
+            Real recipient emails are on file. Sends are blocked until an admin flips
+            <strong> Settings → 📨 Trunk Comms → Sending enabled</strong>.
+            You can still draft + preview the PDF, but the Send Email button is locked.
+          </div>
+        </div>
+      )}
 
       {error && (
         <div style={{ background: '#fdecea', color: '#7a1f0f', padding: 10, borderRadius: 8, fontSize: 13, marginBottom: 12 }}>{error}</div>
