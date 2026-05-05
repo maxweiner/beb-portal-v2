@@ -237,6 +237,32 @@ export interface Event {
   assets_override_by_user_id?: string | null
 }
 
+// ── Event waitlist ───────────────────────────────────────────
+export type EventWaitlistStatus = 'waiting' | 'called' | 'served' | 'no_show'
+export type EventWaitlistNotifyPref = 'sms' | 'wait'
+
+/** Per-event walk-in waitlist entry. Self-added via public
+ *  signup link or staff-added via internal UI. Auto-clears at
+ *  expires_at (today's 7pm in the store's local timezone). */
+export interface EventWaitlistEntry {
+  id: string
+  event_id: string
+  name: string
+  phone: string
+  item_count: number
+  how_heard: string | null
+  added_by_user_id: string | null
+  notify_pref: EventWaitlistNotifyPref
+  notified_at: string | null
+  status: EventWaitlistStatus
+  called_at: string | null
+  called_by_user_id: string | null
+  served_at: string | null
+  expires_at: string
+  created_at: string
+  updated_at: string
+}
+
 /** Per-event physical asset order (counter card / countertop
  *  display / in-store postcard / etc.). One row per discrete
  *  order; lifecycle timestamps (ordered → shipped → delivered)
