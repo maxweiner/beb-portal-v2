@@ -328,12 +328,20 @@ export default function Schedule({ setNav }: { setNav?: (n: NavPage) => void } =
         </div>
       </div>
 
-      {view === 'month'    && <MonthView    events={displayedEvents} stores={stores} users={users} vacations={showVacations ? vacations : []} currentUserId={user?.id} onSelect={setDetail} isNarrow={isNarrow} shipments={shipments} onSelectShipment={setShipmentDetail} tradeShows={showTradeShows ? tradeShows : []} trunkShows={showTrunkShows ? trunkShows : []} onOpenTradeShow={(id) => { setTradeShowIntent({ tradeShowId: id }); setNav?.('trade-shows') }} onOpenTrunkShow={(id) => { setTrunkShowIntent({ trunkShowId: id }); setNav?.('trunk-shows') }} />}
-      {view === 'week'     && <WeekView     events={displayedEvents} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
-      {view === 'day'      && <DayView      events={displayedEvents} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
-      {view === 'timeline' && <TimelineView events={displayedEvents} stores={stores} onSelect={setDetail} isNarrow={isNarrow} onSwitchView={setView} />}
-      {view === 'agenda'   && <AgendaView   events={displayedEvents} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
-      {view === 'kanban'   && <KanbanView   events={displayedEvents} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
+      {(() => {
+        const visibleTrunks = showTrunkShows ? trunkShows : []
+        const openTrunk = (id: string) => { setTrunkShowIntent({ trunkShowId: id }); setNav?.('trunk-shows') }
+        return (
+          <>
+            {view === 'month'    && <MonthView    events={displayedEvents} stores={stores} users={users} vacations={showVacations ? vacations : []} currentUserId={user?.id} onSelect={setDetail} isNarrow={isNarrow} shipments={shipments} onSelectShipment={setShipmentDetail} tradeShows={showTradeShows ? tradeShows : []} trunkShows={visibleTrunks} onOpenTradeShow={(id) => { setTradeShowIntent({ tradeShowId: id }); setNav?.('trade-shows') }} onOpenTrunkShow={openTrunk} />}
+            {view === 'week'     && <WeekView     events={displayedEvents} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
+            {view === 'day'      && <DayView      events={displayedEvents} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
+            {view === 'timeline' && <TimelineView events={displayedEvents} stores={stores} onSelect={setDetail} isNarrow={isNarrow} onSwitchView={setView} trunkShows={visibleTrunks} users={users} onOpenTrunkShow={openTrunk} />}
+            {view === 'agenda'   && <AgendaView   events={displayedEvents} stores={stores} onSelect={setDetail} isNarrow={isNarrow} trunkShows={visibleTrunks} users={users} onOpenTrunkShow={openTrunk} />}
+            {view === 'kanban'   && <KanbanView   events={displayedEvents} stores={stores} onSelect={setDetail} isNarrow={isNarrow} trunkShows={visibleTrunks} users={users} onOpenTrunkShow={openTrunk} />}
+          </>
+        )
+      })()}
 
       {detail && <DetailModal ev={detail} stores={stores} onClose={() => setDetail(null)} isNarrow={isNarrow} />}
       {shipmentDetail && (
@@ -706,7 +714,7 @@ function SelectedDayPanel({ dateStr, events, stores, vacations, onSelect, shipme
 /* ══════════════════════════════════════════
    TIMELINE VIEW
 ══════════════════════════════════════════ */
-function TimelineView({ events, stores, onSelect, isNarrow, onSwitchView }: { events: Event[]; stores: any[]; onSelect: (e: Event) => void; isNarrow: boolean; onSwitchView: (v: ViewMode) => void }) {
+function TimelineView({ events, stores, onSelect, isNarrow, onSwitchView, trunkShows = [], users = [], onOpenTrunkShow }: { events: Event[]; stores: any[]; onSelect: (e: Event) => void; isNarrow: boolean; onSwitchView: (v: ViewMode) => void; trunkShows?: TrunkShowOverlay[]; users?: any[]; onOpenTrunkShow?: (id: string) => void }) {
   const today = new Date(); today.setHours(0,0,0,0)
   const [offset, setOffset] = useState(0)
 
@@ -749,6 +757,11 @@ function TimelineView({ events, stores, onSelect, isNarrow, onSwitchView }: { ev
     return eds.some(d => d >= rangeStart && d <= rangeEnd)
   }).sort((a,b) => a.start_date.localeCompare(b.start_date))
 
+  const visibleTrunks = trunkShows.filter(t => {
+    const tds = trunkShowDays(t)
+    return tds.some(d => d >= rangeStart && d <= rangeEnd)
+  }).sort((a,b) => a.start_date.localeCompare(b.start_date))
+
   const weeks = Array.from({length: 6}, (_, i) => days.slice(i*7, i*7+7))
 
   return (
@@ -778,9 +791,51 @@ function TimelineView({ events, stores, onSelect, isNarrow, onSwitchView }: { ev
           ))}
         </div>
 
-        {visibleEvents.length === 0 && (
+        {visibleEvents.length === 0 && visibleTrunks.length === 0 && (
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--mist)' }}>No events in this range.</div>
         )}
+
+        {visibleTrunks.map(t => {
+          const tds = trunkShowDays(t)
+          const repName = t.assigned_rep_id ? users.find((u: any) => u.id === t.assigned_rep_id)?.name?.split(' ')[0] : null
+          return (
+            <div key={`trunk-${t.id}`} style={{ display: 'grid', gridTemplateColumns: '160px repeat(42, 1fr)', borderBottom: '1px solid var(--cream2)', alignItems: 'center', minHeight: 44 }}>
+              <div
+                onClick={onOpenTrunkShow ? () => onOpenTrunkShow(t.id) : undefined}
+                title={`Trunk Show — ${t.store_name}${repName ? ` · ${repName}` : ' · Unassigned'}`}
+                style={{
+                  padding: '8px 12px', fontSize: 12, fontWeight: 700, color: '#C2410C',
+                  overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+                  cursor: onOpenTrunkShow ? 'pointer' : 'default',
+                }}>
+                💼 {t.store_name}{repName ? ` · ${repName}` : ''}
+              </div>
+              {days.map((d, i) => {
+                const ds = dStr(d)
+                const isShowDay = tds.includes(ds)
+                const isFirst = ds === tds[0]
+                const isLast = ds === tds[tds.length-1]
+                const isToday = ds === todayStr
+                return (
+                  <div key={i} style={{ borderLeft: '1px solid var(--cream2)', height: 44, display: 'flex', alignItems: 'center', padding: '4px 1px', background: isToday ? 'rgba(45,106,79,.04)' : 'transparent' }}>
+                    {isShowDay && (
+                      <div onClick={onOpenTrunkShow ? () => onOpenTrunkShow(t.id) : undefined} style={{
+                        flex: 1, height: 28, background: '#C2410C', cursor: onOpenTrunkShow ? 'pointer' : 'default',
+                        borderRadius: isFirst && isLast ? 6 : isFirst ? '6px 0 0 6px' : isLast ? '0 6px 6px 0' : 0,
+                        display: 'flex', alignItems: 'center', paddingLeft: isFirst ? 6 : 0,
+                        color: '#fff', fontSize: 10, fontWeight: 700,
+                        overflow: 'hidden', whiteSpace: 'nowrap',
+                        boxShadow: isFirst ? '0 1px 3px rgba(0,0,0,.2)' : 'none',
+                      }}>
+                        {isFirst && t.store_name}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })}
 
         {visibleEvents.map(ev => {
           const eds = evDays(ev)
@@ -825,17 +880,24 @@ function TimelineView({ events, stores, onSelect, isNarrow, onSwitchView }: { ev
 /* ══════════════════════════════════════════
    AGENDA VIEW
 ══════════════════════════════════════════ */
-function AgendaView({ events, stores, onSelect, isNarrow }: { events: Event[]; stores: any[]; onSelect: (e: Event) => void; isNarrow: boolean }) {
+type AgendaItem =
+  | { kind: 'event';  start_date: string; ev: Event }
+  | { kind: 'trunk';  start_date: string; ts: TrunkShowOverlay }
+
+function AgendaView({ events, stores, onSelect, isNarrow, trunkShows = [], users = [], onOpenTrunkShow }: { events: Event[]; stores: any[]; onSelect: (e: Event) => void; isNarrow: boolean; trunkShows?: TrunkShowOverlay[]; users?: any[]; onOpenTrunkShow?: (id: string) => void }) {
   const today = new Date(); today.setHours(0,0,0,0)
   const todayStr = today.toISOString().slice(0,10)
 
-  const sorted = [...events].sort((a,b) => a.start_date.localeCompare(b.start_date))
+  const items: AgendaItem[] = [
+    ...events.map(ev => ({ kind: 'event' as const, start_date: ev.start_date, ev })),
+    ...trunkShows.map(ts => ({ kind: 'trunk' as const, start_date: ts.start_date, ts })),
+  ].sort((a, b) => a.start_date.localeCompare(b.start_date))
 
-  const grouped: Record<string, Event[]> = {}
-  sorted.forEach(ev => {
-    const key = ev.start_date.slice(0,7)
+  const grouped: Record<string, AgendaItem[]> = {}
+  items.forEach(it => {
+    const key = it.start_date.slice(0,7)
     if (!grouped[key]) grouped[key] = []
-    grouped[key].push(ev)
+    grouped[key].push(it)
   })
 
   const fmtMonth = (k: string) => new Date(k+'-15').toLocaleDateString('en-US', {month:'long', year:'numeric'})
@@ -886,12 +948,57 @@ function AgendaView({ events, stores, onSelect, isNarrow }: { events: Event[]; s
 
       {/* Event list */}
       <div>
-        {Object.entries(grouped).map(([monthKey, monthEvents]) => (
+        {Object.entries(grouped).map(([monthKey, monthItems]) => (
           <div key={monthKey} id={`month-${monthKey}`} style={{ marginBottom: 32 }}>
             <div style={{ fontSize: 13, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--green)', marginBottom: 12, paddingBottom: 8, borderBottom: '2px solid var(--green3)' }}>
               {fmtMonth(monthKey)}
             </div>
-            {monthEvents.map(ev => {
+            {monthItems.map(it => {
+              if (it.kind === 'trunk') {
+                const t = it.ts
+                const past = t.end_date < todayStr
+                const repName = t.assigned_rep_id ? users.find((u: any) => u.id === t.assigned_rep_id)?.name : null
+                return (
+                  <div key={`trunk-${t.id}`} onClick={onOpenTrunkShow ? () => onOpenTrunkShow(t.id) : undefined} style={{
+                    display: 'flex', flexDirection: isNarrow ? 'column' : 'row', gap: isNarrow ? 10 : 14,
+                    alignItems: isNarrow ? 'stretch' : 'flex-start',
+                    padding: '14px 16px', marginBottom: 10, borderRadius: 'var(--r)',
+                    background: 'var(--cream)', border: '1px solid var(--pearl)',
+                    borderLeft: '4px solid #C2410C',
+                    cursor: onOpenTrunkShow ? 'pointer' : 'default', opacity: past ? 0.65 : 1,
+                  }}>
+                    <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
+                      <div style={{ textAlign: 'center', minWidth: 48, flexShrink: 0 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--mist)' }}>
+                          {new Date(t.start_date+'T12:00:00').toLocaleDateString('en-US', {month:'short'})}
+                        </div>
+                        <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--ink)', lineHeight: 1 }}>
+                          {new Date(t.start_date+'T12:00:00').getDate()}
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--mist)' }}>
+                          {new Date(t.start_date+'T12:00:00').toLocaleDateString('en-US', {weekday:'short'})}
+                        </div>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 900, fontSize: 15, color: 'var(--ink)', marginBottom: 2 }}>💼 {t.store_name}</div>
+                        <div style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 6 }}>
+                          {fmtDate(t.start_date)} — {fmtDate(t.end_date)}
+                          {t.city && <> · {t.city}{t.state ? `, ${t.state}` : ''}</>}
+                          <span style={{ marginLeft: 8, fontSize: 10, background: 'rgba(234,88,12,.10)', color: '#C2410C', padding: '1px 6px', borderRadius: 99, fontWeight: 700 }}>Trunk Show</span>
+                          {past && <span style={{ marginLeft: 6, fontSize: 10, background: 'var(--cream2)', padding: '1px 6px', borderRadius: 99, fontWeight: 700 }}>Past</span>}
+                        </div>
+                        {repName && (
+                          <div style={{ fontSize: 11, color: 'var(--mist)' }}>Rep: <strong style={{ color: 'var(--ink)' }}>{repName}</strong></div>
+                        )}
+                        {!repName && (
+                          <div style={{ fontSize: 11, color: 'var(--mist)', fontStyle: 'italic' }}>Unassigned</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              }
+              const ev = it.ev
               const past = isPast(ev)
               const color = storeColor(ev.store_id, stores)
               const dollars = eventSpend(ev)
@@ -974,16 +1081,25 @@ function AgendaView({ events, stores, onSelect, isNarrow }: { events: Event[]; s
 /* ══════════════════════════════════════════
    KANBAN VIEW
 ══════════════════════════════════════════ */
-function KanbanView({ events, stores, onSelect, isNarrow }: { events: Event[]; stores: any[]; onSelect: (e: Event) => void; isNarrow: boolean }) {
+type KanbanItem =
+  | { kind: 'event'; start_date: string; ev: Event }
+  | { kind: 'trunk'; start_date: string; ts: TrunkShowOverlay }
+
+function KanbanView({ events, stores, onSelect, isNarrow, trunkShows = [], users = [], onOpenTrunkShow }: { events: Event[]; stores: any[]; onSelect: (e: Event) => void; isNarrow: boolean; trunkShows?: TrunkShowOverlay[]; users?: any[]; onOpenTrunkShow?: (id: string) => void }) {
   const today = new Date(); today.setHours(0,0,0,0)
   const weekMs = 7 * 24 * 60 * 60 * 1000
 
-  const categorize = (ev: Event) => {
-    const diff = new Date(ev.start_date+'T12:00:00').getTime() - today.getTime()
+  const categorize = (start: string) => {
+    const diff = new Date(start+'T12:00:00').getTime() - today.getTime()
     if (diff >= -weekMs && diff <= weekMs) return 'current'
     if (diff > weekMs) return 'upcoming'
     return 'past'
   }
+
+  const allItems: KanbanItem[] = [
+    ...events.map(ev => ({ kind: 'event' as const, start_date: ev.start_date, ev })),
+    ...trunkShows.map(ts => ({ kind: 'trunk' as const, start_date: ts.start_date, ts })),
+  ]
 
   const cols = [
     { id: 'upcoming', label: 'Upcoming', color: 'var(--green)', badge: 'badge-jade' },
@@ -1000,8 +1116,8 @@ function KanbanView({ events, stores, onSelect, isNarrow }: { events: Event[]; s
       gap: isNarrow ? 20 : 16, alignItems: 'start',
     }}>
       {cols.map(col => {
-        const colEvents = events
-          .filter(ev => categorize(ev) === col.id)
+        const colItems = allItems
+          .filter(it => categorize(it.start_date) === col.id)
           .sort((a,b) => col.id === 'past'
             ? b.start_date.localeCompare(a.start_date)
             : a.start_date.localeCompare(b.start_date))
@@ -1013,13 +1129,40 @@ function KanbanView({ events, stores, onSelect, isNarrow }: { events: Event[]; s
               <div style={{ width: 10, height: 10, borderRadius: '50%', background: col.color }} />
               <div style={{ fontWeight: 900, fontSize: 14, color: 'var(--ink)' }}>{col.label}</div>
               <div style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'var(--cream2)', color: 'var(--mist)' }}>
-                {colEvents.length}
+                {colItems.length}
               </div>
             </div>
 
             {/* Cards */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {colEvents.map(ev => {
+              {colItems.map(it => {
+                if (it.kind === 'trunk') {
+                  const t = it.ts
+                  const repName = t.assigned_rep_id ? users.find((u: any) => u.id === t.assigned_rep_id)?.name : null
+                  return (
+                    <div key={`trunk-${t.id}`} onClick={onOpenTrunkShow ? () => onOpenTrunkShow(t.id) : undefined} style={{
+                      background: 'var(--cream)', borderRadius: 'var(--r)',
+                      border: '1px solid var(--pearl)', borderTop: '3px solid #C2410C',
+                      padding: '12px 14px', cursor: onOpenTrunkShow ? 'pointer' : 'default',
+                      boxShadow: '0 1px 4px rgba(0,0,0,.06)',
+                    }}>
+                      <div style={{ fontWeight: 900, fontSize: 13, color: 'var(--ink)', marginBottom: 4 }}>💼 {t.store_name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--mist)', marginBottom: 6 }}>
+                        {fmtDate(t.start_date)} – {fmtDate(t.end_date)}
+                        {t.city && <> · {t.city}{t.state ? `, ${t.state}` : ''}</>}
+                      </div>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 99, background: 'rgba(234,88,12,.10)', color: '#C2410C' }}>Trunk Show</span>
+                        {repName ? (
+                          <span style={{ fontSize: 10, color: 'var(--mist)' }}>Rep: <strong style={{ color: 'var(--ink)' }}>{repName}</strong></span>
+                        ) : (
+                          <span style={{ fontSize: 10, color: 'var(--mist)', fontStyle: 'italic' }}>Unassigned</span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                }
+                const ev = it.ev
                 const color = storeColor(ev.store_id, stores)
                 const dollars = eventSpend(ev)
                 const purchases = ev.days.reduce((s,d) => s + (d.purchases||0), 0)
@@ -1060,7 +1203,7 @@ function KanbanView({ events, stores, onSelect, isNarrow }: { events: Event[]; s
                   </div>
                 )
               })}
-              {colEvents.length === 0 && (
+              {colItems.length === 0 && (
                 <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--silver)', fontSize: 13 }}>None</div>
               )}
             </div>
