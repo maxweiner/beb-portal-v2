@@ -41,23 +41,31 @@ function Avatar({ u, size = 32 }: { u: User; size?: number }) {
   )
 }
 
+// Roles a non-management viewer is allowed to see — keep in sync
+// with components/staff/Staff.tsx::STAFF_VISIBLE_ROLES.
+const STAFF_VISIBLE_ROLES = new Set(['buyer', 'sales_rep', 'accounting'])
+
 export default function MobileStaff() {
-  const { users, events } = useApp()
+  const { users, user, events } = useApp()
   const [expanded, setExpanded] = useState<string | null>(null)
+  const isManagement =
+    user?.role === 'admin' || user?.role === 'superadmin' || !!user?.is_partner
 
   const today = new Date(); today.setHours(0, 0, 0, 0)
 
-  const staff = users.map(u => {
-    let daysWorked = 0, upcomingDays = 0, eventsWorked = 0
-    for (const ev of events) {
-      const worked = (ev.workers || []).some((w: any) => w.id === u.id)
-      if (!worked) continue
-      eventsWorked++
-      daysWorked += countDays(ev)
-      if (new Date(ev.start_date + 'T12:00:00') >= today) upcomingDays += 3
-    }
-    return { ...u, daysWorked, eventsWorked, upcomingDays }
-  }).sort((a, b) => b.daysWorked - a.daysWorked)
+  const staff = users
+    .filter(u => isManagement || (STAFF_VISIBLE_ROLES.has(u.role) && !u.is_partner))
+    .map(u => {
+      let daysWorked = 0, upcomingDays = 0, eventsWorked = 0
+      for (const ev of events) {
+        const worked = (ev.workers || []).some((w: any) => w.id === u.id)
+        if (!worked) continue
+        eventsWorked++
+        daysWorked += countDays(ev)
+        if (new Date(ev.start_date + 'T12:00:00') >= today) upcomingDays += 3
+      }
+      return { ...u, daysWorked, eventsWorked, upcomingDays }
+    }).sort((a, b) => b.daysWorked - a.daysWorked)
 
   return (
     <div style={{ padding: 16 }}>
