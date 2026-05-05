@@ -14,6 +14,12 @@ export type DayEntryIntent = {
  *  pre-selects this event on mount instead of showing the picker. */
 export type TravelIntent = { eventId: string } | null
 
+/** Deep-link intents for the Trade Shows / Trunk Shows pages —
+ *  set by the calendar overlay click; the target page consumes
+ *  + clears on mount and opens that show's detail directly. */
+export type TradeShowIntent = { tradeShowId: string } | null
+export type TrunkShowIntent = { trunkShowId: string } | null
+
 interface AppContextType extends AppState {
   setTheme: (t: Theme) => void
   setYear: (y: string) => void
@@ -26,6 +32,10 @@ interface AppContextType extends AppState {
   setDayEntryIntent: (i: DayEntryIntent) => void
   travelIntent: TravelIntent
   setTravelIntent: (i: TravelIntent) => void
+  tradeShowIntent: TradeShowIntent
+  setTradeShowIntent: (i: TradeShowIntent) => void
+  trunkShowIntent: TrunkShowIntent
+  setTrunkShowIntent: (i: TrunkShowIntent) => void
   /** When max@bebllp.com is in "View As" mode, `user` is swapped
    *  to the impersonated target so role-gated UI surfaces render
    *  as that user. `impersonationActor` retains a reference to
@@ -59,6 +69,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [brand, setBrandState] = useState<Brand>(() => readLocal('beb-brand', 'beb'))
   const [dayEntryIntent, setDayEntryIntent] = useState<DayEntryIntent>(null)
   const [travelIntent, setTravelIntent] = useState<TravelIntent>(null)
+  const [tradeShowIntent, setTradeShowIntent] = useState<TradeShowIntent>(null)
+  const [trunkShowIntent, setTrunkShowIntent] = useState<TrunkShowIntent>(null)
 
   // Brand-switch coordination. While a switch is in flight, the committed
   // brand/theme stay on the OLD store so colors don't change until the new
@@ -463,12 +475,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setStores, setEvents,
     dayEntryIntent, setDayEntryIntent,
     travelIntent, setTravelIntent,
+    tradeShowIntent, setTradeShowIntent,
+    trunkShowIntent, setTrunkShowIntent,
     impersonationActor,
   }), [
     user, users, stores, trunkShowStores, events, shipments,
     theme, year, loading, brand, connectionError,
     isSwitching, pendingBrand,
     reload, dayEntryIntent, travelIntent,
+    tradeShowIntent, trunkShowIntent,
     impersonationActor,
   ])
 

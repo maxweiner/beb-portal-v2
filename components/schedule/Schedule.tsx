@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useApp } from '@/lib/context'
 import type { Event, BuyerVacation } from '@/types'
+import type { NavPage } from '@/app/page'
 import { supabase } from '@/lib/supabase'
 import EventShippingPanel from '@/components/shipping/EventShippingPanel'
 import { eventStaffing } from '@/lib/eventStaffing'
@@ -88,6 +89,8 @@ export interface TrunkShowOverlay {
   end_date: string
   city: string | null
   state: string | null
+  /** Assigned rep id for the chip's "(rep)" suffix; null when unassigned. */
+  assigned_rep_id: string | null
 }
 function trunkShowDays(t: TrunkShowOverlay): string[] {
   const out: string[] = []
@@ -100,8 +103,8 @@ function trunkShowDays(t: TrunkShowOverlay): string[] {
   return out
 }
 
-export default function Schedule() {
-  const { events, stores, users, user, brand } = useApp()
+export default function Schedule({ setNav }: { setNav?: (n: NavPage) => void } = {}) {
+  const { events, stores, users, user, brand, setTradeShowIntent, setTrunkShowIntent } = useApp()
   const [view, setView] = useState<ViewMode>('month')
   const [shipments, setShipments] = useState<ShipmentEntry[]>([])
   const [shipmentDetail, setShipmentDetail] = useState<ShipmentEntry | null>(null)
@@ -148,7 +151,7 @@ export default function Schedule() {
   useEffect(() => {
     let cancelled = false
     supabase.from('trunk_shows')
-      .select('id, start_date, end_date, store:trunk_show_stores(name, city, state)')
+      .select('id, start_date, end_date, assigned_rep_id, store:trunk_show_stores(name, city, state)')
       .is('deleted_at', null)
       .then(({ data, error }) => {
         if (cancelled) return
@@ -157,6 +160,7 @@ export default function Schedule() {
           id: r.id,
           start_date: r.start_date,
           end_date: r.end_date,
+          assigned_rep_id: r.assigned_rep_id ?? null,
           store_name: r.store?.name || 'Trunk Show',
           city: r.store?.city ?? null,
           state: r.store?.state ?? null,
@@ -324,7 +328,7 @@ export default function Schedule() {
         </div>
       </div>
 
-      {view === 'month'    && <MonthView    events={displayedEvents} stores={stores} users={users} vacations={showVacations ? vacations : []} currentUserId={user?.id} onSelect={setDetail} isNarrow={isNarrow} shipments={shipments} onSelectShipment={setShipmentDetail} tradeShows={showTradeShows ? tradeShows : []} trunkShows={showTrunkShows ? trunkShows : []} />}
+      {view === 'month'    && <MonthView    events={displayedEvents} stores={stores} users={users} vacations={showVacations ? vacations : []} currentUserId={user?.id} onSelect={setDetail} isNarrow={isNarrow} shipments={shipments} onSelectShipment={setShipmentDetail} tradeShows={showTradeShows ? tradeShows : []} trunkShows={showTrunkShows ? trunkShows : []} onOpenTradeShow={(id) => { setTradeShowIntent({ tradeShowId: id }); setNav?.('trade-shows') }} onOpenTrunkShow={(id) => { setTrunkShowIntent({ trunkShowId: id }); setNav?.('trunk-shows') }} />}
       {view === 'week'     && <WeekView     events={displayedEvents} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
       {view === 'day'      && <DayView      events={displayedEvents} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
       {view === 'timeline' && <TimelineView events={displayedEvents} stores={stores} onSelect={setDetail} isNarrow={isNarrow} onSwitchView={setView} />}
@@ -364,7 +368,7 @@ function ShipmentDrawer({ shipment, onClose }: { shipment: ShipmentEntry; onClos
 /* ══════════════════════════════════════════
    MONTH VIEW
 ══════════════════════════════════════════ */
-function MonthView({ events, stores, users, vacations, currentUserId, onSelect, isNarrow, shipments, onSelectShipment, tradeShows = [], trunkShows = [] }: { events: Event[]; stores: any[]; users: any[]; vacations: BuyerVacation[]; currentUserId?: string; onSelect: (e: Event) => void; isNarrow: boolean; shipments: ShipmentEntry[]; onSelectShipment: (s: ShipmentEntry) => void; tradeShows?: TradeShowOverlay[]; trunkShows?: TrunkShowOverlay[] }) {
+function MonthView({ events, stores, users, vacations, currentUserId, onSelect, isNarrow, shipments, onSelectShipment, tradeShows = [], trunkShows = [], onOpenTradeShow, onOpenTrunkShow }: { events: Event[]; stores: any[]; users: any[]; vacations: BuyerVacation[]; currentUserId?: string; onSelect: (e: Event) => void; isNarrow: boolean; shipments: ShipmentEntry[]; onSelectShipment: (s: ShipmentEntry) => void; tradeShows?: TradeShowOverlay[]; trunkShows?: TrunkShowOverlay[]; onOpenTradeShow?: (id: string) => void; onOpenTrunkShow?: (id: string) => void }) {
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
@@ -509,7 +513,8 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
                   {day && tradesOnDay(day).map(t => (
                     <div
                       key={`trade-${t.id}`}
-                      title={`Trade Show — ${t.name}\n${t.start_date} – ${t.end_date}${t.venue_city ? ` · ${t.venue_city}, ${t.venue_state || ''}` : ''}`}
+                      onClick={onOpenTradeShow ? (e) => { e.stopPropagation(); onOpenTradeShow(t.id) } : undefined}
+                      title={`Trade Show — ${t.name}\n${t.start_date} – ${t.end_date}${t.venue_city ? ` · ${t.venue_city}, ${t.venue_state || ''}` : ''}\nClick to open`}
                       style={{
                         background: 'rgba(147,51,234,.15)',
                         color: '#5B21B6',
@@ -518,26 +523,34 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
                         padding: '3px 7px', borderRadius: 4,
                         marginBottom: 3, overflow: 'hidden',
                         whiteSpace: 'nowrap', textOverflow: 'ellipsis', lineHeight: 1.2,
+                        cursor: onOpenTradeShow ? 'pointer' : 'default',
                       }}>
                       🎪 {t.name}
                     </div>
                   ))}
-                  {day && trunksOnDay(day).map(t => (
-                    <div
-                      key={`trunk-${t.id}`}
-                      title={`Trunk Show — ${t.store_name}\n${t.start_date} – ${t.end_date}${t.city ? ` · ${t.city}, ${t.state || ''}` : ''}`}
-                      style={{
-                        background: 'rgba(234,88,12,.12)',
-                        color: '#C2410C',
-                        border: '1px solid rgba(234,88,12,.3)',
-                        fontSize: 11, fontWeight: 700,
-                        padding: '3px 7px', borderRadius: 4,
-                        marginBottom: 3, overflow: 'hidden',
-                        whiteSpace: 'nowrap', textOverflow: 'ellipsis', lineHeight: 1.2,
-                      }}>
-                      💼 {t.store_name}
-                    </div>
-                  ))}
+                  {day && trunksOnDay(day).map(t => {
+                    const rep = t.assigned_rep_id
+                      ? users.find((u: any) => u.id === t.assigned_rep_id)?.name?.split(' ')[0]
+                      : null
+                    return (
+                      <div
+                        key={`trunk-${t.id}`}
+                        onClick={onOpenTrunkShow ? (e) => { e.stopPropagation(); onOpenTrunkShow(t.id) } : undefined}
+                        title={`Trunk Show — ${t.store_name}\n${t.start_date} – ${t.end_date}${t.city ? ` · ${t.city}, ${t.state || ''}` : ''}${rep ? `\nRep: ${rep}` : '\nUnassigned'}\nClick to open`}
+                        style={{
+                          background: 'rgba(234,88,12,.12)',
+                          color: '#C2410C',
+                          border: '1px solid rgba(234,88,12,.3)',
+                          fontSize: 11, fontWeight: 700,
+                          padding: '3px 7px', borderRadius: 4,
+                          marginBottom: 3, overflow: 'hidden',
+                          whiteSpace: 'nowrap', textOverflow: 'ellipsis', lineHeight: 1.2,
+                          cursor: onOpenTrunkShow ? 'pointer' : 'default',
+                        }}>
+                        💼 {t.store_name}{rep ? ` · ${rep}` : ''}
+                      </div>
+                    )
+                  })}
                   {dayEvs.slice(0, visibleCount).map(ev => {
                     const staffing = eventStaffing(ev)
                     return (
