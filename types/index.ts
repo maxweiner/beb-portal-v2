@@ -226,6 +226,15 @@ export interface Event {
    *  this event. NULL = not yet briefed. */
   staff_briefed_at?: string | null
   staff_briefed_by_user_id?: string | null
+  /** Manual "force green" overrides for the Pre-Event readiness
+   *  chips that don't have a hard data prerequisite. Buyers +
+   *  Booking System are intentionally not overrideable. */
+  travel_override_at?: string | null
+  travel_override_by_user_id?: string | null
+  marketing_override_at?: string | null
+  marketing_override_by_user_id?: string | null
+  assets_override_at?: string | null
+  assets_override_by_user_id?: string | null
 }
 
 /** Per-event physical asset order (counter card / countertop
