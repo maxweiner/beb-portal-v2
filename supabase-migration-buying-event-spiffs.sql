@@ -34,8 +34,11 @@ CREATE TABLE IF NOT EXISTS public.buying_event_spiff_payouts (
   event_id UUID NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,
 
   -- Earner. SET NULL on delete so payout history survives if a
-  -- store later removes the employee record.
-  appointment_employee_id UUID REFERENCES public.appointment_employees(id) ON DELETE SET NULL,
+  -- store later removes the employee record. References store_employees
+  -- (the canonical store-staff table — appointment_employees was unified
+  -- into it; the appointments.appointment_employee_id column was kept
+  -- for backward compatibility but now FKs to store_employees).
+  appointment_employee_id UUID REFERENCES public.store_employees(id) ON DELETE SET NULL,
   -- Denormalized snapshot of the employee's name at payout time
   -- so the row is meaningful even if the FK is later nulled.
   employee_name TEXT NOT NULL,

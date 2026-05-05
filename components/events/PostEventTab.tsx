@@ -35,8 +35,11 @@ interface Props {
 type CompletedAppt = {
   event_id: string
   appointment_employee_id: string | null
-  // Supabase types relations as arrays even on many-to-one joins.
-  appointment_employees?: { name: string | null }[] | { name: string | null } | null
+  // The column is named appointment_employee_id for backwards compat,
+  // but the table it references is store_employees (after the
+  // unify-employees migration). Supabase types relations as arrays
+  // even on many-to-one joins.
+  store_employees?: { name: string | null }[] | { name: string | null } | null
 }
 
 type Payout = {
@@ -103,7 +106,7 @@ export default function PostEventTab({ setNav }: Props) {
       const [apptsRes, payoutsRes, reportsRes, notesRes] = await Promise.all([
         ids.length === 0 ? Promise.resolve({ data: [] }) :
           supabase.from('appointments')
-            .select('event_id, appointment_employee_id, appointment_employees(name)')
+            .select('event_id, appointment_employee_id, store_employees(name)')
             .in('event_id', ids)
             .eq('status', 'completed')
             .not('appointment_employee_id', 'is', null),
@@ -152,7 +155,7 @@ export default function PostEventTab({ setNav }: Props) {
       let inner = m.get(a.event_id)
       if (!inner) { inner = new Map(); m.set(a.event_id, inner) }
       const prev = inner.get(a.appointment_employee_id)
-      const rel = a.appointment_employees
+      const rel = a.store_employees
       const name =
         (Array.isArray(rel) ? rel[0]?.name : rel?.name) || 'Unknown employee'
       inner.set(a.appointment_employee_id, { name, count: (prev?.count || 0) + 1 })
