@@ -18,6 +18,7 @@ import SpecialRequestsPanel from './SpecialRequestsPanel'
 import TrunkShowAppointmentsPanel from './TrunkShowAppointmentsPanel'
 import SpiffsPanel from './SpiffsPanel'
 import TrunkShowCommsSection from './TrunkShowCommsSection'
+import TrunkShowChecklistSection from './TrunkShowChecklistSection'
 import DatePicker from '@/components/ui/DatePicker'
 import TimePicker from '@/components/ui/TimePicker'
 
@@ -338,6 +339,9 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
 
       {/* Spiffs — Phase 13 */}
       <SpiffsPanel trunkShowId={show.id} canMarkPaid={isAdmin} />
+
+      {/* Pre-event checklist — Trunk Comms phase 10 */}
+      <TrunkShowChecklistSection trunkShowId={show.id} setNav={setNav} />
 
       {/* Communications log — Trunk Comms phase 7 */}
       <TrunkShowCommsSection trunkShowId={show.id} setNav={setNav} />
