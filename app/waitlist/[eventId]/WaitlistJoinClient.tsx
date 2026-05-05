@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 interface Props {
   eventId: string
@@ -17,6 +17,7 @@ export default function WaitlistJoinClient({ eventId, storeName, cityState, hear
   const [notifyPref, setNotifyPref] = useState<'sms' | 'wait'>('wait')
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
+  const [entryId, setEntryId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   async function submit(e: React.FormEvent) {
@@ -49,22 +50,17 @@ export default function WaitlistJoinClient({ eventId, storeName, cityState, hear
         setError(json.error || `Failed (${res.status})`)
         return
       }
+      setEntryId(json.id || null)
       setDone(true)
     } finally {
       setSubmitting(false)
     }
   }
 
-  if (done) {
+  if (done && entryId) {
     return (
       <Wrapper>
-        <div style={{ fontSize: 36, marginBottom: 12 }}>✓</div>
-        <h1 style={{ fontSize: 22, fontWeight: 900, marginBottom: 8 }}>You're on the list!</h1>
-        <p style={{ fontSize: 14, color: '#555', lineHeight: 1.5 }}>
-          {notifyPref === 'sms'
-            ? `We'll text you at ${phone} when it's your turn.`
-            : "Please stay nearby — we'll call your name when it's your turn."}
-        </p>
+        <WaitlistStatusView entryId={entryId} storeName={storeName} />
       </Wrapper>
     )
   }
@@ -134,6 +130,138 @@ export default function WaitlistJoinClient({ eventId, storeName, cityState, hear
         </button>
       </form>
     </Wrapper>
+  )
+}
+
+// Polled status view shown after a successful signup. Hits
+// /api/waitlist/entry/[id]/status every 10s while the page is
+// open so the customer sees their position drop in real time.
+function WaitlistStatusView({ entryId, storeName }: { entryId: string; storeName: string }) {
+  const [data, setData] = useState<{
+    status: string
+    position: number | null
+    total: number
+    queue: { id: string; displayName: string; isYou: boolean; status: 'waiting' | 'called' }[]
+  } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+    async function poll() {
+      try {
+        const res = await fetch(`/api/waitlist/entry/${entryId}/status`)
+        const json = await res.json().catch(() => ({}))
+        if (cancelled) return
+        if (!res.ok) { setError(json.error || `Failed (${res.status})`); return }
+        setError(null)
+        setData(json)
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message || 'Network error')
+      } finally {
+        if (!cancelled) timer = setTimeout(poll, 10_000)
+      }
+    }
+    poll()
+    return () => { cancelled = true; if (timer) clearTimeout(timer) }
+  }, [entryId])
+
+  if (!data) {
+    return <div style={{ textAlign: 'center', padding: 20, color: '#666' }}>Loading…</div>
+  }
+
+  if (data.status === 'called') {
+    return (
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 48, marginBottom: 12 }}>🎉</div>
+        <h1 style={{ fontSize: 22, fontWeight: 900, marginBottom: 8, color: '#1D6B44' }}>You're up!</h1>
+        <p style={{ fontSize: 15, color: '#333', lineHeight: 1.5 }}>
+          Please head over to the buyer table at <strong>{storeName}</strong> now.
+        </p>
+      </div>
+    )
+  }
+
+  if (data.status === 'served') {
+    return (
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 36, marginBottom: 12 }}>✓</div>
+        <h1 style={{ fontSize: 20, fontWeight: 900, marginBottom: 6 }}>Thanks for visiting!</h1>
+        <p style={{ fontSize: 14, color: '#555' }}>You've been served.</p>
+      </div>
+    )
+  }
+
+  if (data.status === 'no_show') {
+    return (
+      <div style={{ textAlign: 'center' }}>
+        <h1 style={{ fontSize: 20, fontWeight: 900, marginBottom: 6 }}>Marked no-show</h1>
+        <p style={{ fontSize: 14, color: '#555' }}>If this is a mistake, please ask staff to put you back on the list.</p>
+      </div>
+    )
+  }
+
+  if (data.status === 'expired') {
+    return (
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 36, marginBottom: 12 }}>🌙</div>
+        <h1 style={{ fontSize: 20, fontWeight: 900, marginBottom: 6 }}>Today's waitlist is closed</h1>
+        <p style={{ fontSize: 14, color: '#555' }}>The list resets each day at 7pm. Please come back tomorrow.</p>
+      </div>
+    )
+  }
+
+  // status === 'waiting'
+  return (
+    <div>
+      <div style={{ textAlign: 'center', marginBottom: 18 }}>
+        <div style={{ fontSize: 12, color: '#666', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '.05em' }}>
+          You're number
+        </div>
+        <div style={{ fontSize: 64, fontWeight: 900, color: '#1D6B44', lineHeight: 1, margin: '4px 0' }}>
+          {data.position ?? '—'}
+        </div>
+        <div style={{ fontSize: 13, color: '#666' }}>
+          of {data.total} on the list
+        </div>
+      </div>
+
+      {error && (
+        <div style={{ background: '#fff3e0', color: '#7a4400', padding: 8, borderRadius: 6, fontSize: 12, marginBottom: 12, textAlign: 'center' }}>
+          Connection blip — retrying…
+        </div>
+      )}
+
+      <div style={{ background: '#f7f7f7', borderRadius: 8, padding: 12 }}>
+        <div style={{ fontSize: 11, color: '#666', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '.05em', marginBottom: 6 }}>
+          The line
+        </div>
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {data.queue.map((q, i) => (
+            <li key={q.id} style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '6px 8px', borderRadius: 6,
+              background: q.isYou ? '#e8f5e9' : 'transparent',
+              fontWeight: q.isYou ? 800 : 500,
+              fontSize: 13,
+              color: q.status === 'called' ? '#7a5b00' : '#333',
+            }}>
+              <span style={{
+                minWidth: 20, height: 20, borderRadius: '50%',
+                background: q.status === 'called' ? '#d4a017' : (q.isYou ? '#1D6B44' : '#bbb'),
+                color: '#fff', fontSize: 10, fontWeight: 800,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              }}>{q.status === 'called' ? '!' : i + 1}</span>
+              <span>{q.displayName}{q.status === 'called' ? ' · being called' : ''}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <p style={{ fontSize: 11, color: '#888', textAlign: 'center', marginTop: 14 }}>
+        This page refreshes automatically. Stay nearby — staff will call your name.
+      </p>
+    </div>
   )
 }
 
