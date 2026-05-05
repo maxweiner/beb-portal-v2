@@ -469,7 +469,96 @@ export default function Settings() {
 
       {/* Trip Templates (partner only — see is_partner) */}
       {user?.is_partner && <TripTemplatesSettings />}
+
+      {/* Trunk Communications domain verification (admin/superadmin/partner) */}
+      {(user?.role === 'admin' || user?.role === 'superadmin' || user?.is_partner) && (
+        <TrunkCommsDomainSection />
+      )}
     </div>
+  )
+}
+
+/* ── TRUNK COMMS DOMAIN VERIFICATION (phase 2) ── */
+function TrunkCommsDomainSection() {
+  const [to, setTo] = useState('')
+  const [sending, setSending] = useState(false)
+  const [result, setResult] = useState<
+    | { kind: 'ok'; messageId: string; from: string; to: string }
+    | { kind: 'err'; error: string }
+    | null
+  >(null)
+
+  async function send() {
+    if (!to.includes('@')) { alert('Enter a valid recipient email'); return }
+    setSending(true); setResult(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/admin/comms-test-send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ to: to.trim() }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setResult({ kind: 'err', error: json.error || `Failed (${res.status})` })
+        return
+      }
+      setResult({ kind: 'ok', messageId: json.message_id, from: json.from, to: json.to })
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <CollapsibleCard
+      storageKey="settings-trunk-comms-domain"
+      title="📨 Trunk Comms — Domain Verification"
+      subtitle={<>Verifies that Resend will send from the <strong>bebllp.com</strong> apex (e.g. <code>tom@bebllp.com</code>). Existing outbound uses <code>updates.bebllp.com</code>; the apex needs separate DKIM + SPF records on GoDaddy before phase 5 send pipeline works.</>}
+    >
+      <div style={{ background: 'var(--cream2)', padding: 12, borderRadius: 8, marginBottom: 14, fontSize: 12, lineHeight: 1.6 }}>
+        <strong style={{ color: 'var(--ink)' }}>One-time setup on GoDaddy DNS for bebllp.com:</strong>
+        <ol style={{ margin: '8px 0 0', paddingLeft: 20 }}>
+          <li>In Resend dashboard → Domains → <strong>Add Domain</strong> → <code>bebllp.com</code>.</li>
+          <li>Resend will give you 3 records (DKIM TXT, MX for bounces, SPF TXT). Add all three to GoDaddy DNS.</li>
+          <li><strong>SPF gotcha:</strong> if you already have an SPF record for Google Workspace etc., merge — don't add a second SPF. Keep one record with all <code>include:…</code> entries.</li>
+          <li>DMARC isn't required by Resend but recommended: <code>v=DMARC1; p=none; rua=mailto:postmaster@bebllp.com</code>.</li>
+          <li>Hit <strong>Verify</strong> in Resend (5–60 min for propagation).</li>
+          <li>Use the test send below to confirm a real send from your <code>@bebllp.com</code> address goes through.</li>
+        </ol>
+      </div>
+
+      <div className="field">
+        <label className="fl">Test send to</label>
+        <input type="email" value={to} onChange={e => setTo(e.target.value)}
+          placeholder="someone@example.com" />
+        <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
+          Sends from <strong>your</strong> @bebllp.com address. Use a personal inbox you control.
+        </div>
+      </div>
+
+      <button onClick={send} disabled={sending || !to} className="btn-primary btn-sm">
+        {sending ? 'Sending…' : '📤 Send test email'}
+      </button>
+
+      {result?.kind === 'ok' && (
+        <div style={{ marginTop: 12, padding: 10, borderRadius: 6, background: '#e8f5e9', color: '#1b5e20', fontSize: 12 }}>
+          ✓ Sent from <strong>{result.from}</strong> to <strong>{result.to}</strong>. Resend message id: <code>{result.messageId}</code>. Check inbox (and spam) — it should arrive within a minute.
+        </div>
+      )}
+      {result?.kind === 'err' && (
+        <div style={{ marginTop: 12, padding: 10, borderRadius: 6, background: '#fdecea', color: '#7a1f0f', fontSize: 12 }}>
+          ✗ {result.error}
+          {result.error.toLowerCase().includes('domain') && (
+            <div style={{ marginTop: 6 }}>
+              Most likely the apex isn't verified yet. Re-check the DNS records you added on GoDaddy and click Verify in the Resend dashboard.
+            </div>
+          )}
+        </div>
+      )}
+    </CollapsibleCard>
   )
 }
 
