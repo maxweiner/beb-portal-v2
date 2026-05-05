@@ -14,6 +14,7 @@ import type { NavPage } from '@/app/page'
 import Events from './Events'
 import PreEventTab from './PreEventTab'
 import DuringEventTab from './DuringEventTab'
+import PostEventTab from './PostEventTab'
 
 type ViewMode = 'new' | 'legacy'
 type Phase = 'pre' | 'during' | 'post'
@@ -88,7 +89,7 @@ export default function BuyingEventsView({ setNav }: { setNav?: (n: NavPage) => 
 
       {phase === 'pre'    && <PreEventTab setNav={setNav} />}
       {phase === 'during' && <DuringEventTab setNav={setNav} />}
-      {phase === 'post'   && <PostEventStub />}
+      {phase === 'post'   && <PostEventTab setNav={setNav} />}
     </div>
   )
 }
@@ -128,43 +129,3 @@ function ViewChooser({ view, onChange }: { view: ViewMode; onChange: (v: ViewMod
   )
 }
 
-/* ── stubs ────────────────────────────────────────────────────
-   Each phase tab will be filled in by PR 2 / 3 / 4. For PR 1 we
-   render a placeholder so the structure is testable without
-   blocking on the bigger build. */
-
-function PostEventStub() {
-  return (
-    <PlaceholderCard
-      title="💰 Post-Event Reconciliation — last in the series"
-      lines={[
-        'Will live here:',
-        '• Spiff queue (calculate + mark paid) — needs a new buying_event_spiffs table; design questions before PR 4',
-        '• Expense report status per buyer (open / submitted / approved / paid)',
-        '• "Re-send to accountant" button',
-        '• Recap PDF generation',
-        '• Debrief / post-mortem notes',
-        '• Final spend totals',
-        '• Archive / cancel options',
-      ]}
-    />
-  )
-}
-
-function PlaceholderCard({ title, lines }: { title: string; lines: string[] }) {
-  return (
-    <div style={{
-      background: '#fff', border: '1px dashed var(--mist)',
-      borderRadius: 10, padding: 20,
-    }}>
-      <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink)', marginBottom: 10 }}>
-        {title}
-      </div>
-      {lines.map((l, i) => (
-        <div key={i} style={{ fontSize: 13, color: 'var(--mist)', lineHeight: 1.6 }}>
-          {l}
-        </div>
-      ))}
-    </div>
-  )
-}
