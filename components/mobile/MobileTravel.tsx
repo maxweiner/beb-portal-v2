@@ -90,6 +90,31 @@ export default function MobileTravel() {
     loadData()
   }
 
+  // Mark / clear another buyer's flight or hotel status. Mirrors the
+  // desktop helper. Lead buyer + admins + partners can mark for
+  // anyone; any buyer can mark themselves.
+  const setBuyerStatus = async (
+    buyerId: string,
+    kind: 'flight' | 'hotel',
+    state: 'self' | 'none' | 'clear',
+  ) => {
+    if (!selectedEvent) return
+    const exclusive = kind === 'flight'
+      ? ['self_flight', 'no_flight']
+      : ['self_hotel', 'no_hotel']
+    await supabase.from('travel_acknowledgments').delete()
+      .eq('event_id', selectedEvent.id).eq('buyer_id', buyerId).in('type', exclusive)
+    if (state !== 'clear') {
+      const type = state === 'self'
+        ? (kind === 'flight' ? 'self_flight' : 'self_hotel')
+        : (kind === 'flight' ? 'no_flight' : 'no_hotel')
+      await supabase.from('travel_acknowledgments').insert({
+        event_id: selectedEvent.id, buyer_id: buyerId, type,
+      })
+    }
+    loadData()
+  }
+
   const deleteRes = async (id: string) => {
     if (!confirm('Delete this reservation?')) return
     await supabase.from('travel_reservations').delete().eq('id', id)
@@ -228,22 +253,38 @@ export default function MobileTravel() {
           <div style={{ background: 'var(--cream)', borderRadius: 12, padding: 14, border: '1px solid var(--pearl)' }}>
             <div style={{ fontWeight: 900, fontSize: 13, color: 'var(--ink)', marginBottom: 10 }}>Team Status</div>
             {workers.map(w => {
-              const hasFlight = reservations.some(r => r.buyer_id === w.id && r.type === 'flight')
-              const hasHotel = reservations.some(r => r.buyer_id === w.id && r.type === 'hotel')
+              const hasFlightRes = reservations.some(r => r.buyer_id === w.id && r.type === 'flight')
+              const hasHotelRes = reservations.some(r => r.buyer_id === w.id && r.type === 'hotel')
               const hasCar = reservations.some(r => r.type === 'rental_car')
+              const flightState = mobileItemState(hasFlightRes, acknowledgments, w.id, 'flight')
+              const hotelState  = mobileItemState(hasHotelRes,  acknowledgments, w.id, 'hotel')
+              const canMark =
+                w.id === user?.id
+                || user?.role === 'admin'
+                || user?.role === 'superadmin'
+                || !!user?.is_partner
+                || workers[0]?.id === user?.id
               return (
-                <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                  <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: 12, flexShrink: 0 }}>
-                    {w.name?.charAt(0)}
+                <div key={w.id} style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: 12, flexShrink: 0 }}>
+                      {w.name?.charAt(0)}
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', flex: 1 }}>
+                      {w.name}{workers[0]?.id === w.id && <span style={{ marginLeft: 4, fontSize: 10, color: 'var(--mist)' }}> · Lead</span>}
+                    </div>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <MobileItemChip icon="✈️" state={flightState} />
+                      <MobileItemChip icon="🏨" state={hotelState} />
+                      <span style={{ fontSize: 12, padding: '2px 6px', borderRadius: 6, background: hasCar ? 'var(--green-pale)' : 'rgba(239,68,68,.08)', color: hasCar ? 'var(--green-dark)' : '#dc2626' }}>🚗</span>
+                    </div>
                   </div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', flex: 1 }}>{w.name}</div>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    {[{ has: hasFlight, icon: '✈️' }, { has: hasHotel, icon: '🏨' }, { has: hasCar, icon: '🚗' }].map((item, i) => (
-                      <span key={i} style={{ fontSize: 12, padding: '2px 6px', borderRadius: 6, background: item.has ? 'var(--green-pale)' : 'rgba(239,68,68,.08)', color: item.has ? 'var(--green-dark)' : '#dc2626' }}>
-                        {item.icon}
-                      </span>
-                    ))}
-                  </div>
+                  {canMark && (flightState === 'missing' || hotelState === 'missing' || flightState === 'self' || flightState === 'none' || hotelState === 'self' || hotelState === 'none') && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, paddingLeft: 40 }}>
+                      <MobileMarkActions kind="flight" state={flightState} onSet={(s) => setBuyerStatus(w.id, 'flight', s)} />
+                      <MobileMarkActions kind="hotel" state={hotelState} onSet={(s) => setBuyerStatus(w.id, 'hotel', s)} />
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -426,4 +467,72 @@ function MobileAddReservation({ eventId, user, onClose, onSaved }: any) {
       </div>
     </div>
   )
+}
+
+// ── Travel item state helpers (shared shape with desktop Travel) ──
+
+type MobileItemState = 'booked' | 'self' | 'none' | 'missing'
+
+function mobileItemState(
+  hasReservation: boolean,
+  acks: Acknowledgment[],
+  buyerId: string,
+  kind: 'flight' | 'hotel',
+): MobileItemState {
+  if (hasReservation) return 'booked'
+  const selfType = kind === 'flight' ? 'self_flight' : 'self_hotel'
+  const noType = kind === 'flight' ? 'no_flight' : 'no_hotel'
+  if (acks.some(a => a.buyer_id === buyerId && a.type === selfType)) return 'self'
+  if (acks.some(a => a.buyer_id === buyerId && a.type === noType)) return 'none'
+  return 'missing'
+}
+
+function MobileItemChip({ icon, state }: { icon: string; state: MobileItemState }) {
+  const map: Record<MobileItemState, { bg: string; fg: string; mark: string }> = {
+    booked:  { bg: 'var(--green-pale)',    fg: 'var(--green-dark)', mark: '✓' },
+    self:    { bg: 'rgba(59,130,246,.10)', fg: '#1e40af',           mark: '⊙' },
+    none:    { bg: 'var(--cream2)',        fg: 'var(--mist)',       mark: '—' },
+    missing: { bg: 'rgba(239,68,68,.08)',  fg: '#dc2626',           mark: '✗' },
+  }
+  const s = map[state]
+  return (
+    <span style={{
+      fontSize: 12, padding: '2px 6px', borderRadius: 6,
+      background: s.bg, color: s.fg, display: 'inline-flex', alignItems: 'center', gap: 2,
+    }}>
+      <span>{icon}</span>
+      <span style={{ fontSize: 10 }}>{s.mark}</span>
+    </span>
+  )
+}
+
+function MobileMarkActions({
+  kind, state, onSet,
+}: {
+  kind: 'flight' | 'hotel'
+  state: MobileItemState
+  onSet: (s: 'self' | 'none' | 'clear') => void
+}) {
+  const noun = kind === 'flight' ? '✈️' : '🏨'
+  if (state === 'booked') return null
+  if (state === 'missing') {
+    return (
+      <>
+        <button onClick={() => onSet('self')} style={mobileMiniBtn()}>{noun} Have it</button>
+        <button onClick={() => onSet('none')} style={mobileMiniBtn()}>{noun} Skip</button>
+      </>
+    )
+  }
+  // self or none → undo
+  const label = state === 'self' ? `${noun} Self ↺` : `${noun} Skip ↺`
+  return <button onClick={() => onSet('clear')} style={mobileMiniBtn()}>{label}</button>
+}
+
+function mobileMiniBtn(): React.CSSProperties {
+  return {
+    fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
+    padding: '4px 8px', borderRadius: 6, cursor: 'pointer',
+    background: '#fff', color: 'var(--ash)', border: '1px solid var(--pearl)',
+    minHeight: 28,
+  }
 }
