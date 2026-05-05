@@ -237,6 +237,89 @@ export interface Event {
   assets_override_by_user_id?: string | null
 }
 
+// ── Trunk Communications + Pre-Event Checklist ───────────────
+export type CommunicationAssignedRole = 'admin' | 'rep' | 'both'
+export type CommunicationLinkedAction =
+  | 'send_communication'
+  | 'marketing_postcard'
+  | 'marketing_proof'
+  | 'none'
+export type CommunicationDeliveryStatus = 'sent' | 'delivered' | 'bounced' | 'failed'
+
+export interface CommunicationTemplate {
+  id: string
+  name: string
+  subject_line: string
+  body: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+  created_by: string | null
+}
+
+export interface CommunicationSendSchedule {
+  id: string
+  template_id: string
+  days_before_event_start: number
+  send_window_days: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface CommunicationSend {
+  id: string
+  trunk_show_id: string
+  template_id: string | null
+  schedule_id: string | null
+  sent_by_user_id: string | null
+  sent_at: string
+  from_email: string
+  from_name: string
+  to_email: string
+  to_name: string | null
+  subject_line_rendered: string
+  body_rendered: string
+  pdf_url: string | null
+  resend_message_id: string | null
+  delivery_status: CommunicationDeliveryStatus
+  delivery_status_updated_at: string | null
+  created_at: string
+}
+
+export interface TrunkShowChecklistMasterItem {
+  id: string
+  title: string
+  description: string | null
+  days_before_event_start: number
+  assigned_to_role: CommunicationAssignedRole
+  linked_action_type: CommunicationLinkedAction
+  linked_template_id: string | null
+  display_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface TrunkShowChecklistItem {
+  id: string
+  trunk_show_id: string
+  master_item_id: string | null
+  title: string
+  description: string | null
+  due_date: string  // YYYY-MM-DD
+  assigned_to_role: CommunicationAssignedRole
+  linked_action_type: CommunicationLinkedAction
+  linked_template_id: string | null
+  linked_send_id: string | null
+  is_completed: boolean
+  completed_at: string | null
+  completed_by_user_id: string | null
+  previous_completion_log: { action: 'check' | 'uncheck'; user_id: string | null; timestamp: string }[]
+  created_at: string
+  updated_at: string
+}
+
 // ── Event waitlist ───────────────────────────────────────────
 export type EventWaitlistStatus = 'waiting' | 'called' | 'served' | 'no_show'
 export type EventWaitlistNotifyPref = 'sms' | 'wait'
@@ -442,6 +525,11 @@ export interface TrunkShowStore {
   email_2: string | null
   url: string | null
   trunk_shows: boolean | null
+  /** Single canonical recipient for trunk-show communications.
+   *  Backfilled from email_1 + contact_1; admin can override
+   *  without touching the legacy email_N + contact_N columns. */
+  primary_contact_email: string | null
+  primary_contact_name: string | null
 }
 
 export interface TrunkShowHours {
