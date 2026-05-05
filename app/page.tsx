@@ -34,6 +34,7 @@ import SalesRepDashboard from '@/components/sales/SalesRepDashboard'
 import TradeShows from '@/components/sales/TradeShows'
 import TrunkShows from '@/components/sales/TrunkShows'
 import Leads from '@/components/sales/Leads'
+import TrunkCommunications from '@/components/communications/TrunkCommunications'
 import { useState, useEffect, useRef } from 'react'
 import MobileLayout from '@/components/mobile/MobileLayout'
 import MobileDashboard from '@/components/mobile/MobileDashboard'
@@ -43,7 +44,7 @@ import MobileStaff from '@/components/mobile/MobileStaff'
 import BrandSwitchOverlay from '@/components/layout/BrandSwitchOverlay'
 import { shouldUseMobile, setMobilePreference } from '@/lib/mobile'
 
-export type NavPage = 'dashboard' | 'calendar' | 'events' | 'schedule' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'libertyadmin' | 'recipients' | 'notification-templates' | 'data-research' | 'expenses' | 'financials' | 'customers' | 'trade-shows' | 'trunk-shows' | 'trunk-show-stores' | 'leads'
+export type NavPage = 'dashboard' | 'calendar' | 'events' | 'schedule' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'libertyadmin' | 'recipients' | 'notification-templates' | 'data-research' | 'expenses' | 'financials' | 'customers' | 'trade-shows' | 'trunk-shows' | 'trunk-show-stores' | 'leads' | 'trunk-communications'
 
 export default function Home() {
   const { user, loading, connectionError, reload } = useApp()
@@ -187,6 +188,7 @@ export default function Home() {
             : <MobileDashboard key={navKey} setNav={setNav} />}</ModuleWriteGate>}
           {nav === 'trade-shows' && <ModuleWriteGate moduleId="trade-shows"><TradeShows key={navKey} /></ModuleWriteGate>}
           {nav === 'trunk-shows' && <ModuleWriteGate moduleId="trunk-shows"><TrunkShows key={navKey} /></ModuleWriteGate>}
+          {nav === 'trunk-communications' && <TrunkCommunications key={navKey} />}
           {nav === 'leads'       && <ModuleWriteGate moduleId="leads"><Leads key={navKey} setNav={setNav} /></ModuleWriteGate>}
           {nav === 'dayentry'  && <ModuleWriteGate moduleId="dayentry"><MobileDayEntry key={navKey} /></ModuleWriteGate>}
           {nav === 'events'    && <ModuleWriteGate moduleId="events"><BuyingEventsView key={navKey} setNav={setNav} /></ModuleWriteGate>}
@@ -241,6 +243,7 @@ export default function Home() {
           : <Dashboard key={navKey} setNav={setNav} />}</ModuleWriteGate>}
         {nav === 'trade-shows' && <ModuleWriteGate moduleId="trade-shows"><TradeShows key={navKey} /></ModuleWriteGate>}
         {nav === 'trunk-shows' && <ModuleWriteGate moduleId="trunk-shows"><TrunkShows key={navKey} /></ModuleWriteGate>}
+        {nav === 'trunk-communications' && <TrunkCommunications key={navKey} />}
         {nav === 'leads'       && <ModuleWriteGate moduleId="leads"><Leads key={navKey} setNav={setNav} /></ModuleWriteGate>}
         {nav === 'calendar'   && <ModuleWriteGate moduleId="calendar"><AppointmentsAdmin key={navKey} /></ModuleWriteGate>}
         {nav === 'events'     && <ModuleWriteGate moduleId="events"><BuyingEventsView key={navKey} setNav={setNav} /></ModuleWriteGate>}
