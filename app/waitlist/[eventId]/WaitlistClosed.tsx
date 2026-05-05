@@ -2,7 +2,9 @@
 // store-local. The waitlist is "today only" — we don't accept
 // signups for tomorrow via this URL.
 
-export default function WaitlistClosed({ storeName }: { storeName: string }) {
+export default function WaitlistClosed({
+  storeName, storeImageUrl,
+}: { storeName: string; storeImageUrl: string | null }) {
   return (
     <div style={{
       maxWidth: 480, margin: '0 auto', padding: '24px 16px',
@@ -12,6 +14,13 @@ export default function WaitlistClosed({ storeName }: { storeName: string }) {
         background: '#fff', borderRadius: 14, padding: 32, textAlign: 'center',
         boxShadow: '0 4px 20px rgba(0,0,0,.06)',
       }}>
+        {storeImageUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={storeImageUrl} alt={storeName} style={{
+            maxWidth: 160, maxHeight: 90, height: 'auto', width: 'auto',
+            objectFit: 'contain', marginBottom: 16,
+          }} />
+        )}
         <div style={{ fontSize: 36, marginBottom: 12 }}>🌙</div>
         <h1 style={{ fontSize: 22, fontWeight: 900, marginBottom: 10 }}>The waitlist is closed for today</h1>
         <p style={{ fontSize: 14, color: '#555', lineHeight: 1.5 }}>

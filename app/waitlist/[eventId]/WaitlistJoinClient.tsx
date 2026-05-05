@@ -7,9 +7,10 @@ interface Props {
   storeName: string
   cityState: string
   heardOptions: string[]
+  storeImageUrl: string | null
 }
 
-export default function WaitlistJoinClient({ eventId, storeName, cityState, heardOptions }: Props) {
+export default function WaitlistJoinClient({ eventId, storeName, cityState, heardOptions, storeImageUrl }: Props) {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [itemCount, setItemCount] = useState('')
@@ -60,6 +61,7 @@ export default function WaitlistJoinClient({ eventId, storeName, cityState, hear
   if (done && entryId) {
     return (
       <Wrapper>
+        <StoreLogo url={storeImageUrl} alt={storeName} />
         <WaitlistStatusView entryId={entryId} storeName={storeName} />
       </Wrapper>
     )
@@ -67,6 +69,7 @@ export default function WaitlistJoinClient({ eventId, storeName, cityState, hear
 
   return (
     <Wrapper>
+      <StoreLogo url={storeImageUrl} alt={storeName} />
       <div style={{ marginBottom: 18 }}>
         <h1 style={{ fontSize: 22, fontWeight: 900, marginBottom: 4 }}>Join the waitlist</h1>
         <div style={{ fontSize: 14, color: '#555' }}>
@@ -261,6 +264,23 @@ function WaitlistStatusView({ entryId, storeName }: { entryId: string; storeName
       <p style={{ fontSize: 11, color: '#888', textAlign: 'center', marginTop: 14 }}>
         This page refreshes automatically. Stay nearby — staff will call your name.
       </p>
+    </div>
+  )
+}
+
+function StoreLogo({ url, alt }: { url: string | null; alt: string }) {
+  if (!url) return null
+  return (
+    <div style={{ textAlign: 'center', marginBottom: 18 }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={url}
+        alt={alt}
+        style={{
+          maxWidth: 160, maxHeight: 90, height: 'auto', width: 'auto',
+          objectFit: 'contain',
+        }}
+      />
     </div>
   )
 }

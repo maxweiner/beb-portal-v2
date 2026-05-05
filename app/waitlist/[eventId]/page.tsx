@@ -38,7 +38,7 @@ export default async function WaitlistSignupPage({
 
   const { data: store } = await sb
     .from('stores')
-    .select('id, name, city, state, timezone')
+    .select('id, name, city, state, timezone, store_image_url')
     .eq('id', ev.store_id)
     .maybeSingle()
 
@@ -62,7 +62,10 @@ export default async function WaitlistSignupPage({
   const closed = isAfterCutoff(tz)
 
   if (closed) {
-    return <WaitlistClosed storeName={store?.name || ev.store_name || 'this event'} />
+    return <WaitlistClosed
+      storeName={store?.name || ev.store_name || 'this event'}
+      storeImageUrl={store?.store_image_url || null}
+    />
   }
 
   return (
@@ -71,6 +74,7 @@ export default async function WaitlistSignupPage({
       storeName={store?.name || ev.store_name || 'this event'}
       cityState={[store?.city, store?.state].filter(Boolean).join(', ')}
       heardOptions={heardOptions}
+      storeImageUrl={store?.store_image_url || null}
     />
   )
 }
