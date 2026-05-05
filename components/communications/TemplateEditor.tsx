@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import {
@@ -234,6 +234,140 @@ export default function TemplateEditor({ template, canEdit, onClose }: Props) {
           }}>{previewBody || <em style={{ color: 'var(--mist)' }}>(empty)</em>}</pre>
         </div>
       </div>
+
+      {/* Schedules — only meaningful for saved templates */}
+      {template && (
+        <SchedulesSection templateId={template.id} canEdit={canEdit} />
+      )}
+    </div>
+  )
+}
+
+function SchedulesSection({ templateId, canEdit }: { templateId: string; canEdit: boolean }) {
+  const [rows, setRows] = useState<{
+    id: string; days_before_event_start: number; send_window_days: number; is_active: boolean
+  }[]>([])
+  const [loading, setLoading] = useState(true)
+  const [draftDays, setDraftDays] = useState('')
+  const [draftWindow, setDraftWindow] = useState('7')
+  const [busy, setBusy] = useState(false)
+
+  async function reload() {
+    setLoading(true)
+    const { data } = await supabase
+      .from('communication_send_schedules')
+      .select('id, days_before_event_start, send_window_days, is_active')
+      .eq('template_id', templateId)
+      .order('days_before_event_start', { ascending: false })
+    setRows((data || []) as any)
+    setLoading(false)
+  }
+  useEffect(() => { reload() }, [templateId])
+
+  async function add() {
+    const days = Number(draftDays)
+    const window = Number(draftWindow)
+    if (!Number.isInteger(days) || days < 0) { alert('Days before event must be a non-negative integer'); return }
+    if (!Number.isInteger(window) || window <= 0) { alert('Send window must be a positive integer'); return }
+    setBusy(true)
+    const { error } = await supabase.from('communication_send_schedules').insert({
+      template_id: templateId,
+      days_before_event_start: days,
+      send_window_days: window,
+      is_active: true,
+    })
+    setBusy(false)
+    if (error) { alert(error.message); return }
+    setDraftDays(''); setDraftWindow('7')
+    reload()
+  }
+
+  async function toggleActive(id: string, current: boolean) {
+    setBusy(true)
+    const { error } = await supabase
+      .from('communication_send_schedules')
+      .update({ is_active: !current })
+      .eq('id', id)
+    setBusy(false)
+    if (error) { alert(error.message); return }
+    reload()
+  }
+
+  async function remove(id: string) {
+    if (!confirm('Delete this schedule? Pending checklist items it created on future trunk shows will remain — un-check or delete those manually if needed.')) return
+    setBusy(true)
+    const { error } = await supabase.from('communication_send_schedules').delete().eq('id', id)
+    setBusy(false)
+    if (error) { alert(error.message); return }
+    reload()
+  }
+
+  if (loading) return null
+
+  return (
+    <div style={{ marginTop: 18, background: '#fff', border: '1px solid var(--cream2)', borderRadius: 10, padding: 14 }}>
+      <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink)', marginBottom: 4 }}>📅 Send schedules</div>
+      <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 12 }}>
+        When this template fires on a trunk show. Adding a schedule auto-creates per-show checklist items
+        on every future trunk show whose event date is at least <em>{'{days before}'}</em> days out.
+        Past-due items are NOT created retroactively.
+      </div>
+
+      {rows.length === 0 ? (
+        <div style={{ fontSize: 12, color: 'var(--mist)', padding: '10px 0', textAlign: 'center' }}>
+          No schedules yet. {canEdit ? 'Add one below.' : ''}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+          {rows.map(r => (
+            <div key={r.id} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '8px 10px', borderRadius: 6,
+              background: r.is_active ? 'var(--green-pale)' : 'var(--cream2)',
+              border: `1px solid ${r.is_active ? 'var(--green3)' : 'var(--cream2)'}`,
+              opacity: r.is_active ? 1 : 0.6,
+            }}>
+              <div style={{ flex: 1, fontSize: 13, color: 'var(--ink)' }}>
+                <strong>{r.days_before_event_start}</strong> day{r.days_before_event_start === 1 ? '' : 's'} before event
+                <span style={{ color: 'var(--mist)', marginLeft: 8 }}>· {r.send_window_days}-day send window</span>
+              </div>
+              {canEdit && (
+                <>
+                  <button onClick={() => toggleActive(r.id, r.is_active)} disabled={busy} className="btn-outline btn-xs">
+                    {r.is_active ? 'Archive' : 'Activate'}
+                  </button>
+                  <button onClick={() => remove(r.id)} disabled={busy} className="btn-outline btn-xs" title="Delete schedule">✕</button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {canEdit && (
+        <div style={{
+          padding: 10, border: '1px dashed var(--pearl)', borderRadius: 8,
+          display: 'grid', gridTemplateColumns: '1fr 1fr 120px', gap: 8, alignItems: 'flex-end',
+        }}>
+          <label style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 700 }}>
+            Days before event
+            <input type="number" min="0" value={draftDays}
+              onChange={e => setDraftDays(e.target.value)}
+              placeholder="60"
+              style={{ width: '100%', padding: '6px 8px', fontSize: 13, border: '1px solid var(--cream2)', borderRadius: 6, fontFamily: 'inherit', marginTop: 2 }} />
+          </label>
+          <label style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 700 }}>
+            Send window (days)
+            <input type="number" min="1" value={draftWindow}
+              onChange={e => setDraftWindow(e.target.value)}
+              placeholder="7"
+              style={{ width: '100%', padding: '6px 8px', fontSize: 13, border: '1px solid var(--cream2)', borderRadius: 6, fontFamily: 'inherit', marginTop: 2 }} />
+          </label>
+          <button onClick={add} disabled={busy || !draftDays} className="btn-primary btn-sm">
+            {busy ? '…' : '+ Add'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
