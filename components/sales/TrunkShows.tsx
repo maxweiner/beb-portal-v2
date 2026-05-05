@@ -97,6 +97,10 @@ export default function TrunkShows() {
         )}
       </div>
 
+      {user?.trunk_show_calendar_subscribe_url && (
+        <SubscribeCalendarBanner url={user.trunk_show_calendar_subscribe_url} />
+      )}
+
       <div className="card" style={{ marginBottom: 12, padding: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         {(['all', 'reserved', 'scheduled', 'in_progress', 'completed', 'cancelled'] as Filter[]).map(f => (
           <button key={f} onClick={() => setFilter(f)}
@@ -513,6 +517,40 @@ function ListView({ shows, usersById, storesById, onOpen }: {
           })}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+function SubscribeCalendarBanner({ url }: { url: string }) {
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(url); alert('Copied to clipboard!') }
+    catch { window.prompt('Copy this URL:', url) }
+  }
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12,
+      padding: '10px 14px', borderRadius: 8,
+      background: 'rgba(234,88,12,.08)',
+      border: '1px solid rgba(234,88,12,.25)',
+      color: '#7c2d12', fontSize: 13,
+    }}>
+      <span style={{ fontSize: 18 }}>📅</span>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 700 }}>Your trunk-show Google Calendar is ready</div>
+        <div style={{ fontSize: 12, opacity: .8, marginTop: 2 }}>
+          Add it to your phone or laptop to see your assigned shows alongside everything else in your calendar.
+        </div>
+      </div>
+      <a
+        href={url} target="_blank" rel="noopener noreferrer"
+        className="btn-primary btn-sm"
+        style={{ background: '#C2410C', borderColor: '#C2410C', whiteSpace: 'nowrap' }}
+      >
+        + Add to Google
+      </a>
+      <button onClick={copy} className="btn-outline btn-sm" style={{ whiteSpace: 'nowrap' }}>
+        Copy URL
+      </button>
     </div>
   )
 }
