@@ -141,6 +141,35 @@ export async function deleteGcalEvent(calendarId: string, eventId: string): Prom
 }
 
 /**
+ * Create a brand new calendar owned by the service account. Returned
+ * id can be used immediately with the rest of the helpers.
+ */
+export async function createCalendar(input: {
+  summary: string
+  description?: string
+  timeZone?: string
+}): Promise<{ id: string }> {
+  const json = await api('POST', '/calendars', {
+    summary: input.summary,
+    ...(input.description ? { description: input.description } : {}),
+    timeZone: input.timeZone || 'America/New_York',
+  })
+  return { id: json.id as string }
+}
+
+/**
+ * Make a calendar publicly readable. Adds an ACL rule with role=reader
+ * + scope=default so anyone with the calendar id (or the public iCal
+ * URL) can subscribe without authenticating.
+ */
+export async function setCalendarPublicReadOnly(calendarId: string): Promise<void> {
+  await api('POST', `/calendars/${encodeURIComponent(calendarId)}/acl`, {
+    role: 'reader',
+    scope: { type: 'default' },
+  })
+}
+
+/**
  * Smoke test: create + delete a tiny event to verify the calendar is
  * shared with the service account and the calendar id is correct.
  */
