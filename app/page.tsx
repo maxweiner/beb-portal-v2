@@ -187,7 +187,7 @@ export default function Home() {
             ? <SalesRepDashboard key={navKey} setNav={setNav} />
             : <MobileDashboard key={navKey} setNav={setNav} />}</ModuleWriteGate>}
           {nav === 'trade-shows' && <ModuleWriteGate moduleId="trade-shows"><TradeShows key={navKey} /></ModuleWriteGate>}
-          {nav === 'trunk-shows' && <ModuleWriteGate moduleId="trunk-shows"><TrunkShows key={navKey} /></ModuleWriteGate>}
+          {nav === 'trunk-shows' && <ModuleWriteGate moduleId="trunk-shows"><TrunkShows key={navKey} setNav={setNav} /></ModuleWriteGate>}
           {nav === 'trunk-communications' && <TrunkCommunications key={navKey} />}
           {nav === 'leads'       && <ModuleWriteGate moduleId="leads"><Leads key={navKey} setNav={setNav} /></ModuleWriteGate>}
           {nav === 'dayentry'  && <ModuleWriteGate moduleId="dayentry"><MobileDayEntry key={navKey} /></ModuleWriteGate>}
@@ -242,7 +242,7 @@ export default function Home() {
           ? <SalesRepDashboard key={navKey} setNav={setNav} />
           : <Dashboard key={navKey} setNav={setNav} />}</ModuleWriteGate>}
         {nav === 'trade-shows' && <ModuleWriteGate moduleId="trade-shows"><TradeShows key={navKey} /></ModuleWriteGate>}
-        {nav === 'trunk-shows' && <ModuleWriteGate moduleId="trunk-shows"><TrunkShows key={navKey} /></ModuleWriteGate>}
+        {nav === 'trunk-shows' && <ModuleWriteGate moduleId="trunk-shows"><TrunkShows key={navKey} setNav={setNav} /></ModuleWriteGate>}
         {nav === 'trunk-communications' && <TrunkCommunications key={navKey} />}
         {nav === 'leads'       && <ModuleWriteGate moduleId="leads"><Leads key={navKey} setNav={setNav} /></ModuleWriteGate>}
         {nav === 'calendar'   && <ModuleWriteGate moduleId="calendar"><AppointmentsAdmin key={navKey} /></ModuleWriteGate>}

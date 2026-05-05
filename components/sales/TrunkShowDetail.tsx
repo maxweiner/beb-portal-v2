@@ -17,6 +17,7 @@ import type { TrunkShow, TrunkShowHours, TrunkShowStatus } from '@/types'
 import SpecialRequestsPanel from './SpecialRequestsPanel'
 import TrunkShowAppointmentsPanel from './TrunkShowAppointmentsPanel'
 import SpiffsPanel from './SpiffsPanel'
+import TrunkShowCommsSection from './TrunkShowCommsSection'
 import DatePicker from '@/components/ui/DatePicker'
 import TimePicker from '@/components/ui/TimePicker'
 
@@ -25,9 +26,10 @@ interface Props {
   onBack: () => void
   onChanged: () => void
   onDeleted: () => void
+  setNav?: (n: import('@/app/page').NavPage) => void
 }
 
-export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDeleted }: Props) {
+export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDeleted, setNav }: Props) {
   const { user, trunkShowStores, users } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || !!user?.is_partner
   const [show, setShow] = useState<TrunkShow | null>(null)
@@ -336,6 +338,9 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
 
       {/* Spiffs — Phase 13 */}
       <SpiffsPanel trunkShowId={show.id} canMarkPaid={isAdmin} />
+
+      {/* Communications log — Trunk Comms phase 7 */}
+      <TrunkShowCommsSection trunkShowId={show.id} setNav={setNav} />
     </div>
   )
 }
