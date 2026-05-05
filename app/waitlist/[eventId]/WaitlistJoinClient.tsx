@@ -110,13 +110,12 @@ export default function WaitlistJoinClient({ eventId, storeName, cityState, hear
           <legend style={{ fontSize: 13, fontWeight: 700, padding: '0 6px' }}>When you're up next…</legend>
           <label style={lbl}>
             <input type="radio" name="notify" value="wait" checked={notifyPref === 'wait'}
-              onChange={() => setNotifyPref('wait')} />
+              onChange={() => setNotifyPref('wait')} style={radio} />
             <span><strong>I'll wait here.</strong> Call my name.</span>
           </label>
-          <label style={lbl}>
-            <input type="radio" name="notify" value="sms" checked={notifyPref === 'sms'}
-              onChange={() => setNotifyPref('sms')} />
-            <span><strong>Text me.</strong> I might step out for a bit.</span>
+          <label style={{ ...lbl, opacity: 0.5, cursor: 'not-allowed' }}>
+            <input type="radio" name="notify" value="sms" disabled style={radio} />
+            <span><strong>Text me.</strong> <em style={{ color: '#888' }}>(Coming Soon!)</em></span>
           </label>
         </fieldset>
 
@@ -174,3 +173,13 @@ const lbl: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 10,
   padding: '8px 0', fontSize: 14, cursor: 'pointer',
 }
+
+// globals.css applies width:100%, padding:9px 13px, and
+// -webkit-appearance:none to ALL input elements, which destroys
+// radios. Restore native radio rendering with explicit overrides.
+const radio: React.CSSProperties = {
+  width: 20, height: 20, padding: 0, margin: 0, flexShrink: 0,
+  border: 'none', background: 'transparent', borderRadius: 0,
+  appearance: 'auto', WebkitAppearance: 'radio', MozAppearance: 'radio',
+  cursor: 'pointer',
+} as React.CSSProperties
