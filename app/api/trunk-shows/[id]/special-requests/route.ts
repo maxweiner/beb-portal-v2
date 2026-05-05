@@ -44,6 +44,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const text = (body?.request_text || '').toString().trim()
   if (!text) return NextResponse.json({ error: 'Missing request_text' }, { status: 400 })
 
+  // Budget is optional; coerce to number or null. Negative or
+  // unparseable values silently become null rather than 400 — the
+  // form accepts free-text and we'd rather save the request than
+  // reject it for a bad budget.
+  let budget: number | null = null
+  if (body?.budget != null && body.budget !== '') {
+    const n = Number(body.budget)
+    if (Number.isFinite(n) && n >= 0) budget = Math.round(n * 100) / 100
+  }
+
   const sb = admin()
 
   // Confirm the trunk show exists + load context for the email.
@@ -60,10 +70,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     .from('trunk_show_special_requests').insert({
       trunk_show_id: show.id,
       request_text: text,
+      budget,
       created_by: me.id,
       status: 'open',
     })
-    .select('id, trunk_show_id, request_text, created_by, created_at, status, acknowledged_by, acknowledged_at')
+    .select('id, trunk_show_id, request_text, budget, created_by, created_at, status, acknowledged_by, acknowledged_at')
     .single()
   if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 })
 
@@ -92,12 +103,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const dates = fmtRange(show.start_date, show.end_date)
     const subject = `Special request from ${repName} for ${storeName} trunk show (${dates})`
     const portalBase = process.env.NEXT_PUBLIC_APP_URL || 'https://beb-portal-v2.vercel.app'
+    const budgetLine = budget != null
+      ? `<p style="margin: 6px 0; font-weight: 700; color: #14532d;">Budget: $${budget.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>`
+      : ''
     const html = `
       <p><strong>${repName}</strong> just added a special request for the
       <strong>${storeName}</strong> trunk show (${dates}):</p>
       <blockquote style="border-left: 3px solid #1d6b44; padding: 6px 12px; margin: 12px 0; color: #14532d;">
         ${escapeHtml(text)}
       </blockquote>
+      ${budgetLine}
       <p>Open it in BEB Portal: <a href="${portalBase}">${portalBase}</a></p>
     `.trim()
     await Promise.allSettled(toAddrs.map(addr => sendEmail({ to: addr, subject, html })))
