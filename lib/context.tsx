@@ -10,6 +10,10 @@ export type DayEntryIntent = {
   mode?: 'buyer' | 'combined'
 } | null
 
+/** Deep-link intent for the Travel module. When set, Travel.tsx
+ *  pre-selects this event on mount instead of showing the picker. */
+export type TravelIntent = { eventId: string } | null
+
 interface AppContextType extends AppState {
   setTheme: (t: Theme) => void
   setYear: (y: string) => void
@@ -20,6 +24,8 @@ interface AppContextType extends AppState {
   setEvents: (events: Event[]) => void
   dayEntryIntent: DayEntryIntent
   setDayEntryIntent: (i: DayEntryIntent) => void
+  travelIntent: TravelIntent
+  setTravelIntent: (i: TravelIntent) => void
   /** When max@bebllp.com is in "View As" mode, `user` is swapped
    *  to the impersonated target so role-gated UI surfaces render
    *  as that user. `impersonationActor` retains a reference to
@@ -52,6 +58,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [connectionError, setConnectionError] = useState(false)
   const [brand, setBrandState] = useState<Brand>(() => readLocal('beb-brand', 'beb'))
   const [dayEntryIntent, setDayEntryIntent] = useState<DayEntryIntent>(null)
+  const [travelIntent, setTravelIntent] = useState<TravelIntent>(null)
 
   // Brand-switch coordination. While a switch is in flight, the committed
   // brand/theme stay on the OLD store so colors don't change until the new
@@ -455,12 +462,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setTheme, setYear, setBrand, reload, setUser,
     setStores, setEvents,
     dayEntryIntent, setDayEntryIntent,
+    travelIntent, setTravelIntent,
     impersonationActor,
   }), [
     user, users, stores, trunkShowStores, events, shipments,
     theme, year, loading, brand, connectionError,
     isSwitching, pendingBrand,
-    reload, dayEntryIntent,
+    reload, dayEntryIntent, travelIntent,
     impersonationActor,
   ])
 

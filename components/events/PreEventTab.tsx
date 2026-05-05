@@ -46,7 +46,7 @@ interface Props {
 }
 
 export default function PreEventTab({ setNav }: Props) {
-  const { stores, events: ctxEvents, user } = useApp()
+  const { stores, events: ctxEvents, user, setTravelIntent } = useApp()
   const [events, setEvents] = useState<Event[]>(ctxEvents || [])
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([])
   const [travel, setTravel] = useState<TravelRow[]>([])
@@ -181,6 +181,7 @@ export default function PreEventTab({ setNav }: Props) {
           stores={stores}
           isAdmin={isAdmin}
           setNav={setNav}
+          onOpenTravel={() => { setTravelIntent({ eventId: ev.id }); setNav?.('travel') }}
           onPromoted={(id) => setEvents(es => es.map(e => e.id === id ? { ...e, status: 'scheduled' } : e))}
           onAssetEdit={() => setAssetEditorFor(ev)}
           onMarkBriefed={(briefed) => markBriefed(ev, briefed)}
@@ -215,6 +216,7 @@ interface CardProps {
   stores: ReturnType<typeof useApp>['stores']
   isAdmin: boolean
   setNav?: (n: NavPage) => void
+  onOpenTravel: () => void
   onPromoted: (id: string) => void
   onAssetEdit: () => void
   onMarkBriefed: (briefed: boolean) => void
@@ -222,7 +224,7 @@ interface CardProps {
 
 function EventReadinessCard({
   ev, campaigns, travel, bookingLive, assetOrders, allEvents, stores,
-  isAdmin, setNav, onPromoted, onAssetEdit, onMarkBriefed,
+  isAdmin, setNav, onOpenTravel, onPromoted, onAssetEdit, onMarkBriefed,
 }: CardProps) {
   const reserved = ev.status === 'reserved'
 
@@ -335,8 +337,8 @@ function EventReadinessCard({
               : `Travel ${travelComplete}/${workers.length}`
           }
           icon="✈️"
-          onClick={() => setNav?.('travel')}
-          title="Open Travel module"
+          onClick={onOpenTravel}
+          title="Open this event in Travel"
         />
         <Chip
           level={marketingStatus}
