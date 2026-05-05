@@ -32,8 +32,17 @@ const TYPE_LABELS: Record<string, { label: string; icon: string; color: string }
 }
 
 export default function Travel() {
-  const { events, stores, user } = useApp()
+  const { events, stores, user, travelIntent, setTravelIntent } = useApp()
   const [selection, setSelection] = useState<Selection | null>(null)
+
+  // Deep-link intent from the Pre-Event readiness chip — pre-select
+  // the targeted event so the user doesn't have to find it again.
+  useEffect(() => {
+    if (!travelIntent) return
+    setSelection({ kind: 'event', id: travelIntent.eventId })
+    setTravelIntent(null)
+  }, [travelIntent, setTravelIntent])
+
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState<'reservations' | 'folders'>('reservations')
   // Default to "my events" — what most users want to see; persists across sessions.
