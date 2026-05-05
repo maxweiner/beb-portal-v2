@@ -169,6 +169,29 @@ export default function PreEventTab({ setNav }: Props) {
     setEvents(es => es.map(e => e.id === ev.id ? { ...e, ...update } : e))
   }
 
+  // Manual override for chips that lack a hard data prerequisite
+  // (travel / marketing / assets). Set = force green; clear = drop
+  // back to computed state.
+  async function setOverride(
+    ev: Event,
+    kind: 'travel' | 'marketing' | 'assets',
+    on: boolean,
+  ) {
+    const noun = kind === 'travel' ? 'travel' : kind === 'marketing' ? 'marketing' : 'in-store assets'
+    const ok = on
+      ? confirm(`Manually mark ${noun} as complete for "${eventDisplayName(ev, stores)}"?\n\nThis forces the chip green regardless of underlying data.`)
+      : confirm(`Clear the manual ${noun} override for "${eventDisplayName(ev, stores)}"?\n\nThe chip will drop back to its computed status.`)
+    if (!ok) return
+    const atKey = `${kind}_override_at`
+    const byKey = `${kind}_override_by_user_id`
+    const update: Record<string, any> = on
+      ? { [atKey]: new Date().toISOString(), [byKey]: user?.id || null }
+      : { [atKey]: null, [byKey]: null }
+    const { error } = await supabase.from('events').update(update).eq('id', ev.id)
+    if (error) { alert(error.message); return }
+    setEvents(es => es.map(e => e.id === ev.id ? { ...e, ...update } : e))
+  }
+
   if (loading) {
     return <div style={{ padding: 24, color: 'var(--mist)', fontSize: 13 }}>Loading readiness…</div>
   }
@@ -205,6 +228,7 @@ export default function PreEventTab({ setNav }: Props) {
           onPromoted={(id) => setEvents(es => es.map(e => e.id === id ? { ...e, status: 'scheduled' } : e))}
           onAssetEdit={() => setAssetEditorFor(ev)}
           onMarkBriefed={(briefed) => markBriefed(ev, briefed)}
+          onSetOverride={(kind, on) => setOverride(ev, kind, on)}
         />
       ))}
 
@@ -241,11 +265,12 @@ interface CardProps {
   onPromoted: (id: string) => void
   onAssetEdit: () => void
   onMarkBriefed: (briefed: boolean) => void
+  onSetOverride: (kind: 'travel' | 'marketing' | 'assets', on: boolean) => void
 }
 
 function EventReadinessCard({
   ev, campaigns, travel, travelAcks, bookingLive, assetOrders, allEvents, stores,
-  isAdmin, setNav, onOpenTravel, onPromoted, onAssetEdit, onMarkBriefed,
+  isAdmin, setNav, onOpenTravel, onPromoted, onAssetEdit, onMarkBriefed, onSetOverride,
 }: CardProps) {
   const reserved = ev.status === 'reserved'
 
@@ -277,7 +302,8 @@ function EventReadinessCard({
     return { hasFlight, hasHotel }
   })
   const travelComplete = travelCoverage.filter(c => c.hasFlight && c.hasHotel).length
-  const travelStatus: GateLevel =
+  const travelOverridden = !!ev.travel_override_at
+  const travelStatus: GateLevel = travelOverridden ? 'green' :
     workers.length === 0 ? 'neutral' :
     travelComplete === workers.length ? 'green' :
     travelComplete === 0 ? 'red' : 'yellow'
@@ -291,18 +317,20 @@ function EventReadinessCard({
     if (c.status === 'payment' || c.status === 'proofing') return { flow: f, level: 'yellow' as GateLevel, label: c.status }
     return { flow: f, level: 'red' as GateLevel, label: c.status }
   })
-  const marketingStatus: GateLevel =
+  const marketingOverridden = !!ev.marketing_override_at
+  const marketingStatus: GateLevel = marketingOverridden ? 'green' :
     flowChips.every(c => c.level === 'green') ? 'green' :
     flowChips.some(c => c.level !== 'red') ? 'yellow' : 'red'
 
-  // Booking
+  // Booking — NOT overrideable per spec.
   const bookingStatus: GateLevel = bookingLive ? 'green' : 'red'
 
   // In-store assets — green if all orders delivered, yellow if any
   // ordered but not all delivered, red if no orders at all.
   const assetCount = assetOrders.length
   const deliveredCount = assetOrders.filter(o => o.delivered_at).length
-  const assetStatus: GateLevel =
+  const assetsOverridden = !!ev.assets_override_at
+  const assetStatus: GateLevel = assetsOverridden ? 'green' :
     assetCount === 0 ? 'red' :
     deliveredCount === assetCount ? 'green' : 'yellow'
 
@@ -360,23 +388,33 @@ function EventReadinessCard({
           onClick={() => setNav?.('events')}
           title="Open in Legacy view to assign buyers"
         />
-        <Chip
+        <OverridableChip
           level={travelStatus}
           label={
-            workers.length === 0
-              ? 'Travel — assign buyers first'
-              : `Travel ${travelComplete}/${workers.length}`
+            travelOverridden ? 'Travel ✓ Override' :
+            workers.length === 0 ? 'Travel — assign buyers first' :
+            `Travel ${travelComplete}/${workers.length}`
           }
           icon="✈️"
           onClick={onOpenTravel}
           title="Open this event in Travel"
+          overridden={travelOverridden}
+          onOverride={() => onSetOverride('travel', true)}
+          onClearOverride={() => onSetOverride('travel', false)}
         />
-        <Chip
+        <OverridableChip
           level={marketingStatus}
-          label={`Marketing: ${flowChips.map(f => `${f.flow.toUpperCase()[0]}=${f.level === 'green' ? '✓' : f.level === 'yellow' ? '~' : '○'}`).join(' ')}`}
+          label={
+            marketingOverridden
+              ? 'Marketing ✓ Override'
+              : `Marketing: ${flowChips.map(f => `${f.flow.toUpperCase()[0]}=${f.level === 'green' ? '✓' : f.level === 'yellow' ? '~' : '○'}`).join(' ')}`
+          }
           icon="📣"
           onClick={() => setNav?.('marketing')}
           title="Open Marketing module"
+          overridden={marketingOverridden}
+          onOverride={() => onSetOverride('marketing', true)}
+          onClearOverride={() => onSetOverride('marketing', false)}
         />
         <Chip
           level={bookingStatus}
@@ -385,16 +423,19 @@ function EventReadinessCard({
           onClick={() => setNav?.('calendar')}
           title="Open Calendar / Appointments admin"
         />
-        <Chip
+        <OverridableChip
           level={assetStatus}
           label={
-            assetCount === 0
-              ? 'In-store assets — none ordered'
-              : `In-store assets ${deliveredCount}/${assetCount} delivered`
+            assetsOverridden ? 'In-store assets ✓ Override' :
+            assetCount === 0 ? 'In-store assets — none ordered' :
+            `In-store assets ${deliveredCount}/${assetCount} delivered`
           }
           icon="📦"
           onClick={onAssetEdit}
           title="Manage counter cards / displays / postcards"
+          overridden={assetsOverridden}
+          onOverride={() => onSetOverride('assets', true)}
+          onClearOverride={() => onSetOverride('assets', false)}
         />
         <Chip
           level={briefedStatus}
@@ -411,6 +452,48 @@ function EventReadinessCard({
 // ── Helpers ────────────────────────────────────────────────────
 
 type GateLevel = 'green' | 'yellow' | 'red' | 'neutral'
+
+// Wraps a Chip with a tiny inline action — "Override" when red,
+// "↺" undo when overridden. Chip itself keeps its existing onClick
+// (deep-link); the override controls live alongside as separate
+// buttons so the deep-link still works.
+function OverridableChip({
+  level, label, icon, onClick, title,
+  overridden, onOverride, onClearOverride,
+}: {
+  level: GateLevel; label: string; icon: string; onClick?: () => void; title?: string
+  overridden: boolean
+  onOverride: () => void
+  onClearOverride: () => void
+}) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      <Chip level={level} label={label} icon={icon} onClick={onClick} title={title} />
+      {overridden ? (
+        <button
+          onClick={onClearOverride}
+          title="Clear manual override"
+          style={overrideMiniBtn('var(--green-dark)')}
+        >↺</button>
+      ) : level === 'red' ? (
+        <button
+          onClick={onOverride}
+          title="Manually mark complete (force green)"
+          style={overrideMiniBtn('var(--ash)')}
+        >✓ Override</button>
+      ) : null}
+    </span>
+  )
+}
+
+function overrideMiniBtn(color: string): React.CSSProperties {
+  return {
+    fontFamily: 'inherit', fontSize: 10, fontWeight: 700,
+    padding: '3px 7px', borderRadius: 6, cursor: 'pointer',
+    background: '#fff', color, border: `1px dashed ${color}`,
+    lineHeight: 1.2, whiteSpace: 'nowrap',
+  }
+}
 
 function Chip({
   level, label, icon, onClick, title,
