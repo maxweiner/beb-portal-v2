@@ -291,8 +291,13 @@ function CreateTrunkShowModal({ mode, onClose, onCreated }: { mode: 'scheduled' 
   const [err, setErr] = useState<string | null>(null)
   const [storeQuery, setStoreQuery] = useState('')
 
-  const valid = !!draft.store_id && !!draft.start_date && !!draft.end_date
-                 && draft.end_date >= draft.start_date && !!draft.assigned_rep_id
+  const missing: string[] = []
+  if (!draft.store_id)        missing.push('store')
+  if (!draft.start_date)      missing.push('start date')
+  if (!draft.end_date)        missing.push('end date')
+  if (draft.start_date && draft.end_date && draft.end_date < draft.start_date) missing.push('end date is before start date')
+  if (!draft.assigned_rep_id) missing.push('assigned rep')
+  const valid = missing.length === 0
 
   // Trunk rep pool only — must have is_trunk_rep flag set in
   // Admin → Users. Admins, partners, and other roles are NOT
@@ -441,6 +446,20 @@ function CreateTrunkShowModal({ mode, onClose, onCreated }: { mode: 'scheduled' 
         </div>
 
         {err && <div style={{ background: '#FEE2E2', color: '#991B1B', padding: '8px 10px', borderRadius: 6, fontSize: 13, marginBottom: 10 }}>{err}</div>}
+
+        {!valid && missing.length > 0 && (
+          <div style={{
+            background: '#fff8e1', color: '#7a5b00',
+            padding: '8px 10px', borderRadius: 6, fontSize: 12, marginBottom: 10,
+          }}>
+            ⚠ Still need: <strong>{missing.join(', ')}</strong>
+            {missing.includes('assigned rep') && repOptions.length === 0 && (
+              <div style={{ fontSize: 11, marginTop: 4, opacity: .9 }}>
+                The Trunk Rep pool is empty. In Admin Panel, flag a user with the "Trunk Rep" checkbox and they'll appear in the dropdown.
+              </div>
+            )}
+          </div>
+        )}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button onClick={onClose} className="btn-outline btn-sm">Cancel</button>
