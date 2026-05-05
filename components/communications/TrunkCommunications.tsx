@@ -10,11 +10,13 @@ import { useState } from 'react'
 import { useApp } from '@/lib/context'
 import TemplateList from './TemplateList'
 import TemplateEditor from './TemplateEditor'
+import SendFlow from './SendFlow'
 import type { CommunicationTemplate } from '@/types'
 
 type View =
   | { kind: 'list' }
   | { kind: 'edit'; template: CommunicationTemplate | null }
+  | { kind: 'send'; trunkShowId?: string | null; templateId?: string | null }
 
 export default function TrunkCommunications() {
   const { user } = useApp()
@@ -41,16 +43,30 @@ export default function TrunkCommunications() {
     )
   }
 
+  if (view.kind === 'send') {
+    return (
+      <SendFlow
+        initialTrunkShowId={view.trunkShowId}
+        initialTemplateId={view.templateId}
+        onClose={() => setView({ kind: 'list' })}
+        onSent={() => {
+          alert('Letter sent — log entry recorded.')
+          setView({ kind: 'list' })
+        }}
+      />
+    )
+  }
+
   return (
     <div className="p-6" style={{ maxWidth: 1100, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
         <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)' }}>📨 Trunk Communications</h1>
-        {isAdmin && (
-          <button
-            onClick={() => setView({ kind: 'edit', template: null })}
-            className="btn-primary btn-sm"
-          >+ New Template</button>
-        )}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setView({ kind: 'send' })} className="btn-primary btn-sm">📤 Send a letter</button>
+          {isAdmin && (
+            <button onClick={() => setView({ kind: 'edit', template: null })} className="btn-outline btn-sm">+ New Template</button>
+          )}
+        </div>
       </div>
 
       <TemplateList

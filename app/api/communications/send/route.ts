@@ -1,0 +1,165 @@
+// POST /api/communications/send
+//
+// Auth: admin / superadmin / partner OR sales_rep assigned to
+// the trunk show. Sends a templated letter via Resend from the
+// caller's @bebllp.com address, logs to communication_sends,
+// and auto-checks any open checklist item that's linked to this
+// (trunk_show_id, template_id) pair.
+//
+// PDF generation lives in phase 6 — phase 5 sends an HTML-only
+// email and leaves communication_sends.pdf_url null. Delivery
+// webhooks (delivered/bounced) are phase 8.
+//
+// Body:
+//   {
+//     trunk_show_id, template_id,
+//     subject, body,                  // already merged + edited
+//     to_email,                       // resolved client-side
+//     to_name?,
+//     schedule_id?,                   // optional — null = ad-hoc
+//   }
+
+import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+import { getAuthedUser } from '@/lib/expenses/serverAuth'
+import { blockIfImpersonating } from '@/lib/impersonation/server'
+import { sendEmail } from '@/lib/email'
+
+export const dynamic = 'force-dynamic'
+
+function admin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_KEY!,
+    { auth: { persistSession: false } },
+  )
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function bodyToHtml(text: string): string {
+  // Plain-text body → HTML. Preserves blank lines as <br><br>,
+  // wraps URLs as anchor tags. Phase 6 will replace this with a
+  // proper PDF; the email can either keep this HTML body OR get
+  // rendered from the PDF. For now, HTML body it is.
+  const escaped = escapeHtml(text)
+  const linkified = escaped.replace(
+    /\b(https?:\/\/[^\s<]+)/g,
+    (url) => `<a href="${url}">${url}</a>`,
+  )
+  return `<div style="font-family: Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.5; color: #222;">${linkified.replace(/\n/g, '<br>')}</div>`
+}
+
+export async function POST(req: Request) {
+  const me = await getAuthedUser(req)
+  if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const blocked = await blockIfImpersonating(req)
+  if (blocked) return blocked
+
+  if (!me.email || !/@bebllp\.com$/i.test(me.email)) {
+    return NextResponse.json({
+      error: `Sender's email (${me.email}) is not @bebllp.com — Resend will reject the send. Update the user's email and retry.`,
+    }, { status: 400 })
+  }
+
+  const body = await req.json().catch(() => ({}))
+  const trunk_show_id = String(body.trunk_show_id || '')
+  const template_id   = String(body.template_id   || '')
+  const subject       = String(body.subject       || '').trim()
+  const bodyText      = String(body.body          || '').trim()
+  const to_email      = String(body.to_email      || '').trim()
+  const to_name       = body.to_name ? String(body.to_name) : null
+  const schedule_id   = body.schedule_id ? String(body.schedule_id) : null
+
+  if (!trunk_show_id || !template_id) {
+    return NextResponse.json({ error: 'trunk_show_id and template_id required' }, { status: 400 })
+  }
+  if (!subject || !bodyText) {
+    return NextResponse.json({ error: 'Subject and body are required' }, { status: 400 })
+  }
+  if (!to_email || !to_email.includes('@')) {
+    return NextResponse.json({ error: 'Valid recipient email required' }, { status: 400 })
+  }
+
+  const sb = admin()
+
+  // Authorize: admin/partner OR rep assigned to this show.
+  const isAdmin = me.role === 'admin' || me.role === 'superadmin' || !!me.is_partner
+  if (!isAdmin) {
+    const { data: ts } = await sb
+      .from('trunk_shows').select('assigned_rep_id').eq('id', trunk_show_id).maybeSingle()
+    if (!ts || ts.assigned_rep_id !== me.id) {
+      return NextResponse.json({ error: 'Not assigned to this trunk show' }, { status: 403 })
+    }
+  }
+
+  const fromHeader = `${me.name || me.email} <${me.email}>`
+  const html = bodyToHtml(bodyText)
+
+  let messageId: string | null = null
+  try {
+    messageId = await sendEmail({
+      from: fromHeader,
+      to: to_name ? `${to_name} <${to_email}>` : to_email,
+      subject,
+      html,
+    })
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || 'Resend send failed' }, { status: 502 })
+  }
+  if (!messageId) {
+    return NextResponse.json({
+      error: 'Resend API key is not configured (settings.resend_api_key is empty).',
+    }, { status: 503 })
+  }
+
+  // Log the send. PDF url stays null until phase 6.
+  const { data: row, error: insErr } = await sb
+    .from('communication_sends')
+    .insert({
+      trunk_show_id,
+      template_id,
+      schedule_id,
+      sent_by_user_id: me.id,
+      from_email: me.email,
+      from_name:  me.name || me.email,
+      to_email,
+      to_name,
+      subject_line_rendered: subject,
+      body_rendered:         bodyText,
+      pdf_url:               null,
+      resend_message_id:     messageId,
+      delivery_status:       'sent',
+    })
+    .select('id')
+    .maybeSingle()
+
+  if (insErr || !row) {
+    // Email already went out — surface the bookkeeping error so
+    // operator knows to manually create the log row if needed.
+    return NextResponse.json({
+      error: `Email sent (Resend id ${messageId}) but log write failed: ${insErr?.message || 'unknown'}`,
+      message_id: messageId,
+    }, { status: 500 })
+  }
+
+  // Auto-check linked checklist items for this (show, template).
+  // Per spec rule 6c. Multiple items can match (e.g., schedule
+  // generated + master generated) — check them all.
+  await sb
+    .from('trunk_show_checklist_items')
+    .update({
+      is_completed: true,
+      completed_at: new Date().toISOString(),
+      completed_by_user_id: me.id,
+      linked_send_id: row.id,
+    })
+    .eq('trunk_show_id', trunk_show_id)
+    .eq('linked_template_id', template_id)
+    .eq('is_completed', false)
+
+  return NextResponse.json({ ok: true, send_id: row.id, message_id: messageId })
+}
