@@ -273,6 +273,7 @@ function EventReadinessCard({
   isAdmin, setNav, onOpenTravel, onPromoted, onAssetEdit, onMarkBriefed, onSetOverride,
 }: CardProps) {
   const reserved = ev.status === 'reserved'
+  const [buyerPopover, setBuyerPopover] = useState(false)
 
   // Buyers
   const workers = (ev.workers || []).filter(w => !(w as any).deleted)
@@ -377,17 +378,26 @@ function EventReadinessCard({
 
       {/* Gate chips */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        <Chip
-          level={buyerStatus}
-          label={
-            buyersNeeded == null
-              ? `${workers.length} buyer${workers.length === 1 ? '' : 's'}`
-              : `${workers.length}/${buyersNeeded} buyers${conflictCount > 0 ? ` · ${conflictCount} conflict${conflictCount === 1 ? '' : 's'}` : ''}`
-          }
-          icon="👥"
-          onClick={() => setNav?.('events')}
-          title="Open in Legacy view to assign buyers"
-        />
+        <span style={{ position: 'relative' }}>
+          <Chip
+            level={buyerStatus}
+            label={
+              buyersNeeded == null
+                ? `${workers.length} buyer${workers.length === 1 ? '' : 's'}`
+                : `${workers.length}/${buyersNeeded} buyers${conflictCount > 0 ? ` · ${conflictCount} conflict${conflictCount === 1 ? '' : 's'}` : ''}`
+            }
+            icon="👥"
+            onClick={() => setBuyerPopover(o => !o)}
+            title="Click to see who's assigned"
+          />
+          {buyerPopover && (
+            <BuyerPopover
+              workers={workers}
+              onClose={() => setBuyerPopover(false)}
+              onManage={() => { setBuyerPopover(false); setNav?.('events') }}
+            />
+          )}
+        </span>
         <OverridableChip
           level={travelStatus}
           label={
@@ -452,6 +462,80 @@ function EventReadinessCard({
 // ── Helpers ────────────────────────────────────────────────────
 
 type GateLevel = 'green' | 'yellow' | 'red' | 'neutral'
+
+// Lightweight popover anchored under the buyer chip — shows who's
+// assigned (lead first) and offers a "Manage in Legacy" link.
+// Closes on outside click + Esc.
+function BuyerPopover({
+  workers, onClose, onManage,
+}: {
+  workers: { id: string; name: string }[]
+  onClose: () => void
+  onManage: () => void
+}) {
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      const el = e.target as HTMLElement
+      if (!el.closest('[data-buyer-popover]')) onClose()
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [onClose])
+
+  return (
+    <div
+      data-buyer-popover
+      style={{
+        position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50,
+        background: '#fff', border: '1px solid var(--cream2)', borderRadius: 8,
+        boxShadow: '0 6px 20px rgba(0,0,0,.10)',
+        padding: 8, minWidth: 200, maxWidth: 280,
+      }}
+    >
+      {workers.length === 0 ? (
+        <div style={{ fontSize: 12, color: 'var(--mist)', padding: '6px 8px' }}>
+          No buyers assigned yet.
+        </div>
+      ) : (
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {workers.map((w, i) => (
+            <li key={w.id} style={{
+              fontSize: 13, padding: '4px 8px', borderRadius: 4,
+              color: 'var(--ink)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+            }}>
+              <span>{w.name}</span>
+              {i === 0 && (
+                <span style={{
+                  fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 3,
+                  background: 'var(--cream2)', color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.04em',
+                }}>Lead</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div style={{
+        borderTop: '1px solid var(--cream2)', marginTop: 6, paddingTop: 6,
+        textAlign: 'right',
+      }}>
+        <button
+          onClick={onManage}
+          style={{
+            background: 'transparent', border: 'none',
+            color: 'var(--green-dark)', fontSize: 11, fontWeight: 700,
+            cursor: 'pointer', padding: '2px 4px',
+          }}
+        >Manage in Legacy →</button>
+      </div>
+    </div>
+  )
+}
 
 // Wraps a Chip with a tiny inline action — "Override" when red,
 // "↺" undo when overridden. Chip itself keeps its existing onClick
