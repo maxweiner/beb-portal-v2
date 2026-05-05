@@ -39,6 +39,10 @@ export interface User {
    *  join table. Always includes the primary `role` field. Used by
    *  useRoleModules() to UNION module access across roles. */
   roles?: string[]
+  /** Per-rep trunk-show Google calendar (PR A schema; PR B populates).
+   *  We own the calendar; rep subscribes via the public URL. */
+  trunk_show_calendar_id?: string | null
+  trunk_show_calendar_subscribe_url?: string | null
 }
 
 // ── Expenses & Invoicing module ──────────────────────────────
