@@ -12,6 +12,7 @@
 import { useEffect, useState } from 'react'
 import type { NavPage } from '@/app/page'
 import Events from './Events'
+import PreEventTab from './PreEventTab'
 
 type ViewMode = 'new' | 'legacy'
 type Phase = 'pre' | 'during' | 'post'
@@ -84,7 +85,7 @@ export default function BuyingEventsView({ setNav }: { setNav?: (n: NavPage) => 
         })}
       </div>
 
-      {phase === 'pre'    && <PreEventStub />}
+      {phase === 'pre'    && <PreEventTab setNav={setNav} />}
       {phase === 'during' && <DuringEventStub />}
       {phase === 'post'   && <PostEventStub />}
     </div>
@@ -130,26 +131,6 @@ function ViewChooser({ view, onChange }: { view: ViewMode; onChange: (v: ViewMod
    Each phase tab will be filled in by PR 2 / 3 / 4. For PR 1 we
    render a placeholder so the structure is testable without
    blocking on the bigger build. */
-
-function PreEventStub() {
-  return (
-    <PlaceholderCard
-      title="📋 Pre-Event Readiness — coming next PR"
-      lines={[
-        'Will live here:',
-        '• Readiness checklist with green / yellow / red gates per event',
-        '• Buyer assignment + Buyers Needed editor + worker conflict popups',
-        '• Travel readiness (each buyer has flight + hotel logged)',
-        '• Marketing milestones (VDP / postcards / newspaper proofed + ordered)',
-        '• Counter cards / in-store assets ordered + shipped',
-        '• Booking system configured + tested',
-        '• Staff briefed',
-        '• Save the Date → Promote to Booked',
-        '• "+ New Event" / "+ Save the Date" buttons',
-      ]}
-    />
-  )
-}
 
 function DuringEventStub() {
   return (
