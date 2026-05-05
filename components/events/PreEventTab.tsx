@@ -39,6 +39,12 @@ type TravelRow = {
   type: 'flight' | 'hotel' | 'rental_car'
 }
 
+type TravelAckRow = {
+  event_id: string
+  buyer_id: string
+  type: string  // 'self_flight' | 'self_hotel' | 'no_flight' | 'no_hotel' | 'no_rental_car'
+}
+
 type BookingRow = { store_id: string; day1_start: string | null }
 
 interface Props {
@@ -50,6 +56,7 @@ export default function PreEventTab({ setNav }: Props) {
   const [events, setEvents] = useState<Event[]>(ctxEvents || [])
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([])
   const [travel, setTravel] = useState<TravelRow[]>([])
+  const [travelAcks, setTravelAcks] = useState<TravelAckRow[]>([])
   const [bookingConfigs, setBookingConfigs] = useState<BookingRow[]>([])
   const [assetOrders, setAssetOrders] = useState<EventPromotionalAssetOrder[]>([])
   const [loading, setLoading] = useState(true)
@@ -65,10 +72,11 @@ export default function PreEventTab({ setNav }: Props) {
     void (async () => {
       setLoading(true)
       const todayIso = new Date().toISOString().slice(0, 10)
-      const [eventsRes, campaignsRes, travelRes, bookingRes, assetsRes] = await Promise.all([
+      const [eventsRes, campaignsRes, travelRes, travelAcksRes, bookingRes, assetsRes] = await Promise.all([
         supabase.from('events').select('*').order('start_date'),
         supabase.from('marketing_campaigns').select('event_id, flow_type, status, paid_at'),
         supabase.from('travel_reservations').select('event_id, buyer_id, type'),
+        supabase.from('travel_acknowledgments').select('event_id, buyer_id, type'),
         supabase.from('booking_config').select('store_id, day1_start'),
         supabase.from('event_promotional_asset_orders').select('*'),
       ])
@@ -76,6 +84,7 @@ export default function PreEventTab({ setNav }: Props) {
       if (eventsRes.data) setEvents(eventsRes.data.map((e: any) => ({ ...e, days: e.days || [] })))
       if (campaignsRes.data) setCampaigns(campaignsRes.data as CampaignRow[])
       if (travelRes.data) setTravel(travelRes.data as TravelRow[])
+      if (travelAcksRes.data) setTravelAcks(travelAcksRes.data as TravelAckRow[])
       if (bookingRes.data) setBookingConfigs(bookingRes.data as BookingRow[])
       if (assetsRes.data) setAssetOrders(assetsRes.data as EventPromotionalAssetOrder[])
       void todayIso
@@ -119,6 +128,16 @@ export default function PreEventTab({ setNav }: Props) {
     }
     return m
   }, [travel])
+
+  const travelAcksByEvent = useMemo(() => {
+    const m = new Map<string, TravelAckRow[]>()
+    for (const a of travelAcks) {
+      const arr = m.get(a.event_id) || []
+      arr.push(a)
+      m.set(a.event_id, arr)
+    }
+    return m
+  }, [travelAcks])
 
   const liveBookingStores = useMemo(() => {
     const s = new Set<string>()
@@ -175,6 +194,7 @@ export default function PreEventTab({ setNav }: Props) {
           ev={ev}
           campaigns={campaignsByEvent.get(ev.id) || []}
           travel={travelByEvent.get(ev.id) || []}
+          travelAcks={travelAcksByEvent.get(ev.id) || []}
           bookingLive={liveBookingStores.has(ev.store_id)}
           assetOrders={assetOrdersByEvent.get(ev.id) || []}
           allEvents={events}
@@ -210,6 +230,7 @@ interface CardProps {
   ev: Event
   campaigns: CampaignRow[]
   travel: TravelRow[]
+  travelAcks: TravelAckRow[]
   bookingLive: boolean
   assetOrders: EventPromotionalAssetOrder[]
   allEvents: Event[]
@@ -223,7 +244,7 @@ interface CardProps {
 }
 
 function EventReadinessCard({
-  ev, campaigns, travel, bookingLive, assetOrders, allEvents, stores,
+  ev, campaigns, travel, travelAcks, bookingLive, assetOrders, allEvents, stores,
   isAdmin, setNav, onOpenTravel, onPromoted, onAssetEdit, onMarkBriefed,
 }: CardProps) {
   const reserved = ev.status === 'reserved'
@@ -240,10 +261,20 @@ function EventReadinessCard({
     return sum + (conflicts.length > 0 ? 1 : 0)
   }, 0)
 
-  // Travel
+  // Travel — a buyer counts as "covered" for flight or hotel if EITHER
+  // they have a real reservation row OR they've marked an ack
+  // ('self_X' = "I have one outside the system" / 'no_X' = "Don't
+  // need"). Mirrors the chip logic in components/travel/Travel.tsx.
   const travelCoverage = workers.map(w => {
-    const mine = travel.filter(t => t.buyer_id === w.id)
-    return { hasFlight: mine.some(t => t.type === 'flight'), hasHotel: mine.some(t => t.type === 'hotel') }
+    const myRes = travel.filter(t => t.buyer_id === w.id)
+    const myAcks = travelAcks.filter(a => a.buyer_id === w.id)
+    const hasFlight =
+      myRes.some(t => t.type === 'flight')
+      || myAcks.some(a => a.type === 'self_flight' || a.type === 'no_flight')
+    const hasHotel =
+      myRes.some(t => t.type === 'hotel')
+      || myAcks.some(a => a.type === 'self_hotel' || a.type === 'no_hotel')
+    return { hasFlight, hasHotel }
   })
   const travelComplete = travelCoverage.filter(c => c.hasFlight && c.hasHotel).length
   const travelStatus: GateLevel =
