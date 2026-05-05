@@ -55,11 +55,20 @@ const ROLE_ORDER: Array<{ role: string; label: string }> = [
 
 const GRID = '1fr 130px 200px 150px'
 
+// Roles a non-management viewer is allowed to see in the Staff list.
+// Admins/superadmins/partners see everyone; everyone else only sees
+// peers (Buyers, Sales Reps, Accounting). Pending + management
+// (admin/superadmin/marketing/trunk_admin) and partners are hidden.
+const STAFF_VISIBLE_ROLES = new Set(['buyer', 'sales_rep', 'accounting'])
+
 export default function Staff() {
-  const { users } = useApp()
+  const { users, user } = useApp()
+  const isManagement =
+    user?.role === 'admin' || user?.role === 'superadmin' || !!user?.is_partner
 
   const active = users
     .filter(u => u.active)
+    .filter(u => isManagement || (STAFF_VISIBLE_ROLES.has(u.role) && !u.is_partner))
     .slice()
     .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
 
