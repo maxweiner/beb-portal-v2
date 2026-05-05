@@ -50,6 +50,7 @@ export default function PreEventTab({ setNav }: Props) {
   const [travel, setTravel] = useState<TravelRow[]>([])
   const [bookingConfigs, setBookingConfigs] = useState<BookingRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
 
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
 
@@ -79,11 +80,19 @@ export default function PreEventTab({ setNav }: Props) {
 
   const upcoming = useMemo(() => {
     const todayIso = new Date().toISOString().slice(0, 10)
+    const q = search.trim().toLowerCase()
     return events
       .filter(e => e.status !== 'cancelled')
       .filter(e => !!e.start_date && eventEndIso(e.start_date) >= todayIso)
+      .filter(e => {
+        if (!q) return true
+        const name = eventDisplayName(e, stores).toLowerCase()
+        const store = stores.find(s => s.id === e.store_id)
+        const cityState = `${store?.city || ''} ${store?.state || ''}`.toLowerCase()
+        return name.includes(q) || cityState.includes(q)
+      })
       .sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''))
-  }, [events])
+  }, [events, search, stores])
 
   const campaignsByEvent = useMemo(() => {
     const m = new Map<string, CampaignRow[]>()
@@ -117,19 +126,21 @@ export default function PreEventTab({ setNav }: Props) {
     return <div style={{ padding: 24, color: 'var(--mist)', fontSize: 13 }}>Loading readiness…</div>
   }
 
-  if (upcoming.length === 0) {
-    return (
-      <div style={{
-        background: '#fff', border: '1px solid var(--cream2)', borderRadius: 10,
-        padding: 32, textAlign: 'center', color: 'var(--mist)', fontSize: 14,
-      }}>
-        No upcoming buying events. Use Legacy view to schedule one.
-      </div>
-    )
-  }
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <SearchBox value={search} onChange={setSearch} placeholder="Search by store or city…" />
+
+      {upcoming.length === 0 && (
+        <div style={{
+          background: '#fff', border: '1px solid var(--cream2)', borderRadius: 10,
+          padding: 32, textAlign: 'center', color: 'var(--mist)', fontSize: 14,
+        }}>
+          {search.trim()
+            ? <>No upcoming events match "<strong>{search}</strong>".</>
+            : <>No upcoming buying events. Use Legacy view to schedule one.</>}
+        </div>
+      )}
+
       {upcoming.map(ev => (
         <EventReadinessCard
           key={ev.id}
@@ -316,6 +327,43 @@ function Chip({
       <span>{icon}</span>
       <span>{label}</span>
     </button>
+  )
+}
+
+function SearchBox({
+  value, onChange, placeholder,
+}: { value: string; onChange: (v: string) => void; placeholder: string }) {
+  return (
+    <div style={{ position: 'relative' }}>
+      <span style={{
+        position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+        color: 'var(--mist)', fontSize: 13, pointerEvents: 'none',
+      }}>🔍</span>
+      <input
+        type="search"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{
+          width: '100%', boxSizing: 'border-box',
+          padding: '8px 32px 8px 32px',
+          fontSize: 13, fontFamily: 'inherit',
+          background: '#fff', color: 'var(--ink)',
+          border: '1px solid var(--cream2)', borderRadius: 8,
+        }}
+      />
+      {value && (
+        <button
+          onClick={() => onChange('')}
+          aria-label="Clear search"
+          style={{
+            position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            color: 'var(--mist)', fontSize: 14, padding: 4, lineHeight: 1,
+          }}
+        >✕</button>
+      )}
+    </div>
   )
 }
 
