@@ -42,6 +42,7 @@ export default function TrunkShows({ setNav }: { setNav?: (n: import('@/app/page
   const [filter, setFilter] = useState<Filter>('all')
   const [sort, setSort] = useState<Sort>('date-desc')
   const [view, setView] = useState<View>('cards')
+  const [search, setSearch] = useState('')
   const [createOpen, setCreateOpen] = useState<false | 'scheduled' | 'reserved'>(false)
   const [openId, setOpenId] = useState<string | null>(null)
 
@@ -65,9 +66,22 @@ export default function TrunkShows({ setNav }: { setNav?: (n: import('@/app/page
   const usersById  = useMemo(() => new Map(users.map(u => [u.id, u])), [users])
 
   const filtered = useMemo(() => {
-    const base = rows.filter(r => filter === 'all' || effectiveStatus(r) === filter)
+    const q = search.trim().toLowerCase()
     const repName = (r: TrunkShow) => (r.assigned_rep_id ? usersById.get(r.assigned_rep_id)?.name : null) || '~'
     const storeName = (r: TrunkShow) => storesById.get(r.store_id)?.name || '~'
+    let base = rows.filter(r => filter === 'all' || effectiveStatus(r) === filter)
+    if (q) {
+      base = base.filter(r => {
+        const store = storesById.get(r.store_id)
+        const blob = [
+          storeName(r),
+          repName(r),
+          store?.city, store?.state,
+          r.notes,
+        ].filter(Boolean).join(' ').toLowerCase()
+        return blob.includes(q)
+      })
+    }
     return [...base].sort((a, b) => {
       switch (sort) {
         case 'date-asc':  return a.start_date.localeCompare(b.start_date)
@@ -77,7 +91,7 @@ export default function TrunkShows({ setNav }: { setNav?: (n: import('@/app/page
         default:          return b.start_date.localeCompare(a.start_date)
       }
     })
-  }, [rows, filter, sort, usersById, storesById])
+  }, [rows, filter, sort, search, usersById, storesById])
 
   if (openId) {
     return (
@@ -109,6 +123,35 @@ export default function TrunkShows({ setNav }: { setNav?: (n: import('@/app/page
       {user?.trunk_show_calendar_subscribe_url && (
         <SubscribeCalendarBanner url={user.trunk_show_calendar_subscribe_url} />
       )}
+
+      <div style={{ position: 'relative', marginBottom: 10 }}>
+        <span style={{
+          position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+          color: 'var(--mist)', fontSize: 13, pointerEvents: 'none',
+        }}>🔍</span>
+        <input
+          type="search"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by store, rep, city, or notes…"
+          style={{
+            width: '100%', boxSizing: 'border-box',
+            padding: '9px 32px 9px 32px',
+            fontSize: 13, fontFamily: 'inherit',
+          }}
+        />
+        {search && (
+          <button
+            onClick={() => setSearch('')}
+            aria-label="Clear search"
+            style={{
+              position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              color: 'var(--mist)', fontSize: 14, padding: 4, lineHeight: 1,
+            }}
+          >✕</button>
+        )}
+      </div>
 
       <div className="card" style={{ marginBottom: 12, padding: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         {(['all', 'reserved', 'scheduled', 'in_progress', 'completed', 'cancelled'] as Filter[]).map(f => (
@@ -164,7 +207,9 @@ export default function TrunkShows({ setNav }: { setNav?: (n: import('@/app/page
         <div className="card" style={{ padding: 30, textAlign: 'center', color: 'var(--mist)' }}>
           {rows.length === 0
             ? 'No trunk shows yet.' + (isAdmin ? ' Click "+ New Trunk Show".' : '')
-            : 'Nothing matches the current filter.'}
+            : search.trim()
+              ? <>Nothing matches "<strong>{search}</strong>".</>
+              : 'Nothing matches the current filter.'}
         </div>
       ) : view === 'cards' ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
