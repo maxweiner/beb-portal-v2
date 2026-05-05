@@ -20,12 +20,18 @@ interface BuildArgs {
 
 export interface BuildContextResult {
   ctx: MergeContext
-  /** Recipient resolution (already in ctx.store_*; pulled out
-   *  separately for the send-pipeline's `to` field). */
+  /** Primary recipient (first contact flagged send_documents=true,
+   *  or fallback). Always populated when at least one valid email
+   *  is on file. */
   recipient: {
     email: string | null
     name: string | null
   }
+  /** Every contact flagged send_documents=true (with a non-empty
+   *  email), in array order. Used by the send pipeline to address
+   *  multiple recipients. Falls back to a single-element list
+   *  matching `recipient` when the contacts array is empty. */
+  recipients: { email: string; name: string | null }[]
   /** Sender resolution (already in ctx.rep_*; pulled out for
    *  the `from` header). */
   sender: {
@@ -49,7 +55,7 @@ export async function buildMergeContext({
   // Store
   const { data: store } = await sb
     .from('trunk_show_stores')
-    .select('name, address_1, city, state, zip, primary_contact_name, primary_contact_email, contact_1, email_1')
+    .select('name, address_1, city, state, zip, primary_contact_name, primary_contact_email, contact_1, email_1, contacts')
     .eq('id', ts.store_id)
     .maybeSingle()
 
@@ -85,8 +91,25 @@ export async function buildMergeContext({
     [city, [state, zip].filter(Boolean).join(' ')].filter(Boolean).join(', '),
   ].filter(Boolean).join('\n')
 
-  const recipientEmail = store?.primary_contact_email || store?.email_1 || null
-  const recipientName  = store?.primary_contact_name  || store?.contact_1 || null
+  // Resolve recipients. Source of truth is the new contacts JSONB
+  // array — every entry with send_documents=true and a non-empty
+  // email becomes a recipient. Falls back to primary_contact_*
+  // and then to legacy email_1/contact_1 when the array is empty.
+  const contactsArr = Array.isArray(store?.contacts) ? (store!.contacts as any[]) : []
+  const flagged = contactsArr.filter(c => c?.send_documents && typeof c?.email === 'string' && c.email.trim())
+  let recipients = flagged.map(c => ({
+    email: String(c.email).trim(),
+    name: (typeof c?.name === 'string' && c.name.trim()) ? c.name.trim() : null,
+  }))
+  if (recipients.length === 0) {
+    const fallbackEmail = store?.primary_contact_email || store?.email_1 || null
+    const fallbackName  = store?.primary_contact_name  || store?.contact_1 || null
+    if (fallbackEmail) {
+      recipients = [{ email: fallbackEmail, name: fallbackName }]
+    }
+  }
+  const recipientEmail = recipients[0]?.email ?? null
+  const recipientName  = recipients[0]?.name  ?? null
 
   const ctx: MergeContext = {
     store_name:           storeName,
@@ -110,6 +133,7 @@ export async function buildMergeContext({
   return {
     ctx,
     recipient: { email: recipientEmail, name: recipientName },
+    recipients,
     sender:    { email: rep.email, name: rep.name, phone: rep.phone },
   }
 }

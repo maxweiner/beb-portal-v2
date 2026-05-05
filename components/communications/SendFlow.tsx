@@ -39,6 +39,8 @@ export default function SendFlow({
   const [templateId,  setTemplateId]  = useState<string>(initialTemplateId  || '')
   const [subject, setSubject] = useState('')
   const [body,    setBody]    = useState('')
+  // Comma-joined recipient lists. Editable so the rep can drop
+  // a recipient last-minute or add an ad-hoc one.
   const [toEmail, setToEmail] = useState('')
   const [toName,  setToName]  = useState('')
   const [loadingCtx, setLoadingCtx] = useState(false)
@@ -105,8 +107,9 @@ export default function SendFlow({
         if (!tpl) return
         setSubject(applyMergeFields(tpl.subject_line, ctx.ctx))
         setBody(applyMergeFields(tpl.body, ctx.ctx))
-        setToEmail(ctx.recipient.email || '')
-        setToName(ctx.recipient.name || '')
+        // Comma-joined for display + edit; the endpoint splits.
+        setToEmail(ctx.recipients.map(r => r.email).join(', '))
+        setToName(ctx.recipients.map(r => r.name || '').join(', '))
         setAutoFilled(true)
       } catch (e: any) {
         setError(e?.message || 'Could not load event context')
@@ -177,6 +180,7 @@ export default function SendFlow({
           template_id: templateId,
           subject,
           body,
+          // Comma-joined → endpoint splits into Resend's `to` array.
           to_email: toEmail.trim(),
           to_name: toName.trim() || null,
         }),
@@ -261,9 +265,13 @@ export default function SendFlow({
               <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.04em', paddingTop: 8 }}>To</span>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <input value={toName} onChange={e => setToName(e.target.value)}
-                  placeholder="Recipient name" />
+                  placeholder="Names (comma-separated)" />
                 <input value={toEmail} onChange={e => setToEmail(e.target.value)}
-                  placeholder="recipient@example.com" type="email" />
+                  placeholder="email1@x.com, email2@x.com" type="text" />
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4, gridColumn: '2 / 3' }}>
+                {toEmail.includes(',') && '📨 Sending to multiple recipients · '}
+                Auto-filled from contacts flagged "Send Documents"; comma-separate to add or trim.
               </div>
             </div>
           </div>
@@ -310,6 +318,7 @@ export default function SendFlow({
 async function fetchContext(trunkShowId: string, repUserId?: string | null): Promise<{
   ctx: MergeContext
   recipient: { email: string | null; name: string | null }
+  recipients: { email: string; name: string | null }[]
 }> {
   const { data: ts } = await supabase
     .from('trunk_shows')
@@ -321,7 +330,7 @@ async function fetchContext(trunkShowId: string, repUserId?: string | null): Pro
   const [{ data: store }, { data: hours }] = await Promise.all([
     supabase
       .from('trunk_show_stores')
-      .select('name, address_1, city, state, zip, primary_contact_email, primary_contact_name, email_1, contact_1')
+      .select('name, address_1, city, state, zip, primary_contact_email, primary_contact_name, email_1, contact_1, contacts')
       .eq('id', ts.store_id)
       .maybeSingle(),
     supabase
@@ -344,8 +353,23 @@ async function fetchContext(trunkShowId: string, repUserId?: string | null): Pro
   const state = store?.state || ''
   const zip   = store?.zip || ''
   const fullAddress = [addr1, [city, [state, zip].filter(Boolean).join(' ')].filter(Boolean).join(', ')].filter(Boolean).join('\n')
-  const recipientEmail = store?.primary_contact_email || store?.email_1 || null
-  const recipientName  = store?.primary_contact_name  || store?.contact_1 || null
+
+  // Resolve recipients from the new contacts array; fall back
+  // to legacy primary_contact_* / email_1 when the array is
+  // empty so old data still sends.
+  const contactsArr = Array.isArray((store as any)?.contacts) ? ((store as any).contacts as any[]) : []
+  const flagged = contactsArr.filter(c => c?.send_documents && typeof c?.email === 'string' && c.email.trim())
+  let recipients: { email: string; name: string | null }[] = flagged.map(c => ({
+    email: String(c.email).trim(),
+    name: (typeof c?.name === 'string' && c.name.trim()) ? c.name.trim() : null,
+  }))
+  if (recipients.length === 0) {
+    const fallbackEmail = store?.primary_contact_email || store?.email_1 || null
+    const fallbackName  = store?.primary_contact_name  || store?.contact_1 || null
+    if (fallbackEmail) recipients = [{ email: fallbackEmail, name: fallbackName }]
+  }
+  const recipientEmail = recipients[0]?.email ?? null
+  const recipientName  = recipients[0]?.name ?? null
 
   const ctx: MergeContext = {
     store_name:           store?.name || '',
@@ -365,7 +389,7 @@ async function fetchContext(trunkShowId: string, repUserId?: string | null): Pro
     rep_phone:            rep?.phone || '',
     today_date:           formatDateLong(new Date().toISOString().slice(0, 10)),
   }
-  return { ctx, recipient: { email: recipientEmail, name: recipientName } }
+  return { ctx, recipient: { email: recipientEmail, name: recipientName }, recipients }
 }
 
 function formatDateLong(iso: string | null | undefined): string {
