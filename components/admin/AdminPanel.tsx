@@ -134,6 +134,35 @@ function UsersTab() {
     reload()
   }
 
+  // Per-rep trunk-show calendar setup — POSTs to the create endpoint
+  // which provisions a Google Calendar owned by our service account
+  // and grants public-read so the rep can subscribe without auth.
+  const [creatingCalFor, setCreatingCalFor] = useState<string | null>(null)
+  const createTrunkCal = async (u: any) => {
+    if (!confirm(`Create a personal trunk-show Google Calendar for ${u.name}?\n\nIt will be owned by the BEB Portal service account and publicly subscribable via a read-only URL.`)) return
+    setCreatingCalFor(u.id)
+    try {
+      const res = await fetch('/api/admin/trunk-show-calendars/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: u.id }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) { alert(`Failed: ${json.error || res.status}`); return }
+      reload()
+    } finally {
+      setCreatingCalFor(null)
+    }
+  }
+  const copySubscribeUrl = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url)
+      alert('Copied to clipboard!')
+    } catch {
+      window.prompt('Copy this URL:', url)
+    }
+  }
+
   const changeRole = async (uid: string, newRole: Role) => {
     if (!confirm(`Change primary role to ${newRole}?`)) return
     // Find the current primary so we can drop it from user_roles.
@@ -511,6 +540,37 @@ function UsersTab() {
                   </div>
                   <span style={{ fontSize: 13, fontWeight: 600, color: getTrunkRep(u) ? 'var(--green-dark)' : 'var(--ash)' }}>Trunk Rep</span>
                 </label>
+              )}
+
+              {canEditTrunkRep && getTrunkRep(u) && (
+                u.trunk_show_calendar_subscribe_url ? (
+                  <button
+                    onClick={e => { e.stopPropagation(); copySubscribeUrl(u.trunk_show_calendar_subscribe_url!) }}
+                    title={u.trunk_show_calendar_subscribe_url}
+                    style={{
+                      fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
+                      padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
+                      background: 'rgba(234,88,12,.10)', color: '#C2410C',
+                      border: '1px solid rgba(234,88,12,.3)',
+                    }}
+                  >
+                    📅 Copy Subscribe URL
+                  </button>
+                ) : (
+                  <button
+                    onClick={e => { e.stopPropagation(); createTrunkCal(u) }}
+                    disabled={creatingCalFor === u.id}
+                    style={{
+                      fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
+                      padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
+                      background: 'transparent', color: 'var(--ash)',
+                      border: '1px dashed var(--pearl)',
+                      opacity: creatingCalFor === u.id ? .6 : 1,
+                    }}
+                  >
+                    {creatingCalFor === u.id ? '⏳ Creating…' : '📅 Set up trunk-show calendar'}
+                  </button>
+                )
               )}
             </div>
           </div>
