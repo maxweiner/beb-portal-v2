@@ -530,6 +530,16 @@ export interface TrunkShowStore {
    *  without touching the legacy email_N + contact_N columns. */
   primary_contact_email: string | null
   primary_contact_name: string | null
+  /** Ordered list of contacts. Replaces legacy contact_1..3 +
+   *  email_1..2 columns; the old columns stay in the schema for
+   *  backwards compatibility but the UI reads/writes this array. */
+  contacts: TrunkShowStoreContact[]
+}
+
+export interface TrunkShowStoreContact {
+  name: string
+  email: string | null
+  send_documents: boolean
 }
 
 export interface TrunkShowHours {
