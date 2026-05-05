@@ -21,6 +21,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/process-trunk-show-gcal-sync?secret=bebportal2024",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/poll-tracking?secret=bebportal2024",
       "schedule": "*/30 * * * *"
     },
