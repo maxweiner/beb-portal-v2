@@ -64,6 +64,12 @@ type EventNoteRow = {
   category: 'worked' | 'didnt_work' | 'do_differently'
 }
 
+type WaitlistRow = {
+  event_id: string
+  how_heard: string | null
+  status: 'waiting' | 'called' | 'served' | 'no_show'
+}
+
 const fmtMoney = (n: number) => '$' + Math.round(n).toLocaleString('en-US')
 
 const LOOKBACK_DAYS = 90
@@ -78,6 +84,7 @@ export default function PostEventTab({ setNav }: Props) {
   const [payouts, setPayouts] = useState<Payout[]>([])
   const [expenseReports, setExpenseReports] = useState<ExpenseReportRow[]>([])
   const [eventNotes, setEventNotes] = useState<EventNoteRow[]>([])
+  const [waitlist, setWaitlist] = useState<WaitlistRow[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [savingRate, setSavingRate] = useState<string | null>(null)
@@ -103,7 +110,7 @@ export default function PostEventTab({ setNav }: Props) {
         .filter(e => !!e.start_date && eventEndIso(e.start_date) < todayIso) as Event[]
 
       const ids = past.map(e => e.id)
-      const [apptsRes, payoutsRes, reportsRes, notesRes] = await Promise.all([
+      const [apptsRes, payoutsRes, reportsRes, notesRes, waitRes] = await Promise.all([
         ids.length === 0 ? Promise.resolve({ data: [] }) :
           supabase.from('appointments')
             .select('event_id, appointment_employee_id, store_employees(name)')
@@ -122,6 +129,10 @@ export default function PostEventTab({ setNav }: Props) {
           supabase.from('event_notes')
             .select('event_id, category')
             .in('event_id', ids),
+        ids.length === 0 ? Promise.resolve({ data: [] }) :
+          supabase.from('event_waitlist')
+            .select('event_id, how_heard, status')
+            .in('event_id', ids),
       ])
 
       if (cancelled) return
@@ -130,6 +141,7 @@ export default function PostEventTab({ setNav }: Props) {
       setPayouts((payoutsRes.data || []) as Payout[])
       setExpenseReports((reportsRes.data || []) as ExpenseReportRow[])
       setEventNotes((notesRes.data || []) as EventNoteRow[])
+      setWaitlist((waitRes.data || []) as WaitlistRow[])
       setLoading(false)
     })()
     return () => { cancelled = true }
@@ -180,6 +192,20 @@ export default function PostEventTab({ setNav }: Props) {
     }
     return m
   }, [expenseReports])
+
+  const waitlistByEvent = useMemo(() => {
+    const m = new Map<string, { total: number; served: number; noShow: number; heardCounts: Record<string, number> }>()
+    for (const w of waitlist) {
+      const cur = m.get(w.event_id) || { total: 0, served: 0, noShow: 0, heardCounts: {} }
+      cur.total += 1
+      if (w.status === 'served') cur.served += 1
+      if (w.status === 'no_show') cur.noShow += 1
+      const key = (w.how_heard || 'Not specified').trim()
+      cur.heardCounts[key] = (cur.heardCounts[key] || 0) + 1
+      m.set(w.event_id, cur)
+    }
+    return m
+  }, [waitlist])
 
   const notesByEvent = useMemo(() => {
     const m = new Map<string, { worked: number; didnt_work: number; do_differently: number }>()
@@ -265,6 +291,7 @@ export default function PostEventTab({ setNav }: Props) {
         const spiffsTotal = Array.from(earned.values()).reduce((s, e) => s + e.count * rate, 0)
         const spiffsPaid = paid.reduce((s, p) => s + Number(p.amount), 0)
 
+        const wait = waitlistByEvent.get(ev.id) || { total: 0, served: 0, noShow: 0, heardCounts: {} as Record<string, number> }
         const reports = reportsByEvent.get(ev.id) || []
         const noteCounts = notesByEvent.get(ev.id) || { worked: 0, didnt_work: 0, do_differently: 0 }
         const totalNotes = noteCounts.worked + noteCounts.didnt_work + noteCounts.do_differently
@@ -397,6 +424,28 @@ export default function PostEventTab({ setNav }: Props) {
             </Section>
 
             {/* Debrief */}
+            {wait.total > 0 && (
+              <Section title={`🪑 Waitlist · ${wait.total} total`}>
+                <div style={{ fontSize: 12, color: 'var(--ash)', marginBottom: 8 }}>
+                  <strong style={{ color: '#065f46' }}>{wait.served}</strong> served ·{' '}
+                  <strong style={{ color: '#7a1f0f' }}>{wait.noShow}</strong> no-show ·{' '}
+                  <strong style={{ color: 'var(--mist)' }}>{wait.total - wait.served - wait.noShow}</strong> uncategorized
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {Object.entries(wait.heardCounts)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([source, n]) => (
+                      <span key={source} style={{
+                        fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6,
+                        background: 'var(--cream2)', color: 'var(--ash)',
+                      }}>
+                        {source} · {n}
+                      </span>
+                    ))}
+                </div>
+              </Section>
+            )}
+
             <Section title="📝 Debrief">
               {totalNotes === 0 ? (
                 <div style={{ fontSize: 12, color: 'var(--mist)' }}>No debrief notes yet.</div>
