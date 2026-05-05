@@ -15,6 +15,7 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { NavPage } from '@/app/page'
 import type { Lead, TrunkShow, TrunkShowStatus } from '@/types'
+import CommsRemindersWidget from '@/components/communications/CommsRemindersWidget'
 
 const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
 
@@ -208,6 +209,10 @@ export default function SalesRepDashboard({ setNav }: { setNav?: (n: NavPage) =>
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
+      {/* Trunk-comms reminders — first thing the rep sees so
+          today's overdue / due-soon work doesn't slip. */}
+      <CommsRemindersWidget setNav={setNav} />
+
       <div style={{
         background: 'linear-gradient(160deg, var(--sidebar-bg) 0%, var(--green-dark) 50%, var(--green) 100%)',
         borderRadius: 16, padding: '20px 24px', marginBottom: 18, color: '#fff',

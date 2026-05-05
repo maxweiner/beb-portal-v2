@@ -15,6 +15,7 @@ import NextEventCard from './NextEventCard'
 import BuyerNextEventCard from './BuyerNextEventCard'
 import ProfileTrigger from './ProfileTrigger'
 import MetalsTicker from './MetalsTicker'
+import CommsRemindersWidget from '@/components/communications/CommsRemindersWidget'
 
 /** Current-year past/current events where `buyerId` is in the workers array. */
 function getBuyerEventsThisYear(buyerId: string, allEvents: any[]): any[] {
@@ -158,6 +159,10 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
+      {/* Trunk-comms reminders widget — visible to admins, partners,
+          and trunk reps. Auto-hides when no items are due/overdue. */}
+      <CommsRemindersWidget setNav={setNav} />
+
       {/* Metals price ticker — buyer-only for now. Top strip above
           the hero so it's always visible without scrolling. */}
       {isBuyer && <MetalsTicker variant="desktop" />}
