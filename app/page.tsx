@@ -146,9 +146,13 @@ export default function Home() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen" style={{ background: 'var(--page-bg)' }}>
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-9 h-9 border-4 rounded-full animate-spin"
-            style={{ borderColor: 'var(--pearl)', borderTopColor: 'var(--green)' }} />
+        <div className="flex flex-col items-center gap-5">
+          <div style={{ display: 'flex', gap: 18 }} aria-label="Loading">
+            <span className="beb-jewel-loader" style={{ animationDelay: '0s, 0s' }}>💎</span>
+            <span className="beb-jewel-loader" style={{ animationDelay: '.18s, .4s' }}>💍</span>
+            <span className="beb-jewel-loader" style={{ animationDelay: '.36s, .8s' }}>⌚</span>
+            <span className="beb-jewel-loader" style={{ animationDelay: '.54s, 1.2s' }}>👑</span>
+          </div>
           <div className="text-sm font-semibold" style={{ color: 'var(--mist)' }}>Loading your portal…</div>
         </div>
       </div>
