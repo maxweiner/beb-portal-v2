@@ -130,30 +130,64 @@ export async function GET(req: Request) {
   // For each store, look up its most recent (or upcoming) event window
   // so the modal can populate "All event days" mode without making the
   // user pick the event.
+  //
+  // We also compute two flags used by the modal's smart-default logic:
+  //   - is_event_in_progress: today falls within the event's day list
+  //     (or, fallback, within start_date + 7 days when day_date isn't set)
+  //   - user_is_assigned: the requesting user appears in events.workers
+  //     for any in-progress event at the store. Used to bias the modal
+  //     toward the store the buyer is currently working on.
   const storeIds = [...storeMeta.keys()]
+  const todayStr = ymd(today)
   let eventByStore = new Map<string, { start_date: string; days: string[] }>()
+  const inProgressStores = new Set<string>()
+  const userAssignedStores = new Set<string>()
   if (storeIds.length > 0) {
     const { data: events } = await sb
       .from('events')
-      .select('id, store_id, start_date, days:event_days(day_date)')
+      .select('id, store_id, start_date, workers, days:event_days(day_date)')
       .in('store_id', storeIds)
       .gte('start_date', ymd(back))
       .lte('start_date', ymd(ahead))
       .order('start_date', { ascending: false })
     for (const e of (events || [])) {
-      // Take the first (most recent) event per store. If there are
-      // overlapping events, the modal's "All event days" picks the
-      // newest — close enough for an immediate send.
       const sid = (e as any).store_id
-      if (eventByStore.has(sid)) continue
       const eventDays = ((e as any).days || [])
         .map((d: any) => d.day_date)
         .filter(Boolean)
         .sort()
-      eventByStore.set(sid, {
-        start_date: (e as any).start_date,
-        days: eventDays.length > 0 ? eventDays : [(e as any).start_date],
-      })
+      const startDate: string = (e as any).start_date
+
+      // In-progress check: today appears in event_days, OR today falls
+      // within start_date and start_date + 7 (fallback for events that
+      // don't have event_days rows seeded yet).
+      const within7 = (() => {
+        const start = new Date(startDate + 'T12:00:00')
+        const end = new Date(start); end.setUTCDate(start.getUTCDate() + 7)
+        const t = new Date(todayStr + 'T12:00:00')
+        return t >= start && t <= end
+      })()
+      const inProgress = (eventDays.length > 0 && eventDays.includes(todayStr)) || within7
+      if (inProgress) inProgressStores.add(sid)
+
+      // user_is_assigned: requesting user's public.users.id (me.id) is
+      // listed in this event's workers JSONB — only counts if the event
+      // is in-progress per the rule above.
+      if (inProgress) {
+        const ws = (e as any).workers
+        if (Array.isArray(ws) && ws.some((w: any) => w?.id === me.id)) {
+          userAssignedStores.add(sid)
+        }
+      }
+
+      // Capture the most recent event window per store for the
+      // "All event days" mode.
+      if (!eventByStore.has(sid)) {
+        eventByStore.set(sid, {
+          start_date: startDate,
+          days: eventDays.length > 0 ? eventDays : [startDate],
+        })
+      }
     }
   }
 
@@ -175,6 +209,8 @@ export async function GET(req: Request) {
         state: meta.state,
         portal_dates: [...datesSet].sort(),
         event_window: eventByStore.get(id) || null,
+        is_event_in_progress: inProgressStores.has(id),
+        user_is_assigned: userAssignedStores.has(id),
       }
     })
     .sort((a, b) => a.name.localeCompare(b.name))

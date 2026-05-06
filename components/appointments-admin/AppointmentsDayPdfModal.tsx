@@ -34,6 +34,10 @@ interface StoreOption {
   state: string | null
   portal_dates: string[]
   event_window: { start_date: string; days: string[] } | null
+  /** Server-computed: today falls within an event window for this store. */
+  is_event_in_progress?: boolean
+  /** Server-computed: the requesting user is in the in-progress event's workers. */
+  user_is_assigned?: boolean
 }
 
 interface Props {
@@ -87,13 +91,28 @@ export default function AppointmentsDayPdfModal({ initialStoreId, initialDate, s
           setStoresLoaded(true)
           return
         }
-        setStores(j.stores || [])
+        const list: StoreOption[] = j.stores || []
+        setStores(list)
         setStoresLoaded(true)
+
+        // Smart default: if the click context didn't pre-select a store,
+        // prefer (in order):
+        //   1. Store with a current event where the user is assigned
+        //   2. Any store with a current event in progress
+        //   3. Leave blank — the empty-state message in the preview
+        //      pane prompts the user to pick.
+        if (!storeId) {
+          const myActive = list.find(s => s.user_is_assigned && s.is_event_in_progress)
+          const anyActive = list.find(s => s.is_event_in_progress)
+          const next = myActive || anyActive
+          if (next) setStoreId(next.id)
+        }
       } catch {
         if (!cancelled) setStoresLoaded(true)
       }
     })()
     return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const selectedStore = useMemo(
@@ -330,9 +349,23 @@ export default function AppointmentsDayPdfModal({ initialStoreId, initialDate, s
           <div style={{ borderRight: '1px solid var(--cream2)', background: 'var(--cream)', overflow: 'hidden', position: 'relative' }}>
             {pdfErr && <div style={{ padding: 16, color: '#B22234', fontSize: 13 }}>{pdfErr}</div>}
             {!pdfErr && !pdfObjectUrl && (
-              <div style={{ padding: 24, color: 'var(--mist)', fontSize: 13 }}>
-                {storeId && effectiveDates.length > 0 ? 'Rendering preview…' : 'Pick a store and a date to preview.'}
-              </div>
+              storeId && effectiveDates.length > 0 ? (
+                <div style={{ padding: 24, color: 'var(--mist)', fontSize: 13 }}>Rendering preview…</div>
+              ) : (
+                <div style={{
+                  height: '100%', minHeight: 480,
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                  padding: 24, gap: 10, textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: 36 }}>📅</div>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)' }}>
+                    Please choose an event to the right →
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--mist)', maxWidth: 320 }}>
+                    Pick a store and a day in the panel on the right to preview the appointment list.
+                  </div>
+                </div>
+              )
             )}
             {pdfObjectUrl && (
               <iframe
