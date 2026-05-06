@@ -76,9 +76,6 @@ export default function WaitlistJoinClient({ eventId, storeName, cityState, hear
           <strong>{storeName}</strong>
           {cityState && <> · {cityState}</>}
         </div>
-        <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
-          Today only — list resets at 7pm.
-        </div>
       </div>
 
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
