@@ -52,59 +52,47 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ]
 
+function useIsNarrow(breakpoint = 768) {
+  const [narrow, setNarrow] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth <= breakpoint
+  )
+  useEffect(() => {
+    const onResize = () => setNarrow(window.innerWidth <= breakpoint)
+    onResize()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [breakpoint])
+  return narrow
+}
+
 export default function AdminPanel() {
   const [tab, setTab] = useState<Tab>('users')
+  const isNarrow = useIsNarrow()
 
+  // On mobile the 220px sidebar + 1fr table layout breaks badly
+  // (sidebar eats half the screen; tables get unusable). Collapse
+  // the sidebar to a horizontally-scrollable pill row at the top
+  // on narrow widths; main pane takes the full width below.
   return (
     <div className="p-6" style={{ maxWidth: 1280, margin: '0 auto' }}>
       <h1 className="text-2xl font-black mb-4" style={{ color: 'var(--ink)' }}>⚙️ Admin Panel</h1>
 
       <div style={{
-        display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16,
+        display: 'grid',
+        gridTemplateColumns: isNarrow ? '1fr' : '220px 1fr',
+        gap: isNarrow ? 0 : 16,
         background: '#fff', borderRadius: 12, overflow: 'hidden',
         boxShadow: '0 1px 3px rgba(0,0,0,.06)',
-        minHeight: 600,
+        minHeight: isNarrow ? 'auto' : 600,
       }}>
-        {/* Sub-sidebar */}
-        <nav style={{ background: 'var(--cream2)', padding: '14px 10px' }}>
-          {NAV_GROUPS.map((g, gi) => (
-            <div key={g.label} style={{ marginTop: gi === 0 ? 0 : 14 }}>
-              <div style={{
-                fontSize: 10, fontWeight: 800, color: 'var(--mist)',
-                textTransform: 'uppercase', letterSpacing: '.06em',
-                padding: '0 8px 4px',
-              }}>{g.label}</div>
-              {g.items.map(it => {
-                const on = tab === it.id
-                return (
-                  <button
-                    key={it.id}
-                    onClick={() => setTab(it.id)}
-                    style={{
-                      width: '100%', textAlign: 'left',
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '7px 10px', borderRadius: 6,
-                      fontFamily: 'inherit', fontSize: 13, fontWeight: on ? 800 : 600,
-                      color: on
-                        ? (it.danger ? 'var(--red, #B22234)' : 'var(--green-dark)')
-                        : 'var(--ash)',
-                      background: on ? '#fff' : 'transparent',
-                      border: 'none', cursor: 'pointer',
-                      boxShadow: on ? '0 1px 2px rgba(0,0,0,.06)' : 'none',
-                      marginBottom: 2,
-                    }}
-                  >
-                    <span style={{ fontSize: 14 }}>{it.icon}</span>
-                    <span>{it.label}</span>
-                  </button>
-                )
-              })}
-            </div>
-          ))}
-        </nav>
+        {/* Nav — sidebar on desktop, horizontal pill row on mobile */}
+        {isNarrow ? <NavRow tab={tab} onTab={setTab} /> : <NavSidebar tab={tab} onTab={setTab} />}
 
         {/* Main pane */}
-        <div style={{ padding: '20px 24px', minWidth: 0 }}>
+        <div style={{
+          padding: isNarrow ? '14px 14px' : '20px 24px',
+          minWidth: 0,
+        }}>
           {tab === 'users'        && <UsersTab />}
           {tab === 'invite'       && <InviteTab />}
           {tab === 'merge'        && <MergeTab />}
@@ -115,6 +103,99 @@ export default function AdminPanel() {
         </div>
       </div>
     </div>
+  )
+}
+
+function NavSidebar({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
+  return (
+    <nav style={{ background: 'var(--cream2)', padding: '14px 10px' }}>
+      {NAV_GROUPS.map((g, gi) => (
+        <div key={g.label} style={{ marginTop: gi === 0 ? 0 : 14 }}>
+          <div style={{
+            fontSize: 10, fontWeight: 800, color: 'var(--mist)',
+            textTransform: 'uppercase', letterSpacing: '.06em',
+            padding: '0 8px 4px',
+          }}>{g.label}</div>
+          {g.items.map(it => {
+            const on = tab === it.id
+            return (
+              <button
+                key={it.id}
+                onClick={() => onTab(it.id)}
+                style={{
+                  width: '100%', textAlign: 'left',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '7px 10px', borderRadius: 6,
+                  fontFamily: 'inherit', fontSize: 13, fontWeight: on ? 800 : 600,
+                  color: on
+                    ? (it.danger ? 'var(--red, #B22234)' : 'var(--green-dark)')
+                    : 'var(--ash)',
+                  background: on ? '#fff' : 'transparent',
+                  border: 'none', cursor: 'pointer',
+                  boxShadow: on ? '0 1px 2px rgba(0,0,0,.06)' : 'none',
+                  marginBottom: 2,
+                }}
+              >
+                <span style={{ fontSize: 14 }}>{it.icon}</span>
+                <span>{it.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      ))}
+    </nav>
+  )
+}
+
+function NavRow({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
+  // Flatten groups; group labels become tiny dividers between
+  // chunks so the 4-section structure is still legible.
+  return (
+    <nav style={{
+      background: 'var(--cream2)',
+      padding: '10px 10px',
+      overflowX: 'auto',
+      WebkitOverflowScrolling: 'touch',
+      borderBottom: '1px solid var(--pearl)',
+    }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', minWidth: 'max-content' }}>
+        {NAV_GROUPS.map((g, gi) => (
+          <div key={g.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {gi > 0 && <span style={{ width: 1, height: 18, background: 'var(--pearl)' }} aria-hidden />}
+            {g.items.map(it => {
+              const on = tab === it.id
+              return (
+                <button
+                  key={it.id}
+                  onClick={() => onTab(it.id)}
+                  style={{
+                    flexShrink: 0,
+                    fontFamily: 'inherit', fontSize: 12, fontWeight: on ? 800 : 600,
+                    padding: '8px 12px', borderRadius: 99,
+                    color: on
+                      ? '#fff'
+                      : (it.danger ? 'var(--red, #B22234)' : 'var(--ash)'),
+                    background: on
+                      ? (it.danger ? 'var(--red, #B22234)' : 'var(--green-dark)')
+                      : '#fff',
+                    border: '1px solid ' + (on
+                      ? (it.danger ? 'var(--red, #B22234)' : 'var(--green-dark)')
+                      : 'var(--pearl)'),
+                    cursor: 'pointer',
+                    minHeight: 36,
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <span style={{ fontSize: 13 }}>{it.icon}</span>
+                  <span>{it.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        ))}
+      </div>
+    </nav>
   )
 }
 
