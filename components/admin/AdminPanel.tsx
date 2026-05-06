@@ -7,39 +7,113 @@ import type { User, Role } from '@/types'
 import DatePicker from '@/components/ui/DatePicker'
 import { eventDisplayName } from '@/lib/eventName'
 
-type Tab = 'users' | 'invite' | 'merge' | 'email' | 'sms' | 'events'
+type Tab =
+  | 'users' | 'invite' | 'merge'
+  | 'email' | 'sms'
+  | 'add-event' | 'delete-event'
+
+interface NavItem {
+  id: Tab
+  label: string
+  icon: string
+  danger?: boolean
+}
+interface NavGroup {
+  label: string
+  items: NavItem[]
+}
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: 'People',
+    items: [
+      { id: 'users',  label: 'Users',        icon: '👥' },
+      { id: 'invite', label: 'Invite User',  icon: '✉️' },
+      { id: 'merge',  label: 'Merge Users',  icon: '🔀' },
+    ],
+  },
+  {
+    label: 'Notifications',
+    items: [
+      { id: 'email', label: 'Email (Resend)', icon: '📧' },
+      { id: 'sms',   label: 'SMS (Twilio)',   icon: '📱' },
+    ],
+  },
+  {
+    label: 'Tools',
+    items: [
+      { id: 'add-event', label: 'Add Past Event', icon: '📅' },
+    ],
+  },
+  {
+    label: 'Danger',
+    items: [
+      { id: 'delete-event', label: 'Delete Past Event', icon: '🗑', danger: true },
+    ],
+  },
+]
 
 export default function AdminPanel() {
   const [tab, setTab] = useState<Tab>('users')
-  const { user } = useApp()
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <h1 className="text-2xl font-black mb-6" style={{ color: 'var(--ink)' }}>Admin Panel</h1>
+    <div className="p-6" style={{ maxWidth: 1280, margin: '0 auto' }}>
+      <h1 className="text-2xl font-black mb-4" style={{ color: 'var(--ink)' }}>⚙️ Admin Panel</h1>
 
-      {/* Tab bar */}
-      <div className="tab-bar">
-        {([
-          ['users', 'Users & Roles'],
-          ['invite', 'Invite User'],
-          ['merge', 'Merge Users'],
-          ['email', 'Email Settings'],
-          ['sms', 'SMS Settings'],
-          ['events', 'Events'],
-        ] as [Tab, string][]).map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)}
-            className={`tab${tab === id ? ' active' : ''}`}>
-            {label}
-          </button>
-        ))}
+      <div style={{
+        display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16,
+        background: '#fff', borderRadius: 12, overflow: 'hidden',
+        boxShadow: '0 1px 3px rgba(0,0,0,.06)',
+        minHeight: 600,
+      }}>
+        {/* Sub-sidebar */}
+        <nav style={{ background: 'var(--cream2)', padding: '14px 10px' }}>
+          {NAV_GROUPS.map((g, gi) => (
+            <div key={g.label} style={{ marginTop: gi === 0 ? 0 : 14 }}>
+              <div style={{
+                fontSize: 10, fontWeight: 800, color: 'var(--mist)',
+                textTransform: 'uppercase', letterSpacing: '.06em',
+                padding: '0 8px 4px',
+              }}>{g.label}</div>
+              {g.items.map(it => {
+                const on = tab === it.id
+                return (
+                  <button
+                    key={it.id}
+                    onClick={() => setTab(it.id)}
+                    style={{
+                      width: '100%', textAlign: 'left',
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '7px 10px', borderRadius: 6,
+                      fontFamily: 'inherit', fontSize: 13, fontWeight: on ? 800 : 600,
+                      color: on
+                        ? (it.danger ? 'var(--red, #B22234)' : 'var(--green-dark)')
+                        : 'var(--ash)',
+                      background: on ? '#fff' : 'transparent',
+                      border: 'none', cursor: 'pointer',
+                      boxShadow: on ? '0 1px 2px rgba(0,0,0,.06)' : 'none',
+                      marginBottom: 2,
+                    }}
+                  >
+                    <span style={{ fontSize: 14 }}>{it.icon}</span>
+                    <span>{it.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          ))}
+        </nav>
+
+        {/* Main pane */}
+        <div style={{ padding: '20px 24px', minWidth: 0 }}>
+          {tab === 'users'        && <UsersTab />}
+          {tab === 'invite'       && <InviteTab />}
+          {tab === 'merge'        && <MergeTab />}
+          {tab === 'email'        && <EmailTab />}
+          {tab === 'sms'          && <SmsTab />}
+          {tab === 'add-event'    && <EditEventSection />}
+          {tab === 'delete-event' && <DeleteEventSection />}
+        </div>
       </div>
-
-      {tab === 'users' && <UsersTab />}
-      {tab === 'invite' && <InviteTab />}
-      {tab === 'merge' && <MergeTab />}
-      {tab === 'email' && <EmailTab />}
-      {tab === 'sms' && <SmsTab />}
-      {tab === 'events' && <EventsTab />}
     </div>
   )
 }
@@ -1053,15 +1127,6 @@ function SmsTab() {
 }
 
 /* ── EVENTS TAB ── superadmin tools to edit/delete an event */
-function EventsTab() {
-  return (
-    <div>
-      <EditEventSection />
-      <DeleteEventSection />
-    </div>
-  )
-}
-
 function EditEventSection() {
   const { user: me, events, stores, reload } = useApp()
   const isSuperAdmin = me?.role === 'superadmin'
