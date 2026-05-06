@@ -11,10 +11,12 @@
 
 import { useEffect, useState } from 'react'
 import type { NavPage } from '@/app/page'
+import { useApp } from '@/lib/context'
 import Events from './Events'
 import PreEventTab from './PreEventTab'
 import DuringEventTab from './DuringEventTab'
 import PostEventTab from './PostEventTab'
+import CreateEventModal from './CreateEventModal'
 
 type ViewMode = 'new' | 'legacy'
 type Phase = 'pre' | 'during' | 'post'
@@ -22,8 +24,11 @@ type Phase = 'pre' | 'during' | 'post'
 const STORAGE_KEY = 'beb-buying-events-view'
 
 export default function BuyingEventsView({ setNav }: { setNav?: (n: NavPage) => void }) {
+  const { user } = useApp()
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || user?.is_partner === true
   const [view, setView] = useState<ViewMode>('new')
   const [phase, setPhase] = useState<Phase>('pre')
+  const [createMode, setCreateMode] = useState<'scheduled' | 'reserved' | null>(null)
 
   // Restore the user's preferred view on mount.
   useEffect(() => {
@@ -52,11 +57,23 @@ export default function BuyingEventsView({ setNav }: { setNav?: (n: NavPage) => 
     <div className="p-6" style={{ maxWidth: 1200, margin: '0 auto' }}>
       <ViewChooser view={view} onChange={changeView} />
 
-      <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)', margin: '0 0 4px' }}>
-        ◆ Buying Events
-      </h1>
-      <div style={{ color: 'var(--mist)', fontSize: 13, marginBottom: 14 }}>
-        Pre-event prep, live ops, and post-event close-out — switch with the tabs.
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)', margin: '0 0 4px' }}>
+            ◆ Buying Events
+          </h1>
+          <div style={{ color: 'var(--mist)', fontSize: 13 }}>
+            Pre-event prep, live ops, and post-event close-out — switch with the tabs.
+          </div>
+        </div>
+        {isAdmin && (
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <button onClick={() => setCreateMode('scheduled')} className="btn-primary btn-sm">+ New Event</button>
+            <button onClick={() => setCreateMode('reserved')} className="btn-outline btn-sm" title="Tentative date — Save the Date">
+              📌 Save the Date
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Pill tabs (matches Pattern D Style 1 from the mock) */}
@@ -90,6 +107,13 @@ export default function BuyingEventsView({ setNav }: { setNav?: (n: NavPage) => 
       {phase === 'pre'    && <PreEventTab setNav={setNav} />}
       {phase === 'during' && <DuringEventTab setNav={setNav} />}
       {phase === 'post'   && <PostEventTab setNav={setNav} />}
+
+      {createMode && (
+        <CreateEventModal
+          mode={createMode}
+          onClose={() => setCreateMode(null)}
+        />
+      )}
     </div>
   )
 }
