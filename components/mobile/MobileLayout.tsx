@@ -302,7 +302,7 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
     { id: 'marketing',    label: 'Marketing',           icon: '📣' },
     { id: 'settings',     label: 'Settings',            icon: '⚙️' },
     { id: isLiberty ? 'liberty-admin' : 'admin', label: isLiberty ? 'Liberty Admin Panel' : 'Admin Panel', icon: '🔧' },
-    { id: 'stores',       label: 'Stores',              icon: '🏪' },
+    { id: 'buying-event-stores', label: 'Buying Event Stores', icon: '🏪' },
   ]
 
   // role_modules drives access. Hide everything until modules load
