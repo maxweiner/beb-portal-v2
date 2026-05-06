@@ -45,14 +45,20 @@ const BRAND_LABELS: Record<string, string> = {
 export async function generateAppointmentsDayPdfBuffer(opts: {
   sb: SupabaseClient
   storeId: string
-  date: string                 // YYYY-MM-DD
+  /** One or many YYYY-MM-DD dates. One = single-day mode; many = multi-day
+   *  mode (the PDF table adds a Date column). Order doesn't matter — the
+   *  PDF sorts before rendering. */
+  dates: string[]
   /** When false, cancelled rows are filtered out before render. The
    *  email button defaults to true so the store can see what fell off. */
   includeCancelled?: boolean
-}): Promise<{ ok: true; buffer: Buffer; filename: string; storeName: string; date: string; rowCount: number }
+}): Promise<{ ok: true; buffer: Buffer; filename: string; storeName: string; dates: string[]; rowCount: number }
            | { ok: false; status: number; error: string }> {
-  const { sb, storeId, date } = opts
+  const { sb, storeId, dates } = opts
   const includeCancelled = opts.includeCancelled !== false
+  if (!dates || dates.length === 0) {
+    return { ok: false, status: 400, error: 'No dates provided' }
+  }
 
   const { data: store, error: storeErr } = await sb
     .from('stores')
@@ -62,8 +68,9 @@ export async function generateAppointmentsDayPdfBuffer(opts: {
   if (storeErr) return { ok: false, status: 500, error: storeErr.message }
   if (!store)   return { ok: false, status: 404, error: 'Store not found' }
 
-  // Fetch appointments for that store on that date. The `appointment_employee`
-  // FK now points at store_employees per the unify-employees migration.
+  // Fetch appointments for that store across all requested dates. The
+  // `appointment_employee` FK now points at store_employees per the
+  // unify-employees migration.
   const { data: appts, error: apptErr } = await sb
     .from('appointments')
     .select(`
@@ -74,7 +81,8 @@ export async function generateAppointmentsDayPdfBuffer(opts: {
       appointment_employee:store_employees(name)
     `)
     .eq('store_id', storeId)
-    .eq('appointment_date', date)
+    .in('appointment_date', dates)
+    .order('appointment_date', { ascending: true })
     .order('appointment_time', { ascending: true })
   if (apptErr) return { ok: false, status: 500, error: apptErr.message }
 
@@ -106,21 +114,21 @@ export async function generateAppointmentsDayPdfBuffer(opts: {
     }))
 
   // Merge in iCal-fed (Google Calendar / SimplyBook) appointments for the
-  // same store + date. Mirrors AppointmentsAdmin's fetchGcalAppts client
-  // path but runs server-side so the PDF route doesn't need a client
-  // round-trip. Failure is non-fatal — portal rows still render.
-  const gcalRows = await loadGcalRowsForDate({
+  // same store across ALL requested dates. Mirrors AppointmentsAdmin's
+  // fetchGcalAppts client path but runs server-side. Failure is
+  // non-fatal — portal rows still render.
+  const gcalRows = await loadGcalRowsForDates({
     storeFeedUrl: (store as any).calendar_feed_url || null,
     offsetHours: (store as any).calendar_offset_hours || 0,
-    date,
+    dates,
   })
 
   const rows: AppointmentsDayPdfRow[] = [...portalRows, ...gcalRows]
-    .sort((a, b) => a.appointment_time.localeCompare(b.appointment_time))
 
+  const sortedDates = [...dates].sort()
   const data: AppointmentsDayPdfData = {
     store: { name: store.name, city: store.city, state: store.state },
-    date,
+    dates: sortedDates,
     rows,
     brandLabel,
     logo,
@@ -129,22 +137,25 @@ export async function generateAppointmentsDayPdfBuffer(opts: {
   const buffer = await renderToBuffer(AppointmentsDayPdf(data) as any)
   const slug = (store.name || 'store')
     .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-  const filename = `${slug}-appointments-${date}.pdf`
+  const dateTag = sortedDates.length === 1
+    ? sortedDates[0]
+    : `${sortedDates[0]}_to_${sortedDates[sortedDates.length - 1]}`
+  const filename = `${slug}-appointments-${dateTag}.pdf`
 
-  return { ok: true, buffer, filename, storeName: store.name, date, rowCount: rows.length }
+  return { ok: true, buffer, filename, storeName: store.name, dates: sortedDates, rowCount: rows.length }
 }
 
 // Allowlist mirrors /api/fetch-ical so we don't blindly hit arbitrary
 // URLs from a stores.calendar_feed_url value.
 const ALLOWED_ICAL_HOSTS = ['calendar.google.com', 'simplybook.me', 'simplybook.it']
 
-async function loadGcalRowsForDate(opts: {
+async function loadGcalRowsForDates(opts: {
   storeFeedUrl: string | null
   offsetHours: number
-  date: string                  // YYYY-MM-DD
+  dates: string[]               // YYYY-MM-DD list
 }): Promise<AppointmentsDayPdfRow[]> {
-  const { storeFeedUrl, offsetHours, date } = opts
-  if (!storeFeedUrl) return []
+  const { storeFeedUrl, offsetHours, dates } = opts
+  if (!storeFeedUrl || dates.length === 0) return []
 
   let url = storeFeedUrl
   if (url.includes('%40')) url = decodeURIComponent(url)
@@ -164,11 +175,12 @@ async function loadGcalRowsForDate(opts: {
   }
 
   const offsetMs = (offsetHours || 0) * 60 * 60 * 1000
+  const dateSet = new Set(dates)
   const out: AppointmentsDayPdfRow[] = []
   for (const a of parseIcal(text)) {
     const adj = offsetMs === 0 ? a : { ...a, start: new Date(a.start.getTime() + offsetMs), end: new Date(a.end.getTime() + offsetMs) }
     const ymd = `${adj.start.getUTCFullYear()}-${String(adj.start.getUTCMonth() + 1).padStart(2, '0')}-${String(adj.start.getUTCDate()).padStart(2, '0')}`
-    if (ymd !== date) continue
+    if (!dateSet.has(ymd)) continue
     const time = `${String(adj.start.getUTCHours()).padStart(2, '0')}:${String(adj.start.getUTCMinutes()).padStart(2, '0')}:00`
     const detail = parseApptDetail(adj)
     out.push({

@@ -284,6 +284,13 @@ export default function AppointmentsAdmin() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <h2 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)' }}>Appointments</h2>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            className="btn-outline btn-sm"
+            onClick={() => setSendPdfTarget({ storeId: '', storeName: '', date: '', apptCount: 0 })}
+            title="Pick a store + day(s) and email the schedule as a PDF"
+          >
+            📄 Send PDF
+          </button>
           <button className="btn-primary btn-sm" onClick={() => setShowAddModal(true)}>+ Add Appointment</button>
           <button className="btn-outline btn-sm" onClick={() => setRefreshTick(t => t + 1)}>↻ Refresh</button>
         </div>
@@ -400,10 +407,8 @@ export default function AppointmentsAdmin() {
 
       {sendPdfTarget && (
         <AppointmentsDayPdfModal
-          storeId={sendPdfTarget.storeId}
-          storeName={sendPdfTarget.storeName}
-          date={sendPdfTarget.date}
-          apptCount={sendPdfTarget.apptCount}
+          initialStoreId={sendPdfTarget.storeId || undefined}
+          initialDate={sendPdfTarget.date || undefined}
           senderName={user?.name}
           onClose={() => setSendPdfTarget(null)}
         />

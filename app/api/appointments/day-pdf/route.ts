@@ -1,4 +1,9 @@
-// GET /api/appointments/day-pdf?store_id=…&date=YYYY-MM-DD
+// GET /api/appointments/day-pdf
+//   ?store_id=…
+//   &date=YYYY-MM-DD                (single-day mode)
+//     OR
+//   &dates=YYYY-MM-DD,YYYY-MM-DD,…  (multi-day mode — comma-separated)
+//   [&download=1] [&include_cancelled=0]
 //
 // Streams the daily-appointments PDF. Used by the iframe preview in
 // the modal and by the "⬇ Download" button (?download=1).
@@ -26,14 +31,24 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url)
   const storeId = url.searchParams.get('store_id') || ''
-  const date    = url.searchParams.get('date') || ''
+  const datesParam = url.searchParams.get('dates') || ''
+  const dateParam  = url.searchParams.get('date') || ''
   const download = url.searchParams.get('download') === '1'
   const includeCancelled = url.searchParams.get('include_cancelled') !== '0'
 
   if (!storeId) return NextResponse.json({ error: 'Missing store_id' }, { status: 400 })
-  if (!DATE_RE.test(date)) return NextResponse.json({ error: 'Invalid or missing date (YYYY-MM-DD)' }, { status: 400 })
 
-  const result = await generateAppointmentsDayPdfBuffer({ sb: admin(), storeId, date, includeCancelled })
+  const dates = (datesParam ? datesParam.split(',') : [dateParam])
+    .map(s => s.trim())
+    .filter(Boolean)
+  if (dates.length === 0) {
+    return NextResponse.json({ error: 'Missing date or dates' }, { status: 400 })
+  }
+  if (!dates.every(d => DATE_RE.test(d))) {
+    return NextResponse.json({ error: 'Invalid date (expect YYYY-MM-DD)' }, { status: 400 })
+  }
+
+  const result = await generateAppointmentsDayPdfBuffer({ sb: admin(), storeId, dates, includeCancelled })
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
 
   return new Response(result.buffer as any, {
