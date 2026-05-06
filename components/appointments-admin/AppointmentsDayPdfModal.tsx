@@ -16,7 +16,7 @@
 //
 // PDF preview re-renders whenever store or day-selection changes.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import Checkbox from '@/components/ui/Checkbox'
 
@@ -56,10 +56,25 @@ const fmtShort = (ds: string) =>
   new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 
 export default function AppointmentsDayPdfModal({ initialStoreId, initialDate, senderName, onClose }: Props) {
-  // Step 1 — store picker
+  // Step 1 — store picker (combo box: search input + filtered dropdown)
   const [stores, setStores] = useState<StoreOption[]>([])
   const [storesLoaded, setStoresLoaded] = useState(false)
   const [storeId, setStoreId] = useState<string>(initialStoreId || '')
+  const [storeSearch, setStoreSearch] = useState('')
+  const [storeOpen, setStoreOpen] = useState(false)
+  const storeBoxRef = useRef<HTMLDivElement | null>(null)
+
+  // Close the dropdown when the user clicks outside the picker.
+  useEffect(() => {
+    if (!storeOpen) return
+    const onDocClick = (e: MouseEvent) => {
+      if (storeBoxRef.current && !storeBoxRef.current.contains(e.target as Node)) {
+        setStoreOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [storeOpen])
 
   useEffect(() => {
     let cancelled = false
@@ -85,6 +100,18 @@ export default function AppointmentsDayPdfModal({ initialStoreId, initialDate, s
     () => stores.find(s => s.id === storeId) || null,
     [stores, storeId],
   )
+
+  const filteredStores = useMemo(() => {
+    const q = storeSearch.trim().toLowerCase()
+    if (!q) return stores
+    return stores.filter(s => {
+      const hay = `${s.name} ${s.city || ''} ${s.state || ''}`.toLowerCase()
+      return hay.includes(q)
+    })
+  }, [stores, storeSearch])
+
+  const storeDisplayLabel = (s: StoreOption | null): string =>
+    s ? `${s.name}${s.city ? ` — ${s.city}${s.state ? ', ' + s.state : ''}` : ''}` : ''
 
   // Step 2 — day mode
   const [dayMode, setDayMode] = useState<'single' | 'all'>('single')
@@ -318,22 +345,73 @@ export default function AppointmentsDayPdfModal({ initialStoreId, initialDate, s
 
           {/* Sidebar — pickers + recipients */}
           <div style={{ padding: 16, overflowY: 'auto', minHeight: 0 }}>
-            {/* Store */}
+            {/* Store — search-and-pick combo */}
             <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>
               Store *
             </div>
-            <select
-              value={storeId}
-              onChange={e => setStoreId(e.target.value)}
-              style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', marginBottom: 14 }}
-            >
-              <option value="">{storesLoaded ? 'Pick a store…' : 'Loading stores…'}</option>
-              {stores.map(s => (
-                <option key={s.id} value={s.id}>
-                  {s.name}{s.city ? ` — ${s.city}${s.state ? ', ' + s.state : ''}` : ''}
-                </option>
-              ))}
-            </select>
+            <div ref={storeBoxRef} style={{ position: 'relative', marginBottom: 14 }}>
+              <input
+                type="text"
+                value={storeOpen ? storeSearch : (selectedStore ? storeDisplayLabel(selectedStore) : '')}
+                onFocus={() => {
+                  // Open the dropdown and start with an empty filter so the
+                  // user can scan the full list without clearing their pick.
+                  setStoreOpen(true)
+                  setStoreSearch('')
+                }}
+                onChange={e => {
+                  setStoreOpen(true)
+                  setStoreSearch(e.target.value)
+                }}
+                placeholder={storesLoaded ? 'Search stores…' : 'Loading stores…'}
+                style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
+              />
+              {storeOpen && storesLoaded && (
+                <div
+                  style={{
+                    position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+                    background: '#fff', border: '1px solid var(--pearl)', borderRadius: 6,
+                    boxShadow: '0 6px 20px rgba(0,0,0,0.12)', zIndex: 10,
+                    maxHeight: 240, overflowY: 'auto',
+                  }}
+                >
+                  {filteredStores.length === 0 && (
+                    <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--mist)', fontStyle: 'italic' }}>
+                      No stores match.
+                    </div>
+                  )}
+                  {filteredStores.map(s => {
+                    const isSelected = s.id === storeId
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => {
+                          setStoreId(s.id)
+                          setStoreOpen(false)
+                          setStoreSearch('')
+                        }}
+                        style={{
+                          display: 'block', width: '100%', textAlign: 'left',
+                          padding: '8px 12px', background: isSelected ? 'var(--green-pale)' : 'transparent',
+                          border: 'none', cursor: 'pointer', fontSize: 13,
+                          color: 'var(--ink)', borderBottom: '1px solid var(--cream2)',
+                        }}
+                        onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLButtonElement).style.background = 'var(--cream)' }}
+                        onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                      >
+                        <div style={{ fontWeight: 700 }}>{s.name}</div>
+                        {(s.city || s.state) && (
+                          <div style={{ fontSize: 11, color: 'var(--mist)' }}>
+                            {[s.city, s.state].filter(Boolean).join(', ')}
+                          </div>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
 
             {/* Day mode */}
             <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>
