@@ -52,7 +52,7 @@ interface Props {
 }
 
 export default function PreEventTab({ setNav }: Props) {
-  const { stores, events: ctxEvents, user, setTravelIntent } = useApp()
+  const { stores, events: ctxEvents, user, brand, setTravelIntent } = useApp()
   const [events, setEvents] = useState<Event[]>(ctxEvents || [])
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([])
   const [travel, setTravel] = useState<TravelRow[]>([])
@@ -73,7 +73,10 @@ export default function PreEventTab({ setNav }: Props) {
       setLoading(true)
       const todayIso = new Date().toISOString().slice(0, 10)
       const [eventsRes, campaignsRes, travelRes, travelAcksRes, bookingRes, assetsRes] = await Promise.all([
-        supabase.from('events').select('*').order('start_date'),
+        // Brand-scoped — AppContext.events is loaded with this same
+        // filter; mirror it here so we don't pull the other brand's
+        // events into this tab.
+        supabase.from('events').select('*').eq('brand', brand).order('start_date'),
         supabase.from('marketing_campaigns').select('event_id, flow_type, status, paid_at'),
         supabase.from('travel_reservations').select('event_id, buyer_id, type'),
         supabase.from('travel_acknowledgments').select('event_id, buyer_id, type'),
@@ -91,7 +94,7 @@ export default function PreEventTab({ setNav }: Props) {
       setLoading(false)
     })()
     return () => { cancelled = true }
-  }, [])
+  }, [brand])
 
   const upcoming = useMemo(() => {
     const todayIso = new Date().toISOString().slice(0, 10)

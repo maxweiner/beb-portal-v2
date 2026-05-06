@@ -75,7 +75,7 @@ const fmtMoney = (n: number) => '$' + Math.round(n).toLocaleString('en-US')
 const LOOKBACK_DAYS = 90
 
 export default function PostEventTab({ setNav }: Props) {
-  const { stores, users, user } = useApp()
+  const { stores, users, user, brand } = useApp()
   const isPartner = !!user?.is_partner
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || isPartner
 
@@ -98,9 +98,13 @@ export default function PostEventTab({ setNav }: Props) {
       const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - LOOKBACK_DAYS)
       const cutoffIso = cutoff.toISOString().slice(0, 10)
 
+      // Brand-scoped — AppContext.events is loaded with this same
+      // filter; mirror it here so a Liberty event doesn't show up
+      // in the BEB Post-Event tab (or vice versa).
       const { data: evRows } = await supabase
         .from('events')
         .select('*')
+        .eq('brand', brand)
         .gte('start_date', cutoffIso)
         .order('start_date', { ascending: false })
 
@@ -145,7 +149,7 @@ export default function PostEventTab({ setNav }: Props) {
       setLoading(false)
     })()
     return () => { cancelled = true }
-  }, [])
+  }, [brand])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
