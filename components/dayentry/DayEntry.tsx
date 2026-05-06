@@ -10,6 +10,7 @@ import { searchEvents } from '@/lib/eventSearch'
 import EventNotesNudge from '@/components/events/EventNotesNudge'
 import DatePicker from '@/components/ui/DatePicker'
 import Checkbox from '@/components/ui/Checkbox'
+import DayPdfModal from '@/components/dayentry/DayPdfModal'
 
 /* ── Lead sources — day-level aggregates on event_days ── */
 const LEAD_SOURCES = [
@@ -89,6 +90,7 @@ export default function DayEntry() {
   const [show0pct, setShow0pct] = useState(false)
   const [checks, setChecks] = useState<CheckRow[]>([emptyCheck()])
   const [inputMode, setInputMode] = useState<InputMode>('grid')
+  const [pdfModalDay, setPdfModalDay] = useState<number | 'recap' | null>(null)
   // Per-(user, store) preference. Mirrors mobile's
   // `beb-form-no-{user_id}-{store_id}` localStorage key, falling back to
   // stores.default_form_number_visible, then true.
@@ -693,11 +695,22 @@ export default function DayEntry() {
                   {selectedStore?.city}{selectedStore?.state ? ', ' + selectedStore.state : ''} · {selectedEvent && fmt(selectedEvent.start_date)}
                 </div>
               </div>
-              {existingRow?.entered_by_name && existingRow?.entered_at && (
-                <div style={{ fontSize: 12, color: 'var(--mist)' }}>
-                  Last edit: <b>{existingRow.entered_by_name}</b> · {fmtTime(existingRow.entered_at)}
-                </div>
-              )}
+              <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                {existingRow?.entered_by_name && existingRow?.entered_at && (
+                  <div style={{ fontSize: 12, color: 'var(--mist)' }}>
+                    Last edit: <b>{existingRow.entered_by_name}</b> · {fmtTime(existingRow.entered_at)}
+                  </div>
+                )}
+                {existingRow?.id && (
+                  <button
+                    className="btn-outline btn-sm"
+                    onClick={() => setPdfModalDay(selectedDay)}
+                    title="Preview today's numbers as a PDF and email to store + buyers"
+                  >
+                    📄 Preview & Send
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1081,6 +1094,16 @@ export default function DayEntry() {
             </>
           )}
         </>
+      )}
+
+      {pdfModalDay !== null && selectedEvent && (
+        <DayPdfModal
+          eventId={selectedEvent.id}
+          dayNumber={pdfModalDay === 'recap' ? null : pdfModalDay}
+          storeName={selectedEvent.store_name}
+          senderName={user?.name}
+          onClose={() => setPdfModalDay(null)}
+        />
       )}
     </div>
   )
