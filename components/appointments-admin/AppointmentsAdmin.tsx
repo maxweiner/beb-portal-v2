@@ -289,7 +289,7 @@ export default function AppointmentsAdmin() {
             onClick={() => setSendPdfTarget({ storeId: '', storeName: '', date: '', apptCount: 0 })}
             title="Pick a store + day(s) and email the schedule as a PDF"
           >
-            📄 Send PDF
+            📄 Print/Send Appts
           </button>
           <button className="btn-primary btn-sm" onClick={() => setShowAddModal(true)}>+ Add Appointment</button>
           <button className="btn-outline btn-sm" onClick={() => setRefreshTick(t => t + 1)}>↻ Refresh</button>
@@ -478,7 +478,7 @@ function StoreGroup({ rows, isAdmin, onCancel, onSendPdf, initiallyCollapsed }: 
                 style={{ textTransform: 'none', letterSpacing: 0 }}
                 title="Email today's schedule (portal + Google Calendar) as a PDF to the store + buyers"
               >
-                📄 Send PDF
+                📄 Print/Send Appts
               </button>
             )}
           </div>
