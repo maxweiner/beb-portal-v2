@@ -54,11 +54,12 @@ const BEB_NAV: NavItem[] = [
   // become the buyer time-off + event calendar (formerly id 'schedule').
   // Together with 'events' → 'buying-events' and 'libertyadmin' →
   // 'liberty-admin'. See supabase-migration-rename-nav-ids.sql.
-  { id: 'appointments',  label: 'Appointments',      iconKey: 'calendar' },
-  { id: 'buying-events', label: 'Buying Events',     iconKey: 'events' },
-  { id: 'calendar',      label: 'Calendar',          iconKey: 'schedule' },
-  { id: 'travel',        label: 'Travel Share',      iconKey: 'travel' },
-  { id: 'dayentry',      label: 'Enter Buying Data', iconKey: 'dayentry' },
+  { id: 'appointments',        label: 'Appointments',        iconKey: 'calendar' },
+  { id: 'buying-events',       label: 'Buying Events',       iconKey: 'events' },
+  { id: 'buying-event-stores', label: 'Buying Event Stores', iconKey: 'stores' },
+  { id: 'calendar',            label: 'Calendar',            iconKey: 'schedule' },
+  { id: 'travel',              label: 'Travel Share',        iconKey: 'travel' },
+  { id: 'dayentry',            label: 'Enter Buying Data',   iconKey: 'dayentry' },
   { label: 'Selling', section: true },
   { id: 'trade-shows',       label: 'Trade Shows',       iconKey: 'tradeshows' },
   { id: 'trunk-shows',       label: 'Trunk Shows',       iconKey: 'trunkshows' },
@@ -73,20 +74,20 @@ const BEB_NAV: NavItem[] = [
   { id: 'customers',    label: 'Customers',         iconKey: 'staff' },
   { label: 'Admin', section: true },
   { id: 'admin',         label: 'Admin Panel',       iconKey: 'admin' },
-  { id: 'staff',         label: 'Staff',            iconKey: 'staff' },
-  { id: 'stores',        label: 'Stores',           iconKey: 'stores' },
-  { id: 'data-research', label: 'Data Research',    iconKey: 'reports' },
-  { id: 'financials',    label: 'Financials',       iconKey: 'financials' },
+  { id: 'staff',         label: 'Staff',             iconKey: 'staff' },
+  { id: 'data-research', label: 'Data Research',     iconKey: 'reports' },
+  { id: 'financials',    label: 'Financials',        iconKey: 'financials' },
 ]
 
 const LIBERTY_NAV: NavItem[] = [
   { id: 'dashboard',     label: 'Dashboard',         iconKey: 'dashboard' },
   { label: 'Buying', section: true },
-  { id: 'appointments',  label: 'Appointments',      iconKey: 'calendar' },
-  { id: 'buying-events', label: 'Buying Events',     iconKey: 'events' },
-  { id: 'calendar',      label: 'Calendar',          iconKey: 'schedule' },
-  { id: 'travel',        label: 'Travel Share',      iconKey: 'travel' },
-  { id: 'dayentry',      label: 'Enter Buying Data', iconKey: 'dayentry' },
+  { id: 'appointments',        label: 'Appointments',        iconKey: 'calendar' },
+  { id: 'buying-events',       label: 'Buying Events',       iconKey: 'events' },
+  { id: 'buying-event-stores', label: 'Buying Event Stores', iconKey: 'stores' },
+  { id: 'calendar',            label: 'Calendar',            iconKey: 'schedule' },
+  { id: 'travel',              label: 'Travel Share',        iconKey: 'travel' },
+  { id: 'dayentry',            label: 'Enter Buying Data',   iconKey: 'dayentry' },
   { label: 'Operations', section: true },
   { id: 'marketing',    label: 'Marketing',      iconKey: 'marketing' },
   { id: 'shipping',     label: 'Shipping',       iconKey: 'shipping' },
@@ -95,10 +96,9 @@ const LIBERTY_NAV: NavItem[] = [
   { id: 'customers',    label: 'Customers',      iconKey: 'staff' },
   { label: 'Admin', section: true },
   { id: 'liberty-admin', label: 'Liberty Admin Panel', iconKey: 'admin' },
-  { id: 'staff',         label: 'Staff',          iconKey: 'staff' },
-  { id: 'stores',        label: 'Stores',         iconKey: 'stores' },
-  { id: 'data-research', label: 'Data Research',  iconKey: 'reports' },
-  { id: 'financials',    label: 'Financials',     iconKey: 'financials' },
+  { id: 'staff',         label: 'Staff',               iconKey: 'staff' },
+  { id: 'data-research', label: 'Data Research',       iconKey: 'reports' },
+  { id: 'financials',    label: 'Financials',          iconKey: 'financials' },
 ]
 
 interface SidebarProps {

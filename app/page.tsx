@@ -50,7 +50,7 @@ import { shouldUseMobile, setMobilePreference } from '@/lib/mobile'
 //   schedule     → calendar         (time-off + event calendar)
 //   events       → buying-events
 //   libertyadmin → liberty-admin
-export type NavPage = 'dashboard' | 'appointments' | 'buying-events' | 'calendar' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'liberty-admin' | 'recipients' | 'notification-templates' | 'data-research' | 'expenses' | 'financials' | 'customers' | 'trade-shows' | 'trunk-shows' | 'trunk-show-stores' | 'leads' | 'trunk-communications'
+export type NavPage = 'dashboard' | 'appointments' | 'buying-events' | 'calendar' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'buying-event-stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'liberty-admin' | 'recipients' | 'notification-templates' | 'data-research' | 'expenses' | 'financials' | 'customers' | 'trade-shows' | 'trunk-shows' | 'trunk-show-stores' | 'leads' | 'trunk-communications'
 
 export default function Home() {
   const { user, loading, connectionError, reload } = useApp()
@@ -213,7 +213,7 @@ export default function Home() {
           {nav === 'settings'  && <Settings key={navKey} />}
           {nav === 'admin'     && <ModuleGuard moduleId="admin"><ModuleWriteGate moduleId="admin"><AdminPanel key={navKey} /></ModuleWriteGate></ModuleGuard>}
           {nav === 'liberty-admin' && <ModuleGuard moduleId="liberty-admin"><ModuleWriteGate moduleId="liberty-admin"><LibertyAdminPanel key={navKey} /></ModuleWriteGate></ModuleGuard>}
-          {nav === 'stores'    && <ModuleGuard moduleId="stores"><ModuleWriteGate moduleId="stores"><Stores key={navKey} /></ModuleWriteGate></ModuleGuard>}
+          {nav === 'buying-event-stores' && <ModuleGuard moduleId="buying-event-stores"><ModuleWriteGate moduleId="buying-event-stores"><Stores key={navKey} /></ModuleWriteGate></ModuleGuard>}
           {nav === 'trunk-show-stores' && <ModuleGuard moduleId="trunk-show-stores"><ModuleWriteGate moduleId="trunk-show-stores"><TrunkShowStores key={navKey} /></ModuleWriteGate></ModuleGuard>}
           {nav === 'customers' && <ModuleGuard moduleId="customers"><ModuleWriteGate moduleId="customers"><Customers key={navKey} /></ModuleWriteGate></ModuleGuard>}
         </MobileLayout>
@@ -280,9 +280,9 @@ export default function Home() {
             </ModuleWriteGate>
           </ModuleGuard>
         )}
-        {nav === 'stores' && (
-          <ModuleGuard moduleId="stores">
-            <ModuleWriteGate moduleId="stores">
+        {nav === 'buying-event-stores' && (
+          <ModuleGuard moduleId="buying-event-stores">
+            <ModuleWriteGate moduleId="buying-event-stores">
               <Stores key={navKey} />
             </ModuleWriteGate>
           </ModuleGuard>

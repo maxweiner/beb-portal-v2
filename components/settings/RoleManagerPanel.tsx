@@ -12,8 +12,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
 type ModuleId =
-  | 'dashboard' | 'calendar' | 'events' | 'schedule' | 'travel'
-  | 'dayentry' | 'staff' | 'admin' | 'libertyadmin' | 'stores'
+  | 'dashboard' | 'appointments' | 'buying-events' | 'calendar' | 'travel'
+  | 'dayentry' | 'staff' | 'admin' | 'liberty-admin' | 'buying-event-stores'
   | 'data-research' | 'reports' | 'financials' | 'marketing'
   | 'shipping' | 'expenses' | 'recipients'
   | 'notification-templates'
@@ -35,21 +35,21 @@ const MODULE_SECTIONS: ModuleSection[] = [
   {
     label: 'Daily',
     modules: [
-      { id: 'dashboard', label: 'Dashboard' },
-      { id: 'calendar',  label: 'Appointments' },
-      { id: 'events',    label: 'Events' },
-      { id: 'schedule',  label: 'Calendar' },
-      { id: 'travel',    label: 'Travel Share' },
-      { id: 'dayentry',  label: 'Enter Buying Data' },
-      { id: 'staff',     label: 'Staff' },
+      { id: 'dashboard',           label: 'Dashboard' },
+      { id: 'appointments',        label: 'Appointments' },
+      { id: 'buying-events',       label: 'Buying Events' },
+      { id: 'buying-event-stores', label: 'Buying Event Stores' },
+      { id: 'calendar',            label: 'Calendar' },
+      { id: 'travel',              label: 'Travel Share' },
+      { id: 'dayentry',            label: 'Enter Buying Data' },
+      { id: 'staff',               label: 'Staff' },
     ],
   },
   {
     label: 'Admin',
     modules: [
       { id: 'admin',                  label: 'Admin Panel' },
-      { id: 'libertyadmin',           label: 'Liberty Admin' },
-      { id: 'stores',                 label: 'Stores' },
+      { id: 'liberty-admin',          label: 'Liberty Admin Panel' },
       { id: 'data-research',          label: 'Data Research' },
       { id: 'reports',                label: 'Reports & Notify' },
       { id: 'financials',             label: 'Financials (Partner)' },
