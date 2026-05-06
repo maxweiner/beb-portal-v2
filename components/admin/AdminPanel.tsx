@@ -119,7 +119,7 @@ export default function AdminPanel() {
 
 function NavSidebar({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
   return (
-    <nav style={{ background: 'var(--cream2)', padding: '14px 10px' }}>
+    <nav style={{ background: 'var(--cream2)', padding: '14px 6px' }}>
       {NAV_GROUPS.map((g, gi) => (
         <div key={g.label} style={{ marginTop: gi === 0 ? 0 : 14 }}>
           <div style={{
@@ -220,6 +220,9 @@ function UsersTab() {
   const [editingName, setEditingName] = useState<string | null>(null)
   const [nameVal, setNameVal] = useState('')
   const [editingUser, setEditingUser] = useState<any>(null)
+  // Which user row is expanded (showing all controls).
+  // null = all rows collapsed to skinny header.
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState({ name: '', alternate_emails: [''] })
   const [buyerStates, setBuyerStates] = useState<Record<string, boolean>>({})
   const [orderedUsers, setOrderedUsers] = useState<typeof users>([])
@@ -523,65 +526,106 @@ function UsersTab() {
           <span>{g.label}</span>
           <span style={{ fontWeight: 700, color: 'var(--mist)' }}>{g.users.length}</span>
         </div>
-        {g.users.map(u => (
-        <div key={u.id}
-          draggable
-          onDragStart={() => handleDragStart(u.id)}
-          onDragOver={e => handleDragOver(e, u.id)}
-          onDrop={() => handleDrop(u.id)}
-          onDragEnd={() => { setDragId(null); setDragOverId(null) }}
-          className="card"
-          style={{
-            padding: '16px 20px',
-            cursor: 'grab',
-            opacity: dragId === u.id ? 0.5 : 1,
-            border: dragOverId === u.id && dragId !== u.id ? '2px solid var(--green)' : '1px solid var(--pearl)',
-            transition: 'border .1s, opacity .1s',
-          }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-
+        {g.users.map(u => {
+        const isOpen = expandedId === u.id
+        const extrasCount = (u.roles || []).filter(r => r !== u.role).length
+        return (
+        <div key={u.id} className="card" style={{
+          padding: 0, overflow: 'hidden',
+          opacity: dragId === u.id ? 0.5 : 1,
+          border: dragOverId === u.id && dragId !== u.id ? '2px solid var(--green)' : '1px solid var(--pearl)',
+          transition: 'border .1s, opacity .1s',
+        }}>
+          {/* ── Skinny header row — always visible ── */}
+          <div
+            draggable
+            onDragStart={() => handleDragStart(u.id)}
+            onDragOver={e => handleDragOver(e, u.id)}
+            onDrop={() => handleDrop(u.id)}
+            onDragEnd={() => { setDragId(null); setDragOverId(null) }}
+            onClick={(e) => {
+              // Don't toggle when interacting with the drag handle —
+              // dragstart already fires; toggling on drop would feel
+              // wrong.
+              if ((e.target as HTMLElement).closest('[data-no-toggle]')) return
+              setExpandedId(isOpen ? null : u.id)
+            }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '8px 14px', minHeight: 48,
+              cursor: 'pointer',
+              background: isOpen ? 'var(--cream2)' : '#fff',
+            }}
+          >
             {/* Drag handle */}
-            <div style={{ color: 'var(--pearl)', fontSize: 18, cursor: 'grab', flexShrink: 0, lineHeight: 1 }}>⠿</div>
+            <div data-no-toggle style={{ color: 'var(--pearl)', fontSize: 16, cursor: 'grab', flexShrink: 0, lineHeight: 1 }}>⠿</div>
 
-            {/* Avatar */}
-            <div style={{ width: 44, height: 44, borderRadius: '50%', background: avatarColor(u.id), display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 15, color: '#fff', flexShrink: 0 }}>
+            {/* Avatar (smaller for skinny rows) */}
+            <div style={{ width: 30, height: 30, borderRadius: '50%', background: avatarColor(u.id), display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 12, color: '#fff', flexShrink: 0 }}>
               {u.photo_url
-                ? <img src={u.photo_url} alt={u.name || 'User'} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} />
+                ? <img src={u.photo_url} alt={u.name || 'User'} style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover' }} />
                 : initials(u.name || u.email)}
             </div>
 
-            {/* Name + email */}
-            <div style={{ flex: 1, minWidth: 160 }}>
+            {/* Name + email — single line, ellipsis */}
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 8, overflow: 'hidden' }}>
+              <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--ink)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                {u.name || <span style={{ color: 'var(--mist)' }}>No name</span>}
+              </span>
+              <span style={{ fontSize: 12, color: 'var(--mist)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {u.email}
+              </span>
+            </div>
+
+            {/* Compact badges */}
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+              {roleBadge(u.role)}
+              {extrasCount > 0 && (
+                <span className="badge" style={{ background: '#EDE9FE', color: '#5B21B6' }}>+{extrasCount}</span>
+              )}
+              {!u.active && <span className="badge badge-silver">Inactive</span>}
+            </div>
+
+            {/* Edit toggle — visual hint that the row expands */}
+            <button
+              data-no-toggle
+              onClick={(e) => { e.stopPropagation(); setExpandedId(isOpen ? null : u.id) }}
+              className="btn-outline btn-xs"
+              style={{ flexShrink: 0 }}
+            >
+              {isOpen ? '✕ Close' : '✎ Edit'}
+            </button>
+          </div>
+
+          {/* ── Expandable details — only when isOpen ── */}
+          {isOpen && (
+          <div style={{ padding: '12px 14px', borderTop: '1px solid var(--cream2)', background: '#fff' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
               {editingName === u.id ? (
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   <input value={nameVal} onChange={e => setNameVal(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && saveName(u.id)}
-                    style={{ width: 160, padding: '5px 10px', fontSize: 13 }} autoFocus />
-                  <button onClick={() => saveName(u.id)} className="btn-primary btn-xs">Save</button>
+                    style={{ width: 200, padding: '5px 10px', fontSize: 13 }} autoFocus />
+                  <button onClick={() => saveName(u.id)} className="btn-primary btn-xs">Save name</button>
                   <button onClick={() => setEditingName(null)} className="btn-outline btn-xs">✕</button>
                 </div>
               ) : (
-                <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--ink)' }}>{u.name || <span style={{ color: 'var(--mist)' }}>No name</span>}</div>
+                <button onClick={() => { setEditingName(u.id); setNameVal(u.name || '') }}
+                  className="btn-outline btn-xs">✎ Edit name</button>
               )}
-              <div style={{ fontSize: 13, color: 'var(--mist)', marginTop: 2 }}>{u.email}</div>
-              {(u.alternate_emails || []).length > 0 && (
-                <div style={{ fontSize: 11, color: 'var(--silver)', marginTop: 1 }}>+ {(u.alternate_emails || []).join(', ')}</div>
-              )}
-            </div>
-
-            {/* Badges */}
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-              {roleBadge(u.role)}
-              <span className={`badge ${u.active ? 'badge-jade' : 'badge-silver'}`}>{u.active ? 'Active' : 'Inactive'}</span>
-            </div>
-
-            {/* Actions */}
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
               <button onClick={() => {
                 setEditingUser(u)
                 setEditForm({ name: u.name || '', alternate_emails: [...(u.alternate_emails || []), ''] })
-              }} className="btn-outline btn-xs">✎ Edit</button>
+              }} className="btn-outline btn-xs">✎ Profile + alt emails</button>
 
+              {(u.alternate_emails || []).length > 0 && (
+                <span style={{ fontSize: 11, color: 'var(--mist)' }}>
+                  Alt: {(u.alternate_emails || []).join(', ')}
+                </span>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               {u.id !== me?.id && (
                 <select value={u.role} onChange={e => changeRole(u.id, e.target.value as Role)}
                   style={{ fontSize: 12, padding: '5px 28px 5px 10px', width: 'auto', fontWeight: 700 }}
@@ -740,8 +784,9 @@ function UsersTab() {
               )}
             </div>
           </div>
+          )}
         </div>
-        ))}
+        )})}
       </div>
       ))}
 
