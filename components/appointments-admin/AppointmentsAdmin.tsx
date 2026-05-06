@@ -456,7 +456,7 @@ function StoreGroup({ rows, isAdmin, onCancel, onSendPdf, initiallyCollapsed }: 
       </button>
 
       {!collapsed && byDate.map(([date, dateRows]) => {
-        const portalCount = dateRows.filter(r => r.source === 'beb-portal' && r.status !== 'cancelled').length
+        const sendableCount = dateRows.filter(r => r.status !== 'cancelled').length
         return (
         <div key={date}>
           <div style={{
@@ -466,12 +466,12 @@ function StoreGroup({ rows, isAdmin, onCancel, onSendPdf, initiallyCollapsed }: 
             display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
           }}>
             <span>{fmtDateLong(date)} · {dateRows.length} slot{dateRows.length === 1 ? '' : 's'}</span>
-            {portalCount > 0 && (
+            {sendableCount > 0 && (
               <button
-                onClick={() => onSendPdf(date, portalCount)}
+                onClick={() => onSendPdf(date, sendableCount)}
                 className="btn-outline btn-xs"
                 style={{ textTransform: 'none', letterSpacing: 0 }}
-                title="Email today's schedule as a PDF to the store + buyers"
+                title="Email today's schedule (portal + Google Calendar) as a PDF to the store + buyers"
               >
                 📄 Send PDF
               </button>
