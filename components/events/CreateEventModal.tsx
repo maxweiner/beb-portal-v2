@@ -112,14 +112,19 @@ export default function CreateEventModal({ mode = 'scheduled', onClose, onCreate
           style={{
             padding: 20, display: 'flex', flexDirection: 'column', gap: 14,
             flex: 1, minHeight: 0,
+            // Critical: when the DatePicker opens its inline calendar
+            // popout, the form needs to scroll vertically to reveal
+            // it. Without this, the calendar gets clipped by the
+            // modal's overflow:hidden bounds.
+            overflowY: 'auto',
           }}
         >
-          {/* Store picker — input + native list filling the available
-              vertical room so the operator can scan many stores at once. */}
-          <div
-            className="field"
-            style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
-          >
+          {/* Store picker — list height capped so a 1-result filter
+              doesn't leave a giant empty pane above the date picker.
+              When many results match, the user scrolls within the
+              <select>; when the form needs more vertical room (date
+              calendar opening, etc.), the form itself scrolls. */}
+          <div className="field" style={{ marginBottom: 0 }}>
             <label className="fl">Store *</label>
             <input
               type="text"
@@ -132,10 +137,13 @@ export default function CreateEventModal({ mode = 'scheduled', onClose, onCreate
               value={storeId}
               onChange={e => setStoreId(e.target.value)}
               required
-              size={Math.max(6, Math.min(20, filteredStores.length))}
+              // Cap visible options around 8. Min 4 keeps the box from
+              // collapsing to one line when only 1 match exists — the
+              // empty rows give a visual hint that more would fit.
+              size={Math.max(4, Math.min(8, filteredStores.length))}
               style={{
                 width: '100%', maxWidth: '100%', boxSizing: 'border-box',
-                flex: 1, minHeight: 200, height: 'auto',
+                height: 'auto', maxHeight: 220,
               }}
             >
               {filteredStores.length === 0 && <option value="">No stores match.</option>}
