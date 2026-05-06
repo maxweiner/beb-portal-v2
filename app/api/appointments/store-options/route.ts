@@ -18,8 +18,39 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthedUser } from '@/lib/expenses/serverAuth'
+import { parseIcal } from '@/lib/calendar'
 
 export const dynamic = 'force-dynamic'
+
+const ALLOWED_ICAL_HOSTS = ['calendar.google.com', 'simplybook.me', 'simplybook.it']
+
+async function loadGcalDates(opts: {
+  feedUrl: string
+  offsetHours: number
+  windowStart: string  // YYYY-MM-DD inclusive
+  windowEnd: string    // YYYY-MM-DD inclusive
+}): Promise<Set<string>> {
+  const out = new Set<string>()
+  let url = opts.feedUrl
+  if (url.includes('%40')) url = decodeURIComponent(url)
+  if (!ALLOWED_ICAL_HOSTS.some(h => url.includes(h))) return out
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'BeneficialOS-BuyerPortal/2.0', 'Accept': 'text/calendar, */*' },
+      next: { revalidate: 300 },
+    })
+    if (!res.ok) return out
+    const text = await res.text()
+    if (!text.includes('BEGIN:VCALENDAR')) return out
+    const offsetMs = (opts.offsetHours || 0) * 60 * 60 * 1000
+    for (const a of parseIcal(text)) {
+      const adj = offsetMs === 0 ? a.start : new Date(a.start.getTime() + offsetMs)
+      const ymd = `${adj.getUTCFullYear()}-${String(adj.getUTCMonth() + 1).padStart(2, '0')}-${String(adj.getUTCDate()).padStart(2, '0')}`
+      if (ymd >= opts.windowStart && ymd <= opts.windowEnd) out.add(ymd)
+    }
+  } catch {}
+  return out
+}
 
 function admin() {
   return createClient(
@@ -67,13 +98,34 @@ export async function GET(req: Request) {
   // gcal-only days that don't appear in the appointments table.
   const { data: feedStores } = await sb
     .from('stores')
-    .select('id, name, city, state, calendar_feed_url')
+    .select('id, name, city, state, calendar_feed_url, calendar_offset_hours')
     .not('calendar_feed_url', 'is', null)
+  const feedConfig = new Map<string, { url: string; offsetHours: number }>()
   for (const s of (feedStores || [])) {
     if (!storeMeta.has(s.id)) {
       storeMeta.set(s.id, { name: s.name, city: s.city, state: s.state })
     }
+    if (s.calendar_feed_url) {
+      feedConfig.set(s.id, { url: s.calendar_feed_url, offsetHours: s.calendar_offset_hours || 0 })
+    }
   }
+
+  // For each store with an iCal feed, fetch its dates so the dropdown
+  // includes gcal-only days (e.g. Kay Cameron books exclusively via
+  // Google Calendar — without this, those days are invisible to the
+  // "Single day" picker).
+  const windowStart = ymd(back)
+  const windowEnd   = ymd(ahead)
+  const gcalDatesByStore = new Map<string, Set<string>>()
+  await Promise.all([...feedConfig.entries()].map(async ([sid, cfg]) => {
+    const dates = await loadGcalDates({
+      feedUrl: cfg.url,
+      offsetHours: cfg.offsetHours,
+      windowStart,
+      windowEnd,
+    })
+    if (dates.size > 0) gcalDatesByStore.set(sid, dates)
+  }))
 
   // For each store, look up its most recent (or upcoming) event window
   // so the modal can populate "All event days" mode without making the
@@ -106,14 +158,25 @@ export async function GET(req: Request) {
   }
 
   const stores = [...storeMeta.entries()]
-    .map(([id, meta]) => ({
-      id,
-      name: meta.name,
-      city: meta.city,
-      state: meta.state,
-      portal_dates: [...(portalDatesByStore.get(id) || [])].sort(),
-      event_window: eventByStore.get(id) || null,
-    }))
+    .map(([id, meta]) => {
+      // Union portal + gcal dates so the "Single day" dropdown surfaces
+      // every day with appointments from any source. Without this,
+      // gcal-only stores (e.g. Kay Cameron) only show their portal
+      // appointments and the user can't pick a day that's purely
+      // Google-Calendar-fed.
+      const datesSet = new Set<string>([
+        ...(portalDatesByStore.get(id) || []),
+        ...(gcalDatesByStore.get(id) || []),
+      ])
+      return {
+        id,
+        name: meta.name,
+        city: meta.city,
+        state: meta.state,
+        portal_dates: [...datesSet].sort(),
+        event_window: eventByStore.get(id) || null,
+      }
+    })
     .sort((a, b) => a.name.localeCompare(b.name))
 
   return NextResponse.json({ stores })
