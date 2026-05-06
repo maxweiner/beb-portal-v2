@@ -259,7 +259,7 @@ function UsersTab() {
       setDeletingId(null)
     }
   }
-  const [editForm, setEditForm] = useState({ name: '', alternate_emails: [''] })
+  const [editForm, setEditForm] = useState({ name: '', email: '', alternate_emails: [''] })
   const [buyerStates, setBuyerStates] = useState<Record<string, boolean>>({})
   const [orderedUsers, setOrderedUsers] = useState<typeof users>([])
   const [dragId, setDragId] = useState<string | null>(null)
@@ -403,6 +403,25 @@ function UsersTab() {
   const saveUserEdit = async () => {
     if (!editingUser) return
     const cleanEmails = editForm.alternate_emails.filter(e => e.trim())
+
+    // Email change goes through the privileged endpoint so auth.users
+    // stays in sync. RLS would block a direct supabase.users update of
+    // someone else's email anyway.
+    const newEmail = (editForm.email || '').trim().toLowerCase()
+    const oldEmail = (editingUser.email || '').trim().toLowerCase()
+    if (isSuperAdmin && newEmail && newEmail !== oldEmail) {
+      const r = await fetch(`/api/admin/users/${editingUser.id}/change-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: newEmail }),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        alert('Email change failed: ' + (j.error || r.statusText))
+        return
+      }
+    }
+
     const { error } = await supabase.from('users').update({
       name: editForm.name,
       alternate_emails: cleanEmails
@@ -651,7 +670,7 @@ function UsersTab() {
               )}
               <button onClick={() => {
                 setEditingUser(u)
-                setEditForm({ name: u.name || '', alternate_emails: [...(u.alternate_emails || []), ''] })
+                setEditForm({ name: u.name || '', email: u.email || '', alternate_emails: [...(u.alternate_emails || []), ''] })
               }} className="btn-outline btn-xs">✎ Profile + alt emails</button>
 
               {(u.alternate_emails || []).length > 0 && (
@@ -918,8 +937,24 @@ function UsersTab() {
               <input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} />
             </div>
             <div className="field">
-              <label>Primary Email (cannot be changed)</label>
-              <input value={editingUser.email} disabled style={{ background: 'var(--cream)', color: 'var(--mist)' }} />
+              <label>Primary Email{isSuperAdmin ? '' : ' (superadmin-only)'}</label>
+              <input
+                type="email"
+                value={isSuperAdmin ? editForm.email : (editingUser.email || '')}
+                onChange={e => setEditForm({ ...editForm, email: e.target.value })}
+                disabled={!isSuperAdmin}
+                style={isSuperAdmin ? undefined : { background: 'var(--cream)', color: 'var(--mist)' }}
+              />
+              {isSuperAdmin && editingUser.email && /placeholder\.bebllp\.local$/i.test(editingUser.email) && (
+                <div style={{ fontSize: 11, color: '#B45309', marginTop: 4 }}>
+                  ⚠ Placeholder email from a legacy import — replace with the rep's real address.
+                </div>
+              )}
+              {isSuperAdmin && editingUser.auth_id && (
+                <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
+                  Login email will also be updated (no verification email sent).
+                </div>
+              )}
             </div>
             <div className="field">
               <label>Alternate Email Addresses</label>
