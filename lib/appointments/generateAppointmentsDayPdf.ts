@@ -7,6 +7,7 @@ import path from 'node:path'
 import { renderToBuffer } from '@react-pdf/renderer'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { AppointmentsDayPdf, type AppointmentsDayPdfData, type AppointmentsDayPdfRow } from './appointmentsDayPdf'
+import { parseIcal, parseApptDetail } from '@/lib/calendar'
 
 const LOGO_PATH = path.join(process.cwd(), 'public', 'beb-wordmark.png')
 let bundledLogoBuf: Buffer | null = null
@@ -55,7 +56,7 @@ export async function generateAppointmentsDayPdfBuffer(opts: {
 
   const { data: store, error: storeErr } = await sb
     .from('stores')
-    .select('id, name, city, state')
+    .select('id, name, city, state, calendar_feed_url, calendar_offset_hours')
     .eq('id', storeId)
     .maybeSingle()
   if (storeErr) return { ok: false, status: 500, error: storeErr.message }
@@ -88,7 +89,7 @@ export async function generateAppointmentsDayPdfBuffer(opts: {
   const brandLabel = BRAND_LABELS[brand] || BRAND_LABELS.beb
   const logo = await loadBrandLogo(sb, brand)
 
-  const rows: AppointmentsDayPdfRow[] = (appts || [])
+  const portalRows: AppointmentsDayPdfRow[] = (appts || [])
     .filter((a: any) => includeCancelled || a.status !== 'cancelled')
     .map((a: any) => ({
       appointment_date: a.appointment_date,
@@ -104,6 +105,19 @@ export async function generateAppointmentsDayPdfBuffer(opts: {
       status: a.status || 'confirmed',
     }))
 
+  // Merge in iCal-fed (Google Calendar / SimplyBook) appointments for the
+  // same store + date. Mirrors AppointmentsAdmin's fetchGcalAppts client
+  // path but runs server-side so the PDF route doesn't need a client
+  // round-trip. Failure is non-fatal — portal rows still render.
+  const gcalRows = await loadGcalRowsForDate({
+    storeFeedUrl: (store as any).calendar_feed_url || null,
+    offsetHours: (store as any).calendar_offset_hours || 0,
+    date,
+  })
+
+  const rows: AppointmentsDayPdfRow[] = [...portalRows, ...gcalRows]
+    .sort((a, b) => a.appointment_time.localeCompare(b.appointment_time))
+
   const data: AppointmentsDayPdfData = {
     store: { name: store.name, city: store.city, state: store.state },
     date,
@@ -118,4 +132,60 @@ export async function generateAppointmentsDayPdfBuffer(opts: {
   const filename = `${slug}-appointments-${date}.pdf`
 
   return { ok: true, buffer, filename, storeName: store.name, date, rowCount: rows.length }
+}
+
+// Allowlist mirrors /api/fetch-ical so we don't blindly hit arbitrary
+// URLs from a stores.calendar_feed_url value.
+const ALLOWED_ICAL_HOSTS = ['calendar.google.com', 'simplybook.me', 'simplybook.it']
+
+async function loadGcalRowsForDate(opts: {
+  storeFeedUrl: string | null
+  offsetHours: number
+  date: string                  // YYYY-MM-DD
+}): Promise<AppointmentsDayPdfRow[]> {
+  const { storeFeedUrl, offsetHours, date } = opts
+  if (!storeFeedUrl) return []
+
+  let url = storeFeedUrl
+  if (url.includes('%40')) url = decodeURIComponent(url)
+  if (!ALLOWED_ICAL_HOSTS.some(h => url.includes(h))) return []
+
+  let text: string
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'BeneficialOS-BuyerPortal/2.0', 'Accept': 'text/calendar, */*' },
+      next: { revalidate: 300 },
+    })
+    if (!res.ok) return []
+    text = await res.text()
+    if (!text.includes('BEGIN:VCALENDAR')) return []
+  } catch {
+    return []
+  }
+
+  const offsetMs = (offsetHours || 0) * 60 * 60 * 1000
+  const out: AppointmentsDayPdfRow[] = []
+  for (const a of parseIcal(text)) {
+    const adj = offsetMs === 0 ? a : { ...a, start: new Date(a.start.getTime() + offsetMs), end: new Date(a.end.getTime() + offsetMs) }
+    const ymd = `${adj.start.getUTCFullYear()}-${String(adj.start.getUTCMonth() + 1).padStart(2, '0')}-${String(adj.start.getUTCDate()).padStart(2, '0')}`
+    if (ymd !== date) continue
+    const time = `${String(adj.start.getUTCHours()).padStart(2, '0')}:${String(adj.start.getUTCMinutes()).padStart(2, '0')}:00`
+    const detail = parseApptDetail(adj)
+    out.push({
+      appointment_date: ymd,
+      appointment_time: time,
+      customer_name: detail.name || adj.title || '(no name)',
+      customer_phone: detail.phone || null,
+      customer_email: detail.email || null,
+      items_bringing: detail.items ? [detail.items] : null,
+      how_heard: detail.howHeard || null,
+      // iCal feed has no scheduler-name field. Mark "Google Calendar" so
+      // the row is distinguishable from portal rows in the printed PDF.
+      scheduler_name: 'Google Calendar',
+      notes: null,
+      is_walkin: false,
+      status: 'confirmed',
+    })
+  }
+  return out
 }
