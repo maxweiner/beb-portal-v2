@@ -374,7 +374,7 @@ export default function MobileDashboard({ setNav }: Props) {
 
             {/* My upcoming events */}
             <div style={{ marginBottom: 14 }}>
-              <MyUpcomingEventsList onOpenEvent={() => { setStatsOpen(false); setNav?.('events') }} />
+              <MyUpcomingEventsList onOpenEvent={() => { setStatsOpen(false); setNav?.('buying-events') }} />
             </div>
 
             {/* Three stat tiles */}

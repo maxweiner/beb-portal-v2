@@ -56,7 +56,7 @@ export default function NextEventCard({
 
   return (
     <button
-      onClick={() => setNav?.('events')}
+      onClick={() => setNav?.('buying-events')}
       style={{
         width: '100%', textAlign: 'left', cursor: 'pointer',
         background: 'rgba(240,253,244,.95)',

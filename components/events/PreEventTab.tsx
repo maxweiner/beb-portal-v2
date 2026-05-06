@@ -485,7 +485,7 @@ function EventReadinessCard({
             <BuyerPopover
               workers={workers}
               onClose={() => setBuyerPopover(false)}
-              onManage={() => { setBuyerPopover(false); setNav?.('events') }}
+              onManage={() => { setBuyerPopover(false); setNav?.('buying-events') }}
             />
           )}
         </span>
@@ -521,8 +521,8 @@ function EventReadinessCard({
           level={bookingStatus}
           label={bookingLive ? 'Booking system live' : 'Booking system not configured'}
           icon="📅"
-          onClick={() => setNav?.('calendar')}
-          title="Open Calendar / Appointments admin"
+          onClick={() => setNav?.('appointments')}
+          title="Open Appointments admin"
         />
         <OverridableChip
           level={assetStatus}

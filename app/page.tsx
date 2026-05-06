@@ -44,7 +44,13 @@ import MobileStaff from '@/components/mobile/MobileStaff'
 import BrandSwitchOverlay from '@/components/layout/BrandSwitchOverlay'
 import { shouldUseMobile, setMobilePreference } from '@/lib/mobile'
 
-export type NavPage = 'dashboard' | 'calendar' | 'events' | 'schedule' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'libertyadmin' | 'recipients' | 'notification-templates' | 'data-research' | 'expenses' | 'financials' | 'customers' | 'trade-shows' | 'trunk-shows' | 'trunk-show-stores' | 'leads' | 'trunk-communications'
+// Nav ids — keep in sync with the role_modules.module_id CHECK constraint
+// (see supabase-migration-rename-nav-ids.sql). Renamed 2026-05-06:
+//   calendar     → appointments     (buyer appointment schedule page)
+//   schedule     → calendar         (time-off + event calendar)
+//   events       → buying-events
+//   libertyadmin → liberty-admin
+export type NavPage = 'dashboard' | 'appointments' | 'buying-events' | 'calendar' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'liberty-admin' | 'recipients' | 'notification-templates' | 'data-research' | 'expenses' | 'financials' | 'customers' | 'trade-shows' | 'trunk-shows' | 'trunk-show-stores' | 'leads' | 'trunk-communications'
 
 export default function Home() {
   const { user, loading, connectionError, reload } = useApp()
@@ -64,8 +70,8 @@ export default function Home() {
   // Skipped when an email deep-link (?report=…) is present.
   const { modules: grantedModules, loaded: modulesLoaded } = useRoleModules()
   const FALLBACK_ORDER: NavPage[] = [
-    'dashboard', 'calendar', 'marketing', 'expenses',
-    'events', 'schedule', 'travel', 'staff', 'shipping',
+    'dashboard', 'appointments', 'marketing', 'expenses',
+    'buying-events', 'calendar', 'travel', 'staff', 'shipping',
     'reports',
   ]
   useEffect(() => {
@@ -191,9 +197,9 @@ export default function Home() {
           {nav === 'trunk-communications' && <TrunkCommunications key={navKey} />}
           {nav === 'leads'       && <ModuleWriteGate moduleId="leads"><Leads key={navKey} setNav={setNav} /></ModuleWriteGate>}
           {nav === 'dayentry'  && <ModuleWriteGate moduleId="dayentry"><MobileDayEntry key={navKey} /></ModuleWriteGate>}
-          {nav === 'events'    && <ModuleWriteGate moduleId="events"><BuyingEventsView key={navKey} setNav={setNav} /></ModuleWriteGate>}
-          {nav === 'calendar'  && <ModuleWriteGate moduleId="calendar"><AppointmentsAdmin key={navKey} /></ModuleWriteGate>}
-          {nav === 'schedule'  && <ModuleWriteGate moduleId="schedule"><Schedule key={navKey} setNav={setNav} /></ModuleWriteGate>}
+          {nav === 'buying-events' && <ModuleWriteGate moduleId="buying-events"><BuyingEventsView key={navKey} setNav={setNav} /></ModuleWriteGate>}
+          {nav === 'appointments'  && <ModuleWriteGate moduleId="appointments"><AppointmentsAdmin key={navKey} /></ModuleWriteGate>}
+          {nav === 'calendar'  && <ModuleWriteGate moduleId="calendar"><Schedule key={navKey} setNav={setNav} /></ModuleWriteGate>}
           {nav === 'travel'    && <ModuleWriteGate moduleId="travel"><MobileTravel key={navKey} /></ModuleWriteGate>}
           {nav === 'staff'     && <ModuleWriteGate moduleId="staff"><MobileStaff key={navKey} /></ModuleWriteGate>}
           {nav === 'shipping'  && <ModuleWriteGate moduleId="shipping"><Shipping key={navKey} /></ModuleWriteGate>}
@@ -206,7 +212,7 @@ export default function Home() {
           {nav === 'marketing' && <ModuleWriteGate moduleId="marketing"><Marketing key={navKey} /></ModuleWriteGate>}
           {nav === 'settings'  && <Settings key={navKey} />}
           {nav === 'admin'     && <ModuleGuard moduleId="admin"><ModuleWriteGate moduleId="admin"><AdminPanel key={navKey} /></ModuleWriteGate></ModuleGuard>}
-          {nav === 'libertyadmin' && <ModuleGuard moduleId="libertyadmin"><ModuleWriteGate moduleId="libertyadmin"><LibertyAdminPanel key={navKey} /></ModuleWriteGate></ModuleGuard>}
+          {nav === 'liberty-admin' && <ModuleGuard moduleId="liberty-admin"><ModuleWriteGate moduleId="liberty-admin"><LibertyAdminPanel key={navKey} /></ModuleWriteGate></ModuleGuard>}
           {nav === 'stores'    && <ModuleGuard moduleId="stores"><ModuleWriteGate moduleId="stores"><Stores key={navKey} /></ModuleWriteGate></ModuleGuard>}
           {nav === 'trunk-show-stores' && <ModuleGuard moduleId="trunk-show-stores"><ModuleWriteGate moduleId="trunk-show-stores"><TrunkShowStores key={navKey} /></ModuleWriteGate></ModuleGuard>}
           {nav === 'customers' && <ModuleGuard moduleId="customers"><ModuleWriteGate moduleId="customers"><Customers key={navKey} /></ModuleWriteGate></ModuleGuard>}
@@ -245,8 +251,8 @@ export default function Home() {
         {nav === 'trunk-shows' && <ModuleWriteGate moduleId="trunk-shows"><TrunkShows key={navKey} setNav={setNav} /></ModuleWriteGate>}
         {nav === 'trunk-communications' && <TrunkCommunications key={navKey} />}
         {nav === 'leads'       && <ModuleWriteGate moduleId="leads"><Leads key={navKey} setNav={setNav} /></ModuleWriteGate>}
-        {nav === 'calendar'   && <ModuleWriteGate moduleId="calendar"><AppointmentsAdmin key={navKey} /></ModuleWriteGate>}
-        {nav === 'events'     && <ModuleWriteGate moduleId="events"><BuyingEventsView key={navKey} setNav={setNav} /></ModuleWriteGate>}
+        {nav === 'appointments'  && <ModuleWriteGate moduleId="appointments"><AppointmentsAdmin key={navKey} /></ModuleWriteGate>}
+        {nav === 'buying-events' && <ModuleWriteGate moduleId="buying-events"><BuyingEventsView key={navKey} setNav={setNav} /></ModuleWriteGate>}
         {nav === 'dayentry'   && <ModuleWriteGate moduleId="dayentry"><DayEntry key={navKey} /></ModuleWriteGate>}
         {nav === 'shipping'   && <ModuleWriteGate moduleId="shipping"><Shipping key={navKey} /></ModuleWriteGate>}
         {nav === 'reports'    && <ModuleWriteGate moduleId="reports"><Reports key={navKey} /></ModuleWriteGate>}
@@ -257,7 +263,7 @@ export default function Home() {
         }} /></ModuleWriteGate>}
         {nav === 'settings'   && <Settings key={navKey} />}
         {nav === 'staff'      && <ModuleWriteGate moduleId="staff"><Staff key={navKey} /></ModuleWriteGate>}
-        {nav === 'schedule'   && <ModuleWriteGate moduleId="schedule"><Schedule key={navKey} setNav={setNav} /></ModuleWriteGate>}
+        {nav === 'calendar'   && <ModuleWriteGate moduleId="calendar"><Schedule key={navKey} setNav={setNav} /></ModuleWriteGate>}
         {nav === 'travel'     && <ModuleWriteGate moduleId="travel"><Travel key={navKey} /></ModuleWriteGate>}
         {nav === 'marketing'  && <ModuleWriteGate moduleId="marketing"><Marketing key={navKey} /></ModuleWriteGate>}
         {nav === 'admin' && (
@@ -267,9 +273,9 @@ export default function Home() {
             </ModuleWriteGate>
           </ModuleGuard>
         )}
-        {nav === 'libertyadmin' && (
-          <ModuleGuard moduleId="libertyadmin">
-            <ModuleWriteGate moduleId="libertyadmin">
+        {nav === 'liberty-admin' && (
+          <ModuleGuard moduleId="liberty-admin">
+            <ModuleWriteGate moduleId="liberty-admin">
               <LibertyAdminPanel key={navKey} />
             </ModuleWriteGate>
           </ModuleGuard>

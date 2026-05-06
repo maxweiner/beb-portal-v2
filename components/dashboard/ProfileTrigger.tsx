@@ -60,7 +60,7 @@ export default function ProfileTrigger({
 
   const onOpenEvent = (_ev: Event) => {
     setOpen(false)
-    setNav?.('events')
+    setNav?.('buying-events')
   }
 
   return (

@@ -95,12 +95,12 @@ function NavApptsIcon({ size, color }: { size: number; color: string }) {
 
 type TabDef = { id: NavPage; label: string; kind: 'home' | 'events' | 'enter' | 'appts' }
 const LEFT_TABS: TabDef[] = [
-  { id: 'dashboard', label: 'Home',   kind: 'home' },
-  { id: 'events',    label: 'Events', kind: 'events' },
+  { id: 'dashboard',     label: 'Dash',   kind: 'home' },
+  { id: 'buying-events', label: 'Events', kind: 'events' },
 ]
 const RIGHT_TABS: TabDef[] = [
-  { id: 'dayentry',  label: 'Enter',  kind: 'enter' },
-  { id: 'calendar',  label: 'Appts',  kind: 'appts' },
+  { id: 'dayentry',     label: 'Enter',  kind: 'enter' },
+  { id: 'appointments', label: 'Appts',  kind: 'appts' },
 ]
 
 function renderNavIcon(kind: TabDef['kind'], color: string, size: number) {
@@ -284,13 +284,13 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
     : { id: 'dashboard' as NavPage, label: 'Scan ID', icon: '📷', isScan: true }
 
   const ALL_PAGES: { id: NavPage; label: string; icon: string; isScan?: boolean }[] = [
-    { id: 'dashboard',    label: 'Dashboard',           icon: '⌂' },
-    { id: 'events',       label: 'Buying Events',       icon: '◆' },
-    { id: 'dayentry',     label: 'Enter Buying Data',   icon: '📝' },
-    { id: 'calendar',     label: 'Buying Bookings',     icon: '📅' },
-    { id: 'schedule',     label: 'Calendar',            icon: '🗓' },
+    { id: 'dashboard',     label: 'Dashboard',           icon: '⌂' },
+    { id: 'buying-events', label: 'Buying Events',       icon: '◆' },
+    { id: 'dayentry',      label: 'Enter Buying Data',   icon: '📝' },
+    { id: 'appointments',  label: 'Appointments',        icon: '📅' },
+    { id: 'calendar',      label: 'Calendar',            icon: '🗓' },
     swapItem,
-    { id: 'staff',        label: 'Staff',               icon: '👥' },
+    { id: 'staff',         label: 'Staff',               icon: '👥' },
     { id: 'trade-shows',       label: 'Trade Shows',         icon: '🎪' },
     { id: 'trunk-shows',       label: 'Trunk Shows',         icon: '🛍️' },
     { id: 'trunk-show-stores', label: 'Trunk Show Stores',   icon: '🏬' },
@@ -301,7 +301,7 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
     { id: 'financials',   label: 'Financials',          icon: '💼' },
     { id: 'marketing',    label: 'Marketing',           icon: '📣' },
     { id: 'settings',     label: 'Settings',            icon: '⚙️' },
-    { id: isLiberty ? 'libertyadmin' : 'admin', label: isLiberty ? 'LEB Admin' : 'Admin', icon: '🔧' },
+    { id: isLiberty ? 'liberty-admin' : 'admin', label: isLiberty ? 'Liberty Admin Panel' : 'Admin Panel', icon: '🔧' },
     { id: 'stores',       label: 'Stores',              icon: '🏪' },
   ]
 

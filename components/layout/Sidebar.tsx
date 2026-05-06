@@ -47,15 +47,18 @@ interface NavItem {
 // section header preceding them render unconditionally per the
 // loop in the render block.
 const BEB_NAV: NavItem[] = [
-  { id: 'dashboard',    label: 'Dashboard',         iconKey: 'dashboard' },
+  { id: 'dashboard',     label: 'Dashboard',         iconKey: 'dashboard' },
   { label: 'Buying', section: true },
-  // Renamed from "Bookings" so it's not confused with the new
-  // selling-side "Trunk Customer Bookings" inside Trunk Shows.
-  { id: 'calendar',     label: 'Buying Bookings',   iconKey: 'calendar' },
-  { id: 'events',       label: 'Buying Events',     iconKey: 'events' },
-  { id: 'schedule',     label: 'Schedule',          iconKey: 'schedule' },
-  { id: 'travel',       label: 'Travel Share',      iconKey: 'travel' },
-  { id: 'dayentry',     label: 'Enter Buying Data', iconKey: 'dayentry' },
+  // Nav id renames (2026-05-06): the buyer appointment-schedule page
+  // moved from id 'calendar' → 'appointments' so that 'calendar' could
+  // become the buyer time-off + event calendar (formerly id 'schedule').
+  // Together with 'events' → 'buying-events' and 'libertyadmin' →
+  // 'liberty-admin'. See supabase-migration-rename-nav-ids.sql.
+  { id: 'appointments',  label: 'Appointments',      iconKey: 'calendar' },
+  { id: 'buying-events', label: 'Buying Events',     iconKey: 'events' },
+  { id: 'calendar',      label: 'Calendar',          iconKey: 'schedule' },
+  { id: 'travel',        label: 'Travel Share',      iconKey: 'travel' },
+  { id: 'dayentry',      label: 'Enter Buying Data', iconKey: 'dayentry' },
   { label: 'Selling', section: true },
   { id: 'trade-shows',       label: 'Trade Shows',       iconKey: 'tradeshows' },
   { id: 'trunk-shows',       label: 'Trunk Shows',       iconKey: 'trunkshows' },
@@ -69,7 +72,7 @@ const BEB_NAV: NavItem[] = [
   { id: 'reports',      label: 'Reports',           iconKey: 'reports' },
   { id: 'customers',    label: 'Customers',         iconKey: 'staff' },
   { label: 'Admin', section: true },
-  { id: 'admin',         label: 'Admin Panel',      iconKey: 'admin' },
+  { id: 'admin',         label: 'Admin Panel',       iconKey: 'admin' },
   { id: 'staff',         label: 'Staff',            iconKey: 'staff' },
   { id: 'stores',        label: 'Stores',           iconKey: 'stores' },
   { id: 'data-research', label: 'Data Research',    iconKey: 'reports' },
@@ -77,13 +80,13 @@ const BEB_NAV: NavItem[] = [
 ]
 
 const LIBERTY_NAV: NavItem[] = [
-  { id: 'dashboard',    label: 'Dashboard',      iconKey: 'dashboard' },
+  { id: 'dashboard',     label: 'Dashboard',         iconKey: 'dashboard' },
   { label: 'Buying', section: true },
-  { id: 'calendar',     label: 'Bookings',       iconKey: 'calendar' },
-  { id: 'events',       label: 'Buying Events',  iconKey: 'events' },
-  { id: 'schedule',     label: 'Schedule',       iconKey: 'schedule' },
-  { id: 'travel',       label: 'Travel Share',   iconKey: 'travel' },
-  { id: 'dayentry',     label: 'Enter Buying Data', iconKey: 'dayentry' },
+  { id: 'appointments',  label: 'Appointments',      iconKey: 'calendar' },
+  { id: 'buying-events', label: 'Buying Events',     iconKey: 'events' },
+  { id: 'calendar',      label: 'Calendar',          iconKey: 'schedule' },
+  { id: 'travel',        label: 'Travel Share',      iconKey: 'travel' },
+  { id: 'dayentry',      label: 'Enter Buying Data', iconKey: 'dayentry' },
   { label: 'Operations', section: true },
   { id: 'marketing',    label: 'Marketing',      iconKey: 'marketing' },
   { id: 'shipping',     label: 'Shipping',       iconKey: 'shipping' },
@@ -91,7 +94,7 @@ const LIBERTY_NAV: NavItem[] = [
   { id: 'reports',      label: 'Reports',        iconKey: 'reports' },
   { id: 'customers',    label: 'Customers',      iconKey: 'staff' },
   { label: 'Admin', section: true },
-  { id: 'libertyadmin',  label: 'Liberty Admin',  iconKey: 'admin' },
+  { id: 'liberty-admin', label: 'Liberty Admin Panel', iconKey: 'admin' },
   { id: 'staff',         label: 'Staff',          iconKey: 'staff' },
   { id: 'stores',        label: 'Stores',         iconKey: 'stores' },
   { id: 'data-research', label: 'Data Research',  iconKey: 'reports' },
