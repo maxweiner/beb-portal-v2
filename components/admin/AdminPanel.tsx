@@ -135,7 +135,7 @@ function NavSidebar({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
                 onClick={() => onTab(it.id)}
                 style={{
                   width: '100%', textAlign: 'left',
-                  display: 'flex', alignItems: 'center', gap: 8,
+                  display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 8,
                   padding: '7px 10px', borderRadius: 6,
                   fontFamily: 'inherit', fontSize: 13, fontWeight: on ? 800 : 600,
                   color: on
