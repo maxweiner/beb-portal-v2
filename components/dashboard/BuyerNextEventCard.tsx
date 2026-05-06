@@ -124,7 +124,7 @@ export default function BuyerNextEventCard({
             {cityState && range ? <br /> : null}
             {range}
           </div>
-          <button onClick={() => setNav?.('events')} style={{
+          <button onClick={() => setNav?.('buying-events')} style={{
             marginTop: 8, background: 'transparent', border: 'none',
             padding: 0, color: 'var(--green)', fontSize: 11,
             fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',

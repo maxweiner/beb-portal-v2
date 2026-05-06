@@ -178,7 +178,7 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
           lastWeekEvents={myLastWeek}
           thisWeekEvents={myThisWeek}
           stores={stores}
-          onOpenEvents={() => setNav?.('events')}
+          onOpenEvents={() => setNav?.('buying-events')}
         />
       )}
 
@@ -319,7 +319,7 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
                   const store = stores.find(s => s.id === ev.store_id)
                   const staffing = eventStaffing(ev)
                   return (
-                    <button key={ev.id} onClick={() => setNav?.('events')} style={{
+                    <button key={ev.id} onClick={() => setNav?.('buying-events')} style={{
                       background: 'rgba(240,253,244,.95)', borderRadius: 12, padding: '14px 16px',
                       border: '1px solid var(--green3)',
                       boxShadow: '0 2px 10px rgba(0,0,0,.08)',
