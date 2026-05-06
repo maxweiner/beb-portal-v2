@@ -6,8 +6,18 @@
 // + free-form addresses, and posts to /api/events/.../day-email/[day]
 // to send. Built as a single modal so the user can preview, tweak
 // the recipient list, and send without page-hopping.
+//
+// Auth: the API routes require a Bearer token. Iframes can't inject
+// custom headers, so we fetch the PDF as a Blob and feed an
+// object-URL into the iframe.
 
 import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession()
+  return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
+}
 
 interface PickerOption {
   kind: 'store_contact' | 'buyer'
@@ -26,8 +36,11 @@ interface Props {
 
 export default function DayPdfModal({ eventId, dayNumber, storeName, senderName, onClose }: Props) {
   const dayParam = dayNumber === null ? 'recap' : String(dayNumber)
-  const pdfUrl = `/api/events/${eventId}/day-pdf/${dayParam}?ts=${Date.now()}`
-  const downloadUrl = `${pdfUrl}&download=1`
+  const apiUrl = `/api/events/${eventId}/day-pdf/${dayParam}`
+
+  const [pdfObjectUrl, setPdfObjectUrl] = useState<string | null>(null)
+  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null)
+  const [pdfErr, setPdfErr] = useState<string | null>(null)
 
   const [storeContacts, setStoreContacts] = useState<PickerOption[]>([])
   const [workers, setWorkers] = useState<PickerOption[]>([])
@@ -40,19 +53,64 @@ export default function DayPdfModal({ eventId, dayNumber, storeName, senderName,
   const [loadErr, setLoadErr] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch(`/api/events/${eventId}/day-recipients`)
-      .then(r => r.json())
-      .then(j => {
-        if (j.error) { setLoadErr(j.error); return }
+    let cancelled = false
+    let createdUrl: string | null = null
+    ;(async () => {
+      try {
+        const res = await fetch(apiUrl, { headers: await authHeaders() })
+        if (!res.ok) {
+          const t = await res.text().catch(() => '')
+          if (!cancelled) setPdfErr(`PDF load failed (${res.status}): ${t || res.statusText}`)
+          return
+        }
+        const blob = await res.blob()
+        if (cancelled) return
+        const url = URL.createObjectURL(blob)
+        createdUrl = url
+        setPdfBlob(blob)
+        setPdfObjectUrl(url)
+      } catch (e: any) {
+        if (!cancelled) setPdfErr(e?.message || 'PDF load failed')
+      }
+    })()
+    return () => {
+      cancelled = true
+      if (createdUrl) URL.revokeObjectURL(createdUrl)
+    }
+  }, [apiUrl])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/events/${eventId}/day-recipients`, { headers: await authHeaders() })
+        const j = await res.json().catch(() => ({}))
+        if (cancelled) return
+        if (!res.ok || j.error) { setLoadErr(j.error || `Recipients load failed (${res.status})`); return }
         setStoreContacts(j.storeContacts || [])
         setWorkers(j.workers || [])
         // Pre-pick all store contacts (the common send-to-store case).
         const initial = new Set<string>()
         for (const c of j.storeContacts || []) initial.add(c.id)
         setPicked(initial)
-      })
-      .catch(e => setLoadErr(String(e)))
+      } catch (e: any) {
+        if (!cancelled) setLoadErr(String(e?.message || e))
+      }
+    })()
+    return () => { cancelled = true }
   }, [eventId])
+
+  const downloadFromBlob = () => {
+    if (!pdfBlob) return
+    const a = document.createElement('a')
+    const url = URL.createObjectURL(pdfBlob)
+    a.href = url
+    a.download = `${storeName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${dayNumber === null ? 'recap' : `day-${dayNumber}`}.pdf`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
 
   const togglePick = (id: string) => {
     setPicked(prev => {
@@ -83,7 +141,10 @@ export default function DayPdfModal({ eventId, dayNumber, storeName, senderName,
     try {
       const r = await fetch(`/api/events/${eventId}/day-email/${dayParam}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(await authHeaders()),
+        },
         body: JSON.stringify({
           recipients: allRecipients,
           subject: subject.trim() || undefined,
@@ -123,19 +184,27 @@ export default function DayPdfModal({ eventId, dayNumber, storeName, senderName,
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <a href={downloadUrl} className="btn-outline" target="_blank" rel="noreferrer">⬇ Download</a>
+            <button className="btn-outline" onClick={downloadFromBlob} disabled={!pdfBlob}>⬇ Download</button>
             <button className="btn-outline" onClick={onClose}>✕ Close</button>
           </div>
         </div>
 
         {/* Body — split: PDF iframe left, recipients right */}
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(420px, 1.6fr) minmax(320px, 1fr)', gap: 0, flex: 1, minHeight: 0 }}>
-          <div style={{ borderRight: '1px solid var(--cream2)', background: 'var(--cream)', overflow: 'hidden' }}>
-            <iframe
-              src={pdfUrl}
-              title="Day PDF preview"
-              style={{ width: '100%', height: '100%', minHeight: 480, border: 'none', display: 'block' }}
-            />
+          <div style={{ borderRight: '1px solid var(--cream2)', background: 'var(--cream)', overflow: 'hidden', position: 'relative' }}>
+            {pdfErr && (
+              <div style={{ padding: 16, color: '#B22234', fontSize: 13 }}>{pdfErr}</div>
+            )}
+            {!pdfErr && !pdfObjectUrl && (
+              <div style={{ padding: 24, color: 'var(--mist)', fontSize: 13 }}>Rendering preview…</div>
+            )}
+            {pdfObjectUrl && (
+              <iframe
+                src={pdfObjectUrl}
+                title="Day PDF preview"
+                style={{ width: '100%', height: '100%', minHeight: 480, border: 'none', display: 'block' }}
+              />
+            )}
           </div>
 
           <div style={{ padding: 18, overflowY: 'auto' }}>

@@ -410,9 +410,13 @@ function UsersTab() {
     const newEmail = (editForm.email || '').trim().toLowerCase()
     const oldEmail = (editingUser.email || '').trim().toLowerCase()
     if (isSuperAdmin && newEmail && newEmail !== oldEmail) {
+      const { data: { session } } = await supabase.auth.getSession()
       const r = await fetch(`/api/admin/users/${editingUser.id}/change-email`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
         body: JSON.stringify({ email: newEmail }),
       })
       if (!r.ok) {
