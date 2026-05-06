@@ -97,14 +97,19 @@ export default function AppointmentsDayPdfModal({ initialStoreId, initialDate, s
 
         // Smart default: if the click context didn't pre-select a store,
         // prefer (in order):
-        //   1. Store with a current event where the user is assigned
-        //   2. Any store with a current event in progress
-        //   3. Leave blank — the empty-state message in the preview
-        //      pane prompts the user to pick.
+        //   1. Registered event + user is in workers (in progress)
+        //   2. Any registered event in progress
+        //   3. Store has appointments today — catches gcal-only stores
+        //      like Kay Cameron that book entirely via Google Calendar
+        //      and have no events row in the buying-events table
+        //   4. Leave blank — the empty-state in the preview pane
+        //      prompts the user to pick.
         if (!storeId) {
+          const todayStr = new Date().toISOString().slice(0, 10)
           const myActive = list.find(s => s.user_is_assigned && s.is_event_in_progress)
           const anyActive = list.find(s => s.is_event_in_progress)
-          const next = myActive || anyActive
+          const todayWithAppts = list.find(s => (s.portal_dates || []).includes(todayStr))
+          const next = myActive || anyActive || todayWithAppts
           if (next) setStoreId(next.id)
         }
       } catch {
@@ -136,20 +141,24 @@ export default function AppointmentsDayPdfModal({ initialStoreId, initialDate, s
   const [dayMode, setDayMode] = useState<'single' | 'all'>('single')
   const [singleDate, setSingleDate] = useState<string>(initialDate || '')
 
-  // Once stores load, default the date dropdown to either the click
-  // context date (if it exists in the store's list) or the first
-  // available date.
+  // Once stores load, default the date dropdown to (in order):
+  //   1. The click-context date if it's in the store's list
+  //   2. Today if it's in the store's list (covers the common case
+  //      where the buyer is sending the day's PDF on event day)
+  //   3. The next upcoming date (smallest >= today)
+  //   4. The most recent past date (so a recap of yesterday is still
+  //      reachable in one click)
+  //   5. Today as a hard fallback (e.g. empty list)
   useEffect(() => {
     if (!selectedStore) return
-    if (singleDate && selectedStore.portal_dates.includes(singleDate)) return
-    if (selectedStore.portal_dates.length > 0) {
-      setSingleDate(selectedStore.portal_dates[0])
-      return
-    }
-    // Falls back to today if no portal dates (e.g., gcal-only store).
-    if (!singleDate) {
-      setSingleDate(new Date().toISOString().slice(0, 10))
-    }
+    const dates = selectedStore.portal_dates || []
+    if (singleDate && dates.includes(singleDate)) return
+    const todayStr = new Date().toISOString().slice(0, 10)
+    if (dates.includes(todayStr)) { setSingleDate(todayStr); return }
+    const upcoming = dates.find(d => d >= todayStr)
+    if (upcoming) { setSingleDate(upcoming); return }
+    if (dates.length > 0) { setSingleDate(dates[dates.length - 1]); return }
+    if (!singleDate) setSingleDate(todayStr)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStore?.id])
 
