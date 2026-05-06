@@ -4,15 +4,25 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import Checkbox from '@/components/ui/Checkbox'
+import PhoneInput from '@/components/ui/PhoneInput'
+import { rawDigits } from '@/lib/phone'
 import { StoreSearch, type PlaceData } from '@/lib/googlePlaces'
 
 interface TrunkRep { id: string; name: string }
 
 interface TrunkShowStoreContact {
   name: string
+  /** Free-text role at the store. Common values via <datalist>: Owner,
+   *  Manager, Staff Member. Optional. */
+  title?: string | null
+  /** Raw 10-digit cell number; rendered through PhoneInput which
+   *  formats XXX-XXX-XXXX on display. Optional. */
+  phone?: string | null
   email: string | null
   send_documents: boolean
 }
+
+const CONTACT_TITLE_SUGGESTIONS = ['Owner', 'Manager', 'Staff Member']
 
 interface TrunkShowStore {
   id: string
@@ -369,66 +379,90 @@ function ContactsList({
     onChange(contacts.filter((_, i) => i !== idx))
   }
   function add() {
-    onChange([...contacts, { name: '', email: '', send_documents: false }])
+    onChange([...contacts, { name: '', title: '', phone: '', email: '', send_documents: false }])
   }
+
+  // 5 inputs + send-doc + remove. The grid template fits at ~860px;
+  // wraps below that. Using a wider min-width via overflowX so
+  // narrow viewports scroll horizontally inside the modal.
+  const cols = '1fr 130px 130px 1fr 110px 32px'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{
-        display: 'grid', gridTemplateColumns: '1fr 1fr 130px 32px', gap: 8,
-        fontSize: 11, fontWeight: 700, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.04em',
-      }}>
-        <span>Name</span>
-        <span>Email</span>
-        <span style={{ textAlign: 'center' }}>Send Documents</span>
-        <span></span>
-      </div>
-      {contacts.length === 0 ? (
-        <div style={{ fontSize: 12, color: 'var(--mist)', padding: '8px 0', textAlign: 'center' }}>
-          No contacts yet. Click "+ Add contact" below.
+      <datalist id="trunk-contact-title-suggestions">
+        {CONTACT_TITLE_SUGGESTIONS.map(t => <option key={t} value={t} />)}
+      </datalist>
+      <div style={{ overflowX: 'auto' }}>
+        <div style={{
+          display: 'grid', gridTemplateColumns: cols, gap: 8, minWidth: 720,
+          fontSize: 11, fontWeight: 700, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.04em',
+        }}>
+          <span>Name</span>
+          <span>Title</span>
+          <span>Cell</span>
+          <span>Email</span>
+          <span style={{ textAlign: 'center' }}>Send Docs</span>
+          <span></span>
         </div>
-      ) : (
-        contacts.map((c, i) => (
-          <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 130px 32px', gap: 8, alignItems: 'center' }}>
-            <input
-              type="text"
-              value={c.name ?? ''}
-              onChange={e => update(i, { name: e.target.value })}
-              placeholder="Contact name"
-            />
-            <input
-              type="email"
-              value={c.email ?? ''}
-              onChange={e => update(i, { email: e.target.value })}
-              placeholder="contact@example.com"
-            />
-            <label style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              fontSize: 12, color: 'var(--ash)', fontWeight: 600,
-            }}>
-              <input
-                type="checkbox"
-                checked={!!c.send_documents}
-                onChange={e => update(i, { send_documents: e.target.checked })}
-                style={{
-                  width: 18, height: 18, padding: 0, margin: 0,
-                  appearance: 'auto', WebkitAppearance: 'checkbox',
-                  border: 'none', background: 'transparent', borderRadius: 0,
-                } as React.CSSProperties}
-              />
-            </label>
-            <button
-              type="button"
-              onClick={() => remove(i)}
-              title="Remove contact"
-              style={{
-                background: 'transparent', border: 'none', color: 'var(--mist)',
-                cursor: 'pointer', fontSize: 16, padding: 4, lineHeight: 1,
-              }}
-            >✕</button>
+        {contacts.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--mist)', padding: '8px 0', textAlign: 'center' }}>
+            No contacts yet. Click "+ Add contact" below.
           </div>
-        ))
-      )}
+        ) : (
+          contacts.map((c, i) => (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: cols, gap: 8, alignItems: 'center', minWidth: 720, marginTop: 6 }}>
+              <input
+                type="text"
+                value={c.name ?? ''}
+                onChange={e => update(i, { name: e.target.value })}
+                placeholder="Contact name"
+              />
+              <input
+                type="text"
+                list="trunk-contact-title-suggestions"
+                value={c.title ?? ''}
+                onChange={e => update(i, { title: e.target.value })}
+                placeholder="Owner / Manager"
+              />
+              <PhoneInput
+                value={rawDigits(c.phone || '')}
+                onChange={(raw) => update(i, { phone: raw })}
+                placeholder="555-123-4567"
+              />
+              <input
+                type="email"
+                value={c.email ?? ''}
+                onChange={e => update(i, { email: e.target.value })}
+                placeholder="contact@example.com"
+              />
+              <label style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                fontSize: 12, color: 'var(--ash)', fontWeight: 600,
+              }}>
+                <input
+                  type="checkbox"
+                  checked={!!c.send_documents}
+                  onChange={e => update(i, { send_documents: e.target.checked })}
+                  style={{
+                    width: 18, height: 18, padding: 0, margin: 0,
+                    appearance: 'auto', WebkitAppearance: 'checkbox',
+                    border: 'none', background: 'transparent', borderRadius: 0,
+                  } as React.CSSProperties}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => remove(i)}
+                title="Remove contact"
+                style={{
+                  background: 'transparent', border: 'none', color: 'var(--mist)',
+                  cursor: 'pointer', fontSize: 16, padding: 4, lineHeight: 1,
+                }}
+              >✕</button>
+            </div>
+          ))
+        )}
+      </div>
       <div>
         <button
           type="button"
