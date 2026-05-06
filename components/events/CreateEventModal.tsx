@@ -84,7 +84,12 @@ export default function CreateEventModal({ mode = 'scheduled', onClose, onCreate
     >
       <div
         style={{
-          background: '#fff', borderRadius: 12, width: 'min(540px, 100%)', maxHeight: '92vh',
+          background: '#fff', borderRadius: 12,
+          width: 'min(540px, 100%)',
+          // Fill the screen on phones (iPhone Pro Max ≈ 932pt) and stay
+          // tall on desktop so the store list has room to breathe — was
+          // collapsing to content height with only ~7 stores visible.
+          height: 'min(760px, 92vh)',
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
           boxShadow: '0 20px 60px rgba(0,0,0,.3)',
           border: mode === 'reserved' ? '2px dashed #D97706' : 'none',
@@ -102,8 +107,19 @@ export default function CreateEventModal({ mode = 'scheduled', onClose, onCreate
           )}
         </div>
 
-        <form onSubmit={submit} style={{ padding: 20, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div className="field" style={{ marginBottom: 0 }}>
+        <form
+          onSubmit={submit}
+          style={{
+            padding: 20, display: 'flex', flexDirection: 'column', gap: 14,
+            flex: 1, minHeight: 0,
+          }}
+        >
+          {/* Store picker — input + native list filling the available
+              vertical room so the operator can scan many stores at once. */}
+          <div
+            className="field"
+            style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
+          >
             <label className="fl">Store *</label>
             <input
               type="text"
@@ -116,8 +132,11 @@ export default function CreateEventModal({ mode = 'scheduled', onClose, onCreate
               value={storeId}
               onChange={e => setStoreId(e.target.value)}
               required
-              size={Math.min(8, Math.max(4, filteredStores.length))}
-              style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', height: 'auto' }}
+              size={Math.max(6, Math.min(20, filteredStores.length))}
+              style={{
+                width: '100%', maxWidth: '100%', boxSizing: 'border-box',
+                flex: 1, minHeight: 200, height: 'auto',
+              }}
             >
               {filteredStores.length === 0 && <option value="">No stores match.</option>}
               {filteredStores.map(s => (
@@ -128,19 +147,20 @@ export default function CreateEventModal({ mode = 'scheduled', onClose, onCreate
             </select>
           </div>
 
-          <div className="field" style={{ marginBottom: 0 }}>
-            <label className="fl">Start Date *</label>
-            <DatePicker value={startDate} onChange={v => setStartDate(v)} />
-          </div>
-
-          <div className="field" style={{ marginBottom: 0 }}>
-            <label className="fl">Buyers Needed *</label>
-            <input
-              type="number" min={1} max={20} step={1} required
-              value={buyersNeeded}
-              onChange={e => setBuyersNeeded(e.target.value)}
-              style={{ width: 120 }}
-            />
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+            <div className="field" style={{ marginBottom: 0, flex: 1, minWidth: 200 }}>
+              <label className="fl">Start Date *</label>
+              <DatePicker value={startDate} onChange={v => setStartDate(v)} />
+            </div>
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label className="fl">Buyers Needed *</label>
+              <input
+                type="number" min={1} max={20} step={1} required
+                value={buyersNeeded}
+                onChange={e => setBuyersNeeded(e.target.value)}
+                style={{ width: 120 }}
+              />
+            </div>
           </div>
 
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
