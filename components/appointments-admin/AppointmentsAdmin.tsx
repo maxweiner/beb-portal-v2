@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import type { Store, Event } from '@/types'
 import { formatPhoneDisplay } from '@/lib/phone'
 import AddAppointmentModal from './AddAppointmentModal'
+import AppointmentsDayPdfModal from './AppointmentsDayPdfModal'
 
 // ---------- types ----------
 
@@ -189,9 +190,17 @@ async function fetchGcalAppts(stores: Store[]): Promise<AppointmentRow[]> {
 
 // ---------- main component ----------
 
+interface SendPdfTarget {
+  storeId: string
+  storeName: string
+  date: string
+  apptCount: number
+}
+
 export default function AppointmentsAdmin() {
   const { stores, events, user } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
+  const [sendPdfTarget, setSendPdfTarget] = useState<SendPdfTarget | null>(null)
 
   const [appts, setAppts] = useState<AppointmentRow[]>([])
   const [loaded, setLoaded] = useState(false)
@@ -379,19 +388,37 @@ export default function AppointmentsAdmin() {
           rows={rows}
           isAdmin={isAdmin}
           onCancel={handleCancel}
+          onSendPdf={(date, apptCount) => setSendPdfTarget({
+            storeId,
+            storeName: rows[0]?.store_name || '',
+            date,
+            apptCount,
+          })}
           initiallyCollapsed={byStore.length > 1 && index < byStore.length - 1}
         />
       ))}
+
+      {sendPdfTarget && (
+        <AppointmentsDayPdfModal
+          storeId={sendPdfTarget.storeId}
+          storeName={sendPdfTarget.storeName}
+          date={sendPdfTarget.date}
+          apptCount={sendPdfTarget.apptCount}
+          senderName={user?.name}
+          onClose={() => setSendPdfTarget(null)}
+        />
+      )}
     </div>
   )
 }
 
 // ---------- store group section ----------
 
-function StoreGroup({ rows, isAdmin, onCancel, initiallyCollapsed }: {
+function StoreGroup({ rows, isAdmin, onCancel, onSendPdf, initiallyCollapsed }: {
   rows: AppointmentRow[]
   isAdmin: boolean
   onCancel: (row: AppointmentRow) => void
+  onSendPdf: (date: string, apptCount: number) => void
   initiallyCollapsed: boolean
 }) {
   const [collapsed, setCollapsed] = useState(initiallyCollapsed)
@@ -428,14 +455,27 @@ function StoreGroup({ rows, isAdmin, onCancel, initiallyCollapsed }: {
         <span style={{ marginLeft: 'auto', color: 'var(--mist)' }}>{collapsed ? '▸' : '▾'}</span>
       </button>
 
-      {!collapsed && byDate.map(([date, dateRows]) => (
+      {!collapsed && byDate.map(([date, dateRows]) => {
+        const portalCount = dateRows.filter(r => r.source === 'beb-portal' && r.status !== 'cancelled').length
+        return (
         <div key={date}>
           <div style={{
             padding: '8px 16px', background: 'var(--green-pale)', color: 'var(--green-dark)',
             fontSize: 11, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase',
             borderTop: '1px solid var(--pearl)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
           }}>
-            {fmtDateLong(date)} · {dateRows.length} slot{dateRows.length === 1 ? '' : 's'}
+            <span>{fmtDateLong(date)} · {dateRows.length} slot{dateRows.length === 1 ? '' : 's'}</span>
+            {portalCount > 0 && (
+              <button
+                onClick={() => onSendPdf(date, portalCount)}
+                className="btn-outline btn-xs"
+                style={{ textTransform: 'none', letterSpacing: 0 }}
+                title="Email today's schedule as a PDF to the store + buyers"
+              >
+                📄 Send PDF
+              </button>
+            )}
           </div>
           {dateRows.map((r, idx) => (
             <ApptRow
@@ -446,7 +486,8 @@ function StoreGroup({ rows, isAdmin, onCancel, initiallyCollapsed }: {
             />
           ))}
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
