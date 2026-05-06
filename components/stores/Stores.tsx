@@ -939,7 +939,12 @@ function ContactRow({ contact, onSave, onDelete }: {
     <div style={{ padding: '10px 0', borderBottom: '1px solid var(--cream2)' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
         <input value={vals.name} onChange={e => setVals(p => ({ ...p, name: e.target.value }))} placeholder="Name *" style={{ fontSize: 13 }} />
-        <input value={vals.title} onChange={e => setVals(p => ({ ...p, title: e.target.value }))} placeholder="Title (e.g. Owner)" style={{ fontSize: 13 }} />
+        <select value={vals.title} onChange={e => setVals(p => ({ ...p, title: e.target.value }))} style={{ fontSize: 13 }}>
+          <option value="">Title…</option>
+          <option value="Owner">Owner</option>
+          <option value="Manager">Manager</option>
+          <option value="Staff">Staff</option>
+        </select>
         <PhoneInput value={vals.phone} onChange={v => setVals(p => ({ ...p, phone: v }))} style={{ fontSize: 13 }} />
         <input type="email" value={vals.email} onChange={e => setVals(p => ({ ...p, email: e.target.value }))} placeholder="Email" style={{ fontSize: 13 }} />
       </div>
@@ -981,7 +986,12 @@ function NewContactRows({ onAdd }: { onAdd: (c: { name: string; phone: string; e
       {rows.map(row => (
         <div key={row.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: 8, marginBottom: 8, alignItems: 'center' }}>
           <input value={row.name} onChange={e => update(row.id, 'name', e.target.value)} placeholder="Name *" style={{ fontSize: 13 }} />
-          <input value={row.title} onChange={e => update(row.id, 'title', e.target.value)} placeholder="Title" style={{ fontSize: 13 }} />
+          <select value={row.title} onChange={e => update(row.id, 'title', e.target.value)} style={{ fontSize: 13 }}>
+            <option value="">Title…</option>
+            <option value="Owner">Owner</option>
+            <option value="Manager">Manager</option>
+            <option value="Staff">Staff</option>
+          </select>
           <PhoneInput value={row.phone} onChange={v => update(row.id, 'phone', v)} style={{ fontSize: 13 }} />
           <input type="email" value={row.email} onChange={e => update(row.id, 'email', e.target.value)} placeholder="Email" style={{ fontSize: 13 }} />
           {rows.length > 1
