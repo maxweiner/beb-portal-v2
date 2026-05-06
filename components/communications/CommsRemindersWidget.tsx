@@ -1,12 +1,27 @@
 'use client'
 
 // Dashboard widget — surfaces open trunk-show checklist items
-// the user needs to act on. RLS already scopes the row set:
-// admins/partners see everything; reps see only items on
-// trunk shows assigned to them. The widget filters further to
-// "due within 7 days or overdue" and renders a compact list.
+// the user needs to act on.
+//
+// Visibility (per request): trunk_admin, sales_rep, superadmin only.
+// Buyers + accounting + marketing + plain admins don't see it.
+// (Partners are normally also superadmin role-wise, so they see it
+//  via the role check.)
+//
+// Content rules:
+// - is_completed = false
+// - due_date >= today − 7 days  (anything older is treated as
+//   abandoned; the prune migration deletes outright, but the
+//   filter is here as defense-in-depth)
+// - due_date <= today + 7 days  (only stuff coming up in the
+//   next week, plus anything overdue but still actionable)
+//
+// Layout: collapsible panel anchored to the top of the dashboard.
+// Header is always visible with a 🔔 badge showing the count.
+// Default state: collapsed when no overdue items, EXPANDED when
+// any item is overdue (so a red item never hides until clicked).
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import type { NavPage } from '@/app/page'
@@ -27,19 +42,34 @@ interface Row {
 }
 
 const URGENT_DAYS = 7
+const STALE_DAYS = 7   // items older than 7 days overdue are hidden
+
+// Roles that should see this widget. Anyone else gets nothing
+// (the parent dashboard renders the widget unconditionally; the
+// gate lives here so only one place has to know the rule).
+const ALLOWED_ROLES = new Set(['superadmin', 'sales_rep', 'trunk_admin'])
 
 export default function CommsRemindersWidget({ setNav }: Props) {
-  const { setCommsSendIntent } = useApp()
+  const { user, setCommsSendIntent } = useApp()
   const [rows, setRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)
+  const [open, setOpen] = useState<boolean | null>(null)  // null = not yet decided
+
+  const allowed = !!user?.role && ALLOWED_ROLES.has(user.role)
 
   useEffect(() => {
+    if (!allowed) { setLoading(false); return }
     let cancelled = false
     void (async () => {
       const today = todayIso()
-      const cutoff = (() => {
+      const upper = (() => {
         const d = new Date(today + 'T12:00:00')
         d.setDate(d.getDate() + URGENT_DAYS)
+        return d.toISOString().slice(0, 10)
+      })()
+      const lower = (() => {
+        const d = new Date(today + 'T12:00:00')
+        d.setDate(d.getDate() - STALE_DAYS)
         return d.toISOString().slice(0, 10)
       })()
       const { data } = await supabase
@@ -49,7 +79,8 @@ export default function CommsRemindersWidget({ setNav }: Props) {
           trunk_show:trunk_shows(store:trunk_show_stores(name))
         `)
         .eq('is_completed', false)
-        .lte('due_date', cutoff)
+        .gte('due_date', lower)
+        .lte('due_date', upper)
         .order('due_date', { ascending: true })
       if (cancelled) return
       const mapped = (data || []).map((r: any) => ({
@@ -65,9 +96,25 @@ export default function CommsRemindersWidget({ setNav }: Props) {
       setLoading(false)
     })()
     return () => { cancelled = true }
-  }, [])
+  }, [allowed])
 
-  function open(row: Row) {
+  const sorted = useMemo(() => [...rows].sort((a, b) => a.due_date.localeCompare(b.due_date)), [rows])
+  const today = todayIso()
+  const overdueCount = sorted.filter(r => r.due_date < today).length
+  const dueSoonCount = sorted.filter(r => r.due_date >= today).length
+
+  // Default-open when there's an overdue item; default-closed otherwise.
+  // Only set the initial value once we have data.
+  useEffect(() => {
+    if (loading || open !== null) return
+    setOpen(overdueCount > 0)
+  }, [loading, open, overdueCount])
+
+  if (!allowed) return null
+  if (loading) return null
+  if (sorted.length === 0) return null
+
+  function openRow(row: Row) {
     if (row.linked_action_type === 'send_communication' && row.linked_template_id) {
       setCommsSendIntent({ trunkShowId: row.trunk_show_id, templateId: row.linked_template_id })
       setNav?.('trunk-communications')
@@ -77,30 +124,56 @@ export default function CommsRemindersWidget({ setNav }: Props) {
       setNav?.('marketing')
       return
     }
-    // Manual item — drop into the trunk show detail so the user can check it off.
     setNav?.('trunk-shows')
   }
 
-  if (loading) return null
-  if (rows.length === 0) return null  // hide widget when nothing's pending
-
-  // Sort: overdue first, then upcoming
-  const sorted = [...rows].sort((a, b) => a.due_date.localeCompare(b.due_date))
-
   return (
-    <div className="card" style={{ marginBottom: 16 }}>
-      <div className="card-title">
-        🔔 Trunk-show tasks needing attention
-        <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 600, color: 'var(--mist)' }}>· {sorted.length}</span>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-        {sorted.map(r => <Row key={r.id} row={r} onOpen={() => open(r)} />)}
-      </div>
+    <div className="card" style={{ marginBottom: 16, padding: 0, overflow: 'hidden' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%', textAlign: 'left', background: 'none', border: 'none',
+          fontFamily: 'inherit', cursor: 'pointer', padding: '12px 16px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ position: 'relative', display: 'inline-flex' }}>
+            <span style={{ fontSize: 18 }}>🔔</span>
+            {(overdueCount > 0 || dueSoonCount > 0) && (
+              <span style={{
+                position: 'absolute', top: -4, right: -8,
+                minWidth: 18, height: 18, padding: '0 5px',
+                borderRadius: 9, background: overdueCount > 0 ? '#dc2626' : '#d4a017',
+                color: '#fff', fontSize: 10, fontWeight: 800,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                lineHeight: 1, boxShadow: '0 0 0 2px #fff',
+              }}>{overdueCount + dueSoonCount}</span>
+            )}
+          </span>
+          <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink)' }}>
+            Trunk-show tasks needing attention
+          </span>
+          {overdueCount > 0 && (
+            <span style={{
+              fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 99,
+              background: '#fdecea', color: '#7a1f0f', textTransform: 'uppercase', letterSpacing: '.04em',
+            }}>{overdueCount} overdue</span>
+          )}
+        </div>
+        <span style={{ fontSize: 11, color: 'var(--mist)' }}>{open ? '▾ Hide' : '▸ Show'}</span>
+      </button>
+
+      {open && (
+        <div style={{ padding: '0 16px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {sorted.map(r => <RowItem key={r.id} row={r} onOpen={() => openRow(r)} />)}
+        </div>
+      )}
     </div>
   )
 }
 
-function Row({ row, onOpen }: { row: Row; onOpen: () => void }) {
+function RowItem({ row, onOpen }: { row: Row; onOpen: () => void }) {
   const today = todayIso()
   const overdue = row.due_date < today
   const dueSoon = !overdue && daysUntil(row.due_date) <= URGENT_DAYS
