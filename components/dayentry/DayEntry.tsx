@@ -104,6 +104,10 @@ export default function DayEntry() {
   // selectedDay — prevents an in-flight autosave from clobbering the
   // newly-selected day with the previous day's stale state.
   const loadedKeyRef = useRef<string | null>(null)
+  // Tracks the most-recently-kicked-off load so older in-flight
+  // requests can detect they're stale and bail instead of
+  // overwriting state with the wrong day's data.
+  const latestFetchKeyRef = useRef<string>('')
 
   // Nudge state (Day 3 soft prompt for event notes)
   const [showNotesNudge, setShowNotesNudge] = useState(false)
@@ -190,7 +194,16 @@ export default function DayEntry() {
     // Invalidate the loaded-key so any autosave that fires mid-load
     // sees the mismatch and skips.
     loadedKeyRef.current = null
+    // Snapshot the (event, day) we're loading for. On first mount
+    // two effects can both kick a load (auto-day-pick races with
+    // the initial selectedDay=1) and responses can land out of
+    // order — the loser otherwise overwrote state with stale-day
+    // data, so the form showed day 1 inputs while the selector
+    // read day 2. The latestFetchKeyRef is updated synchronously
+    // here; older in-flight calls compare against it after their
+    // await and bail when they don't match.
     const fetchKey = `${selectedEventId}:${selectedDay}`
+    latestFetchKeyRef.current = fetchKey
     const [{ data: rowData }, { data: checkRows }] = await Promise.all([
       supabase.from('event_days').select('*')
         .eq('event_id', selectedEventId).eq('day_number', selectedDay).maybeSingle(),
@@ -199,6 +212,10 @@ export default function DayEntry() {
         .is('entry_id', null)
         .order('created_at'),
     ])
+    if (latestFetchKeyRef.current !== fetchKey) {
+      // A newer load was kicked off; this one's data is stale.
+      return
+    }
     if (rowData) {
       setExistingRow(rowData)
       rowIdRef.current = rowData.id
