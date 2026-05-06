@@ -79,6 +79,13 @@ export default function ManifestCaptureModal({
     existing: existingBoxLabels,
   })
   const inputRef = useRef<HTMLInputElement>(null)
+  // Second input for "Upload pic" — same behaviour minus the
+  // `capture="environment"` attribute. On mobile, capture forces the
+  // camera; without it the OS lets the user pick from the photo
+  // library / Files app, which is what they need for an existing
+  // photo of the manifest. Two inputs is simpler than toggling the
+  // attribute on a single ref at click time.
+  const uploadInputRef = useRef<HTMLInputElement>(null)
   const isNarrow = useIsNarrow()
   const [scanStyle, setScanStyle] = useState(true)
   const [labelDraft, setLabelDraft] = useState<string>(
@@ -249,31 +256,87 @@ export default function ManifestCaptureModal({
 
         {/* Capture / pick */}
         {!previewUrl && (
-          <button
-            onClick={() => inputRef.current?.click()}
-            disabled={busy !== null}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              width: '100%', minHeight: 120, padding: 16,
-              border: '2px dashed var(--green3)', borderRadius: 10,
-              background: 'var(--green-pale)', color: 'var(--green-dark)',
-              fontSize: 14, fontWeight: 800, cursor: 'pointer',
-              fontFamily: 'inherit',
-            }}
-          >
-            {busy === 'processing' ? 'Processing…' : (
-              <>
-                <span style={{ fontSize: 28 }}>📷</span>
-                <span>{isNarrow ? 'Take photo' : 'Choose image'}</span>
-              </>
-            )}
-          </button>
+          isNarrow ? (
+            // Mobile: two side-by-side actions — Take photo opens the
+            // camera; Upload pic opens the photo library / Files app.
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <button
+                onClick={() => inputRef.current?.click()}
+                disabled={busy !== null}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  flexDirection: 'column',
+                  minHeight: 120, padding: 16,
+                  border: '2px dashed var(--green3)', borderRadius: 10,
+                  background: 'var(--green-pale)', color: 'var(--green-dark)',
+                  fontSize: 13, fontWeight: 800, cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                {busy === 'processing' ? 'Processing…' : (
+                  <>
+                    <span style={{ fontSize: 28 }}>📷</span>
+                    <span>Take photo</span>
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => uploadInputRef.current?.click()}
+                disabled={busy !== null}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  flexDirection: 'column',
+                  minHeight: 120, padding: 16,
+                  border: '2px dashed var(--pearl)', borderRadius: 10,
+                  background: '#fff', color: 'var(--ash)',
+                  fontSize: 13, fontWeight: 800, cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                {busy === 'processing' ? 'Processing…' : (
+                  <>
+                    <span style={{ fontSize: 28 }}>🖼</span>
+                    <span>Upload pic</span>
+                  </>
+                )}
+              </button>
+            </div>
+          ) : (
+            // Desktop: single button that opens a file picker (the OS's
+            // file picker already lets the user choose from anywhere).
+            <button
+              onClick={() => uploadInputRef.current?.click()}
+              disabled={busy !== null}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                width: '100%', minHeight: 120, padding: 16,
+                border: '2px dashed var(--green3)', borderRadius: 10,
+                background: 'var(--green-pale)', color: 'var(--green-dark)',
+                fontSize: 14, fontWeight: 800, cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              {busy === 'processing' ? 'Processing…' : (
+                <>
+                  <span style={{ fontSize: 28 }}>📷</span>
+                  <span>Choose image</span>
+                </>
+              )}
+            </button>
+          )
         )}
         <input
           ref={inputRef}
           type="file"
           accept="image/*"
           {...(isNarrow ? { capture: 'environment' as any } : {})}
+          onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f) }}
+          style={{ display: 'none' }}
+        />
+        <input
+          ref={uploadInputRef}
+          type="file"
+          accept="image/*"
           onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f) }}
           style={{ display: 'none' }}
         />

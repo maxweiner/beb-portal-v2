@@ -25,6 +25,9 @@ import { useApp } from '@/lib/context'
 import { eventEndIso, formatEventRange } from '@/lib/eventDates'
 import { eventDisplayName } from '@/lib/eventName'
 import { eventSpend, eventCommission } from '@/lib/eventSpend'
+import { fetchManifestsForEvents, type ShippingManifest } from '@/lib/shipping/manifests'
+import ManifestCaptureModal from '@/components/shipping/ManifestCaptureModal'
+import ManifestViewerModal from '@/components/shipping/ManifestViewerModal'
 import type { Event } from '@/types'
 import type { NavPage } from '@/app/page'
 
@@ -89,6 +92,10 @@ export default function PostEventTab({ setNav }: Props) {
   const [search, setSearch] = useState('')
   const [savingRate, setSavingRate] = useState<string | null>(null)
   const [payingFor, setPayingFor] = useState<string | null>(null)
+  const [manifestsByEvent, setManifestsByEvent] = useState<Record<string, ShippingManifest[]>>({})
+  const [manifestCaptureFor, setManifestCaptureFor] = useState<Event | null>(null)
+  const [manifestCapturePrefill, setManifestCapturePrefill] = useState<string | null>(null)
+  const [manifestViewerFor, setManifestViewerFor] = useState<Event | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -147,6 +154,23 @@ export default function PostEventTab({ setNav }: Props) {
       setEventNotes((notesRes.data || []) as EventNoteRow[])
       setWaitlist((waitRes.data || []) as WaitlistRow[])
       setLoading(false)
+
+      // Manifests for the visible past events — best-effort, doesn't
+      // block the rest of the tab from rendering. fetchManifestsForEvents
+      // returns a flat array; group by event_id here.
+      if (ids.length > 0) {
+        const flat = await fetchManifestsForEvents(ids).catch(() => [] as ShippingManifest[])
+        if (!cancelled) {
+          const grouped: Record<string, ShippingManifest[]> = {}
+          for (const m of flat) {
+            const eid = (m as any).event_id || (m as any).box_id
+            if (!eid) continue
+            if (!grouped[eid]) grouped[eid] = []
+            grouped[eid].push(m)
+          }
+          setManifestsByEvent(grouped)
+        }
+      }
     })()
     return () => { cancelled = true }
   }, [brand])
@@ -323,6 +347,22 @@ export default function PostEventTab({ setNav }: Props) {
                   {store?.city}{store?.state ? `, ${store.state}` : ''} · {ev.start_date ? formatEventRange(ev.start_date) : ''}
                 </div>
               </div>
+              {(() => {
+                const manifestCount = manifestsByEvent[ev.id]?.length ?? 0
+                return (
+                  <button
+                    onClick={() => {
+                      if (manifestCount > 0) setManifestViewerFor(ev)
+                      else setManifestCaptureFor(ev)
+                    }}
+                    className="btn-outline btn-sm"
+                    style={{ flexShrink: 0 }}
+                    title={manifestCount > 0 ? `View ${manifestCount} manifest photo${manifestCount === 1 ? '' : 's'}` : 'Take or upload a manifest photo'}
+                  >
+                    📷 {manifestCount > 0 ? `Manifest (${manifestCount})` : 'Manifest'}
+                  </button>
+                )
+              })()}
             </div>
 
             {/* Final totals */}
@@ -464,6 +504,48 @@ export default function PostEventTab({ setNav }: Props) {
           </div>
         )
       })}
+
+      {manifestCaptureFor && (
+        <ManifestCaptureModal
+          boxId={manifestCaptureFor.id}
+          boxLabel={eventDisplayName(manifestCaptureFor, stores)}
+          existingBoxLabels={(manifestsByEvent[manifestCaptureFor.id] || []).map((m: any) => m.box_label).filter(Boolean)}
+          initialBoxLabel={manifestCapturePrefill || undefined}
+          onClose={() => { setManifestCaptureFor(null); setManifestCapturePrefill(null) }}
+          onUploaded={(m) => {
+            setManifestsByEvent(prev => ({
+              ...prev,
+              [manifestCaptureFor.id]: [...(prev[manifestCaptureFor.id] || []), m],
+            }))
+            setManifestCaptureFor(null)
+            setManifestCapturePrefill(null)
+          }}
+        />
+      )}
+
+      {manifestViewerFor && (
+        <ManifestViewerModal
+          boxLabel={eventDisplayName(manifestViewerFor, stores)}
+          manifests={manifestsByEvent[manifestViewerFor.id] || []}
+          onClose={() => setManifestViewerFor(null)}
+          onAddAnother={(currentBoxLabel) => {
+            const ev = manifestViewerFor
+            setManifestViewerFor(null)
+            if (ev) {
+              setManifestCapturePrefill(currentBoxLabel)
+              setManifestCaptureFor(ev)
+            }
+          }}
+          onDeleted={(id) => {
+            const ev = manifestViewerFor
+            if (!ev) return
+            setManifestsByEvent(prev => ({
+              ...prev,
+              [ev.id]: (prev[ev.id] || []).filter(x => x.id !== id),
+            }))
+          }}
+        />
+      )}
     </div>
   )
 }
