@@ -107,15 +107,24 @@ export default function AppointmentsDayPdfModal({ initialStoreId, initialDate, s
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStore?.id])
 
+  // "All event days" means: every date this store has an appointment on
+  // (portal + gcal, already merged server-side into portal_dates). If a
+  // formal buying event is registered with event_days, prefer those —
+  // otherwise fall back to the union list so stores like Kay Cameron
+  // (which book entirely via Google Calendar with no buying-event row)
+  // still get a working "All event days" option.
+  const allDaysSource: string[] = useMemo(() => {
+    if (!selectedStore) return []
+    const eventDays = selectedStore.event_window?.days || []
+    if (eventDays.length > 0) return eventDays
+    return selectedStore.portal_dates || []
+  }, [selectedStore])
+
   const effectiveDates: string[] = useMemo(() => {
     if (!selectedStore) return []
-    if (dayMode === 'all') {
-      return selectedStore.event_window?.days?.length
-        ? [...selectedStore.event_window.days]
-        : (singleDate ? [singleDate] : [])
-    }
+    if (dayMode === 'all') return [...allDaysSource]
     return singleDate ? [singleDate] : []
-  }, [dayMode, selectedStore, singleDate])
+  }, [dayMode, selectedStore, singleDate, allDaysSource])
 
   // PDF preview blob
   const [pdfObjectUrl, setPdfObjectUrl] = useState<string | null>(null)
@@ -273,7 +282,7 @@ export default function AppointmentsDayPdfModal({ initialStoreId, initialDate, s
       onClick={onClose}
     >
       <div
-        style={{ background: '#fff', borderRadius: 12, width: 'min(1180px, 100%)', maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,.3)' }}
+        style={{ background: '#fff', borderRadius: 12, width: 'min(1180px, 100%)', height: '92vh', maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,.3)' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -308,7 +317,7 @@ export default function AppointmentsDayPdfModal({ initialStoreId, initialDate, s
           </div>
 
           {/* Sidebar — pickers + recipients */}
-          <div style={{ padding: 16, overflowY: 'auto' }}>
+          <div style={{ padding: 16, overflowY: 'auto', minHeight: 0 }}>
             {/* Store */}
             <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>
               Store *
@@ -316,7 +325,7 @@ export default function AppointmentsDayPdfModal({ initialStoreId, initialDate, s
             <select
               value={storeId}
               onChange={e => setStoreId(e.target.value)}
-              style={{ width: '100%', marginBottom: 14 }}
+              style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', marginBottom: 14 }}
             >
               <option value="">{storesLoaded ? 'Pick a store…' : 'Loading stores…'}</option>
               {stores.map(s => (
@@ -345,7 +354,7 @@ export default function AppointmentsDayPdfModal({ initialStoreId, initialDate, s
                 <select
                   value={singleDate}
                   onChange={e => setSingleDate(e.target.value)}
-                  style={{ width: '100%', marginLeft: 24 }}
+                  style={{ width: 'calc(100% - 24px)', marginLeft: 24, maxWidth: '100%', boxSizing: 'border-box' }}
                   disabled={!selectedStore}
                 >
                   {selectedStore?.portal_dates.length === 0 && (
@@ -356,23 +365,34 @@ export default function AppointmentsDayPdfModal({ initialStoreId, initialDate, s
                   ))}
                 </select>
               )}
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: allDaysSource.length > 0 ? 'pointer' : 'not-allowed' }}>
                 <input
                   type="radio"
                   name="day-mode"
                   checked={dayMode === 'all'}
                   onChange={() => setDayMode('all')}
-                  disabled={!selectedStore?.event_window}
+                  disabled={allDaysSource.length === 0}
                   style={{ width: 16, height: 16, padding: 0, margin: 0 }}
                 />
-                <span style={{ fontSize: 13, fontWeight: 600, color: selectedStore?.event_window ? 'var(--ink)' : 'var(--mist)' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: allDaysSource.length > 0 ? 'var(--ink)' : 'var(--mist)' }}>
                   All event days
-                  {allEventDaysLabel ? <span style={{ fontWeight: 400, color: 'var(--mist)' }}> · {allEventDaysLabel}</span> : null}
+                  {allDaysSource.length > 0 && (
+                    <span style={{ fontWeight: 400, color: 'var(--mist)' }}>
+                      {' '}· {allDaysSource.length === 1
+                        ? fmtShort(allDaysSource[0])
+                        : `${fmtShort(allDaysSource[0])} – ${fmtShort(allDaysSource[allDaysSource.length - 1])} (${allDaysSource.length} days)`}
+                    </span>
+                  )}
                 </span>
               </label>
-              {!selectedStore?.event_window && selectedStore && (
+              {selectedStore && allDaysSource.length === 0 && (
                 <div style={{ fontSize: 11, color: 'var(--mist)', marginLeft: 24 }}>
-                  No buying event found for this store in the recent window.
+                  No appointments yet for this store in the recent window.
+                </div>
+              )}
+              {selectedStore && !selectedStore.event_window && allDaysSource.length > 0 && (
+                <div style={{ fontSize: 11, color: 'var(--mist)', marginLeft: 24 }}>
+                  No buying event registered — using all upcoming dates with appointments.
                 </div>
               )}
             </div>
