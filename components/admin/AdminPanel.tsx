@@ -223,6 +223,42 @@ function UsersTab() {
   // Which user row is expanded (showing all controls).
   // null = all rows collapsed to skinny header.
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  // Hard-delete is gated to two specific emails — see the
+  // matching server-side gate in
+  // app/api/admin/users/[id]/delete-forever/route.ts.
+  const canDeleteForever = !!me?.email
+    && (me.email.toLowerCase() === 'max@bebllp.com'
+        || me.email.toLowerCase() === 'max.weiner@gmail.com')
+
+  async function deleteForever(u: User) {
+    const label = u.name || u.email
+    const confirmText = window.prompt(
+      `🗑 PERMANENTLY DELETE ${label}?\n\n` +
+      `This removes the auth row + public.users row. FK references in events, expense reports, etc. either nullify or cascade.\n\n` +
+      `Cannot be undone.\n\n` +
+      `Type the user's name or email to confirm:`,
+    )
+    if (!confirmText) return
+    setDeletingId(u.id)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`/api/admin/users/${u.id}/delete-forever`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ confirm: confirmText }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) { alert(json.error || `Delete failed (${res.status})`); return }
+      reload()
+    } finally {
+      setDeletingId(null)
+    }
+  }
   const [editForm, setEditForm] = useState({ name: '', alternate_emails: [''] })
   const [buyerStates, setBuyerStates] = useState<Record<string, boolean>>({})
   const [orderedUsers, setOrderedUsers] = useState<typeof users>([])
@@ -781,6 +817,24 @@ function UsersTab() {
                     {creatingCalFor === u.id ? '⏳ Creating…' : '📅 Set up trunk-show calendar'}
                   </button>
                 )
+              )}
+
+              {canDeleteForever && u.id !== me?.id && (
+                <button
+                  onClick={() => deleteForever(u)}
+                  disabled={deletingId === u.id}
+                  title="Permanently delete this user from auth + public.users"
+                  style={{
+                    fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
+                    padding: '4px 10px', borderRadius: 6,
+                    background: '#fff', color: '#7a1f0f',
+                    border: '1px solid #7a1f0f', cursor: 'pointer',
+                    marginLeft: 'auto',
+                    opacity: deletingId === u.id ? 0.6 : 1,
+                  }}
+                >
+                  {deletingId === u.id ? 'Deleting…' : '🗑 Delete forever'}
+                </button>
               )}
             </div>
           </div>
