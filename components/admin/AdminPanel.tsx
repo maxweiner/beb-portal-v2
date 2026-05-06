@@ -75,31 +75,42 @@ export default function AdminPanel() {
   // on narrow widths; main pane takes the full width below.
   return (
     <div className="p-6" style={{ maxWidth: 1280, margin: '0 auto' }}>
-      <h1 className="text-2xl font-black mb-4" style={{ color: 'var(--ink)' }}>⚙️ Admin Panel</h1>
-
       <div style={{
-        display: 'grid',
-        gridTemplateColumns: isNarrow ? '1fr' : '220px 1fr',
-        gap: isNarrow ? 0 : 16,
         background: '#fff', borderRadius: 12, overflow: 'hidden',
-        boxShadow: '0 1px 3px rgba(0,0,0,.06)',
-        minHeight: isNarrow ? 'auto' : 600,
+        boxShadow: '0 4px 16px rgba(0,0,0,.08)',
       }}>
-        {/* Nav — sidebar on desktop, horizontal pill row on mobile */}
-        {isNarrow ? <NavRow tab={tab} onTab={setTab} /> : <NavSidebar tab={tab} onTab={setTab} />}
-
-        {/* Main pane */}
+        {/* Title bar — inside the frame per the mockup */}
         <div style={{
-          padding: isNarrow ? '14px 14px' : '20px 24px',
-          minWidth: 0,
+          padding: '16px 20px',
+          borderBottom: '1px solid var(--cream2)',
         }}>
-          {tab === 'users'        && <UsersTab />}
-          {tab === 'invite'       && <InviteTab />}
-          {tab === 'merge'        && <MergeTab />}
-          {tab === 'email'        && <EmailTab />}
-          {tab === 'sms'          && <SmsTab />}
-          {tab === 'add-event'    && <EditEventSection />}
-          {tab === 'delete-event' && <DeleteEventSection />}
+          <h1 style={{ fontSize: 22, fontWeight: 900, margin: 0, color: 'var(--ink)' }}>
+            ⚙️ Admin Panel
+          </h1>
+        </div>
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isNarrow ? '1fr' : '220px 1fr',
+          gap: 0,
+          minHeight: isNarrow ? 'auto' : 600,
+        }}>
+          {/* Nav — sidebar on desktop, horizontal pill row on mobile */}
+          {isNarrow ? <NavRow tab={tab} onTab={setTab} /> : <NavSidebar tab={tab} onTab={setTab} />}
+
+          {/* Main pane */}
+          <div style={{
+            padding: isNarrow ? '14px 14px' : '24px',
+            minWidth: 0,
+          }}>
+            {tab === 'users'        && <UsersTab />}
+            {tab === 'invite'       && <InviteTab />}
+            {tab === 'merge'        && <MergeTab />}
+            {tab === 'email'        && <EmailTab />}
+            {tab === 'sms'          && <SmsTab />}
+            {tab === 'add-event'    && <EditEventSection />}
+            {tab === 'delete-event' && <DeleteEventSection />}
+          </div>
         </div>
       </div>
     </div>
