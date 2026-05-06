@@ -47,6 +47,20 @@ type TravelAckRow = {
 
 type BookingRow = { store_id: string; day1_start: string | null }
 
+type LastEventNote = {
+  id: string
+  category: 'worked' | 'didnt_work' | 'do_differently'
+  content: string
+  user_name: string
+  created_at: string
+}
+type LastEventLesson = {
+  /** The trunk show / buying event we pulled notes from. */
+  pastEventId: string
+  pastEventStartDate: string
+  notes: LastEventNote[]
+}
+
 interface Props {
   setNav?: (n: NavPage) => void
 }
@@ -59,6 +73,8 @@ export default function PreEventTab({ setNav }: Props) {
   const [travelAcks, setTravelAcks] = useState<TravelAckRow[]>([])
   const [bookingConfigs, setBookingConfigs] = useState<BookingRow[]>([])
   const [assetOrders, setAssetOrders] = useState<EventPromotionalAssetOrder[]>([])
+  // Map: store_id → most-recent past event at that store + its notes.
+  const [lastLessonsByStore, setLastLessonsByStore] = useState<Map<string, LastEventLesson>>(new Map())
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [assetEditorFor, setAssetEditorFor] = useState<Event | null>(null)
@@ -90,7 +106,61 @@ export default function PreEventTab({ setNav }: Props) {
       if (travelAcksRes.data) setTravelAcks(travelAcksRes.data as TravelAckRow[])
       if (bookingRes.data) setBookingConfigs(bookingRes.data as BookingRow[])
       if (assetsRes.data) setAssetOrders(assetsRes.data as EventPromotionalAssetOrder[])
-      void todayIso
+
+      // Last-event lessons: for every store with an upcoming event,
+      // find the most recent past event at the same store and pull
+      // its event_notes. Two batched queries keep this O(1) regardless
+      // of how many cards are visible.
+      const upcomingStoreIds = Array.from(new Set(
+        (eventsRes.data || [])
+          .filter((e: any) => e.status !== 'cancelled' && e.start_date && eventEndIso(e.start_date) >= todayIso)
+          .map((e: any) => e.store_id)
+      ))
+      if (upcomingStoreIds.length > 0) {
+        const { data: pastEvs } = await supabase
+          .from('events')
+          .select('id, store_id, start_date')
+          .eq('brand', brand)
+          .in('store_id', upcomingStoreIds)
+          .lt('start_date', todayIso)
+          .order('start_date', { ascending: false })
+        if (cancelled) return
+        // Take the first (most recent) per store_id.
+        const latestByStore = new Map<string, { id: string; start_date: string }>()
+        for (const ev of (pastEvs || [])) {
+          if (!latestByStore.has(ev.store_id)) {
+            latestByStore.set(ev.store_id, { id: ev.id, start_date: ev.start_date })
+          }
+        }
+        const pastEventIds = Array.from(latestByStore.values()).map(v => v.id)
+        if (pastEventIds.length > 0) {
+          const { data: notes } = await supabase
+            .from('event_notes')
+            .select('id, event_id, category, content, user_name, created_at')
+            .in('event_id', pastEventIds)
+            .order('created_at', { ascending: false })
+          if (cancelled) return
+          const notesByEventId = new Map<string, LastEventNote[]>()
+          for (const n of (notes || [])) {
+            const arr = notesByEventId.get(n.event_id) || []
+            arr.push({ id: n.id, category: n.category, content: n.content, user_name: n.user_name, created_at: n.created_at })
+            notesByEventId.set(n.event_id, arr)
+          }
+          const lessonMap = new Map<string, LastEventLesson>()
+          for (const [storeId, ev] of latestByStore.entries()) {
+            const evNotes = notesByEventId.get(ev.id) || []
+            if (evNotes.length > 0) {
+              lessonMap.set(storeId, {
+                pastEventId: ev.id,
+                pastEventStartDate: ev.start_date,
+                notes: evNotes,
+              })
+            }
+          }
+          setLastLessonsByStore(lessonMap)
+        }
+      }
+
       setLoading(false)
     })()
     return () => { cancelled = true }
@@ -223,15 +293,29 @@ export default function PreEventTab({ setNav }: Props) {
           travelAcks={travelAcksByEvent.get(ev.id) || []}
           bookingLive={liveBookingStores.has(ev.store_id)}
           assetOrders={assetOrdersByEvent.get(ev.id) || []}
+          lastLesson={lastLessonsByStore.get(ev.store_id) || null}
           allEvents={events}
           stores={stores}
           isAdmin={isAdmin}
+          currentUserId={user?.id}
+          currentUserName={user?.name || null}
           setNav={setNav}
           onOpenTravel={() => { setTravelIntent({ eventId: ev.id }); setNav?.('travel') }}
           onPromoted={(id) => setEvents(es => es.map(e => e.id === id ? { ...e, status: 'scheduled' } : e))}
           onAssetEdit={() => setAssetEditorFor(ev)}
           onMarkBriefed={(briefed) => markBriefed(ev, briefed)}
           onSetOverride={(kind, on) => setOverride(ev, kind, on)}
+          onCarriedForward={(noteId) => {
+            // Drop the carried note from the panel so the user
+            // doesn't accidentally double-carry it.
+            setLastLessonsByStore(prev => {
+              const next = new Map(prev)
+              const cur = next.get(ev.store_id)
+              if (!cur) return prev
+              next.set(ev.store_id, { ...cur, notes: cur.notes.filter(n => n.id !== noteId) })
+              return next
+            })
+          }}
         />
       ))}
 
@@ -260,20 +344,24 @@ interface CardProps {
   travelAcks: TravelAckRow[]
   bookingLive: boolean
   assetOrders: EventPromotionalAssetOrder[]
+  lastLesson: LastEventLesson | null
   allEvents: Event[]
   stores: ReturnType<typeof useApp>['stores']
   isAdmin: boolean
+  currentUserId: string | undefined
+  currentUserName: string | null
   setNav?: (n: NavPage) => void
   onOpenTravel: () => void
   onPromoted: (id: string) => void
   onAssetEdit: () => void
   onMarkBriefed: (briefed: boolean) => void
   onSetOverride: (kind: 'travel' | 'marketing' | 'assets', on: boolean) => void
+  onCarriedForward: (noteId: string) => void
 }
 
 function EventReadinessCard({
-  ev, campaigns, travel, travelAcks, bookingLive, assetOrders, allEvents, stores,
-  isAdmin, setNav, onOpenTravel, onPromoted, onAssetEdit, onMarkBriefed, onSetOverride,
+  ev, campaigns, travel, travelAcks, bookingLive, assetOrders, lastLesson, allEvents, stores,
+  isAdmin, currentUserId, currentUserName, setNav, onOpenTravel, onPromoted, onAssetEdit, onMarkBriefed, onSetOverride, onCarriedForward,
 }: CardProps) {
   const reserved = ev.status === 'reserved'
   const [buyerPopover, setBuyerPopover] = useState(false)
@@ -458,8 +546,132 @@ function EventReadinessCard({
           title={briefed ? 'Click to un-mark briefed' : 'Click to mark staff briefed'}
         />
       </div>
+
+      {lastLesson && lastLesson.notes.length > 0 && (
+        <LastEventLessons
+          lesson={lastLesson}
+          newEventId={ev.id}
+          newEventStoreId={ev.store_id}
+          currentUserId={currentUserId}
+          currentUserName={currentUserName}
+          onCarried={onCarriedForward}
+        />
+      )}
     </div>
   )
+}
+
+// Past notes panel + carry-forward action. Collapsed by default
+// to keep the card compact.
+function LastEventLessons({
+  lesson, newEventId, newEventStoreId, currentUserId, currentUserName, onCarried,
+}: {
+  lesson: LastEventLesson
+  newEventId: string
+  newEventStoreId: string
+  currentUserId: string | undefined
+  currentUserName: string | null
+  onCarried: (noteId: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [busyId, setBusyId] = useState<string | null>(null)
+
+  async function carryForward(note: LastEventNote) {
+    setBusyId(note.id)
+    const { error } = await supabase.from('event_notes').insert({
+      event_id: newEventId,
+      store_id: newEventStoreId,
+      user_id:   currentUserId || null,
+      user_name: currentUserName || 'Carried over',
+      category:  note.category,
+      content:   `(carried from ${formatPastDate(lesson.pastEventStartDate)}) ${note.content}`,
+    })
+    setBusyId(null)
+    if (error) { alert(error.message); return }
+    onCarried(note.id)
+  }
+
+  const totals = lesson.notes.reduce((acc, n) => {
+    acc[n.category] = (acc[n.category] || 0) + 1
+    return acc
+  }, {} as Record<string, number>)
+
+  return (
+    <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--cream2)', borderRadius: 8 }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, fontSize: 12 }}>
+          <span style={{ fontWeight: 800, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+            📝 Lessons from last event ({formatPastDate(lesson.pastEventStartDate)})
+          </span>
+          <span style={{ color: 'var(--mist)' }}>
+            <strong style={{ color: '#065f46' }}>{totals.worked || 0}</strong> 👍 ·{' '}
+            <strong style={{ color: '#7a1f0f' }}>{totals.didnt_work || 0}</strong> 👎 ·{' '}
+            <strong style={{ color: '#7a5b00' }}>{totals.do_differently || 0}</strong> 🔄 {open ? '▾' : '▸'}
+          </span>
+        </div>
+      </button>
+
+      {open && (
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {(['do_differently', 'didnt_work', 'worked'] as const).map(cat => {
+            const items = lesson.notes.filter(n => n.category === cat)
+            if (items.length === 0) return null
+            return (
+              <div key={cat}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: catColor(cat).fg, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 4 }}>
+                  {catEmoji(cat)} {catLabel(cat)}
+                </div>
+                {items.map(n => (
+                  <div key={n.id} style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 8,
+                    padding: '6px 8px', borderRadius: 6,
+                    background: '#fff', border: `1px solid ${catColor(cat).bd}`,
+                    marginBottom: 4,
+                  }}>
+                    <div style={{ flex: 1, fontSize: 12, color: 'var(--ink)', lineHeight: 1.4 }}>
+                      {n.content}
+                      <div style={{ fontSize: 10, color: 'var(--mist)', marginTop: 2 }}>— {n.user_name}</div>
+                    </div>
+                    <button
+                      onClick={() => carryForward(n)}
+                      disabled={busyId === n.id}
+                      title="Carry this note forward to the upcoming event"
+                      style={{
+                        fontSize: 10, fontWeight: 700,
+                        padding: '4px 7px', borderRadius: 4, cursor: 'pointer',
+                        background: '#fff', color: catColor(cat).fg,
+                        border: `1px solid ${catColor(cat).fg}`, whiteSpace: 'nowrap', flexShrink: 0,
+                      }}
+                    >
+                      {busyId === n.id ? '…' : '↪ Carry forward'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function catLabel(c: 'worked' | 'didnt_work' | 'do_differently'): string {
+  return c === 'worked' ? 'Worked' : c === 'didnt_work' ? "Didn't work" : 'Do differently next time'
+}
+function catEmoji(c: 'worked' | 'didnt_work' | 'do_differently'): string {
+  return c === 'worked' ? '👍' : c === 'didnt_work' ? '👎' : '🔄'
+}
+function catColor(c: 'worked' | 'didnt_work' | 'do_differently'): { fg: string; bd: string } {
+  if (c === 'worked')        return { fg: '#065f46', bd: '#a5d6a7' }
+  if (c === 'didnt_work')    return { fg: '#7a1f0f', bd: '#ef9a9a' }
+  return { fg: '#7a5b00', bd: '#ffd54f' }
+}
+function formatPastDate(iso: string): string {
+  return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 // ── Helpers ────────────────────────────────────────────────────
