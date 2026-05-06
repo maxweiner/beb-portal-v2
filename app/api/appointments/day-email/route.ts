@@ -44,9 +44,18 @@ export async function POST(req: Request) {
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
   const storeId = String(body?.store_id || '')
-  const date    = String(body?.date || '')
   if (!storeId) return NextResponse.json({ error: 'Missing store_id' }, { status: 400 })
-  if (!DATE_RE.test(date)) return NextResponse.json({ error: 'Invalid date' }, { status: 400 })
+
+  // Accept either a single `date` (legacy) or `dates` array (multi-day).
+  const datesIn: unknown = body?.dates
+  const dateIn:  unknown = body?.date
+  const datesRaw: string[] = Array.isArray(datesIn)
+    ? datesIn.map((x: any) => String(x || '').trim()).filter(Boolean)
+    : (typeof dateIn === 'string' && dateIn ? [dateIn.trim()] : [])
+  if (datesRaw.length === 0 || !datesRaw.every(d => DATE_RE.test(d))) {
+    return NextResponse.json({ error: 'Invalid or missing dates' }, { status: 400 })
+  }
+  const dates = Array.from(new Set(datesRaw)).sort()
 
   const recipientsRaw: unknown = body?.recipients
   if (!Array.isArray(recipientsRaw) || recipientsRaw.length === 0) {
@@ -63,16 +72,20 @@ export async function POST(req: Request) {
   }
 
   const sb = admin()
-  const result = await generateAppointmentsDayPdfBuffer({ sb, storeId, date })
+  const result = await generateAppointmentsDayPdfBuffer({ sb, storeId, dates })
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
 
-  const longDate = new Date(date + 'T12:00:00').toLocaleDateString('en-US', {
-    weekday: 'long', month: 'long', day: 'numeric',
-  })
+  const fmtLong = (ds: string) =>
+    new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+  const fmtShort = (ds: string) =>
+    new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  const dateRangeLabel = dates.length === 1
+    ? fmtLong(dates[0])
+    : `${fmtShort(dates[0])} – ${fmtShort(dates[dates.length - 1])}`
 
   const subject = (typeof body?.subject === 'string' && body.subject.trim())
     ? body.subject.trim()
-    : `${result.storeName} — ${longDate} appointments (${result.rowCount})`
+    : `${result.storeName} — ${dateRangeLabel} appointments (${result.rowCount})`
 
   const senderName = typeof body?.sender_name === 'string' ? body.sender_name.trim() : ''
   const messageRaw = typeof body?.message === 'string' ? body.message.trim() : ''
@@ -87,7 +100,7 @@ export async function POST(req: Request) {
       </div>
       <h2 style="margin:0 0 6px;font-size:18px;color:#1a1a16">${escapeHtml(result.storeName)}</h2>
       <p style="margin:0 0 14px;color:#4A4A42;font-size:13px">
-        Today's appointment schedule for <b>${escapeHtml(longDate)}</b> — ${result.rowCount} ${result.rowCount === 1 ? 'appointment' : 'appointments'}, attached as a PDF.
+        Appointment schedule for <b>${escapeHtml(dateRangeLabel)}</b> — ${result.rowCount} ${result.rowCount === 1 ? 'appointment' : 'appointments'}, attached as a PDF.
       </p>
       ${messageHtml}
       <p style="margin:16px 0 0;color:#A8A89A;font-size:12px">
@@ -114,7 +127,7 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     ok: true,
-    date,
+    dates,
     store_id: storeId,
     row_count: result.rowCount,
     sent_count: sent.length,

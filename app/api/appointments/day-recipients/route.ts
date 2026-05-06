@@ -32,9 +32,20 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url)
   const storeId = url.searchParams.get('store_id') || ''
-  const date    = url.searchParams.get('date') || ''
+  const datesParam = url.searchParams.get('dates') || ''
+  const dateParam  = url.searchParams.get('date') || ''
   if (!storeId) return NextResponse.json({ error: 'Missing store_id' }, { status: 400 })
-  if (!DATE_RE.test(date)) return NextResponse.json({ error: 'Invalid or missing date' }, { status: 400 })
+  const dates = (datesParam ? datesParam.split(',') : [dateParam])
+    .map(s => s.trim())
+    .filter(Boolean)
+  if (dates.length === 0 || !dates.every(d => DATE_RE.test(d))) {
+    return NextResponse.json({ error: 'Invalid or missing date(s)' }, { status: 400 })
+  }
+  // For buyer lookup: use the earliest date as the reference point.
+  // The widening logic (lookup events with start_date in the +/- 5 day
+  // window) is forgiving enough that picking ANY date in the event
+  // window finds the right buyers.
+  const date = dates[0]
 
   const sb = admin()
 
@@ -61,7 +72,7 @@ export async function GET(req: Request) {
     .from('event_days')
     .select('event_id, events!inner(store_id, workers)')
     .eq('events.store_id', storeId)
-    .eq('day_date', date)
+    .in('day_date', dates)
 
   const workerIds = new Set<string>()
   for (const r of (edRows || [])) {
