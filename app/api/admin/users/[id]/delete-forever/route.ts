@@ -84,9 +84,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   // on auth.users → public.users cascade to remove the public
   // row too. If for some reason the public row outlives, drop
   // it explicitly below.
+  //
+  // "Already gone" is treated as success — happens when a prior
+  // delete killed the auth row but the public row got stuck on a
+  // FK violation, leaving the user half-deleted. A retry would
+  // otherwise abort here even though the auth side is done.
   if (target.auth_id) {
     const { error } = await sb.auth.admin.deleteUser(target.auth_id)
-    if (error) {
+    if (error && !/not found|user.?not.?found|invalid user id/i.test(error.message)) {
       return NextResponse.json({ error: `Auth delete failed: ${error.message}` }, { status: 500 })
     }
   }
