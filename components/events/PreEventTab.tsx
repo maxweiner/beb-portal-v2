@@ -25,6 +25,7 @@ import { eventEndIso, formatEventRange } from '@/lib/eventDates'
 import { eventDisplayName } from '@/lib/eventName'
 import type { Event, EventPromotionalAssetOrder } from '@/types'
 import type { NavPage } from '@/app/page'
+import CancelEventModal from './CancelEventModal'
 
 type CampaignRow = {
   event_id: string
@@ -78,8 +79,12 @@ export default function PreEventTab({ setNav }: Props) {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [assetEditorFor, setAssetEditorFor] = useState<Event | null>(null)
+  const [cancelEventId, setCancelEventId] = useState<string | null>(null)
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
+  // isAdmin in this file gates surfaces like Promote / Cancel. Partners
+  // also get cancel rights (matches the legacy view + the server-side
+  // /api/events/[id]/cancel auth check).
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || user?.is_partner === true
 
   // Refresh from DB so we pick up status / workers changes that happened
   // in the legacy view, and load the readiness signals.
@@ -316,8 +321,23 @@ export default function PreEventTab({ setNav }: Props) {
               return next
             })
           }}
+          onCancelClick={() => setCancelEventId(ev.id)}
         />
       ))}
+
+      {cancelEventId && (
+        <CancelEventModal
+          eventId={cancelEventId}
+          onClose={() => setCancelEventId(null)}
+          onCancelled={() => {
+            // Drop the cancelled event from this tab's local list so the
+            // card disappears immediately. The PreEventTab filter
+            // already excludes status='cancelled' rows, but the local
+            // state hasn't been refetched yet.
+            setEvents(prev => prev.filter(e => e.id !== cancelEventId))
+          }}
+        />
+      )}
 
       {assetEditorFor && (
         <AssetOrderEditor
@@ -357,11 +377,12 @@ interface CardProps {
   onMarkBriefed: (briefed: boolean) => void
   onSetOverride: (kind: 'travel' | 'marketing' | 'assets', on: boolean) => void
   onCarriedForward: (noteId: string) => void
+  onCancelClick: () => void
 }
 
 function EventReadinessCard({
   ev, campaigns, travel, travelAcks, bookingLive, assetOrders, lastLesson, allEvents, stores,
-  isAdmin, currentUserId, currentUserName, setNav, onOpenTravel, onPromoted, onAssetEdit, onMarkBriefed, onSetOverride, onCarriedForward,
+  isAdmin, currentUserId, currentUserName, setNav, onOpenTravel, onPromoted, onAssetEdit, onMarkBriefed, onSetOverride, onCarriedForward, onCancelClick,
 }: CardProps) {
   const reserved = ev.status === 'reserved'
   const [buyerPopover, setBuyerPopover] = useState(false)
@@ -462,9 +483,21 @@ function EventReadinessCard({
             {store?.city}{store?.state ? `, ${store.state}` : ''} · {range}
           </div>
         </div>
-        {reserved && isAdmin && (
-          <button onClick={promote} className="btn-primary btn-sm">✅ Promote to Booked</button>
-        )}
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {reserved && isAdmin && (
+            <button onClick={promote} className="btn-primary btn-sm">✅ Promote to Booked</button>
+          )}
+          {isAdmin && (
+            <button
+              onClick={onCancelClick}
+              className="btn-outline btn-sm"
+              style={{ color: '#B22234', borderColor: '#fecdd3' }}
+              title="Cancel this event (paused campaigns, optional appointment + buyer notifications)"
+            >
+              🚫 Cancel
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Gate chips */}

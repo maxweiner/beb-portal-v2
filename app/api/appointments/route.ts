@@ -86,11 +86,14 @@ export async function POST(req: Request) {
   // Confirm event belongs to this store
   const { data: event, error: eventErr } = await sb
     .from('events')
-    .select('id, store_id, start_date, days:event_days(id, day_number)')
+    .select('id, store_id, start_date, status, days:event_days(id, day_number)')
     .eq('id', event_id)
     .maybeSingle()
   if (eventErr || !event) return bad('Unknown event', 404)
   if (event.store_id !== store.id) return bad('Event does not belong to this store', 400)
+  if (event.status === 'cancelled') {
+    return bad('This event has been cancelled — booking is closed.', 410)
+  }
 
   // Determine which day_number this appointment is on (1, 2, or 3)
   const eventStart = new Date(event.start_date + 'T12:00:00')

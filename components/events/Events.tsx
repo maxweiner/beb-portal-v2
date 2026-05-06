@@ -26,6 +26,7 @@ import {
 } from '@/lib/shipping/manifests'
 import ManifestCaptureModal from '@/components/shipping/ManifestCaptureModal'
 import ManifestViewerModal from '@/components/shipping/ManifestViewerModal'
+import CancelEventModal from './CancelEventModal'
 
 type Filter = 'thisweek' | 'active' | 'all' | 'current' | 'past' | 'future' | 'days30' | 'days60'
 type Sort = 'date-desc' | 'date-asc' | 'name-asc'
@@ -123,6 +124,8 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   const [spendOpen, setSpendOpen] = useState<string | null>(null)
   const [detail, setDetail] = useState<Event | null>(null)
   const [notesEvent, setNotesEvent] = useState<Event | null>(null)
+  const [cancelEventId, setCancelEventId] = useState<string | null>(null)
+  const [deletingEventId, setDeletingEventId] = useState<string | null>(null)
   const [noteCounts, setNoteCounts] = useState<Record<string, number>>({})
   const [noteCountsTick, setNoteCountsTick] = useState(0)
 
@@ -462,6 +465,44 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   // automatically — same flow used by Reports → Event Recap.
   const downloadPdf = (ev: Event) => {
     window.open(`/api/event-recap/preview?event_id=${ev.id}&print=1`, '_blank', 'noopener')
+  }
+
+  // Hard-delete a cancelled event. Server requires the event already be
+  // status='cancelled' AND the user to type the store name or start
+  // date as a confirm string. We use window.prompt (matches the user-
+  // delete-forever pattern in AdminPanel) to keep the surface tiny.
+  async function deleteEventForever(ev: Event) {
+    if (ev.status !== 'cancelled') {
+      alert('Cancel the event first, then delete it forever.')
+      return
+    }
+    const label = `${ev.store_name} on ${ev.start_date}`
+    const confirmText = window.prompt(
+      `🗑 PERMANENTLY DELETE this cancelled event?\n\n` +
+      `${label}\n\n` +
+      `This destroys the event row, all event_days, buyer entries, and FK-cascading rows. Cannot be undone.\n\n` +
+      `Type the store name (${ev.store_name}) or the start date (${ev.start_date}) to confirm:`,
+    )
+    if (!confirmText) return
+    setDeletingEventId(ev.id)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`/api/events/${ev.id}/delete-forever`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ confirm: confirmText }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) { alert(json.error || `Delete failed (${res.status})`); return }
+      const next = events.filter(e => e.id !== ev.id)
+      setEvents(next)
+      setContextEvents(next)
+    } finally {
+      setDeletingEventId(null)
+    }
   }
 
   const isCurrent = (ev: Event) => {
@@ -879,6 +920,8 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                         ...(isAdmin ? [{ id: 'spend', icon: '💰', label: 'Ad spend', onTap: () => setSpendOpen(spendOpen === ev.id ? null : ev.id) }] : []),
                         { id: 'notes',   icon: '📝', label: 'Notes',      onTap: () => setNotesEvent(ev) },
                         { id: 'pdf',     icon: '⤓',  label: 'Download PDF', onTap: () => downloadPdf(ev) },
+                        ...(isAdmin && ev.status !== 'cancelled' ? [{ id: 'cancel', icon: '🚫', label: 'Cancel', danger: true, onTap: () => setCancelEventId(ev.id) }] : []),
+                        ...(isAdmin && ev.status === 'cancelled' ? [{ id: 'delete-forever', icon: '🗑', label: 'Delete forever', danger: true, onTap: () => deleteEventForever(ev) }] : []),
                       ].map((btn, i, arr) => (
                         <button key={btn.id} onClick={e => { e.stopPropagation(); btn.onTap() }} style={{
                           flex: 1, background: 'none', border: 'none',
@@ -1189,6 +1232,8 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                       ...(isAdmin ? [{ id: 'spend', icon: '💰', label: 'Ad spend', onTap: () => setSpendOpen(spendOpen === ev.id ? null : ev.id) }] : []),
                       { id: 'notes',   icon: '📝', label: 'Notes',      onTap: () => setNotesEvent(ev) },
                       { id: 'pdf',     icon: '⤓',  label: 'Download PDF', onTap: () => downloadPdf(ev) },
+                      ...(isAdmin && ev.status !== 'cancelled' ? [{ id: 'cancel', icon: '🚫', label: 'Cancel', danger: true, onTap: () => setCancelEventId(ev.id) }] : []),
+                      ...(isAdmin && ev.status === 'cancelled' ? [{ id: 'delete-forever', icon: '🗑', label: 'Delete forever', danger: true, onTap: () => deleteEventForever(ev) }] : []),
                     ].map(btn => (
                       <button key={btn.id} onClick={e => { e.stopPropagation(); btn.onTap() }} style={{
                         flex: 1, background: 'transparent', border: 'none',
@@ -1282,6 +1327,21 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
               ...prev,
               [ev.id]: (prev[ev.id] || []).filter(x => x.id !== id),
             }))
+          }}
+        />
+      )}
+
+      {/* Cancel-event modal */}
+      {cancelEventId && (
+        <CancelEventModal
+          eventId={cancelEventId}
+          onClose={() => setCancelEventId(null)}
+          onCancelled={() => {
+            // Reflect status='cancelled' locally so the action toolbar
+            // swaps Cancel → Delete Forever without a refetch.
+            const next: Event[] = events.map(e => e.id === cancelEventId ? { ...e, status: 'cancelled' as const } : e)
+            setEvents(next)
+            setContextEvents(next)
           }}
         />
       )}
