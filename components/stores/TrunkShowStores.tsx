@@ -22,7 +22,7 @@ interface TrunkShowStoreContact {
   send_documents: boolean
 }
 
-const CONTACT_TITLE_SUGGESTIONS = ['Owner', 'Manager', 'Staff Member']
+const CONTACT_TITLE_OPTIONS = ['Owner', 'Manager', 'Staff'] as const
 
 interface TrunkShowStore {
   id: string
@@ -389,9 +389,6 @@ function ContactsList({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <datalist id="trunk-contact-title-suggestions">
-        {CONTACT_TITLE_SUGGESTIONS.map(t => <option key={t} value={t} />)}
-      </datalist>
       <div style={{ overflowX: 'auto' }}>
         <div style={{
           display: 'grid', gridTemplateColumns: cols, gap: 8, minWidth: 720,
@@ -417,13 +414,13 @@ function ContactsList({
                 onChange={e => update(i, { name: e.target.value })}
                 placeholder="Contact name"
               />
-              <input
-                type="text"
-                list="trunk-contact-title-suggestions"
+              <select
                 value={c.title ?? ''}
                 onChange={e => update(i, { title: e.target.value })}
-                placeholder="Owner / Manager"
-              />
+              >
+                <option value="">Title…</option>
+                {CONTACT_TITLE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
               <PhoneInput
                 value={rawDigits(c.phone || '')}
                 onChange={(raw) => update(i, { phone: raw })}
