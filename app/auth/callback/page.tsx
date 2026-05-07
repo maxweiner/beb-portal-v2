@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { DEEP_LINK_STORAGE_KEY } from '@/components/layout/Login'
 
 export default function AuthCallback() {
   const router = useRouter()
@@ -12,7 +13,19 @@ export default function AuthCallback() {
     const go = () => {
       if (done) return
       done = true
-      router.replace('/')
+      // Restore the search string the user had before sign-in (e.g.
+      // ?report=<id> from an expense email). Without this, magic-link
+      // / OAuth round-trips drop the query and the user lands on
+      // dashboard instead of the deep-linked page.
+      let dest = '/'
+      try {
+        const stash = window.localStorage.getItem(DEEP_LINK_STORAGE_KEY)
+        if (stash && stash.length > 1) {
+          dest = '/' + stash
+          window.localStorage.removeItem(DEEP_LINK_STORAGE_KEY)
+        }
+      } catch {}
+      router.replace(dest)
     }
 
     // Session is persisted to storage before onAuthStateChange fires,

@@ -1,13 +1,30 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+
+// Key used by the auth callback to restore deep-link query params
+// after sign-in. The auth round-trip drops the URL's query string
+// (callback redirects to /), so we stash it on mount and the
+// callback re-applies it.
+export const DEEP_LINK_STORAGE_KEY = 'beb:deep-link-after-login'
 
 export default function Login() {
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Stash the current URL's search string (e.g. ?report=<id> from an
+  // expense email) so the auth callback can restore it after sign-in.
+  // Only stashes when there's actually a query string — avoids
+  // overwriting an earlier stash with an empty value.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (window.location.search && window.location.search.length > 1) {
+      try { window.localStorage.setItem(DEEP_LINK_STORAGE_KEY, window.location.search) } catch {}
+    }
+  }, [])
 
   const handleGoogle = async () => {
     setLoading(true)
