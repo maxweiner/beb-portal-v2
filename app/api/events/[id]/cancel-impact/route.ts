@@ -40,7 +40,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
   const { data: event, error: evErr } = await sb
     .from('events')
-    .select('id, store_id, store_name, start_date, status, workers, days:event_days(day_date)')
+    .select('id, store_id, store_name, start_date, status, workers, days:event_days(day_number)')
     .eq('id', params.id)
     .maybeSingle()
   if (evErr) return NextResponse.json({ error: evErr.message }, { status: 500 })
@@ -72,12 +72,18 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       email: c.email,
     }))
 
-  // Appointments — at this store on this event's days. Use day_date when
-  // event_days is populated; otherwise +/- 5 days from start as a
-  // conservative window.
-  const eventDays: string[] = ((event as any).days || [])
-    .map((d: any) => d.day_date)
-    .filter(Boolean)
+  // Appointments — at this store on this event's days. event_days has
+  // day_number (1/2/3 etc.), not literal dates; derive YYYY-MM-DD from
+  // events.start_date + (day_number - 1). When day_numbers haven't
+  // been seeded yet, fall back to a +5-day window from start_date as
+  // a conservative bound.
+  const dayNumbers: number[] = ((event as any).days || [])
+    .map((d: any) => Number(d.day_number))
+    .filter((n: any) => Number.isFinite(n) && n >= 1)
+  const ymd = (d: Date) => d.toISOString().slice(0, 10)
+  const startDate = new Date(event.start_date + 'T12:00:00')
+  const eventDays: string[] = dayNumbers
+    .map(n => { const d = new Date(startDate); d.setUTCDate(startDate.getUTCDate() + (n - 1)); return ymd(d) })
   let apptCount = 0
   let customerEmails: string[] = []
   {
@@ -88,11 +94,10 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       .neq('status', 'cancelled')
     if (eventDays.length > 0) apptQuery.in('appointment_date', eventDays)
     else {
-      const start = new Date(event.start_date + 'T12:00:00')
-      const end = new Date(start); end.setUTCDate(start.getUTCDate() + 5)
+      const end = new Date(startDate); end.setUTCDate(startDate.getUTCDate() + 5)
       apptQuery
         .gte('appointment_date', event.start_date)
-        .lte('appointment_date', end.toISOString().slice(0, 10))
+        .lte('appointment_date', ymd(end))
     }
     const { data: appts, count } = await apptQuery
     apptCount = count || 0

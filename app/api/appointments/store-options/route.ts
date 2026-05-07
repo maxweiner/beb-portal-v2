@@ -145,18 +145,26 @@ export async function GET(req: Request) {
   if (storeIds.length > 0) {
     const { data: events } = await sb
       .from('events')
-      .select('id, store_id, start_date, workers, days:event_days(day_date)')
+      .select('id, store_id, start_date, workers, days:event_days(day_number)')
       .in('store_id', storeIds)
       .gte('start_date', ymd(back))
       .lte('start_date', ymd(ahead))
       .order('start_date', { ascending: false })
     for (const e of (events || [])) {
       const sid = (e as any).store_id
-      const eventDays = ((e as any).days || [])
-        .map((d: any) => d.day_date)
-        .filter(Boolean)
-        .sort()
       const startDate: string = (e as any).start_date
+      // Derive event-day YYYY-MM-DDs from day_number (1/2/3) +
+      // start_date — event_days has no day_date column.
+      const startMs = new Date(startDate + 'T12:00:00')
+      const dayNumbers: number[] = ((e as any).days || [])
+        .map((d: any) => Number(d.day_number))
+        .filter((n: any) => Number.isFinite(n) && n >= 1)
+      const eventDays = dayNumbers
+        .map(n => {
+          const d = new Date(startMs); d.setUTCDate(startMs.getUTCDate() + (n - 1))
+          return d.toISOString().slice(0, 10)
+        })
+        .sort()
 
       // In-progress check: today appears in event_days, OR today falls
       // within start_date and start_date + 7 (fallback for events that

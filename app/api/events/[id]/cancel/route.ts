@@ -73,7 +73,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const { data: event, error: evErr } = await sb
     .from('events')
-    .select('id, store_id, store_name, start_date, status, workers, brand, days:event_days(day_date)')
+    .select('id, store_id, store_name, start_date, status, workers, brand, days:event_days(day_number)')
     .eq('id', params.id)
     .maybeSingle()
   if (evErr) return NextResponse.json({ error: evErr.message }, { status: 500 })
@@ -109,16 +109,22 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     summary.campaigns_paused = (data || []).length
   }
 
-  // 3. Date set for appointment + travel cascades. Prefer event_days
-  //    when populated; fall back to start_date + 5 days.
-  let dateSet: string[] = ((event as any).days || [])
-    .map((d: any) => d.day_date)
-    .filter(Boolean)
+  // 3. Date set for appointment + travel cascades. event_days holds
+  //    day_number (1/2/3...) — derive YYYY-MM-DD from start_date +
+  //    (day_number - 1). Fall back to start_date + 0..5 days when no
+  //    day_number rows exist yet.
+  const startDate = new Date(event.start_date + 'T12:00:00')
+  const ymd = (d: Date) => d.toISOString().slice(0, 10)
+  const dayNumbers: number[] = ((event as any).days || [])
+    .map((d: any) => Number(d.day_number))
+    .filter((n: any) => Number.isFinite(n) && n >= 1)
+  let dateSet: string[] = dayNumbers.map(n => {
+    const d = new Date(startDate); d.setUTCDate(startDate.getUTCDate() + (n - 1)); return ymd(d)
+  })
   if (dateSet.length === 0) {
-    const start = new Date(event.start_date + 'T12:00:00')
     for (let i = 0; i < 6; i++) {
-      const d = new Date(start); d.setUTCDate(start.getUTCDate() + i)
-      dateSet.push(d.toISOString().slice(0, 10))
+      const d = new Date(startDate); d.setUTCDate(startDate.getUTCDate() + i)
+      dateSet.push(ymd(d))
     }
   }
 
