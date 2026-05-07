@@ -9,7 +9,7 @@
 // can refresh + scroll into view if it wants. Uses useApp().reload()
 // so the global context picks the new row up immediately.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import DatePicker from '@/components/ui/DatePicker'
@@ -38,12 +38,27 @@ export default function CreateEventModal({ mode = 'scheduled', onClose, onCreate
     })
     .sort((a, b) => a.name.localeCompare(b.name))
 
+  // When the search narrows to exactly one match, auto-select it.
+  // Catches the common gotcha where a typed-search user sees a single
+  // highlighted row in the <select size=N> listbox and assumes it's
+  // selected — but HTML requires an explicit click to set the value.
+  useEffect(() => {
+    if (filteredStores.length === 1 && storeId !== filteredStores[0].id) {
+      setStoreId(filteredStores[0].id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredStores.length, filteredStores[0]?.id])
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!storeId || !startDate) {
+    // Be specific about what's missing instead of the generic
+    // "Pick a store and a start date" — half the time only one is.
+    if (!storeId && !startDate) {
       alert('Pick a store and a start date.')
       return
     }
+    if (!storeId)   { alert('Pick a store from the list (click the row to select).'); return }
+    if (!startDate) { alert('Pick a start date.'); return }
     const n = parseInt(buyersNeeded, 10)
     if (!Number.isFinite(n) || n < 1 || n > 20) {
       alert('Buyers needed must be between 1 and 20.')
