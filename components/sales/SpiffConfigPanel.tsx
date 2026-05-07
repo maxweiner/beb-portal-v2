@@ -4,6 +4,7 @@
 // when an appointment is marked purchased. Single-row config.
 
 import { useEffect, useState } from 'react'
+import Checkbox from '@/components/ui/Checkbox'
 import { getSpiffConfig, setSpiffAmount, type SpiffConfig } from '@/lib/sales/spiffs'
 
 const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })
@@ -67,12 +68,12 @@ export default function SpiffConfigPanel() {
               style={{ paddingLeft: 22 }} />
           </div>
         </div>
-        <div className="field" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input id="spiff-active" type="checkbox" checked={draftActive}
-            onChange={e => setDraftActive(e.target.checked)} />
-          <label htmlFor="spiff-active" style={{ fontSize: 13, color: 'var(--ink)', cursor: 'pointer' }}>
-            Spiffs active (uncheck to pause auto-creation site-wide)
-          </label>
+        <div className="field" style={{ marginBottom: 0 }}>
+          <Checkbox
+            checked={draftActive}
+            onChange={setDraftActive}
+            label={<span style={{ fontSize: 13, color: 'var(--ink)' }}>Spiffs active (uncheck to pause auto-creation site-wide)</span>}
+          />
         </div>
       </div>
 

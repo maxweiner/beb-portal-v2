@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
+import Checkbox from '@/components/ui/Checkbox'
 import {
   getTrunkShow, updateTrunkShow, softDeleteTrunkShow,
   listHours, setHoursForDate, reconcileHours,
@@ -300,11 +301,13 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
         <div style={{ fontSize: 11, color: 'var(--mist)', marginBottom: 10 }}>
           Track the show prep workflow. Pick a date when each milestone is done; clear to mark not done.
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <input id="ts-vip" type="checkbox" checked={draft.vip_showing}
-            onChange={e => setDraft(p => ({ ...p, vip_showing: e.target.checked }))}
-            disabled={!canMutate} />
-          <label htmlFor="ts-vip" style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>⭐ VIP Showing</label>
+        <div style={{ marginBottom: 12 }}>
+          <Checkbox
+            checked={!!draft.vip_showing}
+            disabled={!canMutate}
+            onChange={(next) => setDraft(p => ({ ...p, vip_showing: next }))}
+            label={<span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>⭐ VIP Showing</span>}
+          />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
           {([

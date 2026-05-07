@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import Checkbox from '@/components/ui/Checkbox'
 
 interface PaymentMethod {
   id: string
@@ -70,12 +71,12 @@ export default function PaymentMethodsPanel() {
         </button>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <label style={{ fontSize: 12, color: 'var(--ash)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)}
-            style={{ width: 16, height: 16, margin: 0 }} />
-          Show archived
-        </label>
+      <div style={{ marginBottom: 8 }}>
+        <Checkbox
+          checked={showArchived}
+          onChange={setShowArchived}
+          label={<span style={{ fontSize: 12, color: 'var(--ash)' }}>Show archived</span>}
+        />
       </div>
 
       {visible.length === 0 ? (
