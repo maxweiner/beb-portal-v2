@@ -29,8 +29,12 @@ function admin() {
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const me = await getAuthedUser(req)
   if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!me.is_partner) {
-    return NextResponse.json({ error: 'Only partners can approve reports' }, { status: 403 })
+  // Approvers: partners (financial sign-off) and the accounting role
+  // (per the team request — accountants drive the queue, so they can
+  // approve without bouncing back to a partner).
+  const isAccounting = me.role === 'accounting'
+  if (!me.is_partner && !isAccounting) {
+    return NextResponse.json({ error: 'Only partners or accounting can approve reports' }, { status: 403 })
   }
 
   const blocked = await blockIfImpersonating(req)
