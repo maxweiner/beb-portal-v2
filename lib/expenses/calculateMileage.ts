@@ -44,8 +44,16 @@ async function loadIrsRate(): Promise<number> {
  * unrecoverable error (missing addresses, API failure, no route).
  */
 export async function calculateMileageForReport(reportId: string): Promise<MileageBreakdown> {
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY
-  if (!apiKey) throw new Error('GOOGLE_MAPS_API_KEY is not set')
+  // Prefer the dedicated, unrestricted server-side key for Distance
+  // Matrix. The original GOOGLE_MAPS_API_KEY is referrer-restricted so
+  // the browser-side Maps autocomplete can use it safely — but Google
+  // rejects referrer-restricted keys on Distance Matrix because server
+  // calls have no referrer header to validate against. Fall back to
+  // the legacy var so existing setups keep working until they migrate.
+  const apiKey = process.env.GOOGLE_DISTANCE_MATRIX_KEY || process.env.GOOGLE_MAPS_API_KEY
+  if (!apiKey) {
+    throw new Error('GOOGLE_DISTANCE_MATRIX_KEY (or GOOGLE_MAPS_API_KEY) is not set')
+  }
 
   const sb = admin()
   const { data: report, error: rErr } = await sb
@@ -82,7 +90,19 @@ export async function calculateMileageForReport(reportId: string): Promise<Milea
   }
   const json = await res.json() as any
   const top = json?.status
-  if (top && top !== 'OK') throw new Error(`Distance Matrix: ${top} ${json?.error_message ?? ''}`)
+  if (top && top !== 'OK') {
+    const msg = String(json?.error_message ?? '')
+    // Friendlier hint when the operator hits the referrer-restriction
+    // gotcha on the Distance Matrix API. The Google error message
+    // mentions "referer restrictions"; surface a clear next step.
+    if (top === 'REQUEST_DENIED' && /referer/i.test(msg)) {
+      throw new Error(
+        'Distance Matrix REQUEST_DENIED — the configured Google key has HTTP referrer restrictions, which Distance Matrix rejects. ' +
+        'Create a separate unrestricted (Distance Matrix-only) key in Google Cloud Console and set it as GOOGLE_DISTANCE_MATRIX_KEY in Vercel.'
+      )
+    }
+    throw new Error(`Distance Matrix: ${top} ${msg}`)
+  }
   const elem = json?.rows?.[0]?.elements?.[0]
   if (!elem) throw new Error('Distance Matrix returned no result')
   if (elem.status !== 'OK') throw new Error(`Distance Matrix element status: ${elem.status}`)
