@@ -25,6 +25,10 @@ export default function TemplateEditor({ template, canEdit, onClose }: Props) {
   const [isActive, setIsActive] = useState(template?.is_active ?? true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Type-to-confirm delete: must type exactly "delete" to enable button.
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   const subjectRef = useRef<HTMLInputElement | null>(null)
   const bodyRef    = useRef<HTMLTextAreaElement | null>(null)
@@ -254,6 +258,80 @@ export default function TemplateEditor({ template, canEdit, onClose }: Props) {
       {/* Schedules — only meaningful for saved templates */}
       {template && (
         <SchedulesSection templateId={template.id} canEdit={canEdit} />
+      )}
+
+      {/* Danger zone — type-to-confirm delete. Only shown for
+          existing (saved) templates and only to editors. New
+          templates have nothing to delete yet. */}
+      {template && canEdit && (
+        <div style={{
+          marginTop: 32, padding: 16,
+          background: '#FFF7F7', border: '1px dashed #fecdd3', borderRadius: 10,
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: '#B22234', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>
+            ⚠ Danger Zone
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--ash)', marginBottom: 10, lineHeight: 1.5 }}>
+            Permanently deletes this template. Past sends already created from
+            it stay intact. If you just want to stop using it, uncheck
+            <b> Active</b> at the top instead.
+          </div>
+          {!deleteOpen ? (
+            <button
+              onClick={() => setDeleteOpen(true)}
+              className="btn-outline btn-sm"
+              style={{ color: '#B22234', borderColor: '#fecdd3' }}
+            >
+              🗑 Delete this template…
+            </button>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ fontSize: 13, color: 'var(--ink)' }}>
+                Type <b><code>delete</code></b> to confirm:
+              </div>
+              <input
+                type="text"
+                value={deleteConfirm}
+                onChange={e => setDeleteConfirm(e.target.value)}
+                placeholder="delete"
+                autoFocus
+                style={{ maxWidth: 240 }}
+              />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={async () => {
+                    if (deleteConfirm.trim().toLowerCase() !== 'delete') return
+                    setDeleting(true)
+                    try {
+                      const { error } = await supabase
+                        .from('communication_templates')
+                        .delete()
+                        .eq('id', template.id)
+                      if (error) {
+                        alert('Delete failed: ' + error.message)
+                        return
+                      }
+                      onClose()
+                    } finally {
+                      setDeleting(false)
+                    }
+                  }}
+                  disabled={deleting || deleteConfirm.trim().toLowerCase() !== 'delete'}
+                  className="btn-danger btn-sm"
+                >
+                  {deleting ? 'Deleting…' : '🗑 Permanently Delete'}
+                </button>
+                <button
+                  onClick={() => { setDeleteOpen(false); setDeleteConfirm('') }}
+                  disabled={deleting}
+                  className="btn-outline btn-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </div>
   )
