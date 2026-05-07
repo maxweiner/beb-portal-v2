@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import ReportEditView, { type ReportDef } from './ReportEditView'
 import CustomReportsListLazy from './CustomReportsList'
+import ChartsTab from './ChartsTab'
 import NotificationTemplatesAdmin from '@/components/admin/NotificationTemplatesAdmin'
 
 // Reports that need an event picker before they can render. The tile
@@ -118,7 +119,7 @@ export default function Reports() {
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
   const isSuperAdmin = user?.role === 'superadmin'
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [tab, setTab] = useState<'templates' | 'custom' | 'notifications'>('templates')
+  const [tab, setTab] = useState<'templates' | 'custom' | 'charts' | 'notifications'>('templates')
   // Which tile has its inline Quick-view picker expanded. Null = none.
   const [quickViewOpenId, setQuickViewOpenId] = useState<string | null>(null)
 
@@ -157,6 +158,7 @@ export default function Reports() {
   const tabs: ([typeof tab, string][]) = [
     ['templates', 'Templates'],
     ['custom', 'Custom'],
+    ['charts', '📊 Charts'],
     ...(isSuperAdmin ? ([['notifications', 'Notifications']] as [typeof tab, string][]) : []),
   ]
 
@@ -195,6 +197,7 @@ export default function Reports() {
       )}
 
       {tab === 'custom' && <CustomReportsListLazy />}
+      {tab === 'charts' && <ChartsTab />}
       {tab === 'templates' && (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
         {REPORTS.map(t => {
