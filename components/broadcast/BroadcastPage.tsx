@@ -372,7 +372,7 @@ function ComposeView(props: any) {
           </div>
           <div style={{ background: '#fff', borderRadius: 10, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
             <div style={{ padding: '20px 24px 12px', textAlign: 'center', borderBottom: '1px solid #EDE7DA' }}>
-              <img src="/beb-wordmark.png" alt="logo" style={{ maxWidth: 200, height: 'auto' }} />
+              <img src={`/api/brand-logo?brand=${brand}`} alt="logo" style={{ maxWidth: 200, height: 'auto' }} />
             </div>
             <div style={{ padding: '16px 24px 22px', fontSize: 14, lineHeight: 1.55, color: 'var(--ink)' }}>
               <div style={{ fontSize: 11, color: 'var(--mist)', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>
