@@ -209,6 +209,24 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
     fetchEvents()
   }, [fetchEvents])
 
+  // Listen for the calendar's "focus this event" intent (fired when
+  // a buying-event chip is clicked on the Schedule). Expand the
+  // matching card + scroll it into view.
+  useEffect(() => {
+    function onFocus(e: any) {
+      const id = (e as CustomEvent<{ eventId: string }>).detail?.eventId
+      if (!id) return
+      setExpandedCards(prev => new Set(prev).add(id))
+      setJustCreatedEventId(id)   // borrow the "auto-include in filter" path
+      setTimeout(() => {
+        const el = document.getElementById(`event-card-${id}`)
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 100)
+    }
+    window.addEventListener('beb:focus-event', onFocus)
+    return () => window.removeEventListener('beb:focus-event', onFocus)
+  }, [])
+
   /* ── Manifest counts + per-event shipment box counts. Both feed
        the Manifest action (count badge + box-label picker preset
        list). Best-effort; failure leaves the cache empty. ── */

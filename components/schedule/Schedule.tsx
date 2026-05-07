@@ -144,6 +144,7 @@ export default function Schedule({ setNav }: { setNav?: (n: NavPage) => void } =
   // store name + city/state from trunk_show_stores so the day-cell
   // chip is meaningful at a glance.
   const [trunkShows, setTrunkShows] = useState<TrunkShowOverlay[]>([])
+  const [trunkRepFilter, setTrunkRepFilter] = useState<string>('all')
   const [showTrunkShows, setShowTrunkShows] = useState(() => {
     if (typeof window === 'undefined') return true
     return localStorage.getItem('beb-show-trunk-shows') !== 'false'
@@ -227,6 +228,34 @@ export default function Schedule({ setNav }: { setNav?: (n: NavPage) => void } =
     window.localStorage.setItem(VIEW_KEY, view)
   }, [view])
   const [detail, setDetail] = useState<Event | null>(null)
+
+  // Trunk-rep dropdown options — every distinct rep referenced by a
+  // trunk show, sorted by name. Falls back to the user id when the
+  // user record isn't in context (e.g. ex-rep). useMemo keeps the
+  // list stable across re-renders so the <select> doesn't churn.
+  const trunkRepOptions = useMemo(() => {
+    const ids = Array.from(new Set(
+      trunkShows.map(t => t.assigned_rep_id).filter((x): x is string => !!x),
+    ))
+    return ids
+      .map(id => ({
+        id,
+        name: users.find((u: any) => u.id === id)?.name || id.slice(0, 8),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [trunkShows, users])
+
+  // Click on a buying-event chip → navigate to Buying Events and
+  // dispatch a focus intent the destination page listens for to
+  // scroll/highlight the matching card. Replaces the old behaviour
+  // of opening a tiny detail modal.
+  const openBuyingEvent = (ev: Event) => {
+    if (!setNav) { setDetail(ev); return }
+    setNav('buying-events')
+    setTimeout(() => window.dispatchEvent(
+      new CustomEvent('beb:focus-event', { detail: { eventId: ev.id } }),
+    ), 0)
+  }
   const [vacations, setVacations] = useState<BuyerVacation[]>([])
   const [showVacations, setShowVacations] = useState(() => {
     if (typeof window === 'undefined') return true
@@ -312,6 +341,30 @@ export default function Schedule({ setNav }: { setNav?: (n: NavPage) => void } =
               💼 Trunk Shows {showTrunkShows ? 'ON' : 'OFF'}
             </button>
           )}
+          {/* Trunk-rep filter — narrows the trunk-show overlay to a
+              single rep's schedule. Only meaningful when trunk shows
+              are toggled on AND there's more than one rep across the
+              loaded shows. */}
+          {showTrunkShows && trunkShows.length > 0 && trunkRepOptions.length > 1 && (
+            <select
+              value={trunkRepFilter}
+              onChange={e => setTrunkRepFilter(e.target.value)}
+              style={{
+                padding: isNarrow ? '10px 12px' : '7px 10px',
+                borderRadius: 'var(--r)', border: '1px solid var(--pearl)',
+                fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
+                background: '#fff', color: 'var(--ash)',
+                minHeight: isNarrow ? 44 : undefined,
+                width: 'auto',
+              }}
+              title="Filter trunk shows to one rep"
+            >
+              <option value="all">👥 All trunk reps</option>
+              {trunkRepOptions.map(opt => (
+                <option key={opt.id} value={opt.id}>{opt.name}</option>
+              ))}
+            </select>
+          )}
           <div style={{
             display: isNarrow ? 'grid' : 'flex',
             gridTemplateColumns: isNarrow ? 'repeat(4, 1fr)' : undefined,
@@ -334,16 +387,21 @@ export default function Schedule({ setNav }: { setNav?: (n: NavPage) => void } =
       </div>
 
       {(() => {
-        const visibleTrunks = showTrunkShows ? trunkShows : []
+        // Apply the trunk-rep filter on top of the show/hide toggle.
+        // 'all' = every trunk show; otherwise only the rep's shows.
+        const baseTrunks = showTrunkShows ? trunkShows : []
+        const visibleTrunks = trunkRepFilter === 'all'
+          ? baseTrunks
+          : baseTrunks.filter(t => t.assigned_rep_id === trunkRepFilter)
         const openTrunk = (id: string) => { setTrunkShowIntent({ trunkShowId: id }); setNav?.('trunk-shows') }
         return (
           <>
-            {view === 'month'    && <MonthView    events={displayedEvents} stores={stores} users={users} vacations={showVacations ? vacations : []} currentUserId={user?.id} onSelect={setDetail} isNarrow={isNarrow} shipments={shipments} onSelectShipment={setShipmentDetail} tradeShows={showTradeShows ? tradeShows : []} trunkShows={visibleTrunks} onOpenTradeShow={(id) => { setTradeShowIntent({ tradeShowId: id }); setNav?.('trade-shows') }} onOpenTrunkShow={openTrunk} />}
-            {view === 'week'     && <WeekView     events={displayedEvents} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
-            {view === 'day'      && <DayView      events={displayedEvents} stores={stores} onSelect={setDetail} isNarrow={isNarrow} />}
-            {view === 'timeline' && <TimelineView events={displayedEvents} stores={stores} onSelect={setDetail} isNarrow={isNarrow} onSwitchView={setView} trunkShows={visibleTrunks} users={users} onOpenTrunkShow={openTrunk} />}
-            {view === 'agenda'   && <AgendaView   events={displayedEvents} stores={stores} onSelect={setDetail} isNarrow={isNarrow} trunkShows={visibleTrunks} users={users} onOpenTrunkShow={openTrunk} />}
-            {view === 'kanban'   && <KanbanView   events={displayedEvents} stores={stores} onSelect={setDetail} isNarrow={isNarrow} trunkShows={visibleTrunks} users={users} onOpenTrunkShow={openTrunk} />}
+            {view === 'month'    && <MonthView    events={displayedEvents} stores={stores} users={users} vacations={showVacations ? vacations : []} currentUserId={user?.id} onSelect={openBuyingEvent} isNarrow={isNarrow} shipments={shipments} onSelectShipment={setShipmentDetail} tradeShows={showTradeShows ? tradeShows : []} trunkShows={visibleTrunks} onOpenTradeShow={(id) => { setTradeShowIntent({ tradeShowId: id }); setNav?.('trade-shows') }} onOpenTrunkShow={openTrunk} />}
+            {view === 'week'     && <WeekView     events={displayedEvents} stores={stores} onSelect={openBuyingEvent} isNarrow={isNarrow} />}
+            {view === 'day'      && <DayView      events={displayedEvents} stores={stores} onSelect={openBuyingEvent} isNarrow={isNarrow} />}
+            {view === 'timeline' && <TimelineView events={displayedEvents} stores={stores} onSelect={openBuyingEvent} isNarrow={isNarrow} onSwitchView={setView} trunkShows={visibleTrunks} users={users} onOpenTrunkShow={openTrunk} />}
+            {view === 'agenda'   && <AgendaView   events={displayedEvents} stores={stores} onSelect={openBuyingEvent} isNarrow={isNarrow} trunkShows={visibleTrunks} users={users} onOpenTrunkShow={openTrunk} />}
+            {view === 'kanban'   && <KanbanView   events={displayedEvents} stores={stores} onSelect={openBuyingEvent} isNarrow={isNarrow} trunkShows={visibleTrunks} users={users} onOpenTrunkShow={openTrunk} />}
           </>
         )
       })()}
