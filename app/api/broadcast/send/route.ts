@@ -131,7 +131,7 @@ export async function POST(req: Request) {
     bodyHtml,
     ctaLabel,
     ctaUrl,
-    logoAbsoluteUrl: `${portalBaseUrl}/beb-wordmark.png`,
+    logoAbsoluteUrl: `${portalBaseUrl}/api/brand-logo?brand=${brand}`,
   })
 
   const resendKey = await loadResendKey(sb)
