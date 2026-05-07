@@ -59,13 +59,19 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     .maybeSingle()
   if (evErr) return NextResponse.json({ error: evErr.message }, { status: 500 })
   if (!event) return NextResponse.json({ error: 'Event not found' }, { status: 404 })
-  if (event.status !== 'cancelled') {
+
+  const body = await req.json().catch(() => ({}))
+  // `force=true` bypasses the must-be-cancelled-first rule. Reserved
+  // for the Admin Panel's legacy Delete-Past-Event tool, gated to
+  // superadmin only. Anyone else still has to cancel first.
+  const force = body?.force === true || body?.force === 1
+  const isSuperadmin = caller?.role === 'superadmin'
+  if (event.status !== 'cancelled' && !(force && isSuperadmin)) {
     return NextResponse.json({
       error: 'Event must be cancelled first. Use Cancel Event, then Delete Forever.',
     }, { status: 400 })
   }
 
-  const body = await req.json().catch(() => ({}))
   const confirm = String(body?.confirm || '').trim()
   const expected = [event.store_name, event.start_date].filter(Boolean).map(s => s.toLowerCase())
   if (!expected.includes(confirm.toLowerCase())) {
