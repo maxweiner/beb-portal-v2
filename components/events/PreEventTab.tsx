@@ -26,6 +26,7 @@ import { eventDisplayName } from '@/lib/eventName'
 import type { Event, EventPromotionalAssetOrder } from '@/types'
 import type { NavPage } from '@/app/page'
 import CancelEventModal from './CancelEventModal'
+import { CALENDAR_COLORS } from '@/lib/calendarColors'
 
 type CampaignRow = {
   event_id: string
@@ -464,9 +465,15 @@ function EventReadinessCard({
 
   return (
     <div style={{
-      background: '#fff', border: `1px solid ${reserved ? '#d4a017' : 'var(--cream2)'}`,
+      // Reserved events render with a dashed blue accent so they read
+      // as Save the Date variants of the same buying-event family.
+      // Confirmed events get a solid blue accent.
+      background: '#fff',
+      border: `1px solid ${reserved ? CALENDAR_COLORS.buying.main : 'var(--cream2)'}`,
       borderRadius: 10, padding: '14px 16px',
-      borderLeft: `4px solid ${reserved ? '#d4a017' : 'var(--green-dark)'}`,
+      borderLeftStyle: reserved ? 'dashed' : 'solid',
+      borderLeftWidth: 4,
+      borderLeftColor: CALENDAR_COLORS.buying.main,
     }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
@@ -474,7 +481,8 @@ function EventReadinessCard({
           <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)' }}>
             {reserved && <span style={{
               display: 'inline-block', fontSize: 10, fontWeight: 800,
-              background: '#fff4d6', color: '#8a6d00', padding: '2px 6px', borderRadius: 4,
+              background: CALENDAR_COLORS.buying.light, color: CALENDAR_COLORS.buying.text,
+              padding: '2px 6px', borderRadius: 4,
               marginRight: 8, verticalAlign: 'middle',
             }}>📌 RESERVED</span>}
             {display}

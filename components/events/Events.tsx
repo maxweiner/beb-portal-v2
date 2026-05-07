@@ -27,6 +27,7 @@ import {
 import ManifestCaptureModal from '@/components/shipping/ManifestCaptureModal'
 import ManifestViewerModal from '@/components/shipping/ManifestViewerModal'
 import CancelEventModal from './CancelEventModal'
+import { CALENDAR_COLORS } from '@/lib/calendarColors'
 
 type Filter = 'thisweek' | 'active' | 'all' | 'current' | 'past' | 'future' | 'days30' | 'days60'
 type Sort = 'date-desc' | 'date-asc' | 'name-asc'
@@ -592,7 +593,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
       </div>
 
       {showForm && (
-        <div className="card mb-5" style={{ border: showForm === 'reserved' ? '2px dashed #D97706' : '2px solid var(--green3)', marginBottom: 20 }}>
+        <div className="card mb-5" style={{ border: showForm === 'reserved' ? `2px dashed ${CALENDAR_COLORS.buying.main}` : '2px solid var(--green3)', marginBottom: 20 }}>
           <div className="card-title">
             {showForm === 'reserved' ? '📌 Save the Date — Reserved Event' : 'New Event'}
           </div>
@@ -670,8 +671,8 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
 
             return (
               <div key={ev.id} id={`event-card-${ev.id}`} style={{
-                background: ev.status === 'reserved' ? '#FFFBEB' : 'var(--card-bg)',
-                border: ev.status === 'reserved' ? '2px dashed #D97706' : '1px solid var(--pearl)',
+                background: ev.status === 'reserved' ? CALENDAR_COLORS.buying.light : 'var(--card-bg)',
+                border: ev.status === 'reserved' ? `2px dashed ${CALENDAR_COLORS.buying.main}` : '1px solid var(--pearl)',
                 borderRadius: 10,
                 overflow: 'hidden',
                 marginBottom: 12,
@@ -690,7 +691,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                       fontSize: 15, fontWeight: 900, flex: 1, minWidth: 0,
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>
-                      {ev.status === 'reserved' && <span style={{ background: '#D97706', color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, marginRight: 8, letterSpacing: '.04em' }}>📌 RESERVED</span>}
+                      {ev.status === 'reserved' && <span style={{ background: CALENDAR_COLORS.buying.main, color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, marginRight: 8, letterSpacing: '.04em' }}>📌 RESERVED</span>}
                       {ev.status === 'cancelled' && <span style={{ background: '#6B7280', color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, marginRight: 8, letterSpacing: '.04em', textDecoration: 'line-through' }}>CANCELLED</span>}
                       {eventDisplayName(ev, stores)}
                     </span>
@@ -965,8 +966,8 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
 
           return (
             <div key={ev.id} id={`event-card-${ev.id}`} style={{
-              background: ev.status === 'reserved' ? '#FFFBEB' : 'var(--card-bg)',
-              border: ev.status === 'reserved' ? '2px dashed #D97706' : '1.5px solid var(--pearl)',
+              background: ev.status === 'reserved' ? CALENDAR_COLORS.buying.light : 'var(--card-bg)',
+              border: ev.status === 'reserved' ? `2px dashed ${CALENDAR_COLORS.buying.main}` : '1.5px solid var(--pearl)',
               borderRadius: 16,
               overflow: 'hidden',
               marginBottom: 12,
@@ -996,7 +997,7 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                   flex: 1, fontSize: 17, fontWeight: 900, color: '#fff',
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
                 }}>
-                  {ev.status === 'reserved' && <span style={{ background: '#D97706', color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, marginRight: 8, letterSpacing: '.04em' }}>📌 RESERVED</span>}
+                  {ev.status === 'reserved' && <span style={{ background: CALENDAR_COLORS.buying.main, color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, marginRight: 8, letterSpacing: '.04em' }}>📌 RESERVED</span>}
                   {ev.status === 'cancelled' && <span style={{ background: '#6B7280', color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, marginRight: 8, letterSpacing: '.04em' }}>CANCELLED</span>}
                   {eventDisplayName(ev, stores)}
                 </span>
@@ -1473,8 +1474,8 @@ function EventDetailModal({ ev, stores, onClose, fmtDollars, onStatusChanged }: 
 
         <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
           {ev.status === 'reserved' && isAdminUser && (
-            <div style={{ background: '#FFFBEB', border: '2px dashed #D97706', borderRadius: 8, padding: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#92400E' }}>📌 This is a Save the Date — not yet confirmed.</div>
+            <div style={{ background: CALENDAR_COLORS.buying.light, border: `2px dashed ${CALENDAR_COLORS.buying.main}`, borderRadius: 8, padding: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: CALENDAR_COLORS.buying.text }}>📌 This is a Save the Date — not yet confirmed.</div>
               <div style={{ display: 'flex', gap: 6 }}>
                 <button onClick={promote} className="btn-primary btn-sm">✅ Promote to Booked</button>
                 <button onClick={cancelKeep} className="btn-outline btn-sm">Cancel (keep visible)</button>
