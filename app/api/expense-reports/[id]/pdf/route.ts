@@ -31,8 +31,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (rErr) return NextResponse.json({ error: rErr.message }, { status: 500 })
   if (!report) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const isOwner = report.user_id === me.id
-  if (!isOwner && !isAdminLike(me)) {
+  // Anyone who can act on the report should be able to print it:
+  // owner (their own), admin/superadmin (full review), partners
+  // (financial sign-off; users.is_partner flag, distinct from role
+  // — see partner ≠ superadmin feedback note), and accounting
+  // (drives the queue, needs to print PDFs to file).
+  const isOwner      = report.user_id === me.id
+  const isAccounting = me.role === 'accounting'
+  if (!isOwner && !isAdminLike(me) && !me.is_partner && !isAccounting) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
