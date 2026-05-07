@@ -118,6 +118,10 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   // (and auto-expand it) regardless of the active filter, so the user
   // can immediately add buyers. Cleared when they change filter/search.
   const [justCreatedEventId, setJustCreatedEventId] = useState<string | null>(null)
+  // Calendar deep-link focus — when set, the filter shows ONLY the
+  // matching event. A small banner above the list tells the user
+  // they're in this single-event mode and lets them clear it.
+  const [focusEventId, setFocusEventId] = useState<string | null>(null)
   // Post-create marketing prompt — shown right after a new event is
   // saved. Yes opens NewCampaignModal pre-filled with the event.
   const [marketingPromptEvent, setMarketingPromptEvent] = useState<Event | null>(null)
@@ -210,14 +214,16 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   }, [fetchEvents])
 
   // Listen for the calendar's "focus this event" intent (fired when
-  // a buying-event chip is clicked on the Schedule). Expand the
-  // matching card + scroll it into view.
+  // a buying-event chip is clicked on the Schedule). Sets
+  // focusEventId so the filter narrows to ONLY that event, expands
+  // the card, and scrolls it into view. The user can clear via the
+  // banner that appears above the list.
   useEffect(() => {
     function onFocus(e: any) {
       const id = (e as CustomEvent<{ eventId: string }>).detail?.eventId
       if (!id) return
+      setFocusEventId(id)
       setExpandedCards(prev => new Set(prev).add(id))
-      setJustCreatedEventId(id)   // borrow the "auto-include in filter" path
       setTimeout(() => {
         const el = document.getElementById(`event-card-${id}`)
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -257,6 +263,10 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   /* ── Filter & sort events ── */
   const filtered = events.filter(ev => {
     if (!ev.start_date) return false
+    // Calendar deep-link focus mode — show ONLY the matching event.
+    // Overrides everything (date filter, search). Cleared via the
+    // banner below the search row.
+    if (focusEventId) return ev.id === focusEventId
     // Just-created event is always shown so the user can immediately
     // add buyers — even if the active filter would otherwise hide it.
     if (justCreatedEventId && ev.id === justCreatedEventId) return true
@@ -577,16 +587,38 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMobile, filtered.length, filtered.map(e => e.id).join('|')])
 
+  // Banner shown when the user came in via a calendar event click —
+  // makes the single-event filter visible + clearable.
+  const focusedEvent = focusEventId ? events.find(e => e.id === focusEventId) : null
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
+      {focusedEvent && (
+        <div style={{
+          background: '#DBE6F4', border: '1px solid #1E3A8A', borderRadius: 8,
+          padding: '10px 14px', marginBottom: 12,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap',
+        }}>
+          <div style={{ fontSize: 13, color: '#1E3A8A', fontWeight: 700 }}>
+            📅 Showing <b>{focusedEvent.store_name}</b> from the calendar
+          </div>
+          <button
+            onClick={() => setFocusEventId(null)}
+            className="btn-outline btn-xs"
+            style={{ color: '#1E3A8A', borderColor: '#1E3A8A' }}
+          >
+            ← Show all events
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <h1 className="text-2xl font-black" style={{ color: 'var(--ink)' }}>
           Events <span className="text-base font-normal" style={{ color: 'var(--fog)' }}>({filtered.length} of {events.length})</span>
         </h1>
         <div className="flex gap-2 flex-wrap">
-          <input value={search} onChange={e => { setSearch(e.target.value); setJustCreatedEventId(null) }}
+          <input value={search} onChange={e => { setSearch(e.target.value); setJustCreatedEventId(null); setFocusEventId(null) }}
             placeholder="Search stores…" style={{ width: 160 }} />
-          <select value={filter} onChange={e => { setFilter(e.target.value as Filter); setJustCreatedEventId(null) }} style={{ width: 'auto' }}>
+          <select value={filter} onChange={e => { setFilter(e.target.value as Filter); setJustCreatedEventId(null); setFocusEventId(null) }} style={{ width: 'auto' }}>
             <option value="thisweek">This Week</option>
             <option value="active">Current & Upcoming</option>
             <option value="all">All Events</option>
