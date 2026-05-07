@@ -41,14 +41,19 @@ function useIsNarrow(breakpoint = 768) {
   return narrow
 }
 
-const COLORS = [
-  '#2D6A4F','#1B4332','#40916C','#264653','#D62828',
-  '#E76F51','#F4A261','#457B9D','#6D4C41','#7B2D8B',
-]
+// Calendar palette consolidated to 3 families (buying / trunk / trade)
+// 2026-05-06. storeColor / COLORS rotation retired — every buying event
+// is now blue regardless of store. Reserved events render dashed.
+import { CALENDAR_COLORS, eventChipStyle, familyToggleOn, type CalendarFamily } from '@/lib/calendarColors'
 
-function storeColor(storeId: string, stores: any[]) {
-  const idx = stores.findIndex(s => s.id === storeId)
-  return COLORS[Math.abs(idx) % COLORS.length]
+const FAMILY_BUYING: CalendarFamily = 'buying'
+const FAMILY_TRUNK:  CalendarFamily = 'trunk'
+const FAMILY_TRADE:  CalendarFamily = 'trade'
+
+/** All buying events use the blue family. Reserved (STD) events get
+ *  a dashed outline + light fill via eventChipStyle(); see callers. */
+function buyingMainColor(): string {
+  return CALENDAR_COLORS.buying.main
 }
 
 function evDays(ev: Event): string[] {
@@ -277,8 +282,8 @@ export default function Schedule({ setNav }: { setNav?: (n: NavPage) => void } =
             padding: isNarrow ? '10px 14px' : '7px 12px', borderRadius: 'var(--r)',
             border: '1px solid var(--pearl)', cursor: 'pointer',
             fontSize: 13, fontWeight: 700,
-            background: showEvents ? 'rgba(45,106,79,.12)' : 'transparent',
-            color: showEvents ? 'var(--green-dark)' : 'var(--fog)',
+            background: showEvents ? CALENDAR_COLORS.buying.light : 'transparent',
+            color: showEvents ? CALENDAR_COLORS.buying.text : 'var(--fog)',
             minHeight: isNarrow ? 44 : undefined,
           }}>
             ◆ Buying Events {showEvents ? 'ON' : 'OFF'}
@@ -288,8 +293,8 @@ export default function Schedule({ setNav }: { setNav?: (n: NavPage) => void } =
               padding: isNarrow ? '10px 14px' : '7px 12px', borderRadius: 'var(--r)',
               border: '1px solid var(--pearl)', cursor: 'pointer',
               fontSize: 13, fontWeight: 700,
-              background: showTradeShows ? 'rgba(147,51,234,.12)' : 'transparent',
-              color: showTradeShows ? '#5B21B6' : 'var(--fog)',
+              background: showTradeShows ? CALENDAR_COLORS.trade.light : 'transparent',
+              color: showTradeShows ? CALENDAR_COLORS.trade.text : 'var(--fog)',
               minHeight: isNarrow ? 44 : undefined,
             }}>
               🎪 Trade Shows {showTradeShows ? 'ON' : 'OFF'}
@@ -300,8 +305,8 @@ export default function Schedule({ setNav }: { setNav?: (n: NavPage) => void } =
               padding: isNarrow ? '10px 14px' : '7px 12px', borderRadius: 'var(--r)',
               border: '1px solid var(--pearl)', cursor: 'pointer',
               fontSize: 13, fontWeight: 700,
-              background: showTrunkShows ? 'rgba(234,88,12,.12)' : 'transparent',
-              color: showTrunkShows ? '#C2410C' : 'var(--fog)',
+              background: showTrunkShows ? CALENDAR_COLORS.trunk.light : 'transparent',
+              color: showTrunkShows ? CALENDAR_COLORS.trunk.text : 'var(--fog)',
               minHeight: isNarrow ? 44 : undefined,
             }}>
               💼 Trunk Shows {showTrunkShows ? 'ON' : 'OFF'}
@@ -478,7 +483,7 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
                   {visibleDots.map(ev => (
                     <span key={ev.id} style={{
                       width: 6, height: 6, borderRadius: '50%',
-                      background: storeColor(ev.store_id, stores),
+                      background: buyingMainColor(),
                     }} />
                   ))}
                   {dayShips.length > 0 && (
@@ -524,9 +529,9 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
                       onClick={onOpenTradeShow ? (e) => { e.stopPropagation(); onOpenTradeShow(t.id) } : undefined}
                       title={`Trade Show — ${t.name}\n${t.start_date} – ${t.end_date}${t.venue_city ? ` · ${t.venue_city}, ${t.venue_state || ''}` : ''}\nClick to open`}
                       style={{
-                        background: 'rgba(147,51,234,.15)',
-                        color: '#5B21B6',
-                        border: '1px solid rgba(147,51,234,.3)',
+                        background: CALENDAR_COLORS.trade.light,
+                        color: CALENDAR_COLORS.trade.text,
+                        border: `1px solid ${CALENDAR_COLORS.trade.main}`,
                         fontSize: 11, fontWeight: 700,
                         padding: '3px 7px', borderRadius: 4,
                         marginBottom: 3, overflow: 'hidden',
@@ -546,9 +551,9 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
                         onClick={onOpenTrunkShow ? (e) => { e.stopPropagation(); onOpenTrunkShow(t.id) } : undefined}
                         title={`Trunk Show — ${t.store_name}\n${t.start_date} – ${t.end_date}${t.city ? ` · ${t.city}, ${t.state || ''}` : ''}${rep ? `\nRep: ${rep}` : '\nUnassigned'}\nClick to open`}
                         style={{
-                          background: 'rgba(234,88,12,.12)',
-                          color: '#C2410C',
-                          border: '1px solid rgba(234,88,12,.3)',
+                          background: CALENDAR_COLORS.trunk.light,
+                          color: CALENDAR_COLORS.trunk.text,
+                          border: `1px solid ${CALENDAR_COLORS.trunk.main}`,
                           fontSize: 11, fontWeight: 700,
                           padding: '3px 7px', borderRadius: 4,
                           marginBottom: 3, overflow: 'hidden',
@@ -561,14 +566,17 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
                   })}
                   {dayEvs.slice(0, visibleCount).map(ev => {
                     const staffing = eventStaffing(ev)
+                    const reserved = ev.status === 'reserved'
+                    const chip = eventChipStyle(FAMILY_BUYING, reserved)
                     return (
                       <div
                         key={ev.id}
                         onClick={() => onSelect(ev)}
-                        title={`${ev.store_name} — ${ev.start_date}`}
+                        title={`${ev.store_name} — ${ev.start_date}${reserved ? ' (Save the Date)' : ''}`}
                         style={{
                           position: 'relative',
-                          background: storeColor(ev.store_id, stores), color: '#fff',
+                          background: chip.background, color: chip.color,
+                          border: chip.border,
                           fontSize: 12, fontWeight: 700,
                           padding: '4px 7px', borderRadius: 4,
                           marginBottom: 3, cursor: 'pointer', overflow: 'hidden',
@@ -677,7 +685,7 @@ function SelectedDayPanel({ dateStr, events, stores, vacations, onSelect, shipme
               style={{
                 appearance: 'none', textAlign: 'left',
                 background: '#fff', border: '1px solid var(--pearl)',
-                borderLeft: `5px solid ${storeColor(ev.store_id, stores)}`,
+                borderLeft: `5px solid ${buyingMainColor()}`,
                 borderRadius: 8, padding: '10px 12px', cursor: 'pointer',
                 fontFamily: 'inherit',
               }}
@@ -804,7 +812,7 @@ function TimelineView({ events, stores, onSelect, isNarrow, onSwitchView, trunkS
                 onClick={onOpenTrunkShow ? () => onOpenTrunkShow(t.id) : undefined}
                 title={`Trunk Show — ${t.store_name}${repName ? ` · ${repName}` : ' · Unassigned'}`}
                 style={{
-                  padding: '8px 12px', fontSize: 12, fontWeight: 700, color: '#C2410C',
+                  padding: '8px 12px', fontSize: 12, fontWeight: 700, color: CALENDAR_COLORS.trunk.text,
                   overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
                   cursor: onOpenTrunkShow ? 'pointer' : 'default',
                 }}>
@@ -820,7 +828,7 @@ function TimelineView({ events, stores, onSelect, isNarrow, onSwitchView, trunkS
                   <div key={i} style={{ borderLeft: '1px solid var(--cream2)', height: 44, display: 'flex', alignItems: 'center', padding: '4px 1px', background: isToday ? 'rgba(45,106,79,.04)' : 'transparent' }}>
                     {isShowDay && (
                       <div onClick={onOpenTrunkShow ? () => onOpenTrunkShow(t.id) : undefined} style={{
-                        flex: 1, height: 28, background: '#C2410C', cursor: onOpenTrunkShow ? 'pointer' : 'default',
+                        flex: 1, height: 28, background: CALENDAR_COLORS.trunk.text, cursor: onOpenTrunkShow ? 'pointer' : 'default',
                         borderRadius: isFirst && isLast ? 6 : isFirst ? '6px 0 0 6px' : isLast ? '0 6px 6px 0' : 0,
                         display: 'flex', alignItems: 'center', paddingLeft: isFirst ? 6 : 0,
                         color: '#fff', fontSize: 10, fontWeight: 700,
@@ -839,7 +847,7 @@ function TimelineView({ events, stores, onSelect, isNarrow, onSwitchView, trunkS
 
         {visibleEvents.map(ev => {
           const eds = evDays(ev)
-          const color = storeColor(ev.store_id, stores)
+          const color = buyingMainColor()
           return (
             <div key={ev.id} style={{ display: 'grid', gridTemplateColumns: '160px repeat(42, 1fr)', borderBottom: '1px solid var(--cream2)', alignItems: 'center', minHeight: 44 }}>
               <div style={{ padding: '8px 12px', fontSize: 12, fontWeight: 700, color: 'var(--green-dark)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
@@ -964,7 +972,7 @@ function AgendaView({ events, stores, onSelect, isNarrow, trunkShows = [], users
                     alignItems: isNarrow ? 'stretch' : 'flex-start',
                     padding: '14px 16px', marginBottom: 10, borderRadius: 'var(--r)',
                     background: 'var(--cream)', border: '1px solid var(--pearl)',
-                    borderLeft: '4px solid #C2410C',
+                    borderLeft: `4px solid ${CALENDAR_COLORS.trunk.main}`,
                     cursor: onOpenTrunkShow ? 'pointer' : 'default', opacity: past ? 0.65 : 1,
                   }}>
                     <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
@@ -984,7 +992,7 @@ function AgendaView({ events, stores, onSelect, isNarrow, trunkShows = [], users
                         <div style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 6 }}>
                           {fmtDate(t.start_date)} — {fmtDate(t.end_date)}
                           {t.city && <> · {t.city}{t.state ? `, ${t.state}` : ''}</>}
-                          <span style={{ marginLeft: 8, fontSize: 10, background: 'rgba(234,88,12,.10)', color: '#C2410C', padding: '1px 6px', borderRadius: 99, fontWeight: 700 }}>Trunk Show</span>
+                          <span style={{ marginLeft: 8, fontSize: 10, background: CALENDAR_COLORS.trunk.light, color: CALENDAR_COLORS.trunk.text, padding: '1px 6px', borderRadius: 99, fontWeight: 700 }}>Trunk Show</span>
                           {past && <span style={{ marginLeft: 6, fontSize: 10, background: 'var(--cream2)', padding: '1px 6px', borderRadius: 99, fontWeight: 700 }}>Past</span>}
                         </div>
                         {repName && (
@@ -1000,7 +1008,7 @@ function AgendaView({ events, stores, onSelect, isNarrow, trunkShows = [], users
               }
               const ev = it.ev
               const past = isPast(ev)
-              const color = storeColor(ev.store_id, stores)
+              const color = buyingMainColor()
               const dollars = eventSpend(ev)
               const purchases = ev.days.reduce((s,d) => s + (d.purchases||0), 0)
               return (
@@ -1142,7 +1150,7 @@ function KanbanView({ events, stores, onSelect, isNarrow, trunkShows = [], users
                   return (
                     <div key={`trunk-${t.id}`} onClick={onOpenTrunkShow ? () => onOpenTrunkShow(t.id) : undefined} style={{
                       background: 'var(--cream)', borderRadius: 'var(--r)',
-                      border: '1px solid var(--pearl)', borderTop: '3px solid #C2410C',
+                      border: '1px solid var(--pearl)', borderTop: `3px solid ${CALENDAR_COLORS.trunk.main}`,
                       padding: '12px 14px', cursor: onOpenTrunkShow ? 'pointer' : 'default',
                       boxShadow: '0 1px 4px rgba(0,0,0,.06)',
                     }}>
@@ -1152,7 +1160,7 @@ function KanbanView({ events, stores, onSelect, isNarrow, trunkShows = [], users
                         {t.city && <> · {t.city}{t.state ? `, ${t.state}` : ''}</>}
                       </div>
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 99, background: 'rgba(234,88,12,.10)', color: '#C2410C' }}>Trunk Show</span>
+                        <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 99, background: CALENDAR_COLORS.trunk.light, color: CALENDAR_COLORS.trunk.text }}>Trunk Show</span>
                         {repName ? (
                           <span style={{ fontSize: 10, color: 'var(--mist)' }}>Rep: <strong style={{ color: 'var(--ink)' }}>{repName}</strong></span>
                         ) : (
@@ -1163,7 +1171,7 @@ function KanbanView({ events, stores, onSelect, isNarrow, trunkShows = [], users
                   )
                 }
                 const ev = it.ev
-                const color = storeColor(ev.store_id, stores)
+                const color = buyingMainColor()
                 const dollars = eventSpend(ev)
                 const purchases = ev.days.reduce((s,d) => s + (d.purchases||0), 0)
                 return (
@@ -1225,7 +1233,7 @@ function DetailModal({ ev, stores, onClose, isNarrow }: { ev: Event; stores: any
   const totalDollars = eventSpend(ev)
   const totalCommission = eventCommission(ev)
   const closeRate = totalCustomers > 0 ? Math.round(totalPurchases/totalCustomers*100) : 0
-  const color = storeColor(ev.store_id, stores)
+  const color = buyingMainColor()
   const fmt = (ds: string) => new Date(ds+'T12:00:00').toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'})
   const fmtDollars = fmtMoney
 
@@ -1517,7 +1525,7 @@ function WeekView({ events, stores, onSelect, isNarrow }: { events: Event[]; sto
                   style={{
                     position: 'absolute', top: 0, height: 32,
                     left: `calc(${left}% + 4px)`, width: `calc(${width}% - 8px)`,
-                    background: storeColor(ev.store_id, stores), color: '#fff',
+                    background: buyingMainColor(), color: '#fff',
                     borderRadius: 6, padding: '6px 10px',
                     fontSize: 13, fontWeight: 700, lineHeight: 1.4,
                     cursor: 'pointer', overflow: 'hidden', whiteSpace: 'nowrap',
@@ -1582,7 +1590,7 @@ function DayView({ events, stores, onSelect, isNarrow }: { events: Event[]; stor
                   onClick={() => onSelect(ev)}
                   style={{
                     background: '#fff', borderRadius: 10, padding: 16,
-                    borderLeft: `6px solid ${storeColor(ev.store_id, stores)}`,
+                    borderLeft: `6px solid ${buyingMainColor()}`,
                     cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,.06)',
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     gap: 12,
