@@ -8,6 +8,7 @@
 // dropdown but stay readable on existing cost rows.
 
 import { useEffect, useState } from 'react'
+import Checkbox from '@/components/ui/Checkbox'
 import {
   listCategories, createCategory, updateCategory,
   type BoothCostCategory,
@@ -109,10 +110,13 @@ export default function BoothCostCategoriesPanel() {
         </button>
       </div>
 
-      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ash)', marginBottom: 8 }}>
-        <input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)} />
-        Show archived
-      </label>
+      <div style={{ marginBottom: 8 }}>
+        <Checkbox
+          checked={showArchived}
+          onChange={setShowArchived}
+          label={<span style={{ fontSize: 12, color: 'var(--ash)' }}>Show archived</span>}
+        />
+      </div>
 
       {!loaded ? (
         <div style={{ padding: 14, textAlign: 'center', color: 'var(--mist)', fontSize: 13 }}>Loading…</div>

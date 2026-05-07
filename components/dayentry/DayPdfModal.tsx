@@ -13,6 +13,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import Checkbox from '@/components/ui/Checkbox'
 
 async function authHeaders(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession()
@@ -218,12 +219,17 @@ export default function DayPdfModal({ eventId, dayNumber, storeName, senderName,
               <div style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--mist)', textTransform: 'uppercase', marginBottom: 6 }}>Store contacts</div>
                 {storeContacts.map(o => (
-                  <label key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={picked.has(o.id)} onChange={() => togglePick(o.id)} />
-                    <span style={{ fontSize: 13 }}>
-                      {o.label || o.email} <span style={{ color: 'var(--mist)' }}>· {o.email}</span>
-                    </span>
-                  </label>
+                  <div key={o.id} style={{ padding: '4px 0' }}>
+                    <Checkbox
+                      checked={picked.has(o.id)}
+                      onChange={() => togglePick(o.id)}
+                      label={
+                        <span style={{ fontSize: 13 }}>
+                          {o.label || o.email} <span style={{ color: 'var(--mist)' }}>· {o.email}</span>
+                        </span>
+                      }
+                    />
+                  </div>
                 ))}
               </div>
             )}
@@ -232,12 +238,17 @@ export default function DayPdfModal({ eventId, dayNumber, storeName, senderName,
               <div style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--mist)', textTransform: 'uppercase', marginBottom: 6 }}>Buyers on this event</div>
                 {workers.map(o => (
-                  <label key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={picked.has(o.id)} onChange={() => togglePick(o.id)} />
-                    <span style={{ fontSize: 13 }}>
-                      {o.label} <span style={{ color: 'var(--mist)' }}>· {o.email}</span>
-                    </span>
-                  </label>
+                  <div key={o.id} style={{ padding: '4px 0' }}>
+                    <Checkbox
+                      checked={picked.has(o.id)}
+                      onChange={() => togglePick(o.id)}
+                      label={
+                        <span style={{ fontSize: 13 }}>
+                          {o.label} <span style={{ color: 'var(--mist)' }}>· {o.email}</span>
+                        </span>
+                      }
+                    />
+                  </div>
                 ))}
               </div>
             )}
