@@ -114,15 +114,26 @@ function buildHTML(opts: {
     </div>`).join('')
 
   const eventCards = opts.events.map(ev => {
-    const isDay1 = ev.dayNumber === 1
-    const accent = isDay1 ? '#D97706' : '#1D6B44'
-    const pct = ev.dayNumber === 1 ? 33 : ev.dayNumber === 2 ? 66 : 100
+    const isDay1     = ev.dayNumber === 1   // start day — no yesterday data yet
+    const isPostDay  = ev.dayNumber === 4   // morning after Day 3 — final wrap-up card
+    // Card accent: amber for Day 1 (event just starting, no cumulative
+    // yet), navy for the post-event final report, green for in-event
+    // days. Navy on the final card matches the calendar palette so the
+    // recipient knows "this is the wrap-up, not a live day."
+    const accent = isDay1 ? '#D97706' : isPostDay ? '#1E3A8A' : '#1D6B44'
+    const pct = isPostDay ? 100 : ev.dayNumber === 1 ? 33 : ev.dayNumber === 2 ? 66 : 100
+    const dayBadge = isPostDay
+      ? '✓ FINAL — Event Complete'
+      : `Day ${ev.dayNumber} of 3`
+    const yesterdayLabel = isPostDay ? 'Day 3 (final)' : 'Yesterday'
+    const cumulativeLabel = isPostDay ? 'Event Total (3 days)' : 'Cumulative'
+
     const cumulativeTile = isDay1
       ? `<div style="background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 6px; padding: 10px 14px; flex: 1; display: flex; align-items: center; justify-content: center;">
            <div style="font-size: 12px; color: #92400E; font-weight: 700;">Day 1 — no cumulative yet</div>
          </div>`
       : `<div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px; padding: 10px 14px; flex: 1;">
-           <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #14532d;">Cumulative</div>
+           <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #14532d;">${cumulativeLabel}</div>
            <div style="font-size: 20px; font-weight: 900; color: #14532d; margin-top: 2px;">${ev.cumulativePurchases} <span style="font-size: 12px; color: #14532d; font-weight: 500;">purch</span></div>
            <div style="font-size: 16px; font-weight: 900; color: #14532d;">${money(ev.cumulativeDollars)}</div>
          </div>`
@@ -135,11 +146,11 @@ function buildHTML(opts: {
             <div style="font-weight: 900; font-size: 15px; color: #1A1A16;">${ev.store}</div>
             <div style="font-size: 12px; color: #737368;">${ev.city}${ev.state ? ', ' + ev.state : ''}</div>
           </div>
-          <div style="background: ${accent}; color: #fff; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px;">Day ${ev.dayNumber} of 3</div>
+          <div style="background: ${accent}; color: #fff; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px;">${dayBadge}</div>
         </div>
         <div style="display: flex; gap: 20px; margin-top: 14px;">
           <div style="background: #EDE8DF; border-radius: 6px; padding: 10px 14px; flex: 1;">
-            <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #737368;">Yesterday</div>
+            <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #737368;">${yesterdayLabel}</div>
             <div style="font-size: 20px; font-weight: 900; color: #1A1A16; margin-top: 2px;">${ev.yesterdayPurchases} <span style="font-size: 12px; color: #737368; font-weight: 500;">purch</span></div>
             <div style="font-size: 16px; font-weight: 900; color: #1D6B44;">${money(ev.yesterdayDollars)}</div>
           </div>
@@ -147,7 +158,7 @@ function buildHTML(opts: {
         </div>
         <div style="margin-top: 12px;">
           <div style="display: flex; justify-content: space-between; font-size: 11px; color: #737368; margin-bottom: 4px;">
-            <span>Event progress</span><span style="font-weight: 700;">${pct}%</span>
+            <span>${isPostDay ? 'Event progress' : 'Event progress'}</span><span style="font-weight: 700;">${pct}%</span>
           </div>
           <div style="background: #EDE8DF; border-radius: 4px; height: 6px; overflow: hidden;">
             <div style="background: ${accent}; height: 100%; width: ${pct}%; border-radius: 4px;"></div>
@@ -252,14 +263,19 @@ export async function POST(request: NextRequest) {
     const today = new Date()
     const todayMid = new Date(today); todayMid.setHours(12, 0, 0, 0)
 
-    // Active events for THIS brand: today falls in start_date .. start_date+2
+    // Active events for THIS brand. Window is start_date .. start_date+3
+    // (one day past the 3-day event) so the morning AFTER Day 3 can show
+    // the final-day numbers + the full event cumulative as a wrap-up
+    // card. Anything past start_date+3 is dropped — the event is "fully
+    // reported."
     const { data: allEvents } = await sb.from('events')
       .select('*, days:event_days(*)')
       .eq('brand', brand)
+      .neq('status', 'cancelled')
     const activeEvents = (allEvents || []).filter((e: any) => {
       if (!e.start_date) return false
       const start = new Date(e.start_date + 'T12:00:00')
-      const end = new Date(start); end.setDate(end.getDate() + 2)
+      const end = new Date(start); end.setDate(end.getDate() + 3)
       return todayMid >= start && todayMid <= end
     })
 
@@ -273,13 +289,17 @@ export async function POST(request: NextRequest) {
     const storeById = new Map<string, { city: string; state: string }>()
     for (const s of storeRows || []) storeById.set(s.id, { city: s.city || '', state: s.state || '' })
 
-    // Build per-event summary
+    // Build per-event summary. dayNumber is the day-index relative to
+    // start_date, NO clamp:
+    //   1, 2, 3 = today is Day N of the live event
+    //   4       = today is the morning after Day 3 — final wrap-up
+    //             card showing Day 3 numbers + full event total
     let anyHasYesterday = false
     const eventSummaries: EventSummary[] = activeEvents.map((e: any) => {
       const start = new Date(e.start_date + 'T12:00:00')
       const daysSinceStart = Math.round((todayMid.getTime() - start.getTime()) / 86400000)
-      const dayNumber = Math.max(1, Math.min(3, daysSinceStart + 1))
-      const yesterdayDay = dayNumber - 1
+      const dayNumber = daysSinceStart + 1   // 1..4
+      const yesterdayDay = dayNumber - 1     // 0..3 (0 = no yesterday on Day 1)
       const days: any[] = e.days || []
       const yRow = yesterdayDay > 0 ? days.find(d => d.day_number === yesterdayDay) : null
       const cumRows = yesterdayDay > 0 ? days.filter(d => d.day_number <= yesterdayDay) : []
