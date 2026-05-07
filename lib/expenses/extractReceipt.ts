@@ -63,7 +63,11 @@ export async function extractReceiptData(
       messages: [{
         role: 'user',
         content: [
-          { type: 'image', source: { type: 'base64', media_type: mediaType, data: imageBase64 } },
+          // PDFs use a different content-block shape per Anthropic's
+          // document-vision API. Images stay on the image block.
+          mediaType === 'application/pdf'
+            ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: imageBase64 } }
+            : { type: 'image',    source: { type: 'base64', media_type: mediaType,         data: imageBase64 } },
           { type: 'text', text: PROMPT },
         ],
       }],

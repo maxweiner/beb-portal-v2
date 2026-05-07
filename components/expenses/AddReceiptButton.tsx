@@ -92,28 +92,51 @@ export default function AddReceiptButton({
     setError(null); setExtractError(null)
     setBusy('uploading')
     try {
-      // Mobile camera: scan-style processing (BT.709 grayscale +
-      // contrast curve) so receipts photographed in-store read
-      // like scans, not glossy snapshots — better OCR accuracy and
-      // a cleaner record. Desktop uses the same pipeline minus
-      // the scanStyle flag (preserves color in case the user is
-      // uploading an existing photo or PDF render).
-      const { blob } = await processImageForUpload(file, {
-        maxEdge: 1600,
-        quality: 0.7,
-        scanStyle: isMobileUserAgent(),
-      })
-      const dataUrl = await blobToDataUrl(blob)
-      setPreviewUrl(dataUrl)
+      const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
+      let payloadBase64: string
+      let payloadMediaType: string
+      let preview: string
 
-      const commaIdx = dataUrl.indexOf(',')
-      const imageBase64 = commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : dataUrl
+      if (isPdf) {
+        // PDFs skip the image-compression pipeline — Anthropic accepts
+        // PDFs natively in vision OCR. Read raw bytes → base64. Use a
+        // placeholder thumbnail (the preview <img> can't render a PDF
+        // data: URL, so we show a labelled card instead).
+        const buf = await file.arrayBuffer()
+        const bytes = new Uint8Array(buf)
+        let binary = ''
+        const CHUNK = 0x8000
+        for (let i = 0; i < bytes.length; i += CHUNK) {
+          binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
+        }
+        payloadBase64 = btoa(binary)
+        payloadMediaType = 'application/pdf'
+        preview = '__pdf__'   // sentinel — preview block detects + renders PDF tile
+      } else {
+        // Mobile camera: scan-style processing (BT.709 grayscale +
+        // contrast curve) so receipts photographed in-store read like
+        // scans, not glossy snapshots — better OCR accuracy and a
+        // cleaner record. Desktop uses the same pipeline minus the
+        // scanStyle flag (preserves color in case the user is uploading
+        // an existing photo).
+        const { blob } = await processImageForUpload(file, {
+          maxEdge: 1600,
+          quality: 0.7,
+          scanStyle: isMobileUserAgent(),
+        })
+        const dataUrl = await blobToDataUrl(blob)
+        const commaIdx = dataUrl.indexOf(',')
+        payloadBase64 = commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : dataUrl
+        payloadMediaType = 'image/jpeg'
+        preview = dataUrl
+      }
+      setPreviewUrl(preview)
 
       setBusy('extracting')
       const res = await authedFetch(`/api/expense-reports/${reportId}/upload-receipt`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64, mediaType: 'image/jpeg' }),
+        body: JSON.stringify({ imageBase64: payloadBase64, mediaType: payloadMediaType }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -176,7 +199,7 @@ export default function AddReceiptButton({
       <input ref={cameraRef} type="file" accept="image/*" capture="environment"
         style={{ display: 'none' }}
         onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
-      <input ref={fileRef} type="file" accept="image/*"
+      <input ref={fileRef} type="file" accept="image/*,application/pdf,.pdf"
         style={{ display: 'none' }}
         onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
       {busy !== 'idle' ? (
@@ -241,7 +264,18 @@ export default function AddReceiptButton({
             )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 12, alignItems: 'flex-start' }}>
-              {previewUrl && (
+              {previewUrl === '__pdf__' ? (
+                <div style={{
+                  width: '100%', minHeight: 160, borderRadius: 8,
+                  border: '1px solid var(--cream2)', background: 'var(--cream)',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  justifyContent: 'center', gap: 6, padding: 20, textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: 36 }}>📄</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink)' }}>PDF receipt attached</div>
+                  <div style={{ fontSize: 11, color: 'var(--mist)' }}>Saved to the report</div>
+                </div>
+              ) : previewUrl && (
                 <img src={previewUrl} alt="receipt preview"
                   style={{ width: '100%', borderRadius: 8, border: '1px solid var(--cream2)', objectFit: 'contain', maxHeight: 320 }} />
               )}

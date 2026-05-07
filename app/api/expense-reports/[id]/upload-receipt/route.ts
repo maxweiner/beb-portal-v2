@@ -19,7 +19,7 @@ import { extractReceiptData } from '@/lib/expenses/extractReceipt'
 export const dynamic = 'force-dynamic'
 
 const RECEIPTS_BUCKET = 'expense-receipts'
-const ALLOWED_MEDIA = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const ALLOWED_MEDIA = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf'])
 const MAX_BYTES = 5 * 1024 * 1024 // 5 MB after base64 decode
 
 function admin() {
@@ -31,7 +31,10 @@ function admin() {
 }
 
 function extOf(mediaType: string): string {
-  return mediaType === 'image/png' ? 'png' : mediaType === 'image/webp' ? 'webp' : 'jpg'
+  if (mediaType === 'image/png') return 'png'
+  if (mediaType === 'image/webp') return 'webp'
+  if (mediaType === 'application/pdf') return 'pdf'
+  return 'jpg'
 }
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
