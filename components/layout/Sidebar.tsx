@@ -75,6 +75,7 @@ const BEB_NAV: NavItem[] = [
   { id: 'customers',         label: 'Customers',         iconKey: 'staff' },
   { label: 'Admin', section: true },
   { id: 'admin',         label: 'Admin Panel',       iconKey: 'admin' },
+  { id: 'broadcast',     label: '📣 Broadcast',      iconKey: 'marketing' },
   { id: 'staff',         label: 'Staff',             iconKey: 'staff' },
   { id: 'data-research', label: 'Data Research',     iconKey: 'reports' },
   { id: 'financials',    label: 'Financials',        iconKey: 'financials' },
