@@ -1503,12 +1503,23 @@ function DeleteEventSection() {
     if (!canDelete || !selected) return
     setDeleting(true)
     try {
-      // Manual ordered cascade in case FKs aren't set to ON DELETE CASCADE.
-      await supabase.from('buyer_checks').delete().eq('event_id', selected.id)
-      await supabase.from('buyer_entries').delete().eq('event_id', selected.id)
-      await supabase.from('event_days').delete().eq('event_id', selected.id)
-      const { error } = await supabase.from('events').delete().eq('id', selected.id)
-      if (error) throw error
+      // Route through the server endpoint so the admin client (service
+      // role) handles the cascade — bypasses any per-table RLS gaps
+      // (e.g. event_days lacking a DELETE policy) that the previous
+      // direct-supabase calls were tripping over with "unauthorized".
+      // `force: true` is the superadmin-only escape hatch that skips
+      // the cancel-first requirement on the endpoint.
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`/api/events/${selected.id}/delete-forever`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ confirm: confirmText, force: true }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error || `Delete failed (${res.status})`)
       setToast(`Event deleted — ${selected.store_name} ${fmtDate(selected.start_date)}`)
       setSelectedId('')
       setConfirmText('')
