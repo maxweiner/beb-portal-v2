@@ -23,6 +23,7 @@ import { broadcastExpenseStatusChanged } from './usePendingApprovals'
 import AddReceiptButton from './AddReceiptButton'
 import DatePicker from '@/components/ui/DatePicker'
 import AddMileageButton from './AddMileageButton'
+import Checkbox from '@/components/ui/Checkbox'
 import TemplateChecklist from './TemplateChecklist'
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
@@ -874,17 +875,17 @@ function ExpenseRow({ expense, canMutate, onUpdate, onDelete }: {
           cost ledger) but is excluded from the buyer's reimbursable
           total — the accountant has already paid this on the
           company card. Server-side trigger handles recompute. */}
-      <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <input
-          id={`pbcc-${expense.id}`}
-          type="checkbox"
+      <div style={{ marginTop: 8 }}>
+        <Checkbox
           checked={!!expense.paid_by_credit_card}
           disabled={!canMutate}
-          onChange={e => onUpdate({ paid_by_credit_card: e.target.checked } as Partial<Expense>)}
+          onChange={(next) => onUpdate({ paid_by_credit_card: next } as Partial<Expense>)}
+          label={
+            <span style={{ fontSize: 12, fontWeight: 700, color: expense.paid_by_credit_card ? 'var(--green-dark)' : 'var(--ink)' }}>
+              💳 Paid by Credit Card (excluded from reimbursable)
+            </span>
+          }
         />
-        <label htmlFor={`pbcc-${expense.id}`} style={{ fontSize: 12, fontWeight: 700, color: expense.paid_by_credit_card ? 'var(--green-dark)' : 'var(--ink)', cursor: canMutate ? 'pointer' : 'default' }}>
-          💳 Paid by Credit Card (excluded from reimbursable)
-        </label>
       </div>
     </div>
   )
