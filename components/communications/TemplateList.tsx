@@ -13,6 +13,7 @@ export default function TemplateList({ canEdit, onOpen }: Props) {
   const [rows, setRows] = useState<CommunicationTemplate[]>([])
   const [showArchived, setShowArchived] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   async function reload() {
     setLoading(true)
@@ -24,6 +25,28 @@ export default function TemplateList({ canEdit, onOpen }: Props) {
     setLoading(false)
   }
   useEffect(() => { reload() }, [])
+
+  async function deleteTemplate(t: CommunicationTemplate) {
+    if (!confirm(
+      `🗑 Permanently delete template "${t.name}"?\n\n` +
+      `This cannot be undone. Past sends already created from this template stay intact.\n\n` +
+      `If you just want to stop using it, edit the template and uncheck Active instead.`,
+    )) return
+    setDeletingId(t.id)
+    try {
+      const { error } = await supabase
+        .from('communication_templates')
+        .delete()
+        .eq('id', t.id)
+      if (error) {
+        alert('Delete failed: ' + error.message)
+        return
+      }
+      setRows(prev => prev.filter(r => r.id !== t.id))
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   const visible = rows.filter(r => showArchived || r.is_active)
 
@@ -56,7 +79,7 @@ export default function TemplateList({ canEdit, onOpen }: Props) {
       ) : (
         <div style={{ background: '#fff', border: '1px solid var(--cream2)', borderRadius: 10, overflow: 'hidden' }}>
           <div style={{
-            display: 'grid', gridTemplateColumns: '1.5fr 2fr 140px 100px 100px',
+            display: 'grid', gridTemplateColumns: '1.5fr 2fr 140px 100px 160px',
             background: 'var(--cream2)', padding: '8px 14px',
             fontSize: 11, fontWeight: 700, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.04em',
           }}>
@@ -68,7 +91,7 @@ export default function TemplateList({ canEdit, onOpen }: Props) {
           </div>
           {visible.map(t => (
             <div key={t.id} style={{
-              display: 'grid', gridTemplateColumns: '1.5fr 2fr 140px 100px 100px',
+              display: 'grid', gridTemplateColumns: '1.5fr 2fr 140px 100px 160px',
               padding: '10px 14px', borderTop: '1px solid var(--cream2)', alignItems: 'center',
               fontSize: 13,
             }}>
@@ -86,10 +109,21 @@ export default function TemplateList({ canEdit, onOpen }: Props) {
                   color: t.is_active ? 'var(--green-dark)' : 'var(--mist)',
                 }}>{t.is_active ? 'Active' : 'Archived'}</span>
               </div>
-              <div style={{ textAlign: 'right' }}>
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                 <button onClick={() => onOpen(t)} className="btn-outline btn-xs">
                   {canEdit ? 'Edit' : 'View'}
                 </button>
+                {canEdit && (
+                  <button
+                    onClick={() => deleteTemplate(t)}
+                    disabled={deletingId === t.id}
+                    className="btn-outline btn-xs"
+                    style={{ color: '#B22234', borderColor: '#fecdd3' }}
+                    title="Permanently delete this template"
+                  >
+                    {deletingId === t.id ? 'Deleting…' : '🗑 Delete'}
+                  </button>
+                )}
               </div>
             </div>
           ))}

@@ -215,10 +215,26 @@ export default function TemplateEditor({ template, canEdit, onClose }: Props) {
           </div>
         </div>
 
-        {/* Live preview */}
+        {/* Live preview — mirrors what the recipient sees: BEB
+            letterhead at the top, subject pill, body. The actual
+            sent PDF is generated server-side via lib/communications/
+            generatePdf.ts using the same /public/beb-wordmark.png. */}
         <div style={{ background: '#fff', border: '1px solid var(--cream2)', borderRadius: 10, padding: 14 }}>
           <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>
             Live preview · sample data
+          </div>
+          {/* BEB letterhead — included on every Beneficial letter sent
+              from this module. Pulled from the static asset. */}
+          <div style={{ borderBottom: '1px solid var(--cream2)', paddingBottom: 12, marginBottom: 12 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/beb-wordmark.png"
+              alt="Beneficial Estate Buyers"
+              style={{ height: 48, width: 'auto', display: 'block', objectFit: 'contain' }}
+            />
+            <div style={{ fontSize: 10, color: 'var(--mist)', fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', marginTop: 4 }}>
+              Estate Trunk Show
+            </div>
           </div>
           <div style={{
             background: 'var(--cream2)', borderRadius: 6, padding: '8px 10px',
