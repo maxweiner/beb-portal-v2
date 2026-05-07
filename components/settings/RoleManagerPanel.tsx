@@ -16,7 +16,7 @@ type ModuleId =
   | 'dayentry' | 'staff' | 'admin' | 'liberty-admin' | 'buying-event-stores'
   | 'data-research' | 'reports' | 'financials' | 'marketing'
   | 'shipping' | 'expenses' | 'recipients'
-  | 'notification-templates' | 'accounting-queue'
+  | 'notification-templates' | 'accounting-queue' | 'broadcast'
 
 interface Role {
   id: string
@@ -64,6 +64,7 @@ const MODULE_SECTIONS: ModuleSection[] = [
       { id: 'shipping',  label: 'Shipping' },
       { id: 'expenses',         label: 'Expenses' },
       { id: 'accounting-queue', label: 'Accounting Queue' },
+      { id: 'broadcast',        label: 'Broadcast' },
     ],
   },
 ]

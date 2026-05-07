@@ -41,6 +41,8 @@ import MobileDashboard from '@/components/mobile/MobileDashboard'
 import MobileDayEntry from '@/components/mobile/MobileDayEntry'
 import MobileTravel from '@/components/mobile/MobileTravel'
 import AccountingQueue from '@/components/accounting/AccountingQueue'
+import BroadcastPage from '@/components/broadcast/BroadcastPage'
+import BroadcastBanner from '@/components/broadcast/BroadcastBanner'
 import MobileStaff from '@/components/mobile/MobileStaff'
 import BrandSwitchOverlay from '@/components/layout/BrandSwitchOverlay'
 import { shouldUseMobile, setMobilePreference } from '@/lib/mobile'
@@ -51,7 +53,7 @@ import { shouldUseMobile, setMobilePreference } from '@/lib/mobile'
 //   schedule     → calendar         (time-off + event calendar)
 //   events       → buying-events
 //   libertyadmin → liberty-admin
-export type NavPage = 'dashboard' | 'appointments' | 'buying-events' | 'calendar' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'buying-event-stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'liberty-admin' | 'recipients' | 'notification-templates' | 'data-research' | 'expenses' | 'financials' | 'customers' | 'trade-shows' | 'trunk-shows' | 'trunk-show-stores' | 'leads' | 'trunk-communications' | 'accounting-queue'
+export type NavPage = 'dashboard' | 'appointments' | 'buying-events' | 'calendar' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'buying-event-stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'liberty-admin' | 'recipients' | 'notification-templates' | 'data-research' | 'expenses' | 'financials' | 'customers' | 'trade-shows' | 'trunk-shows' | 'trunk-show-stores' | 'leads' | 'trunk-communications' | 'accounting-queue' | 'broadcast'
 
 export default function Home() {
   const { user, loading, connectionError, reload } = useApp()
@@ -239,6 +241,7 @@ export default function Home() {
         setTimeout(() => window.dispatchEvent(new CustomEvent('beb:open-expense-report', { detail: { reportId: id } })), 0)
       }} />
       <main className="flex-1 overflow-y-auto">
+        <BroadcastBanner />
         {/* `key={navKey}` on every section forces a fresh remount when
             the user clicks any sidebar nav link — internal state (open
             detail views, filters, search, expanded cards, etc.) resets
@@ -268,6 +271,7 @@ export default function Home() {
         {nav === 'travel'     && <ModuleWriteGate moduleId="travel"><Travel key={navKey} /></ModuleWriteGate>}
         {nav === 'marketing'  && <ModuleWriteGate moduleId="marketing"><Marketing key={navKey} /></ModuleWriteGate>}
         {nav === 'accounting-queue' && <ModuleGuard moduleId="accounting-queue"><ModuleWriteGate moduleId="accounting-queue"><AccountingQueue key={navKey} setNav={setNav} /></ModuleWriteGate></ModuleGuard>}
+        {nav === 'broadcast' && <ModuleGuard moduleId="broadcast"><ModuleWriteGate moduleId="broadcast"><BroadcastPage key={navKey} /></ModuleWriteGate></ModuleGuard>}
         {nav === 'admin' && (
           <ModuleGuard moduleId="admin">
             <ModuleWriteGate moduleId="admin">
