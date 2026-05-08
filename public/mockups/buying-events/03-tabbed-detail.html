@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>3 · List → Tabbed Detail</title>
+<style>
+  :root {
+    --ink: #1a1a16; --ash: #4A4A42; --mist: #A8A89A;
+    --cream: #FAF8F4; --cream2: #EDE7DA; --pearl: #D9D2C0;
+    --green: #1D6B44; --green-dark: #14532D; --green3: #7EC8A0; --green-pale: #E6F4EC;
+    --buying: #1E3A8A; --buying-pale: #DBEAFE;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+         margin: 0; background: var(--cream2); color: var(--ink); }
+  a { color: var(--green-dark); }
+  .top-back { padding: 14px 20px; background: #fff; border-bottom: 1px solid var(--pearl); }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
+
+  .header {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px;
+  }
+  .breadcrumb a { color: var(--mist); text-decoration: none; font-weight: 700; font-size: 13px; }
+  .breadcrumb { font-size: 13px; color: var(--mist); }
+  .hero {
+    background: linear-gradient(160deg, #14532D 0%, var(--green) 100%);
+    color: #fff; border-radius: 14px; padding: 24px 28px; margin-bottom: 18px;
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+  .hero h1 { margin: 0 0 4px; font-size: 26px; font-weight: 900; }
+  .hero .where { color: rgba(255,255,255,.85); font-size: 14px; }
+  .hero .when { color: rgba(255,255,255,.7); font-size: 13px; margin-top: 6px; }
+  .hero .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .hero-stat {
+    background: rgba(255,255,255,.92); color: var(--green-dark); border-radius: 10px;
+    padding: 10px 14px; min-width: 110px;
+  }
+  .hero-stat .l { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; opacity: 0.7; }
+  .hero-stat .v { font-size: 20px; font-weight: 900; margin-top: 2px; }
+  .stats { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .btn { padding: 7px 12px; border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.1); border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 12px; color: #fff; }
+  .btn.danger { color: #fecaca; border-color: rgba(254,202,202,.4); }
+
+  .tabs {
+    display: flex; gap: 4px; background: #fff; border: 1px solid var(--pearl);
+    border-radius: 10px; padding: 6px; margin-bottom: 16px; overflow-x: auto;
+  }
+  .tab {
+    padding: 8px 16px; border: none; background: transparent; cursor: pointer;
+    font-size: 13px; font-weight: 700; color: var(--mist); border-radius: 6px;
+    white-space: nowrap;
+  }
+  .tab.active { background: var(--green-pale); color: var(--green-dark); }
+  .gate-bar { background: #fff; border: 1px solid var(--pearl); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; }
+  .gates { display: flex; gap: 6px; flex-wrap: wrap; }
+  .gate { padding: 5px 10px; border-radius: 99; font-size: 11px; font-weight: 700; border: 1px solid; }
+  .g-green { background: var(--green-pale); color: var(--green-dark); border-color: var(--green3); }
+  .g-yellow { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+  .g-red { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+  .card { background: #fff; border: 1px solid var(--pearl); border-radius: 10px; padding: 16px 18px; }
+  .card h3 { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--mist); margin: 0 0 10px; }
+  .card ul { padding-left: 18px; margin: 0; font-size: 13px; color: var(--ash); line-height: 1.6; }
+  .card .row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--cream2); font-size: 13px; }
+  .card .row:last-child { border-bottom: none; }
+
+  .principle {
+    margin-top: 22px; padding: 14px 18px; background: #fff;
+    border: 1px solid var(--pearl); border-radius: 10px;
+    font-size: 13px; color: var(--ash); line-height: 1.55;
+  }
+  .principle b { color: var(--ink); }
+
+  .demo-list-toggle { margin-top: 28px; padding: 14px 18px; background: #fff; border: 1px dashed var(--pearl); border-radius: 10px; }
+  .demo-list-toggle h3 { margin: 0 0 8px; font-size: 13px; color: var(--mist); font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+  .demo-list-toggle a { font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="top-back"><a href="index.html">← Back to all mockups</a></div>
+
+<div class="container">
+  <div class="header breadcrumb">
+    <a href="#">◆ Buying Events</a> &nbsp;›&nbsp; <strong style="color: var(--ink);">Pickens Jewelers</strong>
+  </div>
+
+  <div class="hero">
+    <div>
+      <h1>Pickens Jewelers</h1>
+      <div class="where">Atlanta, GA</div>
+      <div class="when">📅 May 12 – May 14, 2026 · 8 days from now · Booked</div>
+      <div class="actions" style="margin-top: 14px;">
+        <button class="btn">💰 Ad Spend</button>
+        <button class="btn">📊 Day Entry</button>
+        <button class="btn danger">🚫 Cancel Event</button>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="hero-stat"><div class="l">Buyers</div><div class="v">3/3</div></div>
+      <div class="hero-stat"><div class="l">Spend</div><div class="v">$148K</div></div>
+      <div class="hero-stat"><div class="l">Customers</div><div class="v">24</div></div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active">Overview</button>
+    <button class="tab">Buyers</button>
+    <button class="tab">Travel</button>
+    <button class="tab">Marketing</button>
+    <button class="tab">Day Entry</button>
+    <button class="tab">Checklist</button>
+    <button class="tab">Notes</button>
+  </div>
+
+  <div class="gate-bar">
+    <div class="gates">
+      <span class="gate g-green">👥 3/3 buyers</span>
+      <span class="gate g-yellow">✈️ Travel 2/3</span>
+      <span class="gate g-green">📣 Marketing on track</span>
+      <span class="gate g-green">📅 Booking live</span>
+      <span class="gate g-red">📦 Assets — none ordered</span>
+      <span class="gate g-red">🎓 Staff not briefed</span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Buyers</h3>
+      <div class="row"><span>Max Weiner <em style="color:var(--mist); font-size:11px;">· Lead</em></span><span style="color:var(--green-dark); font-weight:800;">✓</span></div>
+      <div class="row"><span>Tom Williams</span><span style="color:var(--green-dark); font-weight:800;">✓</span></div>
+      <div class="row"><span>Sami Reilly</span><span style="color:var(--green-dark); font-weight:800;">✓</span></div>
+    </div>
+    <div class="card">
+      <h3>Travel</h3>
+      <div class="row"><span>Max — ✈️ + 🏨</span><span style="color:var(--green-dark);">✓</span></div>
+      <div class="row"><span>Tom — ✈️ + 🏨</span><span style="color:var(--green-dark);">✓</span></div>
+      <div class="row"><span>Sami — 🏨</span><span style="color:#92400e;">⚠ no ✈️</span></div>
+    </div>
+    <div class="card">
+      <h3>Marketing</h3>
+      <div class="row"><span>VDP</span><span style="color:var(--green-dark);">✓ Done</span></div>
+      <div class="row"><span>Postcard</span><span style="color:var(--green-dark);">✓ Done</span></div>
+      <div class="row"><span>Newspaper</span><span style="color:#92400e;">~ Proofing</span></div>
+    </div>
+    <div class="card">
+      <h3>Day Entry — 0 of 3</h3>
+      <div class="row"><span>Day 1 (Tue)</span><span style="color:var(--mist);">— pending</span></div>
+      <div class="row"><span>Day 2 (Wed)</span><span style="color:var(--mist);">— pending</span></div>
+      <div class="row"><span>Day 3 (Thu)</span><span style="color:var(--mist);">— pending</span></div>
+    </div>
+    <div class="card">
+      <h3>Last visit lessons</h3>
+      <ul>
+        <li>Postcard went out 2w late</li>
+        <li>Owner prefers Tue–Thu</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Booking</h3>
+      <div class="row"><span>Live URL</span><span style="font-family:monospace; font-size:11px; color:var(--mist);">/book/pickens</span></div>
+      <div class="row"><span>Hours</span><span>10–5 daily</span></div>
+      <div class="row"><span>Slots booked</span><span style="font-weight:800;">12 / 24</span></div>
+    </div>
+  </div>
+
+  <div class="demo-list-toggle">
+    <h3>List view (preview)</h3>
+    <a href="#">← Back to event list</a> — top of the flow is a clean list of events; clicking opens this full-page detail.
+  </div>
+
+  <div class="principle">
+    <b>How drill-down works:</b> Top level is a clean event list (like Slim view). Click an event →
+    full-page detail with a hero header (KPIs at a glance) + a tab bar that maps to legacy panels
+    (Buyers / Travel / Marketing / Days / Checklist / Notes). Each tab is uncluttered because it
+    only shows that one concern. Browser back / breadcrumbs return to the list. Mobile-perfect: every
+    tab is a swipe.
+  </div>
+</div>
+</body>
+</html>

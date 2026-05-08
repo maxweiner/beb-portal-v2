@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>1 · Cards Expand-in-place</title>
+<style>
+  :root {
+    --ink: #1a1a16; --ash: #4A4A42; --mist: #A8A89A;
+    --cream: #FAF8F4; --cream2: #EDE7DA; --pearl: #D9D2C0;
+    --green: #1D6B44; --green-dark: #14532D; --green3: #7EC8A0; --green-pale: #E6F4EC;
+    --buying: #1E3A8A; --buying-pale: #DBEAFE;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    margin: 0; background: var(--cream2); color: var(--ink);
+  }
+  a { color: var(--green-dark); }
+  .top-back { padding: 14px 20px; background: #fff; border-bottom: 1px solid var(--pearl); }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 12px; margin-bottom: 20px;
+  }
+  h1 { font-size: 22px; margin: 0; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--pearl); background: #fff; cursor: pointer; font-weight: 700; font-size: 13px; }
+  .btn-primary { background: var(--green); color: #fff; border-color: var(--green); }
+  .btn-outline { background: transparent; }
+  .row {
+    background: #fff; border: 1px solid var(--pearl); border-radius: 10px;
+    margin-bottom: 10px; overflow: hidden; transition: box-shadow .15s;
+  }
+  .row.expanded { box-shadow: 0 6px 24px rgba(0,0,0,.08); border-color: var(--green3); }
+  .summary {
+    display: grid; grid-template-columns: 4px 1fr auto auto auto auto auto; gap: 12px;
+    align-items: center; padding: 14px 16px; cursor: pointer;
+  }
+  .accent { background: var(--buying); height: 100%; min-height: 28px; border-radius: 2px; align-self: stretch; }
+  .accent.reserved { background: var(--buying); opacity: 0.5; border: 1px dashed var(--buying); }
+  .name { font-weight: 800; font-size: 15px; }
+  .sub { font-size: 12px; color: var(--mist); margin-top: 2px; }
+  .pill {
+    font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
+    padding: 3px 8px; border-radius: 99; white-space: nowrap;
+  }
+  .pill-buyers { background: var(--green-pale); color: var(--green-dark); }
+  .pill-buyers.short { background: #fef3c7; color: #92400e; }
+  .pill-money { background: var(--cream2); color: var(--ash); font-family: monospace; padding: 3px 10px; }
+  .pill-status { background: var(--buying-pale); color: var(--buying); }
+  .pill-status.reserved { background: #fef3c7; color: #92400e; }
+  .chevron { font-size: 14px; color: var(--mist); transition: transform .15s; }
+  .row.expanded .chevron { transform: rotate(90deg); }
+  .body {
+    border-top: 1px solid var(--cream2);
+    padding: 20px 20px 24px;
+    background: var(--cream);
+    display: none;
+  }
+  .row.expanded .body { display: block; }
+  .gates {
+    display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 18px;
+  }
+  .gate {
+    padding: 5px 10px; border-radius: 99; font-size: 11px; font-weight: 700;
+    border: 1px solid; white-space: nowrap;
+  }
+  .g-green { background: var(--green-pale); color: var(--green-dark); border-color: var(--green3); }
+  .g-yellow { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+  .g-red { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+  .panel-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;
+  }
+  .panel {
+    background: #fff; border: 1px solid var(--cream2); border-radius: 8px; padding: 14px;
+  }
+  .panel h3 {
+    font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--mist); margin: 0 0 8px;
+  }
+  .panel ul { padding-left: 18px; margin: 0; font-size: 13px; color: var(--ash); line-height: 1.6; }
+  .footer-actions { margin-top: 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .danger { background: transparent; color: #b22234; border: 1px solid #fecdd3; }
+  .principle {
+    margin-top: 28px; padding: 14px 18px; background: #fff;
+    border: 1px solid var(--pearl); border-radius: 10px;
+    font-size: 13px; color: var(--ash); line-height: 1.55;
+  }
+  .principle b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="top-back"><a href="index.html">← Back to all mockups</a></div>
+
+<div class="container">
+  <div class="header">
+    <h1>◆ Buying Events</h1>
+    <div class="actions">
+      <button class="btn btn-outline">📌 Save the Date</button>
+      <button class="btn btn-primary">+ New Event</button>
+    </div>
+  </div>
+
+  <!-- Row 1: collapsed -->
+  <div class="row" onclick="this.classList.toggle('expanded')">
+    <div class="summary">
+      <div class="accent reserved"></div>
+      <div>
+        <div class="name">📌 Burkes Jewelers <span class="pill pill-status reserved" style="margin-left: 8px;">Reserved</span></div>
+        <div class="sub">Tampa, FL · May 21–23 · Save the Date</div>
+      </div>
+      <span class="pill pill-buyers short">2/3 buyers</span>
+      <span class="pill pill-money">$0</span>
+      <span class="pill" style="background:#fef3c7;color:#92400e;">⚠</span>
+      <span></span>
+      <span class="chevron">▶</span>
+    </div>
+  </div>
+
+  <!-- Row 2: expanded by default for the demo -->
+  <div class="row expanded">
+    <div class="summary">
+      <div class="accent"></div>
+      <div>
+        <div class="name">Pickens Jewelers <span class="pill pill-status" style="margin-left: 8px;">Booked</span></div>
+        <div class="sub">Atlanta, GA · May 12–14 · 8 days from now</div>
+      </div>
+      <span class="pill pill-buyers">3/3 buyers</span>
+      <span class="pill pill-money">$148K</span>
+      <span></span>
+      <span></span>
+      <span class="chevron">▶</span>
+    </div>
+    <div class="body">
+      <div class="gates">
+        <span class="gate g-green">👥 3/3 buyers</span>
+        <span class="gate g-yellow">✈️ Travel 2/3</span>
+        <span class="gate g-green">📣 Marketing</span>
+        <span class="gate g-green">📅 Booking live</span>
+        <span class="gate g-red">📦 Assets — none ordered</span>
+        <span class="gate g-red">🎓 Staff not briefed</span>
+      </div>
+
+      <div class="panel-grid">
+        <div class="panel">
+          <h3>Buyers</h3>
+          <ul>
+            <li>Max Weiner · Lead</li>
+            <li>Tom Williams</li>
+            <li>Sami Reilly</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>Days entered</h3>
+          <ul>
+            <li>Day 1: $48,200 · 24 customers</li>
+            <li>Day 2: $52,100 · 21 customers</li>
+            <li>Day 3: $48,684 · 19 customers</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>Travel snapshot</h3>
+          <ul>
+            <li>Max — flight + hotel ✓</li>
+            <li>Tom — flight + hotel ✓</li>
+            <li>Sami — hotel ✓ (no flight)</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>Notes from last visit</h3>
+          <ul>
+            <li>Postcard mailing went out 2w late</li>
+            <li>Owner asked for a Tues-Thurs slot</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer-actions">
+        <button class="btn">💰 Ad Spend</button>
+        <button class="btn">📋 Pre-Event Checklist</button>
+        <button class="btn">📊 Day Entry</button>
+        <button class="btn danger">🚫 Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 3: collapsed -->
+  <div class="row" onclick="this.classList.toggle('expanded')">
+    <div class="summary">
+      <div class="accent"></div>
+      <div>
+        <div class="name">Kay Cameron Jewelers <span class="pill pill-status" style="margin-left: 8px;">Booked</span></div>
+        <div class="sub">Sayville, NY · May 7–9 · Day 3 of 3 (today)</div>
+      </div>
+      <span class="pill pill-buyers">3/3 buyers</span>
+      <span class="pill pill-money">$311K</span>
+      <span></span>
+      <span></span>
+      <span class="chevron">▶</span>
+    </div>
+  </div>
+
+  <!-- Row 4: collapsed -->
+  <div class="row" onclick="this.classList.toggle('expanded')">
+    <div class="summary">
+      <div class="accent"></div>
+      <div>
+        <div class="name">Adelphi Jewelers <span class="pill pill-status" style="margin-left: 8px;">Booked</span></div>
+        <div class="sub">Adelphi, MD · June 2–4 · 28 days from now</div>
+      </div>
+      <span class="pill pill-buyers">2/3 buyers</span>
+      <span class="pill pill-money">$0</span>
+      <span></span>
+      <span></span>
+      <span class="chevron">▶</span>
+    </div>
+  </div>
+
+  <div class="principle">
+    <b>How drill-down works:</b> The summary row shows event name, dates, headline gates (buyers, $, alerts).
+    Click anywhere on the row → it expands inline with every legacy function in the body. No separate page,
+    no modal — just a longer card. Click again or pick a different row to collapse. Multiple rows can be
+    expanded at once if you want to compare two events side by side (or limit to one for cleanliness).
+  </div>
+</div>
+</body>
+</html>

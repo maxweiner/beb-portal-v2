@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>4 · Kanban Workflow</title>
+<style>
+  :root {
+    --ink: #1a1a16; --ash: #4A4A42; --mist: #A8A89A;
+    --cream: #FAF8F4; --cream2: #EDE7DA; --pearl: #D9D2C0;
+    --green: #1D6B44; --green-dark: #14532D; --green3: #7EC8A0; --green-pale: #E6F4EC;
+    --buying: #1E3A8A; --buying-pale: #DBEAFE;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+         margin: 0; background: var(--cream2); color: var(--ink); }
+  a { color: var(--green-dark); }
+  .top-back { padding: 14px 20px; background: #fff; border-bottom: 1px solid var(--pearl); }
+  .container { max-width: 1400px; margin: 0 auto; padding: 24px 20px; }
+  .header {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+    gap: 12px; margin-bottom: 20px;
+  }
+  h1 { font-size: 22px; margin: 0; }
+  .actions { display: flex; gap: 8px; }
+  .btn { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--pearl); background: #fff; cursor: pointer; font-weight: 700; font-size: 13px; }
+  .btn.primary { background: var(--green); color: #fff; border-color: var(--green); }
+  .board {
+    display: grid; grid-template-columns: repeat(5, minmax(220px, 1fr)); gap: 12px;
+    overflow-x: auto;
+  }
+  @media (max-width: 1100px) { .board { grid-template-columns: repeat(5, 240px); } }
+  .col {
+    background: rgba(255,255,255,.4); border: 1px solid var(--pearl); border-radius: 10px;
+    padding: 10px; min-height: 480px;
+  }
+  .col-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 8px 12px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
+  }
+  .col-head .pill { background: rgba(0,0,0,.05); color: var(--mist); padding: 2px 8px; border-radius: 99; font-size: 11px; }
+  .col-1 .col-head { color: #92400e; }
+  .col-2 .col-head { color: var(--buying); }
+  .col-3 .col-head { color: #6d28d9; }
+  .col-4 .col-head { color: var(--green-dark); }
+  .col-5 .col-head { color: var(--mist); }
+  .ek {
+    background: #fff; border: 1px solid var(--pearl); border-radius: 8px;
+    padding: 12px 14px; margin-bottom: 8px; cursor: pointer; transition: box-shadow .12s;
+  }
+  .ek:hover { box-shadow: 0 4px 12px rgba(0,0,0,.06); }
+  .ek .name { font-weight: 800; font-size: 13px; margin-bottom: 2px; }
+  .ek .when { font-size: 11px; color: var(--mist); }
+  .ek .gates { display: flex; gap: 4px; margin-top: 8px; }
+  .ek .g { width: 8px; height: 8px; border-radius: 50%; }
+  .g-green { background: #16a34a; }
+  .g-yellow { background: #f59e0b; }
+  .g-red { background: #dc2626; }
+  .ek .meta { font-size: 11px; color: var(--ash); margin-top: 6px; display: flex; justify-content: space-between; }
+
+  .ek.reserved { border-style: dashed; border-color: var(--buying); }
+
+  .principle {
+    margin-top: 28px; padding: 14px 18px; background: #fff;
+    border: 1px solid var(--pearl); border-radius: 10px;
+    font-size: 13px; color: var(--ash); line-height: 1.55;
+  }
+  .principle b { color: var(--ink); }
+
+  .preview-detail {
+    margin-top: 18px; padding: 18px; background: #fff;
+    border: 1px solid var(--pearl); border-radius: 10px;
+  }
+  .preview-detail h3 { margin: 0 0 10px; font-size: 14px; color: var(--mist); text-transform: uppercase; font-weight: 800; letter-spacing: .04em; }
+</style>
+</head>
+<body>
+<div class="top-back"><a href="index.html">← Back to all mockups</a></div>
+
+<div class="container">
+  <div class="header">
+    <h1>◆ Buying Events — Pipeline</h1>
+    <div class="actions">
+      <button class="btn">📌 Save the Date</button>
+      <button class="btn primary">+ New Event</button>
+    </div>
+  </div>
+
+  <div class="board">
+    <div class="col col-1">
+      <div class="col-head">📌 Save the Date <span class="pill">2</span></div>
+      <div class="ek reserved">
+        <div class="name">Burkes Jewelers</div>
+        <div class="when">Tampa, FL · May 21–23</div>
+        <div class="gates"><span class="g g-yellow"></span><span class="g g-red"></span><span class="g g-red"></span></div>
+        <div class="meta"><span>2/3 buyers</span><span>—</span></div>
+      </div>
+      <div class="ek reserved">
+        <div class="name">Lyle Husar Designs</div>
+        <div class="when">Brookfield, WI · Jul 8–10</div>
+        <div class="gates"><span class="g g-red"></span><span class="g g-red"></span><span class="g g-red"></span></div>
+        <div class="meta"><span>0/3 buyers</span><span>—</span></div>
+      </div>
+    </div>
+
+    <div class="col col-2">
+      <div class="col-head">📅 Booked · Pre-event <span class="pill">3</span></div>
+      <div class="ek">
+        <div class="name">Pickens Jewelers</div>
+        <div class="when">Atlanta, GA · May 12–14 · in 8d</div>
+        <div class="gates"><span class="g g-green"></span><span class="g g-yellow"></span><span class="g g-red"></span></div>
+        <div class="meta"><span>3/3 buyers</span><span>—</span></div>
+      </div>
+      <div class="ek">
+        <div class="name">Adelphi Jewelers</div>
+        <div class="when">Adelphi, MD · Jun 2–4 · in 28d</div>
+        <div class="gates"><span class="g g-green"></span><span class="g g-yellow"></span><span class="g g-yellow"></span></div>
+        <div class="meta"><span>2/3 buyers</span><span>—</span></div>
+      </div>
+      <div class="ek">
+        <div class="name">Sami's Diamonds</div>
+        <div class="when">Phoenix, AZ · Jun 18–20 · in 44d</div>
+        <div class="gates"><span class="g g-yellow"></span><span class="g g-red"></span><span class="g g-red"></span></div>
+        <div class="meta"><span>1/3 buyers</span><span>—</span></div>
+      </div>
+    </div>
+
+    <div class="col col-3">
+      <div class="col-head">📣 Marketing live <span class="pill">2</span></div>
+      <div class="ek">
+        <div class="name">McTeigue & McClelland</div>
+        <div class="when">Great Barrington, MA · May 19–21</div>
+        <div class="gates"><span class="g g-green"></span><span class="g g-green"></span><span class="g g-green"></span></div>
+        <div class="meta"><span>3/3 buyers</span><span>postcards out</span></div>
+      </div>
+      <div class="ek">
+        <div class="name">Spence Diamonds</div>
+        <div class="when">Dallas, TX · May 28–30</div>
+        <div class="gates"><span class="g g-green"></span><span class="g g-green"></span><span class="g g-yellow"></span></div>
+        <div class="meta"><span>3/3 buyers</span><span>VDP done</span></div>
+      </div>
+    </div>
+
+    <div class="col col-4">
+      <div class="col-head">🟢 This week <span class="pill">1</span></div>
+      <div class="ek">
+        <div class="name">Kay Cameron Jewelers</div>
+        <div class="when">Sayville, NY · May 7–9 · Day 3</div>
+        <div class="gates"><span class="g g-green"></span><span class="g g-green"></span><span class="g g-green"></span></div>
+        <div class="meta"><span>$311K spent</span><span>Day 3 of 3</span></div>
+      </div>
+    </div>
+
+    <div class="col col-5">
+      <div class="col-head">📦 Wrapping up <span class="pill">3</span></div>
+      <div class="ek">
+        <div class="name">Glen Allen Jewelers</div>
+        <div class="when">Richmond, VA · Apr 28–30 · 8d ago</div>
+        <div class="meta"><span>$203K · post-event close</span></div>
+      </div>
+      <div class="ek">
+        <div class="name">Beard's Jewelry</div>
+        <div class="when">Jacksonville, FL · Apr 24–26 · 12d ago</div>
+        <div class="meta"><span>$176K · expense reports pending</span></div>
+      </div>
+      <div class="ek">
+        <div class="name">Carter's Diamond</div>
+        <div class="when">Mobile, AL · Apr 21–23 · 15d ago</div>
+        <div class="meta"><span>$98K · awaiting customer follow-ups</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="preview-detail">
+    <h3>Click → opens detail (mockup 3 layout)</h3>
+    <p style="margin: 0; font-size: 13px; color: var(--ash); line-height: 1.55;">
+      Tapping any card drills into the same tabbed detail as mockup #3. The Kanban view's job is the
+      pipeline overview — how many events sit in each phase, where the team's attention should go.
+      Drag-and-drop between columns is optional (advances status; could be admin-only).
+    </p>
+  </div>
+
+  <div class="principle">
+    <b>How drill-down works:</b> Top-level shows the funnel — events flow left → right as they progress
+    (Save the Date → Booked → Marketing live → This week → Wrapping up). Click any card to open the full
+    detail page (same layout as mockup 3). Strength: at-a-glance pipeline health. Weakness: more horizontal
+    space than the others; mobile reverts to single-column scroll.
+  </div>
+</div>
+</body>
+</html>
