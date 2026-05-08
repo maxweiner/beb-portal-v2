@@ -18,6 +18,7 @@ import { createTrunkShow } from '@/lib/sales/trunkShows'
 import type { Lead, LeadInterestLevel, LeadStatus } from '@/types'
 import type { NavPage } from '@/app/page'
 import DatePicker from '@/components/ui/DatePicker'
+import { StoreSearch, type PlaceData } from '@/lib/googlePlaces'
 
 interface Props {
   leadId: string
@@ -258,6 +259,36 @@ export default function LeadDetail({ leadId, onBack, onChanged, onDeleted, setNa
         <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>
           Address
         </div>
+        {/* Google Places refine — only meaningful for store-pitch
+            kinds. Trade-show leads keep the address as the rep
+            captured it from the booth card. */}
+        {canMutate && lead.lead_kind !== 'trade_show' && (
+          <div style={{
+            background: 'var(--green-pale)', border: '1px dashed var(--green3)',
+            borderRadius: 8, padding: 10, marginBottom: 12,
+          }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--green-dark)', marginBottom: 6 }}>
+              🔍 Refine via Google
+            </div>
+            <StoreSearch
+              placeholder="Look the store up on Google to fill or fix fields…"
+              onSelect={(p: PlaceData) => {
+                setDraft(prev => ({
+                  ...prev,
+                  company_name:    prev.company_name    || p.name || '',
+                  address_line_1: p.address || prev.address_line_1,
+                  city:           p.city    || prev.city,
+                  state:          p.state   || prev.state,
+                  zip:            p.zip     || prev.zip,
+                  website:        prev.website || p.website || '',
+                }))
+              }}
+            />
+            <div style={{ fontSize: 11, color: 'var(--green-dark)', opacity: 0.7, marginTop: 4 }}>
+              Picks up address + website. Empty fields fill in; existing values are preserved.
+            </div>
+          </div>
+        )}
         <Field label="Street">
           <input value={draft.address_line_1} onChange={e => setDraft(p => ({ ...p, address_line_1: e.target.value }))} disabled={!canMutate} />
         </Field>
