@@ -443,3 +443,13 @@ tr:last-child td { border-bottom: none; }
   line-height: 1;
   animation: bebJewelPulse 1.4s ease-in-out infinite, bebJewelShine 2.8s ease-in-out infinite;
 }
+
+/* Google Places Autocomplete dropdown — Google attaches `.pac-
+ * container` to <body> with a default z-index of 1000, which sits
+ * BELOW our modal overlays (z-index 1100). Without this override
+ * the autocomplete typeahead "doesn't work" — actually fires fine
+ * but the suggestion dropdown is hidden behind the modal. Bump it
+ * above any in-app overlay. */
+.pac-container {
+  z-index: 2000 !important;
+}
