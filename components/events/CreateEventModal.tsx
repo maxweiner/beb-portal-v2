@@ -9,7 +9,7 @@
 // can refresh + scroll into view if it wants. Uses useApp().reload()
 // so the global context picks the new row up immediately.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import DatePicker from '@/components/ui/DatePicker'
@@ -29,6 +29,11 @@ export default function CreateEventModal({ mode = 'scheduled', onClose, onCreate
   const [buyersNeeded, setBuyersNeeded] = useState('3')
   const [saving, setSaving] = useState(false)
   const [storeQuery, setStoreQuery] = useState('')
+  // Synchronous lock against double-submission. setSaving(true) is
+  // async; if the user double-clicks or hits Enter twice in quick
+  // succession both submits can run before React re-renders the
+  // button as disabled. The ref flips synchronously inside submit().
+  const submittingRef = useRef(false)
 
   const filteredStores = stores
     .filter(s => {
@@ -51,6 +56,9 @@ export default function CreateEventModal({ mode = 'scheduled', onClose, onCreate
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
+    // Hard guard against double-fire (race between rapid clicks and
+    // React updating disabled).
+    if (submittingRef.current) return
     // Be specific about what's missing instead of the generic
     // "Pick a store and a start date" — half the time only one is.
     if (!storeId && !startDate) {
@@ -65,6 +73,7 @@ export default function CreateEventModal({ mode = 'scheduled', onClose, onCreate
       return
     }
     const store = stores.find(s => s.id === storeId)
+    submittingRef.current = true
     setSaving(true)
     try {
       const { data, error } = await supabase
@@ -86,6 +95,7 @@ export default function CreateEventModal({ mode = 'scheduled', onClose, onCreate
       onClose()
     } finally {
       setSaving(false)
+      submittingRef.current = false
     }
   }
 
