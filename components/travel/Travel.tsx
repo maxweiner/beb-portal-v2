@@ -560,15 +560,17 @@ function ReservationsView({ ev, user }: { ev: Event; user: any }) {
     const exclusive =
       kind === 'flight'     ? ['self_flight', 'no_flight'] :
       kind === 'hotel'      ? ['self_hotel',  'no_hotel']  :
-      ['no_rental_car']  // no "self" for rental car — group ride concept
+      ['self_rental_car', 'no_rental_car']
     await supabase.from('travel_acknowledgments').delete()
       .eq('event_id', ev.id).eq('buyer_id', buyerId).in('type', exclusive)
     if (state !== 'clear') {
-      const type =
-        kind === 'rental_car' ? 'no_rental_car' :
-        state === 'self'
-          ? (kind === 'flight' ? 'self_flight' : 'self_hotel')
-          : (kind === 'flight' ? 'no_flight'  : 'no_hotel')
+      const type = state === 'self'
+        ? (kind === 'flight'     ? 'self_flight' :
+           kind === 'hotel'      ? 'self_hotel'  :
+           'self_rental_car')
+        : (kind === 'flight'     ? 'no_flight'  :
+           kind === 'hotel'      ? 'no_hotel'   :
+           'no_rental_car')
       await supabase.from('travel_acknowledgments').insert({
         event_id: ev.id, buyer_id: buyerId, type,
       })
@@ -598,10 +600,13 @@ function ReservationsView({ ev, user }: { ev: Event; user: any }) {
         alerts.push({ worker: w, type: 'no_hotel', message: `No hotel booked` })
     })
 
-    // Rental car — at least one needed for the whole team
+    // Rental car — at least one needed for the whole team. Counts as
+    // covered if any reservation exists OR any buyer has marked
+    // self_rental_car ("Tom is getting it").
     const hasAnyCar = reservations.some(r => r.type === 'rental_car')
+    const someoneGettingCar = acknowledgments.some(a => a.type === 'self_rental_car')
     const allAckNoCar = workers.length > 0 && workers.every(w => acknowledgments.some(a => a.buyer_id === w.id && a.type === 'no_rental_car'))
-    if (!hasAnyCar && !allAckNoCar && workers.length > 0 && weeksOut < 4)
+    if (!hasAnyCar && !someoneGettingCar && !allAckNoCar && workers.length > 0 && weeksOut < 4)
       alerts.push({ worker: { id: 'team', name: 'Team' }, type: 'no_rental_car', message: 'No rental car booked for this event' })
 
     return alerts
@@ -662,9 +667,14 @@ function ReservationsView({ ev, user }: { ev: Event; user: any }) {
               const hasFlightRes = wRes.some(r => r.type === 'flight')
               const hasHotelRes = wRes.some(r => r.type === 'hotel')
               const hasCar = reservations.some(r => r.type === 'rental_car') // team-wide
-              const ackNoCar = acknowledgments.some(a => a.buyer_id === w.id && a.type === 'no_rental_car')
               const flightState = travelItemState(hasFlightRes, acknowledgments, w.id, 'flight')
               const hotelState  = travelItemState(hasHotelRes, acknowledgments, w.id, 'hotel')
+              // Rental-car state per buyer:
+              //   self_rental_car ack → 'self' ("getting it for the team")
+              //   no_rental_car ack   → 'none' ("won't need")
+              //   any reservation     → 'booked'
+              //   else                → 'missing'
+              const carState = travelItemState(hasCar, acknowledgments, w.id, 'rental_car')
               const canMark =
                 w.id === user?.id
                 || user?.role === 'admin'
@@ -688,7 +698,7 @@ function ReservationsView({ ev, user }: { ev: Event; user: any }) {
                     />
                     <TravelItemControl
                       icon="🚗" kind="rental_car"
-                      state={hasCar ? 'booked' : ackNoCar ? 'none' : 'missing'}
+                      state={carState}
                       canMark={canMark}
                       onSet={(s) => setBuyerStatus(w.id, 'rental_car', s)}
                     />
@@ -1364,14 +1374,14 @@ export function travelItemState(
 ): ItemState {
   if (hasReservation) return 'booked'
   const selfType =
-    kind === 'flight' ? 'self_flight' :
-    kind === 'hotel'  ? 'self_hotel'  :
-    null  // rental_car has no "I have one" self-state
+    kind === 'flight'     ? 'self_flight' :
+    kind === 'hotel'      ? 'self_hotel'  :
+    'self_rental_car'  // "this buyer is getting the team's car"
   const noType =
     kind === 'flight'     ? 'no_flight' :
     kind === 'hotel'      ? 'no_hotel'  :
     'no_rental_car'
-  if (selfType && acks.some(a => a.buyer_id === buyerId && a.type === selfType)) return 'self'
+  if (acks.some(a => a.buyer_id === buyerId && a.type === selfType)) return 'self'
   if (acks.some(a => a.buyer_id === buyerId && a.type === noType)) return 'none'
   return 'missing'
 }
@@ -1387,7 +1397,8 @@ function TravelItemControl({
 }) {
   const styles: Record<ItemState, { bg: string; fg: string; bd: string; label: string }> = {
     booked:  { bg: 'var(--green-pale)',     fg: 'var(--green-dark)', bd: 'var(--green3)',         label: '✓ Booked' },
-    self:    { bg: 'rgba(59,130,246,.10)',  fg: '#1e40af',           bd: 'rgba(59,130,246,.30)',  label: '✓ Self' },
+    self:    { bg: 'rgba(59,130,246,.10)',  fg: '#1e40af',           bd: 'rgba(59,130,246,.30)',
+               label: kind === 'rental_car' ? '✓ Got the car' : '✓ Self' },
     none:    { bg: 'var(--cream2)',         fg: 'var(--mist)',       bd: 'var(--cream2)',         label: 'Not needed' },
     missing: { bg: 'rgba(239,68,68,.08)',   fg: '#dc2626',           bd: 'rgba(239,68,68,.20)',   label: '✗ None' },
   }
@@ -1403,14 +1414,15 @@ function TravelItemControl({
       <span>{icon} {s.label}</span>
       {canMark && state === 'missing' && (
         <>
-          {/* Rental car has no "I have one" self-state — group ride. */}
-          {kind !== 'rental_car' && (
-            <button
-              onClick={() => onSet('self')}
-              title={`Mark "I have a ${noun}" for this buyer`}
-              style={miniBtn('var(--ash)')}
-            >Have</button>
-          )}
+          <button
+            onClick={() => onSet('self')}
+            title={
+              kind === 'rental_car'
+                ? `Mark "this buyer is getting the team's car"`
+                : `Mark "I have a ${noun}" for this buyer`
+            }
+            style={miniBtn('var(--ash)')}
+          >{kind === 'rental_car' ? 'Got it' : 'Have'}</button>
           <button
             onClick={() => onSet('none')}
             title={`Mark "Don't need a ${noun}" for this buyer`}
