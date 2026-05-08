@@ -138,6 +138,35 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
 
+  // YTD strip — Max only. Annualizes the selected-year totals when
+  // viewing the current calendar year so we get a "on pace for $X"
+  // run rate; for past years the strip just shows the full-year totals
+  // and hides the run rate (the year is already over).
+  // Mirror the gate AdminPanel uses for delete-forever — both addresses
+  // resolve to Max, lowercased for safety against any casing drift.
+  const meEmail = (user?.email || '').toLowerCase()
+  const isMax = meEmail === 'max@bebllp.com' || meEmail === 'max.weiner@gmail.com'
+  const currentYear = new Date().getFullYear()
+  const isCurrentYear = year === String(currentYear)
+  const todayIso = today.toISOString().slice(0, 10)
+  const ytdEvents = isCurrentYear
+    ? yearEvents.filter(e => e.start_date && e.start_date <= todayIso && e.status !== 'cancelled')
+    : yearEvents.filter(e => e.status !== 'cancelled')
+  const ytdTotals = ytdEvents.reduce((acc, ev) => {
+    ev.days.forEach((d: any) => {
+      acc.purchases += d.purchases || 0
+      acc.dollars   += daySpend(d)
+    })
+    return acc
+  }, { purchases: 0, dollars: 0 })
+  const dayOfYear = Math.floor(
+    (today.getTime() - new Date(currentYear, 0, 1).getTime()) / 86400000
+  ) + 1
+  const daysInYear = ((currentYear % 4 === 0 && currentYear % 100 !== 0) || currentYear % 400 === 0) ? 366 : 365
+  const runRate = isCurrentYear && dayOfYear > 0
+    ? Math.round(ytdTotals.dollars / dayOfYear * daysInYear)
+    : null
+
   // Buyer-only dashboard scope. We keep the rest of the file
   // unchanged for admin / superadmin / etc.; buyers get a stripped
   // top + just the leaderboard podium below.
@@ -268,6 +297,27 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
                 {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · Week of {fmtWeek}
               </div>
             </div>
+            {isMax && (
+              <div style={{
+                flex: '1 1 320px',
+                display: 'flex', flexWrap: 'wrap',
+                alignItems: 'center', justifyContent: 'center',
+                gap: 14,
+                color: 'rgba(245,240,232,.85)',
+                fontSize: 12,
+                margin: '4px 8px 0',
+              }}>
+                <span style={{ fontWeight: 700, fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', opacity: 0.6 }}>
+                  {isCurrentYear ? 'YTD' : year}
+                </span>
+                <YtdPill label="Events" value={ytdEvents.length.toLocaleString()} />
+                <YtdPill label="Purchases" value={ytdTotals.purchases.toLocaleString()} />
+                <YtdPill label="Spend" value={fmt(ytdTotals.dollars)} />
+                {runRate != null && (
+                  <YtdPill label="Run rate" value={fmt(runRate)} />
+                )}
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <span style={{ color: 'rgba(245,240,232,.6)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em' }}>Year</span>
               <select value={year} onChange={e => setYear(e.target.value)}
@@ -874,5 +924,23 @@ function Leaderboard({ events, users, buyers }: { events: any[]; users: any[]; b
 
     </div>
 
+  )
+}
+
+/**
+ * Compact YTD strip pill for the dashboard hero. Plain text, vertical-
+ * aligned to the date row; sits between the user's name block and the
+ * YEAR selector.
+ */
+function YtdPill({ label, value }: { label: string; value: string }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6 }}>
+      <span style={{ opacity: 0.6, fontSize: 10, textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 700 }}>
+        {label}
+      </span>
+      <span style={{ fontWeight: 800, fontSize: 13, color: '#fff', letterSpacing: '-.01em' }}>
+        {value}
+      </span>
+    </span>
   )
 }
