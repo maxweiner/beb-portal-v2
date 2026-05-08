@@ -793,15 +793,16 @@ function BuyerPopover({
     persist([target, ...workers.filter(w => w.id !== uid)])
   }
 
-  // Eligible adds: active users not already assigned, filtered by
-  // search. Roles included: any active user (legacy lets you assign
-  // anyone — the assignee just needs to be in users). Sort by name
-  // alphabetically so the list is stable.
+  // Eligible adds: active users explicitly flagged is_buyer (Admin
+  // Panel → user row → Buyer toggle). Treats undefined as TRUE to
+  // match the legacy convention (`is_buyer !== false`) — older user
+  // rows that never had the flag set still surface here. Sort by
+  // name alphabetically.
   const candidates = useMemo(() => {
     const q = search.trim().toLowerCase()
     const assignedIds = new Set(workers.map(w => w.id))
     return (allUsers || [])
-      .filter((u: any) => u.active !== false && !assignedIds.has(u.id))
+      .filter((u: any) => u.active !== false && u.is_buyer !== false && !assignedIds.has(u.id))
       .filter((u: any) => !q || `${u.name} ${u.email}`.toLowerCase().includes(q))
       .sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''))
   }, [allUsers, workers, search])
