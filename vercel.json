@@ -51,6 +51,10 @@
     {
       "path": "/api/cron/metals-prices-refresh?secret=bebportal2024",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/communications-fire-due?secret=bebportal2024",
+      "schedule": "*/15 * * * *"
     }
   ]
 }
