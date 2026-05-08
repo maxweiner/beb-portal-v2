@@ -65,10 +65,16 @@ type LastEventLesson = {
 
 interface Props {
   setNav?: (n: NavPage) => void
+  /** When true, each event row collapses to a single line (store name +
+   *  dates) and expands to the full readiness card on click. Accordion
+   *  behavior — only one row open at a time. */
+  slim?: boolean
 }
 
-export default function PreEventTab({ setNav }: Props) {
+export default function PreEventTab({ setNav, slim = false }: Props) {
   const { stores, events: ctxEvents, user, brand, setTravelIntent, users } = useApp()
+  // Accordion state for slim mode. Null when nothing is open.
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [events, setEvents] = useState<Event[]>(ctxEvents || [])
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([])
   const [travel, setTravel] = useState<TravelRow[]>([])
@@ -294,6 +300,9 @@ export default function PreEventTab({ setNav }: Props) {
         <EventReadinessCard
           key={ev.id}
           ev={ev}
+          slim={slim}
+          expanded={slim ? expandedId === ev.id : true}
+          onToggleExpand={slim ? () => setExpandedId(cur => cur === ev.id ? null : ev.id) : undefined}
           campaigns={campaignsByEvent.get(ev.id) || []}
           travel={travelByEvent.get(ev.id) || []}
           travelAcks={travelAcksByEvent.get(ev.id) || []}
@@ -385,12 +394,18 @@ interface CardProps {
   onCancelClick: () => void
   allUsers: ReturnType<typeof useApp>['users']
   onWorkersChange: (workers: { id: string; name: string }[]) => void
+  /** When true, render the slim collapsed-row layout. Expanded state is
+   *  controlled by the parent for accordion behavior. */
+  slim?: boolean
+  expanded?: boolean
+  onToggleExpand?: () => void
 }
 
 function EventReadinessCard({
   ev, campaigns, travel, travelAcks, bookingLive, assetOrders, lastLesson, allEvents, stores,
   isAdmin, currentUserId, currentUserName, setNav, onOpenTravel, onPromoted, onAssetEdit, onMarkBriefed, onSetOverride, onCarriedForward, onCancelClick,
   allUsers, onWorkersChange,
+  slim = false, expanded = true, onToggleExpand,
 }: CardProps) {
   const reserved = ev.status === 'reserved'
   const [buyerPopover, setBuyerPopover] = useState(false)
@@ -470,50 +485,92 @@ function EventReadinessCard({
     onPromoted(ev.id)
   }
 
-  return (
-    <div style={{
-      // Reserved events render with a dashed blue accent so they read
-      // as Save the Date variants of the same buying-event family.
-      // Confirmed events get a solid blue accent.
-      background: '#fff',
-      border: `1px solid ${reserved ? CALENDAR_COLORS.buying.main : 'var(--cream2)'}`,
-      borderRadius: 10, padding: '14px 16px',
-      borderLeftStyle: reserved ? 'dashed' : 'solid',
-      borderLeftWidth: 4,
-      borderLeftColor: CALENDAR_COLORS.buying.main,
-    }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
-        <div>
-          <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)' }}>
-            {reserved && <span style={{
-              display: 'inline-block', fontSize: 10, fontWeight: 800,
-              background: CALENDAR_COLORS.buying.light, color: CALENDAR_COLORS.buying.text,
-              padding: '2px 6px', borderRadius: 4,
-              marginRight: 8, verticalAlign: 'middle',
-            }}>📌 RESERVED</span>}
-            {display}
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 2 }}>
-            {store?.city}{store?.state ? `, ${store.state}` : ''} · {range}
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          {reserved && isAdmin && (
-            <button onClick={promote} className="btn-primary btn-sm">✅ Promote to Booked</button>
-          )}
-          {isAdmin && (
-            <button
-              onClick={onCancelClick}
-              className="btn-outline btn-sm"
-              style={{ color: '#B22234', borderColor: '#fecdd3' }}
-              title="Cancel this event (paused campaigns, optional appointment + buyer notifications)"
-            >
-              🚫 Cancel
-            </button>
-          )}
-        </div>
+  // Slim collapsed: a single bigger row with store name + dates.
+  // Slim expanded: same row at the top + the full body below.
+  // Non-slim: existing header layout (title + actions in one flex row).
+  const cardOuterStyle: React.CSSProperties = {
+    background: '#fff',
+    border: `1px solid ${reserved ? CALENDAR_COLORS.buying.main : 'var(--cream2)'}`,
+    borderRadius: 10,
+    padding: slim ? (expanded ? '12px 16px 14px' : '12px 16px') : '14px 16px',
+    borderLeftStyle: reserved ? 'dashed' : 'solid',
+    borderLeftWidth: 4,
+    borderLeftColor: CALENDAR_COLORS.buying.main,
+  }
+  if (slim && !expanded) {
+    return (
+      <div style={cardOuterStyle}>
+        <SlimHeader display={display} range={range} reserved={reserved} expanded={false} onClick={onToggleExpand} />
       </div>
+    )
+  }
+
+  return (
+    <div style={cardOuterStyle}>
+      {slim ? (
+        <SlimHeader display={display} range={range} reserved={reserved} expanded={true} onClick={onToggleExpand} />
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)' }}>
+              {reserved && <span style={{
+                display: 'inline-block', fontSize: 10, fontWeight: 800,
+                background: CALENDAR_COLORS.buying.light, color: CALENDAR_COLORS.buying.text,
+                padding: '2px 6px', borderRadius: 4,
+                marginRight: 8, verticalAlign: 'middle',
+              }}>📌 RESERVED</span>}
+              {display}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 2 }}>
+              {store?.city}{store?.state ? `, ${store.state}` : ''} · {range}
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {reserved && isAdmin && (
+              <button onClick={promote} className="btn-primary btn-sm">✅ Promote to Booked</button>
+            )}
+            {isAdmin && (
+              <button
+                onClick={onCancelClick}
+                className="btn-outline btn-sm"
+                style={{ color: '#B22234', borderColor: '#fecdd3' }}
+                title="Cancel this event (paused campaigns, optional appointment + buyer notifications)"
+              >
+                🚫 Cancel
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* In slim+expanded mode the action buttons + city/state row live
+          inside the body since the slim header reserves its layout for
+          the bigger title + dates. */}
+      {slim && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: 10, flexWrap: 'wrap', margin: '10px 0 12px',
+        }}>
+          <div style={{ fontSize: 12, color: 'var(--mist)' }}>
+            {store?.city}{store?.state ? `, ${store.state}` : ''}
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
+            {reserved && isAdmin && (
+              <button onClick={promote} className="btn-primary btn-sm">✅ Promote to Booked</button>
+            )}
+            {isAdmin && (
+              <button
+                onClick={onCancelClick}
+                className="btn-outline btn-sm"
+                style={{ color: '#B22234', borderColor: '#fecdd3' }}
+                title="Cancel this event (paused campaigns, optional appointment + buyer notifications)"
+              >
+                🚫 Cancel
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Gate chips */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -1182,6 +1239,61 @@ function findOverlapping(buyerId: string, currentEv: Event, allEvents: Event[]):
     const otherDays = eventDayKeys(other)
     return days.some(d => otherDays.includes(d))
   })
+}
+
+/**
+ * Slim header — single-line clickable row used by the Slim view.
+ * Bigger fonts (store name 18px / 800, dates 14px) and a chevron
+ * affordance signal expand/collapse on click. The store name takes
+ * the lead since it's how staff actually identify an event.
+ */
+function SlimHeader({
+  display, range, reserved, expanded, onClick,
+}: {
+  display: string
+  range: string
+  reserved: boolean
+  expanded: boolean
+  onClick?: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex', width: '100%', alignItems: 'center',
+        justifyContent: 'space-between', gap: 12,
+        background: 'transparent', border: 'none', padding: 0, margin: 0,
+        cursor: onClick ? 'pointer' : 'default', fontFamily: 'inherit',
+        textAlign: 'left',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: 18, fontWeight: 800, color: 'var(--ink)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {reserved && <span style={{
+            display: 'inline-block', fontSize: 9, fontWeight: 800,
+            background: CALENDAR_COLORS.buying.light, color: CALENDAR_COLORS.buying.text,
+            padding: '1px 5px', borderRadius: 3, marginRight: 8,
+            verticalAlign: 'middle', letterSpacing: '.04em',
+          }}>📌 RESERVED</span>}
+          {display}
+        </div>
+        <div style={{
+          fontSize: 14, fontWeight: 700, color: 'var(--mist)',
+          whiteSpace: 'nowrap',
+        }}>
+          {range}
+        </div>
+      </div>
+      <span style={{
+        fontSize: 11, color: 'var(--mist)', flexShrink: 0,
+        display: 'inline-block', transition: 'transform .15s ease',
+        transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
+      }}>▶</span>
+    </button>
+  )
 }
 
 function eventDayKeys(ev: { start_date?: string | null }): string[] {

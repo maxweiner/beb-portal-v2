@@ -18,7 +18,7 @@ import DuringEventTab from './DuringEventTab'
 import PostEventTab from './PostEventTab'
 import CreateEventModal from './CreateEventModal'
 
-type ViewMode = 'new' | 'legacy'
+type ViewMode = 'new' | 'slim' | 'legacy'
 type Phase = 'pre' | 'during' | 'post'
 
 const STORAGE_KEY = 'beb-buying-events-view'
@@ -34,7 +34,7 @@ export default function BuyingEventsView({ setNav }: { setNav?: (n: NavPage) => 
   useEffect(() => {
     if (typeof window === 'undefined') return
     const saved = window.localStorage.getItem(STORAGE_KEY)
-    if (saved === 'new' || saved === 'legacy') setView(saved)
+    if (saved === 'new' || saved === 'slim' || saved === 'legacy') setView(saved)
   }, [])
 
   function changeView(v: ViewMode) {
@@ -48,6 +48,45 @@ export default function BuyingEventsView({ setNav }: { setNav?: (n: NavPage) => 
       <div>
         <ViewChooser view={view} onChange={changeView} />
         <Events setNav={setNav} />
+      </div>
+    )
+  }
+
+  // Slim view = Pre-Event only, single-line accordion rows. Skips
+  // the Pre/During/Post pill bar — by design slim is a fast-scan
+  // glance at upcoming events, with the full card one click away.
+  if (view === 'slim') {
+    return (
+      <div className="p-6" style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <ViewChooser view={view} onChange={changeView} />
+
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+          <div>
+            <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)', margin: '0 0 4px' }}>
+              ◆ Buying Events <span style={{ fontSize: 13, color: 'var(--mist)', fontWeight: 700 }}>· Slim</span>
+            </h1>
+            <div style={{ color: 'var(--mist)', fontSize: 13 }}>
+              Upcoming events at a glance — click any row for the full readiness card.
+            </div>
+          </div>
+          {isAdmin && (
+            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              <button onClick={() => setCreateMode('scheduled')} className="btn-primary btn-sm">+ New Event</button>
+              <button onClick={() => setCreateMode('reserved')} className="btn-outline btn-sm" title="Tentative date — Save the Date">
+                📌 Save the Date
+              </button>
+            </div>
+          )}
+        </div>
+
+        <PreEventTab setNav={setNav} slim />
+
+        {createMode && (
+          <CreateEventModal
+            mode={createMode}
+            onClose={() => setCreateMode(null)}
+          />
+        )}
       </div>
     )
   }
@@ -131,8 +170,9 @@ function ViewChooser({ view, onChange }: { view: ViewMode; onChange: (v: ViewMod
         display: 'flex', gap: 2, background: 'var(--cream2)',
         padding: 2, borderRadius: 6,
       }}>
-        {(['new', 'legacy'] as ViewMode[]).map(v => {
+        {(['new', 'slim', 'legacy'] as ViewMode[]).map(v => {
           const sel = view === v
+          const label = v === 'new' ? '✨ New' : v === 'slim' ? '📃 Slim' : '🗂 Legacy'
           return (
             <button key={v} onClick={() => onChange(v)}
               style={{
@@ -144,7 +184,7 @@ function ViewChooser({ view, onChange }: { view: ViewMode; onChange: (v: ViewMod
                 boxShadow: sel ? '0 1px 2px rgba(0,0,0,.06)' : 'none',
                 textTransform: 'capitalize',
               }}>
-              {v === 'new' ? '✨ New' : '🗂 Legacy'}
+              {label}
             </button>
           )
         })}
