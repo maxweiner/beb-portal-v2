@@ -9,7 +9,11 @@ import { blockIfImpersonating } from '@/lib/impersonation/server'
 
 export const dynamic = 'force-dynamic'
 
-const ALLOWED_FIELDS = new Set(['amount', 'vendor', 'confirmation_number', 'check_in', 'check_out'])
+const ALLOWED_FIELDS = new Set([
+  'amount', 'vendor', 'confirmation_number', 'check_in', 'check_out',
+  // Phase B: Mark booked / Mark pending + who's handling the booking.
+  'status', 'assigned_to_user_id',
+])
 
 function admin() {
   return createClient(
@@ -35,6 +39,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if ('amount' in update) {
     const n = Number(update.amount)
     update.amount = Number.isFinite(n) && n >= 0 ? n : 0
+  }
+  if ('status' in update && update.status !== 'pending' && update.status !== 'booked') {
+    return NextResponse.json({ error: 'status must be "pending" or "booked"' }, { status: 400 })
   }
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: 'No editable fields supplied' }, { status: 400 })
