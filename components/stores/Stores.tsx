@@ -5,6 +5,7 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import type { Store } from '@/types'
+import Checkbox from '@/components/ui/Checkbox'
 import BookingConfigCard from './BookingConfigCard'
 import QrCodesSection from './QrCodesSection'
 import StorePortalAccessCard from './StorePortalAccessCard'
@@ -44,20 +45,27 @@ export default function Stores() {
   const [sort, setSort] = useState<'name' | 'state' | 'spent'>('name')
 
   // ── Direct fetch — fresh query builder each time ──
+  // List query is slim — only the columns the row needs to render
+  // (incl. store_image_url for the new logo thumbnail). Skipping the
+  // big detail-only columns (notes, hold_*, shipping_recipients,
+  // calendar_*, lat/lng, etc.) cuts the list payload from megabytes
+  // to a few hundred KB on accounts with many stores.
+  // We do NOT push this slim list back into AppContext — context
+  // expects full Store rows for other consumers. Context refreshes
+  // independently on app load + brand switch.
   const fetchStores = useCallback(async () => {
     try {
       const { data } = await withTimeout(
-        supabase.from('stores').select('*').eq('brand', brand).order('name')
+        supabase.from('stores')
+          .select('id, name, city, state, active, store_image_url, color_primary')
+          .eq('brand', brand).order('name')
       )
-      if (data) {
-        setStores(data)
-        setContextStores(data)
-      }
+      if (data) setStores(data as Store[])
     } catch (err) {
       console.error('fetchStores error:', err)
     }
     setStoresLoaded(true)
-  }, [brand, setContextStores])
+  }, [brand])
 
   useEffect(() => {
     fetchStores()
@@ -118,14 +126,13 @@ export default function Stores() {
       setNewStore({ name: '', address: '', city: '', state: '', zip: '', lat: 0, lng: 0, website: '', owner_phone: '' })
       setPlacePicked(false)
 
-      // Re-fetch stores directly with a fresh query
+      // Re-fetch stores directly with a fresh slim query.
       const { data: freshStores } = await withTimeout(
-        supabase.from('stores').select('*').eq('brand', brand).order('name')
+        supabase.from('stores')
+          .select('id, name, city, state, active, store_image_url, color_primary')
+          .eq('brand', brand).order('name')
       )
-      if (freshStores) {
-        setStores(freshStores)
-        setContextStores(freshStores)
-      }
+      if (freshStores) setStores(freshStores as Store[])
     } catch (err: any) {
       alert('Error creating store: ' + (err?.message || 'unknown'))
     } finally {
@@ -173,12 +180,9 @@ export default function Stores() {
             <option value="state">Sort: By State</option>
             <option value="spent">Sort: Amount Spent ({new Date().getFullYear()})</option>
           </select>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--mist)', cursor: 'pointer' }}>
-            <input type="checkbox" checked={showInactive}
-              onChange={e => setShowInactive(e.target.checked)}
-              style={{ width: 'auto' }} />
-            Show inactive
-          </label>
+          <Checkbox checked={showInactive} onChange={setShowInactive}
+            label={<span style={{ fontSize: 12, color: 'var(--mist)' }}>Show inactive</span>} />
+
           <button className="btn-primary" onClick={() => setShowForm(true)}>+ Add Store</button>
         </div>
       </div>
@@ -243,19 +247,40 @@ export default function Stores() {
                 const spent = storeSpend(s.id)
                 const inactive = s.active === false
                 return (
-                  <tr key={s.id} onClick={() => setSelected(s)}
+                  <tr key={s.id} onClick={async () => {
+                    // Slim list query → fetch the full row before
+                    // opening the detail modal (it needs notes /
+                    // hold_* / shipping fields).
+                    const { data } = await withTimeout(
+                      supabase.from('stores').select('*').eq('id', s.id).maybeSingle()
+                    )
+                    setSelected((data as Store) || s)
+                  }}
                     style={{ cursor: 'pointer', opacity: inactive ? 0.55 : 1 }}
                     onMouseOver={e => (e.currentTarget as HTMLElement).style.background = 'var(--cream2)'}
                     onMouseOut={e => (e.currentTarget as HTMLElement).style.background = ''}>
                     <td>
-                      <span style={{ color: 'var(--green-dark)', fontWeight: 700 }}>◆ {s.name}</span>
-                      {inactive && (
-                        <span style={{
-                          marginLeft: 8, padding: '1px 6px', borderRadius: 4,
-                          background: 'var(--cream2)', color: 'var(--mist)',
-                          fontSize: 10, fontWeight: 800, letterSpacing: '.04em',
-                        }}>INACTIVE</span>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        {s.store_image_url ? (
+                          <img src={s.store_image_url} alt=""
+                            style={{ width: 28, height: 28, borderRadius: 4, objectFit: 'cover', flexShrink: 0, border: '1px solid var(--pearl)' }} />
+                        ) : (
+                          <span style={{
+                            width: 28, height: 28, borderRadius: 4, flexShrink: 0,
+                            background: 'var(--cream2)', display: 'inline-flex',
+                            alignItems: 'center', justifyContent: 'center',
+                            fontSize: 11, color: 'var(--mist)', fontWeight: 800,
+                          }}>◆</span>
+                        )}
+                        <span style={{ color: 'var(--green-dark)', fontWeight: 700 }}>{s.name}</span>
+                        {inactive && (
+                          <span style={{
+                            padding: '1px 6px', borderRadius: 4,
+                            background: 'var(--cream2)', color: 'var(--mist)',
+                            fontSize: 10, fontWeight: 800, letterSpacing: '.04em',
+                          }}>INACTIVE</span>
+                        )}
+                      </div>
                     </td>
                     <td>{s.city || '—'}</td>
                     <td>{s.state || '—'}</td>
@@ -424,34 +449,6 @@ function StoreModal({ store, onClose, refetchStores, onDelete }: {
         </div>
 
         <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
-
-          {/* Inactive flag — when checked the store is dormant and
-              hidden from the default list. Reusable for archiving
-              stores that are no longer customers without losing
-              history. */}
-          <label style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '10px 14px', borderRadius: 8,
-            background: details.active === false ? '#FFFBEB' : 'var(--cream2)',
-            border: '1px solid ' + (details.active === false ? '#FCD34D' : 'var(--pearl)'),
-            fontSize: 13, fontWeight: 700, cursor: 'pointer',
-            color: details.active === false ? '#92400E' : 'var(--ash)',
-          }}>
-            <input
-              type="checkbox"
-              checked={details.active === false}
-              onChange={async e => {
-                const next = !e.target.checked
-                setDetails((p: any) => ({ ...p, active: next }))
-                await withTimeout(
-                  supabase.from('stores').update({ active: next }).eq('id', store.id)
-                )
-                await refetchStores()
-              }}
-              style={{ width: 'auto' }}
-            />
-            <span>{details.active === false ? '⚠ Inactive — hidden from list' : 'Inactive (dormant store)'}</span>
-          </label>
 
           {/* Google Map */}
           {mapUrl && (
@@ -811,6 +808,36 @@ function StoreModal({ store, onClose, refetchStores, onDelete }: {
 
           {/* Danger zone — moved here from the inline list row so the
               destructive action is gated behind opening the store. */}
+
+          {/* Inactive flag — kept at the bottom near the Delete row
+              since it's a "lifecycle" action, not part of the daily
+              edit flow. Toggling it autosaves immediately. */}
+          <div style={{
+            padding: '12px 14px', borderRadius: 8,
+            background: details.active === false ? '#FFFBEB' : 'var(--cream2)',
+            border: '1px solid ' + (details.active === false ? '#FCD34D' : 'var(--pearl)'),
+          }}>
+            <Checkbox
+              checked={details.active === false}
+              onChange={async (checked) => {
+                const next = !checked
+                setDetails((p: any) => ({ ...p, active: next }))
+                await withTimeout(
+                  supabase.from('stores').update({ active: next }).eq('id', store.id)
+                )
+                await refetchStores()
+              }}
+              label={
+                <span style={{
+                  fontSize: 13, fontWeight: 700,
+                  color: details.active === false ? '#92400E' : 'var(--ash)',
+                }}>
+                  {details.active === false ? '⚠ Inactive — hidden from list' : 'Mark store inactive (dormant)'}
+                </span>
+              }
+            />
+          </div>
+
           <div style={{
             marginTop: 8, paddingTop: 16,
             borderTop: '1px solid var(--pearl)',

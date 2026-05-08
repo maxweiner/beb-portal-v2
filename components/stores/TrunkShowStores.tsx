@@ -202,12 +202,8 @@ export default function TrunkShowStores() {
             <option value="active">Active trunk shows</option>
             <option value="inactive">Inactive</option>
           </select>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--mist)', cursor: 'pointer' }}>
-            <input type="checkbox" checked={showInactive}
-              onChange={e => setShowInactive(e.target.checked)}
-              style={{ width: 'auto' }} />
-            Show inactive
-          </label>
+          <Checkbox checked={showInactive} onChange={setShowInactive}
+            label={<span style={{ fontSize: 12, color: 'var(--mist)' }}>Show inactive</span>} />
           <button className="btn-primary" onClick={() => setShowAdd(true)}>+ Add Store</button>
         </div>
       </div>
@@ -277,14 +273,27 @@ export default function TrunkShowStores() {
                   onMouseOver={e => (e.currentTarget as HTMLElement).style.background = 'var(--cream2)'}
                   onMouseOut={e => (e.currentTarget as HTMLElement).style.background = ''}>
                   <td>
-                    <span style={{ color: 'var(--green-dark)', fontWeight: 700 }}>◆ {s.name}</span>
-                    {s.active === false && (
-                      <span style={{
-                        marginLeft: 8, padding: '1px 6px', borderRadius: 4,
-                        background: 'var(--cream2)', color: 'var(--mist)',
-                        fontSize: 10, fontWeight: 800, letterSpacing: '.04em',
-                      }}>INACTIVE</span>
-                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      {(s as any).store_image_url ? (
+                        <img src={(s as any).store_image_url} alt=""
+                          style={{ width: 28, height: 28, borderRadius: 4, objectFit: 'cover', flexShrink: 0, border: '1px solid var(--pearl)' }} />
+                      ) : (
+                        <span style={{
+                          width: 28, height: 28, borderRadius: 4, flexShrink: 0,
+                          background: 'var(--cream2)', display: 'inline-flex',
+                          alignItems: 'center', justifyContent: 'center',
+                          fontSize: 11, color: 'var(--mist)', fontWeight: 800,
+                        }}>◆</span>
+                      )}
+                      <span style={{ color: 'var(--green-dark)', fontWeight: 700 }}>{s.name}</span>
+                      {s.active === false && (
+                        <span style={{
+                          padding: '1px 6px', borderRadius: 4,
+                          background: 'var(--cream2)', color: 'var(--mist)',
+                          fontSize: 10, fontWeight: 800, letterSpacing: '.04em',
+                        }}>INACTIVE</span>
+                      )}
+                    </div>
                   </td>
                   <td>{s.city || <span style={{ color: 'var(--silver)' }}>—</span>}</td>
                   <td>{s.state || <span style={{ color: 'var(--silver)' }}>—</span>}</td>
@@ -579,34 +588,6 @@ function Modal({ store, trunkReps, onClose, onSaved, onDelete }: {
 
         <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-          {/* Inactive flag — when checked the store is dormant and
-              hidden from the default list. Toggle "Show inactive" in
-              the list header to see and reactivate. */}
-          <label style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '10px 14px', borderRadius: 8,
-            background: details.active === false ? '#FFFBEB' : 'var(--cream2)',
-            border: '1px solid ' + (details.active === false ? '#FCD34D' : 'var(--pearl)'),
-            fontSize: 13, fontWeight: 700, cursor: 'pointer',
-            color: details.active === false ? '#92400E' : 'var(--ash)',
-          }}>
-            <input
-              type="checkbox"
-              checked={details.active === false}
-              onChange={async e => {
-                const next = !e.target.checked
-                set('active', next)
-                const { data, error } = await supabase
-                  .from('trunk_show_stores').update({ active: next }).eq('id', store.id)
-                  .select(COLS).single()
-                if (error) { alert('Save failed: ' + error.message); return }
-                onSaved(data as TrunkShowStore)
-              }}
-              style={{ width: 'auto' }}
-            />
-            <span>{details.active === false ? '⚠ Inactive — hidden from list' : 'Inactive (dormant store)'}</span>
-          </label>
-
           {mapUrl && (
             <div style={{ borderRadius: 'var(--r)', overflow: 'hidden', border: '1px solid var(--pearl)' }}>
               <iframe src={mapUrl} width="100%" height="200" style={{ border: 0, display: 'block' }} allowFullScreen loading="lazy" />
@@ -674,6 +655,36 @@ function Modal({ store, trunkReps, onClose, onSaved, onDelete }: {
           <div className="card" style={{ margin: 0 }}>
             <div className="card-title">Comments<AutosaveIndicator status={status} /></div>
             <TA label="" value={details.comments} onChange={v => set('comments', v)} />
+          </div>
+
+          {/* Inactive flag — kept at the bottom near the Delete row
+              since it's a "lifecycle" action, not part of the daily
+              edit flow. */}
+          <div style={{
+            padding: '12px 14px', borderRadius: 8,
+            background: details.active === false ? '#FFFBEB' : 'var(--cream2)',
+            border: '1px solid ' + (details.active === false ? '#FCD34D' : 'var(--pearl)'),
+          }}>
+            <Checkbox
+              checked={details.active === false}
+              onChange={async (checked) => {
+                const next = !checked
+                set('active', next)
+                const { data, error } = await supabase
+                  .from('trunk_show_stores').update({ active: next }).eq('id', store.id)
+                  .select(COLS).single()
+                if (error) { alert('Save failed: ' + error.message); return }
+                onSaved(data as TrunkShowStore)
+              }}
+              label={
+                <span style={{
+                  fontSize: 13, fontWeight: 700,
+                  color: details.active === false ? '#92400E' : 'var(--ash)',
+                }}>
+                  {details.active === false ? '⚠ Inactive — hidden from list' : 'Mark store inactive (dormant)'}
+                </span>
+              }
+            />
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
