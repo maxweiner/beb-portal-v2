@@ -142,7 +142,10 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
   // viewing the current calendar year so we get a "on pace for $X"
   // run rate; for past years the strip just shows the full-year totals
   // and hides the run rate (the year is already over).
-  const isMax = user?.email === 'max@bebllp.com'
+  // Mirror the gate AdminPanel uses for delete-forever — both addresses
+  // resolve to Max, lowercased for safety against any casing drift.
+  const meEmail = (user?.email || '').toLowerCase()
+  const isMax = meEmail === 'max@bebllp.com' || meEmail === 'max.weiner@gmail.com'
   const currentYear = new Date().getFullYear()
   const isCurrentYear = year === String(currentYear)
   const todayIso = today.toISOString().slice(0, 10)
