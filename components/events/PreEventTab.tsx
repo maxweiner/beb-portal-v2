@@ -68,7 +68,7 @@ interface Props {
 }
 
 export default function PreEventTab({ setNav }: Props) {
-  const { stores, events: ctxEvents, user, brand, setTravelIntent } = useApp()
+  const { stores, events: ctxEvents, user, brand, setTravelIntent, users } = useApp()
   const [events, setEvents] = useState<Event[]>(ctxEvents || [])
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([])
   const [travel, setTravel] = useState<TravelRow[]>([])
@@ -323,6 +323,10 @@ export default function PreEventTab({ setNav }: Props) {
             })
           }}
           onCancelClick={() => setCancelEventId(ev.id)}
+          allUsers={users}
+          onWorkersChange={(workers) => {
+            setEvents(prev => prev.map(e => e.id === ev.id ? { ...e, workers } as Event : e))
+          }}
         />
       ))}
 
@@ -379,11 +383,14 @@ interface CardProps {
   onSetOverride: (kind: 'travel' | 'marketing' | 'assets', on: boolean) => void
   onCarriedForward: (noteId: string) => void
   onCancelClick: () => void
+  allUsers: ReturnType<typeof useApp>['users']
+  onWorkersChange: (workers: { id: string; name: string }[]) => void
 }
 
 function EventReadinessCard({
   ev, campaigns, travel, travelAcks, bookingLive, assetOrders, lastLesson, allEvents, stores,
   isAdmin, currentUserId, currentUserName, setNav, onOpenTravel, onPromoted, onAssetEdit, onMarkBriefed, onSetOverride, onCarriedForward, onCancelClick,
+  allUsers, onWorkersChange,
 }: CardProps) {
   const reserved = ev.status === 'reserved'
   const [buyerPopover, setBuyerPopover] = useState(false)
@@ -524,9 +531,12 @@ function EventReadinessCard({
           />
           {buyerPopover && (
             <BuyerPopover
+              eventId={ev.id}
               workers={workers}
+              allUsers={allUsers}
+              isAdmin={isAdmin}
               onClose={() => setBuyerPopover(false)}
-              onManage={() => { setBuyerPopover(false); setNav?.('buying-events') }}
+              onChange={onWorkersChange}
             />
           )}
         </span>
@@ -723,12 +733,18 @@ type GateLevel = 'green' | 'yellow' | 'red' | 'neutral'
 // assigned (lead first) and offers a "Manage in Legacy" link.
 // Closes on outside click + Esc.
 function BuyerPopover({
-  workers, onClose, onManage,
+  eventId, workers, allUsers, isAdmin, onClose, onChange,
 }: {
+  eventId: string
   workers: { id: string; name: string }[]
+  allUsers: ReturnType<typeof useApp>['users']
+  isAdmin: boolean
   onClose: () => void
-  onManage: () => void
+  onChange: (workers: { id: string; name: string }[]) => void
 }) {
+  const [search, setSearch] = useState('')
+  const [busy, setBusy] = useState(false)
+
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
       const el = e.target as HTMLElement
@@ -743,6 +759,53 @@ function BuyerPopover({
     }
   }, [onClose])
 
+  // PUT through the chokepoint so the buyer_added_to_event /
+  // buyer_removed notifications fire as they do in legacy.
+  async function persist(next: { id: string; name: string }[]) {
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/events/${eventId}/workers`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workers: next }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        alert('Failed to update buyers: ' + (j.error || res.statusText))
+        return
+      }
+      onChange(next)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function add(u: { id: string; name?: string | null }) {
+    if (workers.some(w => w.id === u.id)) return
+    persist([...workers, { id: u.id, name: u.name || '' }])
+  }
+  function remove(uid: string) {
+    persist(workers.filter(w => w.id !== uid))
+  }
+  function makeLead(uid: string) {
+    const target = workers.find(w => w.id === uid)
+    if (!target) return
+    persist([target, ...workers.filter(w => w.id !== uid)])
+  }
+
+  // Eligible adds: active users not already assigned, filtered by
+  // search. Roles included: any active user (legacy lets you assign
+  // anyone — the assignee just needs to be in users). Sort by name
+  // alphabetically so the list is stable.
+  const candidates = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const assignedIds = new Set(workers.map(w => w.id))
+    return (allUsers || [])
+      .filter((u: any) => u.active !== false && !assignedIds.has(u.id))
+      .filter((u: any) => !q || `${u.name} ${u.email}`.toLowerCase().includes(q))
+      .sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''))
+  }, [allUsers, workers, search])
+
   return (
     <div
       data-buyer-popover
@@ -750,45 +813,90 @@ function BuyerPopover({
         position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50,
         background: '#fff', border: '1px solid var(--cream2)', borderRadius: 8,
         boxShadow: '0 6px 20px rgba(0,0,0,.10)',
-        padding: 8, minWidth: 200, maxWidth: 280,
+        padding: 10, minWidth: 280, maxWidth: 340,
       }}
     >
+      <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>
+        Assigned ({workers.length})
+      </div>
       {workers.length === 0 ? (
-        <div style={{ fontSize: 12, color: 'var(--mist)', padding: '6px 8px' }}>
-          No buyers assigned yet.
+        <div style={{ fontSize: 12, color: 'var(--mist)', padding: '6px 4px', fontStyle: 'italic' }}>
+          No buyers yet — add one below.
         </div>
       ) : (
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {workers.map((w, i) => (
-            <li key={w.id} style={{
-              fontSize: 13, padding: '4px 8px', borderRadius: 4,
-              color: 'var(--ink)',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-            }}>
-              <span>{w.name}</span>
-              {i === 0 && (
-                <span style={{
-                  fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 3,
-                  background: 'var(--cream2)', color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.04em',
-                }}>Lead</span>
-              )}
-            </li>
-          ))}
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 10 }}>
+          {workers.map((w, i) => {
+            const isLead = i === 0
+            return (
+              <li key={w.id} style={{
+                fontSize: 13, padding: '4px 8px', borderRadius: 4,
+                background: isLead ? 'var(--green-pale)' : 'transparent',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+              }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--ink)' }}>
+                  {w.name}
+                  {isLead && (
+                    <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 3, background: 'var(--green-dark)', color: '#fff', textTransform: 'uppercase', letterSpacing: '.04em' }}>Lead</span>
+                  )}
+                </span>
+                {isAdmin && (
+                  <span style={{ display: 'inline-flex', gap: 4 }}>
+                    {!isLead && (
+                      <button onClick={() => makeLead(w.id)} disabled={busy} title="Make lead"
+                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--mist)', padding: '0 4px' }}>⭐</button>
+                    )}
+                    <button onClick={() => remove(w.id)} disabled={busy} title="Remove"
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--mist)', padding: '0 4px' }}>×</button>
+                  </span>
+                )}
+              </li>
+            )
+          })}
         </ul>
       )}
-      <div style={{
-        borderTop: '1px solid var(--cream2)', marginTop: 6, paddingTop: 6,
-        textAlign: 'right',
-      }}>
-        <button
-          onClick={onManage}
-          style={{
-            background: 'transparent', border: 'none',
-            color: 'var(--green-dark)', fontSize: 11, fontWeight: 700,
-            cursor: 'pointer', padding: '2px 4px',
-          }}
-        >Manage in Legacy →</button>
-      </div>
+
+      {isAdmin && (
+        <>
+          <div style={{ borderTop: '1px solid var(--cream2)', paddingTop: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>
+              Add a buyer
+            </div>
+            <input
+              type="search"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search by name…"
+              style={{ width: '100%', fontSize: 13, marginBottom: 6 }}
+            />
+            <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid var(--cream2)', borderRadius: 4 }}>
+              {candidates.length === 0 ? (
+                <div style={{ padding: 8, fontSize: 12, color: 'var(--mist)', fontStyle: 'italic' }}>
+                  {search ? 'No matches.' : 'Everyone\'s already assigned.'}
+                </div>
+              ) : candidates.map((u: any) => (
+                <button
+                  key={u.id}
+                  onClick={() => add(u)}
+                  disabled={busy}
+                  style={{
+                    display: 'block', width: '100%', textAlign: 'left',
+                    padding: '6px 10px', border: 'none', background: 'transparent',
+                    cursor: 'pointer', fontFamily: 'inherit', fontSize: 13,
+                    borderBottom: '1px solid var(--cream2)',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--cream)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  + {u.name || u.email}
+                  {u.role && (
+                    <span style={{ fontSize: 10, color: 'var(--mist)', marginLeft: 6 }}>· {u.role}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
