@@ -33,11 +33,31 @@ export async function getAuthedUser(req: Request): Promise<AuthedUser | null> {
   if (!m) return null
   const sb = admin()
   const { data: tokenUser, error: tokenErr } = await sb.auth.getUser(m[1])
-  if (tokenErr || !tokenUser?.user?.email) return null
-  const { data: row } = await sb.from('users')
-    .select('id, auth_id, name, email, role, is_partner, active')
-    .eq('email', tokenUser.user.email)
-    .maybeSingle()
+  if (tokenErr || !tokenUser?.user?.id) return null
+
+  // Match the public.users row primarily by auth_id (the auth.users
+  // UUID, which can never drift out of sync with the JWT) and fall
+  // back to email (legacy rows where auth_id was never backfilled).
+  // Without this, anyone whose Supabase Auth email differs from their
+  // public.users.email gets a 401 — which was breaking Max because his
+  // auth login is max.weiner@gmail.com but his users row reads
+  // max@bebllp.com.
+  const COLS = 'id, auth_id, name, email, role, is_partner, active'
+  let row: any = null
+  {
+    const { data } = await sb.from('users')
+      .select(COLS)
+      .eq('auth_id', tokenUser.user.id)
+      .maybeSingle()
+    row = data
+  }
+  if (!row && tokenUser.user.email) {
+    const { data } = await sb.from('users')
+      .select(COLS)
+      .eq('email', tokenUser.user.email)
+      .maybeSingle()
+    row = data
+  }
   if (!row || row.active === false) return null
   return row as AuthedUser
 }
