@@ -1,12 +1,13 @@
 'use client'
 
-// Leads top-level page. Three pipelines via the lead_kind enum:
-//   trade_show    — sales-rep booth captures (existing)
+// Leads top-level page. Two pipelines via the lead_kind enum:
 //   buying_event  — stores BEB might pitch on hosting an estate event
 //   trunk_show    — stores BEB might pitch on hosting a trunk show
 //
-// Tabs gate by role: sales_rep sees only Trade Shows;
-// admin/superadmin/partner see all three.
+// Trade-show captures (lead_kind='trade_show') still exist in the DB
+// but live on the trade-show detail page itself, not here. RLS on
+// buying_event + trunk_show kinds restricts visibility to admin /
+// superadmin / partner.
 //
 // View toggle (List ↔ Kanban) persists in localStorage.
 
@@ -34,7 +35,6 @@ const STATUS_COLOR: Record<LeadStatus, { bg: string; fg: string }> = {
 const INTEREST_ICON: Record<LeadInterestLevel, string> = { hot: '🔥', warm: '🌤️', cold: '❄️' }
 
 const KIND_TABS: { kind: LeadKind; label: string; emoji: string; convertedLabel: string }[] = [
-  { kind: 'trade_show',   label: 'Trade Shows',   emoji: '🎯', convertedLabel: 'Converted' },
   { kind: 'buying_event', label: 'Buying Events', emoji: '💎', convertedLabel: 'Booked' },
   { kind: 'trunk_show',   label: 'Trunk Shows',   emoji: '👜', convertedLabel: 'Booked' },
 ]
@@ -47,16 +47,16 @@ export default function Leads({ setNav }: { setNav?: (n: NavPage) => void }) {
   const { user, users } = useApp()
   const isAdminLike = user?.role === 'admin' || user?.role === 'superadmin' || !!user?.is_partner
 
-  const allowedTabs = useMemo(
-    () => isAdminLike ? KIND_TABS : KIND_TABS.filter(t => t.kind === 'trade_show'),
-    [isAdminLike],
-  )
+  // KIND_TABS no longer includes trade_show; sales-rep gating is
+  // handled by RLS — non-admins just see empty buying-event/trunk-show
+  // lists rather than a special filtered tab.
+  const allowedTabs = KIND_TABS
 
   const [activeKind, setActiveKind] = useState<LeadKind>(() => {
-    if (typeof window === 'undefined') return 'trade_show'
+    if (typeof window === 'undefined') return 'buying_event'
     const saved = window.localStorage.getItem(TAB_KEY) as LeadKind | null
     if (saved && KIND_TABS.some(t => t.kind === saved)) return saved
-    return 'trade_show'
+    return 'buying_event'
   })
   const [view, setView] = useState<ViewMode>(() => {
     if (typeof window === 'undefined') return 'list'
@@ -71,11 +71,11 @@ export default function Leads({ setNav }: { setNav?: (n: NavPage) => void }) {
     try { window.localStorage.setItem(VIEW_KEY, view) } catch {}
   }, [view])
 
-  // If a sales-rep lands here with a saved tab they can no longer
-  // see, snap back to trade_show.
+  // If localStorage holds a stale 'trade_show' value from before the
+  // tab was retired, snap back to buying_event so a valid tab renders.
   useEffect(() => {
-    if (!allowedTabs.some(t => t.kind === activeKind)) setActiveKind('trade_show')
-  }, [allowedTabs, activeKind])
+    if (!KIND_TABS.some(t => t.kind === activeKind)) setActiveKind('buying_event')
+  }, [activeKind])
 
   const activeTab = KIND_TABS.find(t => t.kind === activeKind)!
 
