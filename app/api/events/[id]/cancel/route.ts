@@ -24,7 +24,6 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getAuthedUser } from '@/lib/expenses/serverAuth'
 import { sendEmail } from '@/lib/email'
 import { blockIfImpersonating } from '@/lib/impersonation/server'
 
@@ -43,20 +42,37 @@ function escapeHtml(s: string): string {
 }
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const me = await getAuthedUser(req)
-  if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Cancel-event is open to any signed-in user. The role/partner gate
+  // was removed because it kept catching legitimate ops staff whose
+  // public.users.email didn't line up with their auth-side email; the
+  // confirmation modal in the UI is now the only checkpoint. We still
+  // verify a Supabase JWT is present so anonymous external callers
+  // can't hit this endpoint, and we still block view-as / impersonation
+  // sessions from cancelling on someone else's behalf.
+  const sb = admin()
+  const authHeader = req.headers.get('authorization') || ''
+  const m = authHeader.match(/^Bearer\s+(.+)$/i)
+  if (!m) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { data: tokenUser, error: tokenErr } = await sb.auth.getUser(m[1])
+  if (tokenErr || !tokenUser?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   const blocked = await blockIfImpersonating(req)
   if (blocked) return blocked
 
-  const sb = admin()
+  // Resolve a public.users row when we can — purely for the audit
+  // cancelled_by field. If the caller's auth account isn't linked to
+  // a public.users row yet, we fall through with a null cancelled_by
+  // rather than refusing the cancel.
   const { data: caller } = await sb
     .from('users')
-    .select('role, is_partner, name, email')
-    .eq('id', me.id)
+    .select('id, name, email')
+    .or(`auth_id.eq.${tokenUser.user.id},email.eq.${tokenUser.user.email || ''}`)
+    .limit(1)
     .maybeSingle()
-  const allowed = caller?.role === 'admin' || caller?.role === 'superadmin' || !!caller?.is_partner
-  if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const me = caller ? { id: caller.id, name: caller.name, email: caller.email }
+                    : { id: null as string | null, name: tokenUser.user.email || 'Unknown', email: tokenUser.user.email || '' }
 
   let body: any
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
@@ -82,15 +98,18 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: 'Event is already cancelled' }, { status: 400 })
   }
 
-  // 1. Cancel the event itself.
+  // 1. Cancel the event itself. Only attach cancelled_by when we
+  // resolved a public.users row — otherwise the FK would reject a
+  // synthesized id from a JWT-only caller.
+  const eventUpdate: Record<string, any> = {
+    status: 'cancelled',
+    cancelled_at: new Date().toISOString(),
+    cancellation_reason: reason,
+  }
+  if (me.id) eventUpdate.cancelled_by = me.id
   const { error: updErr } = await sb
     .from('events')
-    .update({
-      status: 'cancelled',
-      cancelled_at: new Date().toISOString(),
-      cancelled_by: me.id,
-      cancellation_reason: reason,
-    })
+    .update(eventUpdate)
     .eq('id', event.id)
   if (updErr) return NextResponse.json({ error: `Event update failed: ${updErr.message}` }, { status: 500 })
 
