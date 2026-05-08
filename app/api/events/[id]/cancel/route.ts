@@ -20,11 +20,13 @@
 // shouldn't fire after the event is cancelled. Already-mailed pieces
 // stay where they are — can't recall USPS.
 //
-// Auth: caller must be admin/superadmin/partner.
+// Auth: caller must be superadmin or partner.
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email'
+import { getAuthedUser } from '@/lib/expenses/serverAuth'
+import { blockIfImpersonating } from '@/lib/impersonation/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,35 +43,25 @@ function escapeHtml(s: string): string {
 }
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  // ⚠️ All restrictions stripped per request — only the bare-minimum
-  // JWT check remains so the endpoint isn't exposed to the open
-  // internet. To be locked back down once the auth flow is debugged.
+  // Auth: caller must resolve to a public.users row (via auth_id /
+  // primary email / alternate_emails — see getAuthedUser) AND be a
+  // superadmin or partner. `admin` role intentionally not allowed —
+  // event cancellation is a partner/superadmin-only action.
+  const me = await getAuthedUser(req)
+  if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const blocked = await blockIfImpersonating(req)
+  if (blocked) return blocked
+
+  const allowed = me.role === 'superadmin' || !!me.is_partner
+  if (!allowed) return NextResponse.json({ error: 'Forbidden — partners or superadmins only' }, { status: 403 })
+
   const sb = admin()
-  const authHeader = req.headers.get('authorization') || ''
-  const m = authHeader.match(/^Bearer\s+(.+)$/i)
-  if (!m) return NextResponse.json({ error: 'Unauthorized — no Bearer token' }, { status: 401 })
-  const { data: tokenUser, error: tokenErr } = await sb.auth.getUser(m[1])
-  if (tokenErr || !tokenUser?.user?.id) {
-    return NextResponse.json({
-      error: 'Unauthorized — JWT failed verification',
-      detail: tokenErr?.message || 'no user in token',
-    }, { status: 401 })
-  }
+  let body: any
+  try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
-  // Best-effort audit lookup; never blocks the cancel.
-  const { data: caller } = await sb
-    .from('users')
-    .select('id, name, email')
-    .or(`auth_id.eq.${tokenUser.user.id},email.eq.${tokenUser.user.email || ''}`)
-    .limit(1)
-    .maybeSingle()
-  const me = caller ? { id: caller.id, name: caller.name, email: caller.email }
-                    : { id: null as string | null, name: tokenUser.user.email || 'Unknown', email: tokenUser.user.email || '' }
-
-  let body: any = {}
-  try { body = await req.json() } catch { /* swallow — empty body is fine */ }
-
-  const reason = String(body?.reason || '').trim() || 'No reason provided'
+  const reason = String(body?.reason || '').trim()
+  if (!reason) return NextResponse.json({ error: 'Reason is required' }, { status: 400 })
 
   const cancelAppointments = body?.cancel_appointments === true
   const emailBuyers        = body?.email_buyers        === true
@@ -86,18 +78,15 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (evErr) return NextResponse.json({ error: evErr.message }, { status: 500 })
   if (!event) return NextResponse.json({ error: 'Event not found' }, { status: 404 })
 
-  // 1. Cancel the event itself. Only attach cancelled_by when we
-  // resolved a public.users row — otherwise the FK would reject a
-  // synthesized id from a JWT-only caller.
-  const eventUpdate: Record<string, any> = {
-    status: 'cancelled',
-    cancelled_at: new Date().toISOString(),
-    cancellation_reason: reason,
-  }
-  if (me.id) eventUpdate.cancelled_by = me.id
+  // 1. Cancel the event itself.
   const { error: updErr } = await sb
     .from('events')
-    .update(eventUpdate)
+    .update({
+      status: 'cancelled',
+      cancelled_at: new Date().toISOString(),
+      cancelled_by: me.id,
+      cancellation_reason: reason,
+    })
     .eq('id', event.id)
   if (updErr) return NextResponse.json({ error: `Event update failed: ${updErr.message}` }, { status: 500 })
 
@@ -187,7 +176,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const fmtLong = (ds: string) =>
     new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
   const eventLabel = `${event.store_name} on ${fmtLong(event.start_date)}`
-  const senderName = caller?.name || 'BEB Operations'
+  const senderName = me.name || 'BEB Operations'
 
   const buyerHtml = `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1a1a16;max-width:560px;margin:0 auto;padding:20px;background:#F5F0E8">

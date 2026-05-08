@@ -19,10 +19,12 @@
 // Body: { confirm: string }  // must equal store_name or YYYY-MM-DD
 //                            // start_date — belt-and-suspenders.
 //
-// Auth: caller must be admin/superadmin/partner.
+// Auth: caller must be superadmin or partner.
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getAuthedUser } from '@/lib/expenses/serverAuth'
+import { blockIfImpersonating } from '@/lib/impersonation/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,21 +37,18 @@ function admin() {
 }
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  // ⚠️ All restrictions stripped per request — only the bare-minimum
-  // JWT check remains so the endpoint isn't exposed to the open
-  // internet. To be locked back down once the auth flow is debugged.
-  const sb = admin()
-  const authHeader = req.headers.get('authorization') || ''
-  const m = authHeader.match(/^Bearer\s+(.+)$/i)
-  if (!m) return NextResponse.json({ error: 'Unauthorized — no Bearer token' }, { status: 401 })
-  const { data: tokenUser, error: tokenErr } = await sb.auth.getUser(m[1])
-  if (tokenErr || !tokenUser?.user?.id) {
-    return NextResponse.json({
-      error: 'Unauthorized — JWT failed verification',
-      detail: tokenErr?.message || 'no user in token',
-    }, { status: 401 })
-  }
+  // Auth: caller must resolve to a public.users row AND be a
+  // superadmin or partner. `admin` role intentionally not allowed.
+  const me = await getAuthedUser(req)
+  if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const blocked = await blockIfImpersonating(req)
+  if (blocked) return blocked
+
+  const allowed = me.role === 'superadmin' || !!me.is_partner
+  if (!allowed) return NextResponse.json({ error: 'Forbidden — partners or superadmins only' }, { status: 403 })
+
+  const sb = admin()
   const { data: event, error: evErr } = await sb
     .from('events')
     .select('id, store_name, start_date, status')
@@ -57,6 +56,26 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     .maybeSingle()
   if (evErr) return NextResponse.json({ error: evErr.message }, { status: 500 })
   if (!event) return NextResponse.json({ error: 'Event not found' }, { status: 404 })
+
+  const body = await req.json().catch(() => ({}))
+  // force=true skips the cancel-first rule. Reserved for the Admin
+  // Panel "Delete Past Event" tool — gated to superadmin only here
+  // (partners do not get the bypass).
+  const force = body?.force === true || body?.force === 1
+  const isSuperadmin = me.role === 'superadmin'
+  if (event.status !== 'cancelled' && !(force && isSuperadmin)) {
+    return NextResponse.json({
+      error: 'Event must be cancelled first. Use Cancel Event, then Delete Forever.',
+    }, { status: 400 })
+  }
+
+  const confirmText = String(body?.confirm || '').trim()
+  const expected = [event.store_name, event.start_date].filter(Boolean).map(s => s.toLowerCase())
+  if (!expected.includes(confirmText.toLowerCase())) {
+    return NextResponse.json({
+      error: `Type the store name (${event.store_name}) or start date (${event.start_date}) to confirm.`,
+    }, { status: 400 })
+  }
 
   const { error: delErr } = await sb.from('events').delete().eq('id', event.id)
   if (delErr) return NextResponse.json({ error: `Delete failed: ${delErr.message}` }, { status: 500 })
