@@ -160,9 +160,38 @@ export default function AddLeadModal({ tradeShowId, defaultKind = 'trade_show', 
     }
     setScanning(true); setError(null); setScanNotice(null)
     try {
+      // Route through a canvas to force-output JPEG. iPhones default
+      // to HEIC, which the Anthropic Messages API rejects with the
+      // generic "string does not match the expected pattern" error;
+      // canvas re-encoding strips the original mime entirely. Also
+      // resizes to max 1024px wide so giant photos stay under the
+      // payload cap. Mirrors components/scan/ReceiptScanner.tsx.
       const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader()
-        reader.onload = () => resolve(reader.result as string)
+        reader.onload = () => {
+          const raw = reader.result as string
+          const img = document.createElement('img')
+          img.onload = () => {
+            const canvas = document.createElement('canvas')
+            const maxW = 1280
+            let w = img.naturalWidth
+            let h = img.naturalHeight
+            if (w > maxW) { h = Math.round(h * maxW / w); w = maxW }
+            canvas.width = w
+            canvas.height = h
+            const ctx = canvas.getContext('2d')
+            if (!ctx) { resolve(raw); return }
+            ctx.drawImage(img, 0, 0, w, h)
+            resolve(canvas.toDataURL('image/jpeg', 0.85))
+          }
+          img.onerror = () => {
+            // Browsers that can't decode HEIC (older Safari, desktop
+            // Chrome) fall back to raw bytes. The server still
+            // rejects, but the user gets the existing error path.
+            resolve(raw)
+          }
+          img.src = raw
+        }
         reader.onerror = () => reject(new Error('Could not read the file.'))
         reader.readAsDataURL(file)
       })
