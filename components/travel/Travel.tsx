@@ -104,7 +104,16 @@ export default function Travel() {
   }
   const isPastTradeShow = (ts: TradeShow) => ts.end_date < todayStr
 
-  const sorted = [...events].sort((a, b) => b.start_date.localeCompare(a.start_date))
+  // Soonest first — partition into upcoming (asc by start) then past
+  // (desc by start) so the next event is at the top, far-future events
+  // beneath, and any past events surface at the very bottom.
+  const sorted = (() => {
+    const upcoming = [...events].filter(ev => !isPast(ev))
+      .sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''))
+    const past = [...events].filter(ev => isPast(ev))
+      .sort((a, b) => (b.start_date || '').localeCompare(a.start_date || ''))
+    return [...upcoming, ...past]
+  })()
   const scoped = scope === 'mine'
     ? sorted.filter(ev => (ev.workers || []).some((w: any) => w.id === user?.id))
     : sorted
@@ -113,117 +122,127 @@ export default function Travel() {
   const filtered = visible.filter(ev => eventDisplayName(ev, stores).toLowerCase().includes(search.toLowerCase()))
   const visibleTradeShows = (showPast ? tradeShows : tradeShows.filter(ts => !isPastTradeShow(ts)))
     .filter(ts => ts.name.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      const ap = isPastTradeShow(a), bp = isPastTradeShow(b)
+      if (ap !== bp) return ap ? 1 : -1
+      // Both upcoming: ascending. Both past: descending.
+      return ap
+        ? (b.start_date || '').localeCompare(a.start_date || '')
+        : (a.start_date || '').localeCompare(b.start_date || '')
+    })
   const fmt = (ds: string) => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
   const selectedEvent = selection?.kind === 'event' ? events.find(e => e.id === selection.id) || null : null
   const selectedTradeShow = selection?.kind === 'trade_show' ? tradeShows.find(t => t.id === selection.id) || null : null
 
+  // Build the picker option groups (sorted lists computed above).
+  const pickerEventOptions = filtered.map(ev => {
+    const store = stores.find(s => s.id === ev.store_id)
+    const past = isPast(ev)
+    const label = `${past ? '⏳ ' : ''}◆ ${eventDisplayName(ev, stores)}${store?.city ? ` · ${store.city}, ${store.state}` : ''} · ${fmt(ev.start_date)}`
+    return { value: `event:${ev.id}`, label, past }
+  })
+  const pickerTradeShowOptions = visibleTradeShows.map(ts => {
+    const past = isPastTradeShow(ts)
+    const where = [ts.venue_city, ts.venue_state].filter(Boolean).join(', ')
+    const label = `${past ? '⏳ ' : ''}🏢 ${ts.name}${where ? ` · ${where}` : ''} · ${fmt(ts.start_date)}`
+    return { value: `trade_show:${ts.id}`, label, past }
+  })
+  const pickerValue = !selection ? ''
+    : selection.kind === 'unassigned' ? 'unassigned'
+    : `${selection.kind}:${selection.id}`
+
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 60px)', overflow: 'hidden' }}>
-      {/* Event sidebar */}
-      <div style={{ width: 260, flexShrink: 0, borderRight: '1px solid var(--pearl)', display: 'flex', flexDirection: 'column', background: 'var(--cream)' }}>
-        <div style={{ padding: '16px 16px 8px', borderBottom: '1px solid var(--pearl)' }}>
-          <div style={{ fontWeight: 900, fontSize: 16, color: 'var(--ink)', marginBottom: 10 }}>✈️ Travel Share</div>
-          <div style={{ display: 'flex', gap: 4, marginBottom: 8, background: 'var(--cream2)', borderRadius: 8, padding: 3 }}>
-            {([['mine', 'My events'], ['all', 'All events']] as const).map(([id, label]) => {
-              const sel = scope === id
-              return (
-                <button key={id} onClick={() => setScope(id)} style={{
-                  flex: 1, padding: '5px 8px', borderRadius: 6, border: 'none', cursor: 'pointer',
-                  background: sel ? '#fff' : 'transparent',
-                  color: sel ? 'var(--green-dark)' : 'var(--mist)',
-                  fontSize: 11, fontWeight: 700, fontFamily: 'inherit',
-                  boxShadow: sel ? '0 1px 2px rgba(0,0,0,.06)' : 'none',
-                }}>{label}</button>
-              )
-            })}
+    <div style={{ minHeight: 'calc(100vh - 60px)', background: 'var(--cream2)' }}>
+      {/* ── Top header: title + scope toggle + search + picker ─── */}
+      <div style={{
+        background: '#fff', borderBottom: '1px solid var(--pearl)',
+        padding: '14px 20px', position: 'sticky', top: 0, zIndex: 10,
+      }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)', margin: 0 }}>
+              ✈️ Travel Share
+            </h1>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 4, background: 'var(--cream2)', borderRadius: 8, padding: 3 }}>
+                {([['mine', 'My events'], ['all', 'All events']] as const).map(([id, label]) => {
+                  const sel = scope === id
+                  return (
+                    <button key={id} onClick={() => setScope(id)} style={{
+                      padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                      background: sel ? '#fff' : 'transparent',
+                      color: sel ? 'var(--green-dark)' : 'var(--mist)',
+                      fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
+                      boxShadow: sel ? '0 1px 2px rgba(0,0,0,.06)' : 'none',
+                    }}>{label}</button>
+                  )
+                })}
+              </div>
+              {unassignedCount > 0 && (
+                <button onClick={() => setSelection({ kind: 'unassigned' })}
+                  style={{
+                    background: '#FFFBEB', border: '1px solid #D97706',
+                    color: '#92400E', fontSize: 12, fontWeight: 800,
+                    padding: '6px 12px', borderRadius: 999, cursor: 'pointer',
+                    fontFamily: 'inherit',
+                  }}>
+                  ⚠ Unassigned · {unassignedCount}
+                </button>
+              )}
+            </div>
           </div>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search events…" style={{ width: '100%', fontSize: 13 }} />
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1fr) auto', gap: 10, alignItems: 'center' }}>
+            <select
+              value={pickerValue}
+              onChange={e => {
+                const v = e.target.value
+                if (!v) { setSelection(null); return }
+                if (v === 'unassigned') { setSelection({ kind: 'unassigned' }); return }
+                const [kind, id] = v.split(':')
+                setSelection({ kind: kind as 'event' | 'trade_show', id })
+              }}
+              style={{ width: '100%', padding: '8px 10px', fontSize: 13, fontWeight: 600 }}
+            >
+              <option value="">— Pick an event or trade show —</option>
+              {pickerEventOptions.length > 0 && (
+                <optgroup label="Buying events">
+                  {pickerEventOptions.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </optgroup>
+              )}
+              {pickerTradeShowOptions.length > 0 && (
+                <optgroup label="Trade shows">
+                  {pickerTradeShowOptions.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="🔍 Filter…"
+              style={{ width: 'min(220px, 40vw)', padding: '8px 10px', fontSize: 13 }} />
+          </div>
           {pastCount > 0 && (
-            <button onClick={() => setShowPast(p => !p)} style={{
-              background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 8,
-              color: 'var(--mist)', fontSize: 11, fontWeight: 600, textDecoration: 'underline',
-              fontFamily: 'inherit', textAlign: 'left',
-            }}>
-              {showPast
-                ? `Hide ${pastCount} past event${pastCount === 1 ? '' : 's'}`
-                : `Show ${pastCount} past event${pastCount === 1 ? '' : 's'}`}
-            </button>
-          )}
-        </div>
-        <div style={{ flex: 1, overflowY: 'auto' }}>
-          {/* Unassigned pin — only when there's something to action */}
-          {unassignedCount > 0 && (() => {
-            const sel = selection?.kind === 'unassigned'
-            return (
-              <div onClick={() => setSelection({ kind: 'unassigned' })}
-                style={{
-                  padding: '10px 16px', cursor: 'pointer', borderBottom: '1px solid var(--cream2)',
-                  background: sel ? '#FEF3C7' : '#FFFBEB',
-                  borderLeft: sel ? '3px solid #D97706' : '3px solid transparent',
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
-                }}>
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: 13, color: '#92400E' }}>🛂 Unassigned</div>
-                  <div style={{ fontSize: 11, color: '#A16207', marginTop: 2 }}>Place these on an event or trade show</div>
-                </div>
-                <span style={{
-                  background: '#D97706', color: '#fff', fontSize: 11, fontWeight: 800,
-                  padding: '2px 8px', borderRadius: 999,
-                }}>{unassignedCount}</span>
-              </div>
-            )
-          })()}
-
-          {/* Buying events */}
-          {filtered.length > 0 && (
-            <div style={{ padding: '10px 16px 4px', fontSize: 10, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-              Buying Events
+            <div style={{ marginTop: 8 }}>
+              <button onClick={() => setShowPast(p => !p)} style={{
+                background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                color: 'var(--mist)', fontSize: 11, fontWeight: 600, textDecoration: 'underline',
+                fontFamily: 'inherit',
+              }}>
+                {showPast
+                  ? `Hide ${pastCount} past event${pastCount === 1 ? '' : 's'}`
+                  : `Show ${pastCount} past event${pastCount === 1 ? '' : 's'}`}
+              </button>
             </div>
           )}
-          {filtered.map(ev => {
-            const store = stores.find(s => s.id === ev.store_id)
-            const sel = selection?.kind === 'event' && selection.id === ev.id
-            return (
-              <div key={ev.id} onClick={() => setSelection({ kind: 'event', id: ev.id })}
-                style={{
-                  padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid var(--cream2)',
-                  background: sel ? 'var(--green-pale)' : 'transparent',
-                  borderLeft: sel ? '3px solid var(--green)' : '3px solid transparent',
-                }}>
-                <div style={{ fontWeight: 700, fontSize: 13, color: sel ? 'var(--green-dark)' : 'var(--ink)' }}>◆ {eventDisplayName(ev, stores)}</div>
-                <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>{store?.city}, {store?.state} · {fmt(ev.start_date)}</div>
-              </div>
-            )
-          })}
-
-          {/* Trade shows */}
-          {visibleTradeShows.length > 0 && (
-            <div style={{ padding: '10px 16px 4px', fontSize: 10, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-              Trade Shows
-            </div>
-          )}
-          {visibleTradeShows.map(ts => {
-            const sel = selection?.kind === 'trade_show' && selection.id === ts.id
-            return (
-              <div key={ts.id} onClick={() => setSelection({ kind: 'trade_show', id: ts.id })}
-                style={{
-                  padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid var(--cream2)',
-                  background: sel ? 'var(--green-pale)' : 'transparent',
-                  borderLeft: sel ? '3px solid var(--green)' : '3px solid transparent',
-                }}>
-                <div style={{ fontWeight: 700, fontSize: 13, color: sel ? 'var(--green-dark)' : 'var(--ink)' }}>🏢 {ts.name}</div>
-                <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>
-                  {[ts.venue_city, ts.venue_state].filter(Boolean).join(', ')}{(ts.venue_city || ts.venue_state) ? ' · ' : ''}{fmt(ts.start_date)}
-                </div>
-              </div>
-            )
-          })}
         </div>
       </div>
 
       {/* Main content */}
-      <div style={{ flex: 1, overflowY: 'auto', background: 'var(--cream2)' }}>
+      <div style={{ background: 'var(--cream2)', minHeight: 'calc(100vh - 60px - 130px)' }}>
         {!selection ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--mist)' }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>✈️</div>
@@ -375,7 +394,7 @@ function UnassignedView({ user, events, tradeShows, stores, refreshTick, onPlace
                 {events.length > 0 && <optgroup label="Buying events">
                   {events
                     .slice()
-                    .sort((a, b) => b.start_date.localeCompare(a.start_date))
+                    .sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''))
                     .map(ev => {
                       const s = stores.find(x => x.id === ev.store_id)
                       return <option key={ev.id} value={`event:${ev.id}`}>
