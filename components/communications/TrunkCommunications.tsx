@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import { useApp } from '@/lib/context'
 import TemplateList from './TemplateList'
 import TemplateEditor from './TemplateEditor'
+import CommsLogPanel from './CommsLogPanel'
 import SendFlow from './SendFlow'
 import MasterChecklist from './MasterChecklist'
 import type { CommunicationTemplate } from '@/types'
@@ -19,6 +20,7 @@ type View =
   | { kind: 'edit'; template: CommunicationTemplate | null }
   | { kind: 'send'; trunkShowId?: string | null; templateId?: string | null }
   | { kind: 'master' }
+  | { kind: 'log' }
 
 export default function TrunkCommunications() {
   const { user, commsSendIntent, setCommsSendIntent } = useApp()
@@ -75,12 +77,25 @@ export default function TrunkCommunications() {
     )
   }
 
+  if (view.kind === 'log') {
+    return (
+      <div className="p-6" style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <button onClick={() => setView({ kind: 'list' })} className="btn-outline btn-xs">← Back</button>
+          <h1 style={{ fontSize: 20, fontWeight: 900, color: 'var(--ink)', margin: 0 }}>📨 Communications Log — All shows</h1>
+        </div>
+        <CommsLogPanel title="📨 Every send, scheduled or fired" />
+      </div>
+    )
+  }
+
   return (
     <div className="p-6" style={{ maxWidth: 1100, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
         <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)' }}>📨 Trunk Communications</h1>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={() => setView({ kind: 'send' })} className="btn-primary btn-sm">📤 Send a letter</button>
+          <button onClick={() => setView({ kind: 'log' })} className="btn-outline btn-sm">📨 Log</button>
           {isAdmin && (
             <>
               <button onClick={() => setView({ kind: 'master' })} className="btn-outline btn-sm">🗒 Master Checklist</button>

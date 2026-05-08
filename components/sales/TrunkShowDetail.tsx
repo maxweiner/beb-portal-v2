@@ -19,6 +19,7 @@ import SpecialRequestsPanel from './SpecialRequestsPanel'
 import TrunkShowAppointmentsPanel from './TrunkShowAppointmentsPanel'
 import SpiffsPanel from './SpiffsPanel'
 import TrunkShowCommsSection from './TrunkShowCommsSection'
+import CommsLogPanel from '@/components/communications/CommsLogPanel'
 import TrunkShowChecklistSection from './TrunkShowChecklistSection'
 import DatePicker from '@/components/ui/DatePicker'
 import TimePicker from '@/components/ui/TimePicker'
@@ -346,7 +347,12 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
       {/* Pre-event checklist — Trunk Comms phase 10 */}
       <TrunkShowChecklistSection trunkShowId={show.id} setNav={setNav} />
 
-      {/* Communications log — Trunk Comms phase 7 */}
+      {/* Communications log — sent, scheduled, cancelled, failed in
+          one unified panel with inline cancel/reschedule actions. */}
+      <CommsLogPanel trunkShowId={show.id} />
+
+      {/* Legacy comms section — kept for the View PDF / View email /
+          Resend actions which CommsLogPanel doesn't surface yet. */}
       <TrunkShowCommsSection trunkShowId={show.id} setNav={setNav} />
     </div>
   )

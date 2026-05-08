@@ -32,7 +32,7 @@ interface Props {
 export default function SendFlow({
   initialTrunkShowId, initialTemplateId, onClose, onSent,
 }: Props) {
-  const { user } = useApp()
+  const { user, users } = useApp()
   const [shows, setShows] = useState<(TrunkShow & { _store?: TrunkShowStore | null })[]>([])
   const [templates, setTemplates] = useState<CommunicationTemplate[]>([])
   const [trunkShowId, setTrunkShowId] = useState<string>(initialTrunkShowId || '')
@@ -48,6 +48,15 @@ export default function SendFlow({
   const [error, setError] = useState<string | null>(null)
   const [autoFilled, setAutoFilled] = useState(false)
   const [sendingEnabled, setSendingEnabled] = useState<boolean | null>(null)
+
+  // Search box that filters the trunk-show dropdown — matches store
+  // name, city, state, and assigned-rep name (Q5: c).
+  const [showSearch, setShowSearch] = useState('')
+
+  // Schedule-send modal state.
+  const [scheduleOpen, setScheduleOpen] = useState(false)
+  const [scheduleDate, setScheduleDate] = useState('')
+  const [scheduling, setScheduling] = useState(false)
 
   // Load the safety kill-switch state. Defaults to disabled
   // until an admin flips it in Settings.
@@ -121,6 +130,24 @@ export default function SendFlow({
   }, [trunkShowId, templateId, user?.id, templates])
 
   const selectedShow = shows.find(s => s.id === trunkShowId)
+
+  // Filtered dropdown list — matches store name + city + state +
+  // assigned rep's name. The currently-selected show always stays
+  // visible so a search-narrow doesn't make the active row vanish.
+  const filteredShows = (() => {
+    const q = showSearch.trim().toLowerCase()
+    if (!q) return shows
+    return shows.filter(s => {
+      if (s.id === trunkShowId) return true
+      const store = (s as any)._store as TrunkShowStore | null
+      const repName = s.assigned_rep_id
+        ? (users || []).find(u => u.id === s.assigned_rep_id)?.name || ''
+        : ''
+      const hay = [store?.name, store?.city, store?.state, repName]
+        .filter(Boolean).join(' ').toLowerCase()
+      return hay.includes(q)
+    })
+  })()
   const senderEmail = user?.email || ''
   const canSend =
     !!trunkShowId && !!templateId && !!subject.trim() && !!body.trim()
@@ -200,9 +227,17 @@ export default function SendFlow({
           <button onClick={onClose} className="btn-outline btn-xs" style={{ marginBottom: 6 }}>← Back</button>
           <h1 style={{ fontSize: 20, fontWeight: 900, color: 'var(--ink)', margin: 0 }}>📤 Send a letter</h1>
         </div>
-        <button onClick={send} disabled={!canSend} className="btn-primary btn-sm">
-          {sending ? 'Sending…' : '📤 Send Email'}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setScheduleOpen(true)}
+            disabled={!canSend || sending}
+            className="btn-outline btn-sm"
+            title="Schedule this letter to send at 9 AM (store-local) on a future date">
+            📅 Schedule Send
+          </button>
+          <button onClick={send} disabled={!canSend} className="btn-primary btn-sm">
+            {sending ? 'Sending…' : '📤 Send Email'}
+          </button>
+        </div>
       </div>
 
       {sendingEnabled === false && (
@@ -228,9 +263,15 @@ export default function SendFlow({
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div className="field">
             <label className="fl">Trunk show</label>
+            <input
+              value={showSearch}
+              onChange={e => setShowSearch(e.target.value)}
+              placeholder="Search by store, city, state, or rep…"
+              style={{ marginBottom: 6 }}
+            />
             <select value={trunkShowId} onChange={e => setTrunkShowId(e.target.value)}>
               <option value="">— Select trunk show —</option>
-              {shows.map(s => (
+              {filteredShows.map(s => (
                 <option key={s.id} value={s.id}>
                   {(s as any)._store?.name || 'Trunk show'} · {s.start_date}
                 </option>
@@ -307,6 +348,77 @@ export default function SendFlow({
             </div>
           )}
         </>
+      )}
+
+      {scheduleOpen && (
+        <div onClick={() => !scheduling && setScheduleOpen(false)} style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1100,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: '#fff', borderRadius: 12, width: 'min(420px, 100%)',
+            padding: 20, boxShadow: '0 20px 60px rgba(0,0,0,.30)',
+          }}>
+            <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)', margin: '0 0 12px' }}>
+              📅 Schedule Send
+            </h2>
+            <p style={{ fontSize: 13, color: 'var(--ash)', margin: '0 0 14px' }}>
+              The letter will fire at <strong>9:00 AM</strong> in the recipient store's local
+              time zone on the chosen date. You can cancel or reschedule from the
+              Communications log on the trunk show page.
+            </p>
+            <div className="field" style={{ marginBottom: 14 }}>
+              <label className="fl">Send date</label>
+              <input
+                type="date"
+                value={scheduleDate}
+                onChange={e => setScheduleDate(e.target.value)}
+                min={new Date().toISOString().slice(0, 10)}
+              />
+            </div>
+            {error && <div style={{ background: '#fdecea', color: '#7a1f0f', padding: 10, borderRadius: 8, fontSize: 13, marginBottom: 10 }}>{error}</div>}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button onClick={() => setScheduleOpen(false)} disabled={scheduling} className="btn-outline btn-sm">Cancel</button>
+              <button
+                onClick={async () => {
+                  if (!scheduleDate) { setError('Pick a date.'); return }
+                  setScheduling(true); setError(null)
+                  try {
+                    const { data: { session } } = await supabase.auth.getSession()
+                    const res = await fetch('/api/communications/schedule', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+                      },
+                      body: JSON.stringify({
+                        trunk_show_id: trunkShowId,
+                        template_id: templateId,
+                        subject,
+                        body,
+                        to_email: toEmail.trim(),
+                        to_name: toName.trim() || null,
+                        scheduled_for_date: scheduleDate,
+                      }),
+                    })
+                    const json = await res.json().catch(() => ({}))
+                    if (!res.ok) { setError(json.error || `Schedule failed (${res.status})`); return }
+                    setScheduleOpen(false)
+                    setScheduleDate('')
+                    alert(`✅ Scheduled for ${new Date(json.scheduled_for).toLocaleString()} (${json.timezone})`)
+                    onClose()
+                  } finally {
+                    setScheduling(false)
+                  }
+                }}
+                disabled={scheduling || !scheduleDate || !canSend}
+                className="btn-primary btn-sm"
+              >
+                {scheduling ? 'Scheduling…' : 'Schedule'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
