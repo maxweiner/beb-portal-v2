@@ -188,7 +188,12 @@ export default function Schedule({ setNav }: { setNav?: (n: NavPage) => void } =
       localStorage.setItem('beb-show-buying-events', String(showEvents))
     }
   }, [showEvents])
-  const displayedEvents = showEvents ? events : []
+  // Cancelled events drop off the calendar entirely. The cancel
+  // flow (PR #402) flips status='cancelled'; without this filter the
+  // chip still rendered alongside live events.
+  const displayedEvents = showEvents
+    ? events.filter(e => (e as any).status !== 'cancelled')
+    : []
 
   // Brand-scoped shipments. Re-fetches on brand switch.
   useEffect(() => {
