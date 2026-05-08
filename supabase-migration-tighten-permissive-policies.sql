@@ -182,6 +182,7 @@ CREATE POLICY event_waitlist_update ON public.event_waitlist
 -- ─────────────────────────────────────────────────────────────
 
 DROP POLICY IF EXISTS "Authenticated users can insert receipt scans" ON public.receipt_scans;
+DROP POLICY IF EXISTS receipt_scans_insert ON public.receipt_scans;
 CREATE POLICY receipt_scans_insert ON public.receipt_scans
   FOR INSERT TO authenticated
   WITH CHECK (
@@ -191,6 +192,7 @@ CREATE POLICY receipt_scans_insert ON public.receipt_scans
   );
 
 DROP POLICY IF EXISTS "Authenticated users can update receipt scans" ON public.receipt_scans;
+DROP POLICY IF EXISTS receipt_scans_update ON public.receipt_scans;
 CREATE POLICY receipt_scans_update ON public.receipt_scans
   FOR UPDATE TO authenticated
   USING (
@@ -205,6 +207,7 @@ CREATE POLICY receipt_scans_update ON public.receipt_scans
   );
 
 DROP POLICY IF EXISTS "Authenticated users can delete receipt scans" ON public.receipt_scans;
+DROP POLICY IF EXISTS receipt_scans_delete ON public.receipt_scans;
 CREATE POLICY receipt_scans_delete ON public.receipt_scans
   FOR DELETE TO authenticated
   USING (
