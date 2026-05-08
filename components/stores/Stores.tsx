@@ -171,7 +171,7 @@ export default function Stores() {
     <div className="p-6 max-w-6xl mx-auto">
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)' }}>Jewelry Stores</h2>
+        <h2 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)' }}>Buying Event Stores</h2>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search stores…" style={{ width: 180 }} />
