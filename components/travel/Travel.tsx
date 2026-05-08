@@ -15,6 +15,11 @@ interface Reservation {
   type: 'flight' | 'hotel' | 'rental_car'; vendor: string; confirmation_number: string
   details: any; check_in: string; check_out: string; departure_at: string; arrival_at: string
   amount: number; created_at: string
+  /** 'pending' = someone's getting it (no confirmation yet); 'booked' = done. */
+  status?: 'pending' | 'booked'
+  /** Who's responsible for completing this booking (often someone
+   *  other than the buyer — e.g. "Tom is getting Sami's rental car"). */
+  assigned_to_user_id?: string | null
 }
 interface TradeShow {
   id: string; name: string; venue_city: string | null; venue_state: string | null
@@ -549,18 +554,21 @@ function ReservationsView({ ev, user }: { ev: Event; user: any }) {
   // "no_flight" at the same time.
   const setBuyerStatus = async (
     buyerId: string,
-    kind: 'flight' | 'hotel',
+    kind: 'flight' | 'hotel' | 'rental_car',
     state: 'self' | 'none' | 'clear',
   ) => {
-    const exclusive = kind === 'flight'
-      ? ['self_flight', 'no_flight']
-      : ['self_hotel', 'no_hotel']
+    const exclusive =
+      kind === 'flight'     ? ['self_flight', 'no_flight'] :
+      kind === 'hotel'      ? ['self_hotel',  'no_hotel']  :
+      ['no_rental_car']  // no "self" for rental car — group ride concept
     await supabase.from('travel_acknowledgments').delete()
       .eq('event_id', ev.id).eq('buyer_id', buyerId).in('type', exclusive)
     if (state !== 'clear') {
-      const type = state === 'self'
-        ? (kind === 'flight' ? 'self_flight' : 'self_hotel')
-        : (kind === 'flight' ? 'no_flight' : 'no_hotel')
+      const type =
+        kind === 'rental_car' ? 'no_rental_car' :
+        state === 'self'
+          ? (kind === 'flight' ? 'self_flight' : 'self_hotel')
+          : (kind === 'flight' ? 'no_flight'  : 'no_hotel')
       await supabase.from('travel_acknowledgments').insert({
         event_id: ev.id, buyer_id: buyerId, type,
       })
@@ -678,14 +686,12 @@ function ReservationsView({ ev, user }: { ev: Event; user: any }) {
                       icon="🏨" kind="hotel" state={hotelState} canMark={canMark}
                       onSet={(s) => setBuyerStatus(w.id, 'hotel', s)}
                     />
-                    <span style={{
-                      fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 99,
-                      background: (hasCar || ackNoCar) ? 'var(--green-pale)' : 'rgba(239,68,68,.08)',
-                      color: (hasCar || ackNoCar) ? 'var(--green-dark)' : '#dc2626',
-                      border: `1px solid ${(hasCar || ackNoCar) ? 'var(--green3)' : 'rgba(239,68,68,.2)'}`,
-                    }}>
-                      🚗 {(hasCar || ackNoCar) ? '✓' : '✗'}
-                    </span>
+                    <TravelItemControl
+                      icon="🚗" kind="rental_car"
+                      state={hasCar ? 'booked' : ackNoCar ? 'none' : 'missing'}
+                      canMark={canMark}
+                      onSet={(s) => setBuyerStatus(w.id, 'rental_car', s)}
+                    />
                   </div>
                   <div style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--mist)' }}>
                     {wRes.length} reservation{wRes.length !== 1 ? 's' : ''} · ${wRes.reduce((s, r) => s + (r.amount || 0), 0).toLocaleString()}
@@ -810,6 +816,45 @@ function ReservationCard({ res, user, workers, onDelete, onReload }: {
     setAssigning(false)
   }
 
+  // Toggle pending ↔ booked. Routes through the same PATCH endpoint
+  // the amount edit uses.
+  const setStatus = async (status: 'pending' | 'booked') => {
+    try {
+      const r = await fetch(`/api/travel-reservations/${res.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        alert('Status save failed: ' + (j.error || r.status))
+      } else {
+        onReload()
+      }
+    } catch (e: any) {
+      alert('Network error: ' + (e?.message || 'unknown'))
+    }
+  }
+
+  // Set who's responsible for completing this booking. Same endpoint.
+  const setHandler = async (uid: string) => {
+    try {
+      const r = await fetch(`/api/travel-reservations/${res.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assigned_to_user_id: uid || null }),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        alert('Handler save failed: ' + (j.error || r.status))
+      } else {
+        onReload()
+      }
+    } catch (e: any) {
+      alert('Network error: ' + (e?.message || 'unknown'))
+    }
+  }
+
   const fmtDate = (d: string) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'
   const fmtDateTime = (d: string) => d ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'
 
@@ -823,6 +868,16 @@ function ReservationCard({ res, user, workers, onDelete, onReload }: {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <div style={{ fontWeight: 900, fontSize: 15, color: 'var(--ink)' }}>{res.vendor || meta.label}</div>
+            {/* Status pill — pending = "Tom's getting it", booked = done. */}
+            {res.status === 'pending' ? (
+              <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 99, background: '#FEF3C7', color: '#92400E', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                ⏳ Pending
+              </span>
+            ) : (
+              <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 99, background: '#D1FAE5', color: '#065F46', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                ✓ Booked
+              </span>
+            )}
             {res.confirmation_number && (
               <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'var(--cream2)', color: 'var(--mist)', fontFamily: 'monospace' }}>
                 {res.confirmation_number}
@@ -912,11 +967,46 @@ function ReservationCard({ res, user, workers, onDelete, onReload }: {
             </>}
           </div>
           {(isOwn || isAdmin) && (
-            <div style={{ marginTop: 14, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ marginTop: 14, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              {/* Mark Booked / Mark Pending — explicit confirm
+                  state, mirrored on the server's status column. */}
+              {res.status === 'pending' ? (
+                <button onClick={() => setStatus('booked')}
+                  className="btn-primary btn-sm"
+                  title="Mark this reservation as fully booked / done">
+                  ✓ Mark booked
+                </button>
+              ) : (
+                <button onClick={() => setStatus('pending')}
+                  className="btn-outline btn-sm"
+                  title="Flip back to pending if the booking fell through or is in progress">
+                  ⏳ Mark pending
+                </button>
+              )}
+
+              {/* Who's getting it (separate from the buyer it's FOR). */}
+              {workers.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                    Getting it
+                  </span>
+                  <select
+                    value={res.assigned_to_user_id || ''}
+                    onChange={e => setHandler(e.target.value)}
+                    style={{ fontSize: 12, padding: '4px 6px' }}
+                  >
+                    <option value="">— No one yet —</option>
+                    {workers.map(w => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {isAdmin && workers.length > 0 && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
-                    Assigned to
+                    For buyer
                   </span>
                   <select
                     value={res.buyer_id || ''}
@@ -1270,12 +1360,18 @@ export function travelItemState(
   hasReservation: boolean,
   acks: Acknowledgment[],
   buyerId: string,
-  kind: 'flight' | 'hotel',
+  kind: 'flight' | 'hotel' | 'rental_car',
 ): ItemState {
   if (hasReservation) return 'booked'
-  const selfType = kind === 'flight' ? 'self_flight' : 'self_hotel'
-  const noType = kind === 'flight' ? 'no_flight' : 'no_hotel'
-  if (acks.some(a => a.buyer_id === buyerId && a.type === selfType)) return 'self'
+  const selfType =
+    kind === 'flight' ? 'self_flight' :
+    kind === 'hotel'  ? 'self_hotel'  :
+    null  // rental_car has no "I have one" self-state
+  const noType =
+    kind === 'flight'     ? 'no_flight' :
+    kind === 'hotel'      ? 'no_hotel'  :
+    'no_rental_car'
+  if (selfType && acks.some(a => a.buyer_id === buyerId && a.type === selfType)) return 'self'
   if (acks.some(a => a.buyer_id === buyerId && a.type === noType)) return 'none'
   return 'missing'
 }
@@ -1284,7 +1380,7 @@ function TravelItemControl({
   icon, kind, state, canMark, onSet,
 }: {
   icon: string
-  kind: 'flight' | 'hotel'
+  kind: 'flight' | 'hotel' | 'rental_car'
   state: ItemState
   canMark: boolean
   onSet: (s: 'self' | 'none' | 'clear') => void
@@ -1296,7 +1392,7 @@ function TravelItemControl({
     missing: { bg: 'rgba(239,68,68,.08)',   fg: '#dc2626',           bd: 'rgba(239,68,68,.20)',   label: '✗ None' },
   }
   const s = styles[state]
-  const noun = kind === 'flight' ? 'flight' : 'hotel'
+  const noun = kind === 'flight' ? 'flight' : kind === 'hotel' ? 'hotel' : 'car'
 
   return (
     <span style={{
@@ -1307,11 +1403,14 @@ function TravelItemControl({
       <span>{icon} {s.label}</span>
       {canMark && state === 'missing' && (
         <>
-          <button
-            onClick={() => onSet('self')}
-            title={`Mark "I have a ${noun}" for this buyer`}
-            style={miniBtn('var(--ash)')}
-          >Have</button>
+          {/* Rental car has no "I have one" self-state — group ride. */}
+          {kind !== 'rental_car' && (
+            <button
+              onClick={() => onSet('self')}
+              title={`Mark "I have a ${noun}" for this buyer`}
+              style={miniBtn('var(--ash)')}
+            >Have</button>
+          )}
           <button
             onClick={() => onSet('none')}
             title={`Mark "Don't need a ${noun}" for this buyer`}
