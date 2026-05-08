@@ -35,6 +35,7 @@ export default function Stores() {
   const [selected, setSelected] = useState<Store | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [search, setSearch] = useState('')
+  const [showInactive, setShowInactive] = useState(false)
   const [saving, setSaving] = useState(false)
   const [newStore, setNewStore] = useState({
     name: '', address: '', city: '', state: '', zip: '', lat: 0, lng: 0, website: '', owner_phone: ''
@@ -68,11 +69,14 @@ export default function Stores() {
       .reduce((total, ev) => total + ev.days.reduce((s, d) => s + (d.dollars10 || 0) + (d.dollars5 || 0), 0), 0)
   }
 
-  const filtered = stores.filter(s =>
-    s.name.toLowerCase().includes(search.toLowerCase()) ||
-    (s.city || '').toLowerCase().includes(search.toLowerCase()) ||
-    (s.state || '').toLowerCase().includes(search.toLowerCase())
-  ).sort((a, b) => {
+  const filtered = stores.filter(s => {
+    // Hide dormant stores by default; "Show inactive" reveals them.
+    if (!showInactive && s.active === false) return false
+    const q = search.toLowerCase()
+    return s.name.toLowerCase().includes(q) ||
+      (s.city || '').toLowerCase().includes(q) ||
+      (s.state || '').toLowerCase().includes(q)
+  }).sort((a, b) => {
     if (sort === 'name') return a.name.localeCompare(b.name)
     if (sort === 'state') return (a.state || '').localeCompare(b.state || '') || a.name.localeCompare(b.name)
     if (sort === 'spent') return storeSpend(b.id) - storeSpend(a.id)
@@ -169,6 +173,12 @@ export default function Stores() {
             <option value="state">Sort: By State</option>
             <option value="spent">Sort: Amount Spent ({new Date().getFullYear()})</option>
           </select>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--mist)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={showInactive}
+              onChange={e => setShowInactive(e.target.checked)}
+              style={{ width: 'auto' }} />
+            Show inactive
+          </label>
           <button className="btn-primary" onClick={() => setShowForm(true)}>+ Add Store</button>
         </div>
       </div>
@@ -231,11 +241,22 @@ export default function Stores() {
               {filtered.map(s => {
                 const ec = events.filter(e => e.store_id === s.id).length
                 const spent = storeSpend(s.id)
+                const inactive = s.active === false
                 return (
-                  <tr key={s.id} onClick={() => setSelected(s)} style={{ cursor: 'pointer' }}
+                  <tr key={s.id} onClick={() => setSelected(s)}
+                    style={{ cursor: 'pointer', opacity: inactive ? 0.55 : 1 }}
                     onMouseOver={e => (e.currentTarget as HTMLElement).style.background = 'var(--cream2)'}
                     onMouseOut={e => (e.currentTarget as HTMLElement).style.background = ''}>
-                    <td><span style={{ color: 'var(--green-dark)', fontWeight: 700 }}>◆ {s.name}</span></td>
+                    <td>
+                      <span style={{ color: 'var(--green-dark)', fontWeight: 700 }}>◆ {s.name}</span>
+                      {inactive && (
+                        <span style={{
+                          marginLeft: 8, padding: '1px 6px', borderRadius: 4,
+                          background: 'var(--cream2)', color: 'var(--mist)',
+                          fontSize: 10, fontWeight: 800, letterSpacing: '.04em',
+                        }}>INACTIVE</span>
+                      )}
+                    </td>
                     <td>{s.city || '—'}</td>
                     <td>{s.state || '—'}</td>
                     <td>{ec}</td>
@@ -403,6 +424,34 @@ function StoreModal({ store, onClose, refetchStores, onDelete }: {
         </div>
 
         <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+          {/* Inactive flag — when checked the store is dormant and
+              hidden from the default list. Reusable for archiving
+              stores that are no longer customers without losing
+              history. */}
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '10px 14px', borderRadius: 8,
+            background: details.active === false ? '#FFFBEB' : 'var(--cream2)',
+            border: '1px solid ' + (details.active === false ? '#FCD34D' : 'var(--pearl)'),
+            fontSize: 13, fontWeight: 700, cursor: 'pointer',
+            color: details.active === false ? '#92400E' : 'var(--ash)',
+          }}>
+            <input
+              type="checkbox"
+              checked={details.active === false}
+              onChange={async e => {
+                const next = !e.target.checked
+                setDetails((p: any) => ({ ...p, active: next }))
+                await withTimeout(
+                  supabase.from('stores').update({ active: next }).eq('id', store.id)
+                )
+                await refetchStores()
+              }}
+              style={{ width: 'auto' }}
+            />
+            <span>{details.active === false ? '⚠ Inactive — hidden from list' : 'Inactive (dormant store)'}</span>
+          </label>
 
           {/* Google Map */}
           {mapUrl && (
