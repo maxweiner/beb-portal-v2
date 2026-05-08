@@ -63,11 +63,20 @@ type LastEventLesson = {
   notes: LastEventNote[]
 }
 
+type SlimStatusFilter    = 'all' | 'reserved' | 'booked'
+type SlimHorizonFilter   = 'all' | 'week' | '14d' | '30d'
+type SlimReadinessFilter = 'all' | 'attention' | 'ready'
+
+const SLIM_STATUS_KEY    = 'beb-pre-event-slim-status'
+const SLIM_HORIZON_KEY   = 'beb-pre-event-slim-horizon'
+const SLIM_READINESS_KEY = 'beb-pre-event-slim-readiness'
+
 interface Props {
   setNav?: (n: NavPage) => void
   /** When true, each event row collapses to a single line (store name +
    *  dates) and expands to the full readiness card on click. Accordion
-   *  behavior — only one row open at a time. */
+   *  behavior — only one row open at a time. Also enables the
+   *  Status/Horizon/Readiness filter pills. */
   slim?: boolean
 }
 
@@ -75,6 +84,24 @@ export default function PreEventTab({ setNav, slim = false }: Props) {
   const { stores, events: ctxEvents, user, brand, setTravelIntent, users } = useApp()
   // Accordion state for slim mode. Null when nothing is open.
   const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  // Slim-mode filters. Persisted in localStorage so a partner who
+  // always wants "Reserved + Next 14d" doesn't have to re-pick.
+  const [slimStatus, setSlimStatus] = useState<SlimStatusFilter>('all')
+  const [slimHorizon, setSlimHorizon] = useState<SlimHorizonFilter>('all')
+  const [slimReadiness, setSlimReadiness] = useState<SlimReadinessFilter>('all')
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const s = window.localStorage.getItem(SLIM_STATUS_KEY)
+    const h = window.localStorage.getItem(SLIM_HORIZON_KEY)
+    const r = window.localStorage.getItem(SLIM_READINESS_KEY)
+    if (s === 'all' || s === 'reserved' || s === 'booked') setSlimStatus(s)
+    if (h === 'all' || h === 'week' || h === '14d' || h === '30d') setSlimHorizon(h)
+    if (r === 'all' || r === 'attention' || r === 'ready') setSlimReadiness(r)
+  }, [])
+  useEffect(() => { try { window.localStorage.setItem(SLIM_STATUS_KEY, slimStatus) } catch {} }, [slimStatus])
+  useEffect(() => { try { window.localStorage.setItem(SLIM_HORIZON_KEY, slimHorizon) } catch {} }, [slimHorizon])
+  useEffect(() => { try { window.localStorage.setItem(SLIM_READINESS_KEY, slimReadiness) } catch {} }, [slimReadiness])
   const [events, setEvents] = useState<Event[]>(ctxEvents || [])
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([])
   const [travel, setTravel] = useState<TravelRow[]>([])
@@ -178,22 +205,6 @@ export default function PreEventTab({ setNav, slim = false }: Props) {
     return () => { cancelled = true }
   }, [brand])
 
-  const upcoming = useMemo(() => {
-    const todayIso = new Date().toISOString().slice(0, 10)
-    const q = search.trim().toLowerCase()
-    return events
-      .filter(e => e.status !== 'cancelled')
-      .filter(e => !!e.start_date && eventEndIso(e.start_date) >= todayIso)
-      .filter(e => {
-        if (!q) return true
-        const name = eventDisplayName(e, stores).toLowerCase()
-        const store = stores.find(s => s.id === e.store_id)
-        const cityState = `${store?.city || ''} ${store?.state || ''}`.toLowerCase()
-        return name.includes(q) || cityState.includes(q)
-      })
-      .sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''))
-  }, [events, search, stores])
-
   const campaignsByEvent = useMemo(() => {
     const m = new Map<string, CampaignRow[]>()
     for (const c of campaigns) {
@@ -241,6 +252,69 @@ export default function PreEventTab({ setNav, slim = false }: Props) {
     return m
   }, [assetOrders])
 
+  // Worst-of all the readiness gates per event. Mirrors the chip-level
+  // logic inside EventReadinessCard so the slim-mode "🚨 Needs
+  // attention / ✅ Ready" filter operates on the same definition the
+  // card surfaces. Computed at the parent so we can filter the list
+  // without rendering every card.
+  const worstReadinessByEvent = useMemo(() => {
+    const m = new Map<string, 'red' | 'yellow' | 'green'>()
+    for (const ev of events) {
+      m.set(ev.id, computeWorstGate(
+        ev,
+        campaignsByEvent.get(ev.id) || [],
+        travelByEvent.get(ev.id) || [],
+        travelAcksByEvent.get(ev.id) || [],
+        liveBookingStores.has(ev.store_id),
+        assetOrdersByEvent.get(ev.id) || [],
+      ))
+    }
+    return m
+  }, [events, campaignsByEvent, travelByEvent, travelAcksByEvent, liveBookingStores, assetOrdersByEvent])
+
+  const upcoming = useMemo(() => {
+    const todayIso = new Date().toISOString().slice(0, 10)
+    const q = search.trim().toLowerCase()
+    // Compute the horizon ceiling once. 'all' = no upper bound.
+    const horizonDays =
+      slim && slimHorizon === 'week' ? 7 :
+      slim && slimHorizon === '14d'  ? 14 :
+      slim && slimHorizon === '30d'  ? 30 : null
+    const horizonCeil = horizonDays === null ? null : (() => {
+      const d = new Date(todayIso + 'T12:00:00')
+      d.setDate(d.getDate() + horizonDays)
+      return d.toISOString().slice(0, 10)
+    })()
+    return events
+      .filter(e => e.status !== 'cancelled')
+      .filter(e => !!e.start_date && eventEndIso(e.start_date) >= todayIso)
+      .filter(e => {
+        if (!slim) return true
+        if (slimStatus === 'reserved') return e.status === 'reserved'
+        if (slimStatus === 'booked')   return e.status === 'scheduled'
+        return true
+      })
+      .filter(e => {
+        if (!horizonCeil) return true
+        return !!e.start_date && e.start_date <= horizonCeil
+      })
+      .filter(e => {
+        if (!slim || slimReadiness === 'all') return true
+        const lvl = worstReadinessByEvent.get(e.id) || 'green'
+        if (slimReadiness === 'attention') return lvl === 'red'
+        if (slimReadiness === 'ready')     return lvl !== 'red'
+        return true
+      })
+      .filter(e => {
+        if (!q) return true
+        const name = eventDisplayName(e, stores).toLowerCase()
+        const store = stores.find(s => s.id === e.store_id)
+        const cityState = `${store?.city || ''} ${store?.state || ''}`.toLowerCase()
+        return name.includes(q) || cityState.includes(q)
+      })
+      .sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''))
+  }, [events, search, stores, slim, slimStatus, slimHorizon, slimReadiness, worstReadinessByEvent])
+
   async function markBriefed(ev: Event, briefed: boolean) {
     const ok = briefed
       ? confirm(`Mark staff as briefed for "${eventDisplayName(ev, stores)}"?`)
@@ -283,6 +357,13 @@ export default function PreEventTab({ setNav, slim = false }: Props) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {slim && (
+        <SlimFilterBar
+          status={slimStatus}     onStatus={setSlimStatus}
+          horizon={slimHorizon}   onHorizon={setSlimHorizon}
+          readiness={slimReadiness} onReadiness={setSlimReadiness}
+        />
+      )}
       <SearchBox value={search} onChange={setSearch} placeholder="Search by store or city…" />
 
       {upcoming.length === 0 && (
@@ -1247,6 +1328,98 @@ function findOverlapping(buyerId: string, currentEv: Event, allEvents: Event[]):
  * affordance signal expand/collapse on click. The store name takes
  * the lead since it's how staff actually identify an event.
  */
+/**
+ * Slim-mode filter bar: 3 pill groups (Status / Horizon / Readiness).
+ * Each group is a tab-strip; selections persist in localStorage at
+ * the parent level. Wraps to multiple rows on narrow screens.
+ */
+function SlimFilterBar({
+  status, onStatus, horizon, onHorizon, readiness, onReadiness,
+}: {
+  status: SlimStatusFilter
+  onStatus: (v: SlimStatusFilter) => void
+  horizon: SlimHorizonFilter
+  onHorizon: (v: SlimHorizonFilter) => void
+  readiness: SlimReadinessFilter
+  onReadiness: (v: SlimReadinessFilter) => void
+}) {
+  return (
+    <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+      <PillGroup
+        label="Status"
+        value={status}
+        onChange={(v) => onStatus(v as SlimStatusFilter)}
+        options={[
+          { value: 'all',      label: 'All' },
+          { value: 'reserved', label: '📌 Reserved' },
+          { value: 'booked',   label: '✅ Booked' },
+        ]}
+      />
+      <PillGroup
+        label="Time"
+        value={horizon}
+        onChange={(v) => onHorizon(v as SlimHorizonFilter)}
+        options={[
+          { value: 'all',  label: 'All' },
+          { value: 'week', label: 'This week' },
+          { value: '14d',  label: 'Next 14d' },
+          { value: '30d',  label: 'Next 30d' },
+        ]}
+      />
+      <PillGroup
+        label="Readiness"
+        value={readiness}
+        onChange={(v) => onReadiness(v as SlimReadinessFilter)}
+        options={[
+          { value: 'all',       label: 'All' },
+          { value: 'attention', label: '🚨 Needs attention' },
+          { value: 'ready',     label: '✅ Ready' },
+        ]}
+      />
+    </div>
+  )
+}
+
+function PillGroup({
+  label, value, onChange, options,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  options: { value: string; label: string }[]
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <span style={{
+        fontSize: 10, fontWeight: 800, color: 'var(--mist)',
+        textTransform: 'uppercase', letterSpacing: '.06em',
+      }}>{label}</span>
+      <div style={{
+        display: 'flex', gap: 2, background: 'var(--cream2)',
+        padding: 2, borderRadius: 6,
+      }}>
+        {options.map(o => {
+          const sel = value === o.value
+          return (
+            <button key={o.value} onClick={() => onChange(o.value)}
+              style={{
+                fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
+                padding: '4px 10px', border: 'none', borderRadius: 4,
+                background: sel ? '#fff' : 'transparent',
+                color: sel ? 'var(--green-dark)' : 'var(--mist)',
+                cursor: 'pointer',
+                boxShadow: sel ? '0 1px 2px rgba(0,0,0,.06)' : 'none',
+                whiteSpace: 'nowrap',
+              }}>
+              {o.label}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function SlimHeader({
   display, range, reserved, expanded, onClick,
 }: {
@@ -1294,6 +1467,73 @@ function SlimHeader({
       }}>▶</span>
     </button>
   )
+}
+
+/**
+ * Aggregate the per-event readiness gates (buyers, travel, marketing,
+ * booking, assets, briefed) into one worst-of level used by the slim-
+ * mode "🚨 Needs attention / ✅ Ready" filter. Mirrors the chip-level
+ * computation inside EventReadinessCard — keep them in sync. Returns
+ * 'red' if any gate is red, 'yellow' if any is yellow, else 'green'.
+ */
+function computeWorstGate(
+  ev: Event,
+  campaigns: CampaignRow[],
+  travel: TravelRow[],
+  travelAcks: TravelAckRow[],
+  bookingLive: boolean,
+  assetOrders: EventPromotionalAssetOrder[],
+): 'red' | 'yellow' | 'green' {
+  const workers = (ev.workers || []).filter(w => !(w as any).deleted)
+  const buyersNeeded = ev.buyers_needed ?? null
+  const buyerStatus =
+    buyersNeeded == null ? 'green' :
+    workers.length >= buyersNeeded ? 'green' :
+    workers.length === 0 ? 'red' : 'yellow'
+
+  const travelOverridden = !!ev.travel_override_at
+  const travelComplete = workers.filter(w => {
+    const myRes = travel.filter(t => t.buyer_id === w.id)
+    const myAcks = travelAcks.filter(a => a.buyer_id === w.id)
+    const hasFlight = myRes.some(t => t.type === 'flight')
+      || myAcks.some(a => a.type === 'self_flight' || a.type === 'no_flight')
+    const hasHotel = myRes.some(t => t.type === 'hotel')
+      || myAcks.some(a => a.type === 'self_hotel' || a.type === 'no_hotel')
+    return hasFlight && hasHotel
+  }).length
+  const travelStatus = travelOverridden ? 'green' :
+    workers.length === 0 ? 'green' :  // can't fail on travel without buyers
+    travelComplete === workers.length ? 'green' :
+    travelComplete === 0 ? 'red' : 'yellow'
+
+  const flows: ('vdp' | 'postcard' | 'newspaper')[] = ['vdp', 'postcard', 'newspaper']
+  const flowLevels = flows.map(f => {
+    const c = campaigns.find(cc => cc.flow_type === f)
+    if (!c) return 'red' as const
+    if (c.status === 'done' || c.paid_at) return 'green' as const
+    if (c.status === 'payment' || c.status === 'proofing') return 'yellow' as const
+    return 'red' as const
+  })
+  const marketingOverridden = !!ev.marketing_override_at
+  const marketingStatus = marketingOverridden ? 'green' :
+    flowLevels.every(c => c === 'green') ? 'green' :
+    flowLevels.some(c => c !== 'red') ? 'yellow' : 'red'
+
+  const bookingStatus = bookingLive ? 'green' : 'red'
+
+  const assetCount = assetOrders.length
+  const deliveredCount = assetOrders.filter(o => o.delivered_at).length
+  const assetsOverridden = !!ev.assets_override_at
+  const assetStatus = assetsOverridden ? 'green' :
+    assetCount === 0 ? 'red' :
+    deliveredCount === assetCount ? 'green' : 'yellow'
+
+  const briefedStatus = ev.staff_briefed_at ? 'green' : 'red'
+
+  const all = [buyerStatus, travelStatus, marketingStatus, bookingStatus, assetStatus, briefedStatus]
+  if (all.some(l => l === 'red')) return 'red'
+  if (all.some(l => l === 'yellow')) return 'yellow'
+  return 'green'
 }
 
 function eventDayKeys(ev: { start_date?: string | null }): string[] {
