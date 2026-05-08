@@ -319,7 +319,7 @@ export default function AddLeadModal({ tradeShowId, onCreated, onClose }: Props)
       <div style={{ width: 'min(680px, 100%)', background: '#fff', borderRadius: 12, padding: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)' }}>
-            {step === 'scan'    && '🎯 New Lead — Step 1 of 3 · Scan card'}
+            {step === 'scan'    && '🎯 New Lead — Step 1 of 3 · Pre-fill'}
             {step === 'kind'    && '🎯 New Lead — Step 2 of 3 · Pick kind'}
             {step === 'profile' && (isTradeShowMode
               ? '🎯 New Lead (linked to this show)'
@@ -343,39 +343,89 @@ export default function AddLeadModal({ tradeShowId, onCreated, onClose }: Props)
           </div>
         )}
 
-        {/* ── Step 1: Scan ─────────────────────────────────────── */}
+        {/* ── Step 1: Pre-fill ──────────────────────────────────
+             Two ways to populate the lead before you hit the kind
+             picker: scan a physical card, or search the store on
+             Google. Skip if you'd rather type by hand. */}
         {step === 'scan' && (
           <>
+            {/* Card scan */}
             <div style={{
               background: 'var(--green-pale)', border: '1px dashed var(--green3)',
-              borderRadius: 10, padding: 22, marginBottom: 14,
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+              borderRadius: 10, padding: 18, marginBottom: 12,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
               textAlign: 'center',
             }}>
-              <div style={{ fontSize: 36 }}>📇</div>
+              <div style={{ fontSize: 30 }}>📇</div>
               <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--green-dark)' }}>
-                Start with a business card
+                Scan a business card
               </div>
               <div style={{ fontSize: 12, color: 'var(--green-dark)', opacity: 0.75, maxWidth: 380 }}>
-                Tap to use your camera — we'll auto-fill name, company, contact info, and address from the card.
-                Review everything in the next step.
+                Camera reads name, company, contact info, address.
               </div>
               <button
                 onClick={() => setScannerOpen(true)}
                 disabled={scanning || busy}
                 className="btn-primary"
-                style={{ minHeight: 44, padding: '8px 22px', fontSize: 14 }}
+                style={{ minHeight: 40, padding: '8px 20px', fontSize: 13 }}
               >
-                {scanning ? 'Scanning…' : '📷 Scan business card'}
+                {scanning ? 'Scanning…' : '📷 Open camera'}
               </button>
             </div>
+
+            {/* OR divider */}
+            {!isTradeShowMode && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                margin: '4px 0 12px',
+                color: 'var(--mist)', fontSize: 11, fontWeight: 700, letterSpacing: '.06em',
+              }}>
+                <div style={{ flex: 1, height: 1, background: 'var(--cream2)' }} />
+                <span>OR</span>
+                <div style={{ flex: 1, height: 1, background: 'var(--cream2)' }} />
+              </div>
+            )}
+
+            {/* Google Places lookup — only for store-pitch flows */}
+            {!isTradeShowMode && (
+              <div style={{
+                background: '#fff', border: '1px dashed var(--pearl)',
+                borderRadius: 10, padding: 18, marginBottom: 12,
+              }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink)', marginBottom: 4 }}>
+                  🔍 Look the store up on Google
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 10 }}>
+                  Auto-fills name, address, phone, website. Same lookup the Stores page uses.
+                </div>
+                <StoreSearch
+                  placeholder="Type the store name…"
+                  onSelect={(p: PlaceData) => {
+                    setDraft(prev => ({
+                      ...prev,
+                      company_name:    prev.company_name    || p.name || '',
+                      address_line_1:  prev.address_line_1  || p.address || '',
+                      city:            prev.city            || p.city || '',
+                      state:           prev.state           || p.state || '',
+                      zip:             prev.zip             || p.zip || '',
+                      website:         prev.website         || p.website || '',
+                      store_phone:     prev.store_phone     || p.phone || '',
+                    }))
+                    void runDupCheck(p.name, p.city, p.state)
+                    setScanNotice('✓ Found on Google. Review the fields in the next step.')
+                    setStep('kind')
+                  }}
+                />
+              </div>
+            )}
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ fontSize: 12, color: 'var(--mist)' }}>
-                Don't have a card? Skip ahead and fill the fields by hand.
+                Or skip ahead and fill the fields by hand.
               </div>
               <button onClick={() => setStep(isTradeShowMode ? 'profile' : 'kind')}
                 className="btn-outline btn-sm">
-                Skip scan →
+                Skip →
               </button>
             </div>
             {scanNotice && (
