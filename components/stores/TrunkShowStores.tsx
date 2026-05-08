@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import Checkbox from '@/components/ui/Checkbox'
@@ -52,6 +52,8 @@ interface TrunkShowStore {
   primary_contact_email: string | null
   primary_contact_name: string | null
   contacts: TrunkShowStoreContact[]
+  /** Base-64 data URL — same shape buying-event stores use. */
+  store_image_url: string | null
   created_at?: string
   updated_at?: string
 }
@@ -60,6 +62,7 @@ const COLS = `id, trunk_shows, active, name, ts_reps, trunk_rep_user_id, comment
   address_1, address_2, city, state, zip, store_phone,
   contact_1, contact_2, contact_3, email_1, email_2, url,
   primary_contact_email, primary_contact_name, contacts,
+  store_image_url,
   created_at, updated_at`
 
 export default function TrunkShowStores() {
@@ -274,8 +277,8 @@ export default function TrunkShowStores() {
                   onMouseOut={e => (e.currentTarget as HTMLElement).style.background = ''}>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      {(s as any).store_image_url ? (
-                        <img src={(s as any).store_image_url} alt=""
+                      {s.store_image_url ? (
+                        <img src={s.store_image_url} alt=""
                           style={{ width: 28, height: 28, borderRadius: 4, objectFit: 'cover', flexShrink: 0, border: '1px solid var(--pearl)' }} />
                       ) : (
                         <span style={{
@@ -519,9 +522,70 @@ function Modal({ store, trunkReps, onClose, onSaved, onDelete }: {
   onDelete: () => void | Promise<void>
 }) {
   const [details, setDetails] = useState<TrunkShowStore>({ ...store })
+  const imgRef = useRef<HTMLInputElement>(null)
+  const [imageOpen, setImageOpen] = useState(false)
+  const [copyOpen, setCopyOpen] = useState(false)
+  const [copyMatches, setCopyMatches] = useState<Array<{ id: string; name: string; city: string | null; state: string | null; store_image_url: string }> | null>(null)
+  const [copyBusy, setCopyBusy] = useState(false)
 
   // Keep local copy in sync if parent swaps the selected store
   useEffect(() => { setDetails({ ...store }) }, [store.id])
+
+  // Logo upload — base-64 data URL, mirrors the buying-event side.
+  const uploadLogo = async (file: File) => {
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      const dataUrl = e.target?.result as string
+      const { data, error } = await supabase
+        .from('trunk_show_stores').update({ store_image_url: dataUrl }).eq('id', store.id)
+        .select(COLS).single()
+      if (error) { alert('Upload failed: ' + error.message); return }
+      onSaved(data as TrunkShowStore)
+      setDetails(p => ({ ...p, store_image_url: dataUrl }))
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const removeLogo = async () => {
+    if (!confirm('Remove store logo?')) return
+    const { data, error } = await supabase
+      .from('trunk_show_stores').update({ store_image_url: null }).eq('id', store.id)
+      .select(COLS).single()
+    if (error) { alert('Remove failed: ' + error.message); return }
+    onSaved(data as TrunkShowStore)
+    setDetails(p => ({ ...p, store_image_url: null }))
+  }
+
+  // "Copy from buying stores" — looks for a public.stores row with the
+  // same (name, state) that has a logo. Multiple matches → user picks.
+  const findBuyingLogos = async () => {
+    setCopyBusy(true)
+    setCopyMatches(null)
+    setCopyOpen(true)
+    try {
+      let q = supabase.from('stores')
+        .select('id, name, city, state, store_image_url')
+        .ilike('name', store.name)
+        .not('store_image_url', 'is', null)
+      if (store.state) q = q.eq('state', store.state.toUpperCase())
+      const { data } = await q
+      const rows = ((data || []) as any[]).filter(r => !!r.store_image_url) as Array<{ id: string; name: string; city: string | null; state: string | null; store_image_url: string }>
+      setCopyMatches(rows)
+    } finally {
+      setCopyBusy(false)
+    }
+  }
+
+  const copyLogoFrom = async (dataUrl: string) => {
+    const { data, error } = await supabase
+      .from('trunk_show_stores').update({ store_image_url: dataUrl }).eq('id', store.id)
+      .select(COLS).single()
+    if (error) { alert('Copy failed: ' + error.message); return }
+    onSaved(data as TrunkShowStore)
+    setDetails(p => ({ ...p, store_image_url: dataUrl }))
+    setCopyOpen(false)
+    setCopyMatches(null)
+  }
 
   // Single autosave watcher: any field change debounces a save of the
   // full editable column set. Simpler than per-section autosaves and
@@ -656,6 +720,97 @@ function Modal({ store, trunkReps, onClose, onSaved, onDelete }: {
             <div className="card-title">Comments<AutosaveIndicator status={status} /></div>
             <TA label="" value={details.comments} onChange={v => set('comments', v)} />
           </div>
+
+          {/* Store logo — collapsed by default. Upload a base-64
+              image, or copy a matching logo from the buying-event
+              side via the "Copy from buying stores" shortcut. */}
+          <div style={{ borderTop: '1px solid var(--pearl)', paddingTop: 14 }}>
+            <button
+              type="button"
+              onClick={() => setImageOpen(o => !o)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                fontSize: 12, fontWeight: 700, color: 'var(--ash)', fontFamily: 'inherit',
+              }}>
+              <span style={{
+                display: 'inline-block', width: 10, transition: 'transform .15s ease',
+                transform: imageOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+              }}>▶</span>
+              Store logo{details.store_image_url ? '' : ' (none)'}
+            </button>
+            {imageOpen && (
+              <div style={{ marginTop: 10 }}>
+                {details.store_image_url ? (
+                  <>
+                    <img src={details.store_image_url} alt="Store logo"
+                      style={{ maxWidth: 200, borderRadius: 'var(--r)', border: '1px solid var(--pearl)', display: 'block', marginBottom: 10 }} />
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button className="btn-primary btn-sm" onClick={() => imgRef.current?.click()}>Replace</button>
+                      <button className="btn-outline btn-sm" onClick={findBuyingLogos}>📥 Copy from buying stores</button>
+                      <button className="btn-danger btn-sm" onClick={removeLogo}>Remove</button>
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 10 }}>No logo uploaded yet.</p>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button className="btn-primary btn-sm" onClick={() => imgRef.current?.click()}>Upload Image</button>
+                      <button className="btn-outline btn-sm" onClick={findBuyingLogos}>📥 Copy from buying stores</button>
+                    </div>
+                  </div>
+                )}
+                <input ref={imgRef} type="file" accept="image/*" style={{ display: 'none' }}
+                  onChange={e => { if (e.target.files?.[0]) uploadLogo(e.target.files[0]) }} />
+              </div>
+            )}
+          </div>
+
+          {copyOpen && (
+            <div onClick={() => !copyBusy && setCopyOpen(false)} style={{
+              position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1100,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12,
+            }}>
+              <div onClick={e => e.stopPropagation()} style={{
+                background: '#fff', borderRadius: 12, width: 'min(440px, 100%)', padding: 20,
+                boxShadow: '0 20px 60px rgba(0,0,0,.30)',
+              }}>
+                <h3 style={{ fontSize: 16, fontWeight: 800, margin: '0 0 12px' }}>📥 Copy logo from buying stores</h3>
+                {copyBusy ? (
+                  <div style={{ fontSize: 13, color: 'var(--mist)' }}>Searching…</div>
+                ) : !copyMatches || copyMatches.length === 0 ? (
+                  <div style={{ fontSize: 13, color: 'var(--mist)' }}>
+                    No buying-event store with a logo matched <strong>{store.name}</strong>
+                    {store.state ? ` (${store.state})` : ''}. Upload one manually instead.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {copyMatches.map(m => (
+                      <button key={m.id} onClick={() => copyLogoFrom(m.store_image_url)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 12, padding: 10,
+                          background: '#fff', border: '1px solid var(--pearl)', borderRadius: 8,
+                          cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+                        }}>
+                        <img src={m.store_image_url} alt=""
+                          style={{ width: 44, height: 44, borderRadius: 4, objectFit: 'cover', flexShrink: 0, border: '1px solid var(--pearl)' }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)' }}>{m.name}</div>
+                          {(m.city || m.state) && (
+                            <div style={{ fontSize: 11, color: 'var(--mist)' }}>{[m.city, m.state].filter(Boolean).join(', ')}</div>
+                          )}
+                        </div>
+                        <span style={{ fontSize: 11, color: 'var(--green-dark)', fontWeight: 700 }}>Use →</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+                  <button className="btn-outline btn-sm" onClick={() => setCopyOpen(false)} disabled={copyBusy}>Close</button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Inactive flag — kept at the bottom near the Delete row
               since it's a "lifecycle" action, not part of the daily
