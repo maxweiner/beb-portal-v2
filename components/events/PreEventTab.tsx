@@ -88,10 +88,13 @@ export default function PreEventTab({ setNav, slim = false }: Props) {
   const [assetEditorFor, setAssetEditorFor] = useState<Event | null>(null)
   const [cancelEventId, setCancelEventId] = useState<string | null>(null)
 
-  // isAdmin in this file gates surfaces like Promote / Cancel. Partners
-  // also get cancel rights (matches the legacy view + the server-side
-  // /api/events/[id]/cancel auth check).
+  // isAdmin in this file gates non-destructive surfaces (Promote, edit
+  // buyers, etc). Partners + admins/superadmins all qualify here.
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || user?.is_partner === true
+  // Cancel + delete-forever are partner/superadmin-only — narrower than
+  // isAdmin so plain admins can't trigger destructive ops. Mirrors the
+  // server gate in /api/events/[id]/cancel.
+  const canCancel = user?.role === 'superadmin' || user?.is_partner === true
 
   // Refresh from DB so we pick up status / workers changes that happened
   // in the legacy view, and load the readiness signals.
@@ -312,6 +315,7 @@ export default function PreEventTab({ setNav, slim = false }: Props) {
           allEvents={events}
           stores={stores}
           isAdmin={isAdmin}
+          canCancel={canCancel}
           currentUserId={user?.id}
           currentUserName={user?.name || null}
           setNav={setNav}
@@ -382,6 +386,9 @@ interface CardProps {
   allEvents: Event[]
   stores: ReturnType<typeof useApp>['stores']
   isAdmin: boolean
+  /** Narrower than isAdmin: only superadmin + partners. Drives the
+   *  Cancel button's visibility so plain admins don't see it. */
+  canCancel: boolean
   currentUserId: string | undefined
   currentUserName: string | null
   setNav?: (n: NavPage) => void
@@ -403,7 +410,7 @@ interface CardProps {
 
 function EventReadinessCard({
   ev, campaigns, travel, travelAcks, bookingLive, assetOrders, lastLesson, allEvents, stores,
-  isAdmin, currentUserId, currentUserName, setNav, onOpenTravel, onPromoted, onAssetEdit, onMarkBriefed, onSetOverride, onCarriedForward, onCancelClick,
+  isAdmin, canCancel, currentUserId, currentUserName, setNav, onOpenTravel, onPromoted, onAssetEdit, onMarkBriefed, onSetOverride, onCarriedForward, onCancelClick,
   allUsers, onWorkersChange,
   slim = false, expanded = true, onToggleExpand,
 }: CardProps) {
@@ -529,7 +536,7 @@ function EventReadinessCard({
             {reserved && isAdmin && (
               <button onClick={promote} className="btn-primary btn-sm">✅ Promote to Booked</button>
             )}
-            {isAdmin && (
+            {canCancel && (
               <button
                 onClick={onCancelClick}
                 className="btn-outline btn-sm"
@@ -558,7 +565,7 @@ function EventReadinessCard({
             {reserved && isAdmin && (
               <button onClick={promote} className="btn-primary btn-sm">✅ Promote to Booked</button>
             )}
-            {isAdmin && (
+            {canCancel && (
               <button
                 onClick={onCancelClick}
                 className="btn-outline btn-sm"

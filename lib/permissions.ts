@@ -8,6 +8,17 @@ export function isSuperAdmin(user: { role?: Role | null } | null | undefined): b
   return user?.role === 'superadmin'
 }
 
+/**
+ * Buying-event cancel + delete-forever are partner/superadmin-only
+ * actions. Mirrors the server gate in /api/events/[id]/cancel and
+ * /api/events/[id]/delete-forever; keep both in sync.
+ */
+export function canCancelEvent(
+  user: { role?: Role | null; is_partner?: boolean | null } | null | undefined,
+): boolean {
+  return user?.role === 'superadmin' || user?.is_partner === true
+}
+
 export function isWorkerAssigned(
   event: { workers?: { id: string }[] | null } | null | undefined,
   userId: string | null | undefined,

@@ -6,7 +6,7 @@ import BuyerCustomerView from '@/components/customers/BuyerCustomerView'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import { isMobileDevice } from '@/lib/mobile'
-import { canEditEvent, isAdmin as roleIsAdmin, isWorkerAssigned } from '@/lib/permissions'
+import { canEditEvent, isAdmin as roleIsAdmin, isWorkerAssigned, canCancelEvent } from '@/lib/permissions'
 import { fmtMoney } from '@/lib/format'
 import DatePicker from '@/components/ui/DatePicker'
 import { eventSpend, eventCommission, daySpend, dayHasData } from '@/lib/eventSpend'
@@ -90,6 +90,9 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   const { stores, users, user, brand, setEvents: setContextEvents, setDayEntryIntent } = useApp()
   const isAdmin = roleIsAdmin(user)
   const isSuperAdmin = user?.role === 'superadmin'
+  // Cancel + delete-forever are partner/superadmin-only — keeps the
+  // UI in sync with the server gate.
+  const canCancel = canCancelEvent(user)
 
   const [events, setEvents] = useState<Event[]>([])
   const [eventsLoaded, setEventsLoaded] = useState(false)
@@ -971,8 +974,8 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                         ...(isAdmin ? [{ id: 'spend', icon: '💰', label: 'Ad spend', onTap: () => setSpendOpen(spendOpen === ev.id ? null : ev.id) }] : []),
                         { id: 'notes',   icon: '📝', label: 'Notes',      onTap: () => setNotesEvent(ev) },
                         { id: 'pdf',     icon: '⤓',  label: 'Download PDF', onTap: () => downloadPdf(ev) },
-                        ...(isAdmin && ev.status !== 'cancelled' ? [{ id: 'cancel', icon: '🚫', label: 'Cancel', danger: true, onTap: () => setCancelEventId(ev.id) }] : []),
-                        ...(isAdmin && ev.status === 'cancelled' ? [{ id: 'delete-forever', icon: '🗑', label: 'Delete forever', danger: true, onTap: () => deleteEventForever(ev) }] : []),
+                        ...(canCancel && ev.status !== 'cancelled' ? [{ id: 'cancel', icon: '🚫', label: 'Cancel', danger: true, onTap: () => setCancelEventId(ev.id) }] : []),
+                        ...(canCancel && ev.status === 'cancelled' ? [{ id: 'delete-forever', icon: '🗑', label: 'Delete forever', danger: true, onTap: () => deleteEventForever(ev) }] : []),
                       ].map((btn, i, arr) => (
                         <button key={btn.id} onClick={e => { e.stopPropagation(); btn.onTap() }} style={{
                           flex: 1, background: 'none', border: 'none',
@@ -1283,8 +1286,8 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
                       ...(isAdmin ? [{ id: 'spend', icon: '💰', label: 'Ad spend', onTap: () => setSpendOpen(spendOpen === ev.id ? null : ev.id) }] : []),
                       { id: 'notes',   icon: '📝', label: 'Notes',      onTap: () => setNotesEvent(ev) },
                       { id: 'pdf',     icon: '⤓',  label: 'Download PDF', onTap: () => downloadPdf(ev) },
-                      ...(isAdmin && ev.status !== 'cancelled' ? [{ id: 'cancel', icon: '🚫', label: 'Cancel', danger: true, onTap: () => setCancelEventId(ev.id) }] : []),
-                      ...(isAdmin && ev.status === 'cancelled' ? [{ id: 'delete-forever', icon: '🗑', label: 'Delete forever', danger: true, onTap: () => deleteEventForever(ev) }] : []),
+                      ...(canCancel && ev.status !== 'cancelled' ? [{ id: 'cancel', icon: '🚫', label: 'Cancel', danger: true, onTap: () => setCancelEventId(ev.id) }] : []),
+                      ...(canCancel && ev.status === 'cancelled' ? [{ id: 'delete-forever', icon: '🗑', label: 'Delete forever', danger: true, onTap: () => deleteEventForever(ev) }] : []),
                     ].map(btn => (
                       <button key={btn.id} onClick={e => { e.stopPropagation(); btn.onTap() }} style={{
                         flex: 1, background: 'transparent', border: 'none',
