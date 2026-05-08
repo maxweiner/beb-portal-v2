@@ -108,6 +108,62 @@ function trunkShowDays(t: TrunkShowOverlay): string[] {
   return out
 }
 
+/**
+ * Per-week bar layout for any date-ranged item (event / trade / trunk).
+ * Returns a list of segments with grid-column placement + a track index
+ * so multiple overlapping items stack visually without colliding.
+ *
+ * Greedy track assignment, sorted by length-desc + start-asc so longer
+ * bars take the top tracks (typical month-calendar look).
+ */
+interface WeekSegment<T> {
+  item: T
+  startCol: number   // 0-6
+  span: number       // 1-7
+  isStart: boolean   // bar's first column matches the item's actual start day
+  isEnd: boolean     // bar's last column matches the item's actual end day
+  track: number
+}
+function computeWeekSegments<T>(
+  weekDates: string[],  // 7 ISO date strings
+  items: T[],
+  getRange: (item: T) => { start: string | null; end: string | null },
+): WeekSegment<T>[] {
+  const weekStart = weekDates[0]
+  const weekEnd = weekDates[6]
+  type Tmp = Omit<WeekSegment<T>, 'track'>
+  const tmp: Tmp[] = []
+  for (const item of items) {
+    const r = getRange(item)
+    if (!r.start || !r.end) continue
+    if (r.end < weekStart || r.start > weekEnd) continue
+    const segStart = r.start < weekStart ? weekStart : r.start
+    const segEnd   = r.end   > weekEnd   ? weekEnd   : r.end
+    const startCol = weekDates.indexOf(segStart)
+    const endCol   = weekDates.indexOf(segEnd)
+    if (startCol < 0 || endCol < 0) continue
+    tmp.push({
+      item,
+      startCol,
+      span: endCol - startCol + 1,
+      isStart: r.start === segStart,
+      isEnd:   r.end   === segEnd,
+    })
+  }
+  // Longer first; ties go to earlier start so packing is deterministic.
+  tmp.sort((a, b) => (b.span - a.span) || (a.startCol - b.startCol))
+  const out: WeekSegment<T>[] = []
+  for (const s of tmp) {
+    let track = 0
+    while (out.some(t =>
+      t.track === track &&
+      !(s.startCol + s.span - 1 < t.startCol || s.startCol > t.startCol + t.span - 1)
+    )) track++
+    out.push({ ...s, track })
+  }
+  return out
+}
+
 export default function Schedule({ setNav }: { setNav?: (n: NavPage) => void } = {}) {
   const { events, stores, users, user, brand, setTradeShowIntent, setTrunkShowIntent } = useApp()
   const [view, setView] = useState<ViewMode>('month')
@@ -506,13 +562,11 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)' }}>
-        {cells.map((day, i) => {
+        {/* Mobile path: one cell per day with dots — kept as-is. */}
+        {isNarrow && cells.map((day, i) => {
           const dayEvs = day ? eventsOnDay(day) : []
           const isToday = day ? ds(day) === todayStr : false
-          const dayVacs = day ? vacationsOnDay(day) : []
           const dayShips = day ? shipmentsOnDay(day) : []
-          const visibleCount = isNarrow ? 2 : 5
-          const overflow = dayEvs.length - visibleCount
           const isSelected = isNarrow && day === selectedDay
           // ── MOBILE: mini calendar with dots, tap to expand below ──
           if (isNarrow && day) {
@@ -572,122 +626,253 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
               }} />
             )
           }
-          return (
-            <div key={i} style={{
-              minHeight: 140, padding: '8px 8px',
-              borderRight: '1px solid var(--cream2)', borderBottom: '1px solid var(--cream2)',
-              background: !day ? 'rgba(0,0,0,.02)' : isToday ? 'rgba(45,106,79,.05)' : 'var(--cream)',
-            }}>
-              {day && (
-                <>
-                  <div style={{
-                    width: 26, height: 26, borderRadius: '50%',
-                    fontSize: 13, fontWeight: isToday ? 900 : 600,
-                    color: isToday ? '#fff' : 'var(--ash)', background: isToday ? 'var(--green)' : 'transparent',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4,
-                  }}>{day}</div>
-                  {day && tradesOnDay(day).map(t => (
-                    <div
-                      key={`trade-${t.id}`}
-                      onClick={onOpenTradeShow ? (e) => { e.stopPropagation(); onOpenTradeShow(t.id) } : undefined}
-                      title={`Trade Show — ${t.name}\n${t.start_date} – ${t.end_date}${t.venue_city ? ` · ${t.venue_city}, ${t.venue_state || ''}` : ''}\nClick to open`}
-                      style={{
-                        background: CALENDAR_COLORS.trade.light,
-                        color: CALENDAR_COLORS.trade.text,
-                        border: `1px solid ${CALENDAR_COLORS.trade.main}`,
-                        fontSize: 11, fontWeight: 700,
-                        padding: '3px 7px', borderRadius: 4,
-                        marginBottom: 3, overflow: 'hidden',
-                        whiteSpace: 'nowrap', textOverflow: 'ellipsis', lineHeight: 1.2,
-                        cursor: onOpenTradeShow ? 'pointer' : 'default',
-                      }}>
-                      🎪 {t.name}
+          return null
+        })}
+      </div>
+
+      {/* Desktop month grid: each week is its own grid container so
+          multi-day buying events / trade shows / trunk shows can render
+          as continuous bars that span columns. */}
+      {!isNarrow && (() => {
+        // Split the 42-cell grid into 6 weeks of 7 cells each.
+        const weeks: { days: { day: number | null; iso: string | null; isToday: boolean }[] }[] = []
+        for (let w = 0; w < cells.length / 7; w++) {
+          const days = []
+          for (let c = 0; c < 7; c++) {
+            const day = cells[w * 7 + c]
+            const iso = day ? ds(day) : null
+            days.push({ day, iso, isToday: iso === todayStr })
+          }
+          weeks.push({ days })
+        }
+        return (
+          <div>
+            {weeks.map((week, wIdx) => {
+              const weekIsoDates = week.days.map(d => d.iso || '')
+              // Compute connected-bar segments for each layer.
+              const evSegs = computeWeekSegments(weekIsoDates, events, ev => {
+                if (!ev.start_date) return { start: null, end: null }
+                const days = evDays(ev)
+                return { start: ev.start_date, end: days[days.length - 1] || ev.start_date }
+              })
+              const tradeSegs = computeWeekSegments(weekIsoDates, tradeShows, t => ({
+                start: t.start_date, end: t.end_date,
+              }))
+              const trunkSegs = computeWeekSegments(weekIsoDates, trunkShows, t => ({
+                start: t.start_date, end: t.end_date,
+              }))
+              // All bars share one stack of tracks so visually they
+              // don't collide. Recompute global tracks across the merged
+              // set.
+              const merged = [
+                ...tradeSegs.map(s => ({ ...s, kind: 'trade' as const })),
+                ...trunkSegs.map(s => ({ ...s, kind: 'trunk' as const })),
+                ...evSegs.map(s => ({ ...s, kind: 'event' as const })),
+              ]
+              merged.sort((a, b) => (b.span - a.span) || (a.startCol - b.startCol))
+              const placed: typeof merged = []
+              for (const s of merged) {
+                let track = 0
+                while (placed.some(p =>
+                  p.track === track &&
+                  !(s.startCol + s.span - 1 < p.startCol || s.startCol > p.startCol + p.span - 1)
+                )) track++
+                placed.push({ ...s, track })
+              }
+              const trackCount = placed.reduce((m, s) => Math.max(m, s.track + 1), 0)
+              return (
+                <div key={wIdx} style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(7, 1fr)',
+                  position: 'relative',
+                  borderBottom: '1px solid var(--cream2)',
+                }}>
+                  {/* Layer 1: per-day backgrounds (full week height) */}
+                  {week.days.map((d, c) => (
+                    <div key={`bg-${c}`} style={{
+                      gridColumn: c + 1, gridRow: '1 / -1',
+                      borderRight: c < 6 ? '1px solid var(--cream2)' : undefined,
+                      background: !d.day ? 'rgba(0,0,0,.02)'
+                                : d.isToday ? 'rgba(45,106,79,.05)'
+                                : 'var(--cream)',
+                      minHeight: 140,
+                    }} />
+                  ))}
+                  {/* Layer 2: day numbers */}
+                  {week.days.map((d, c) => (
+                    <div key={`num-${c}`} style={{
+                      gridColumn: c + 1, gridRow: 1,
+                      padding: '6px 8px 4px', position: 'relative', zIndex: 1,
+                    }}>
+                      {d.day && (
+                        <div style={{
+                          width: 26, height: 26, borderRadius: '50%',
+                          fontSize: 13, fontWeight: d.isToday ? 900 : 600,
+                          color: d.isToday ? '#fff' : 'var(--ash)',
+                          background: d.isToday ? 'var(--green)' : 'transparent',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>{d.day}</div>
+                      )}
                     </div>
                   ))}
-                  {day && trunksOnDay(day).map(t => {
+                  {/* Layer 3: connected bars */}
+                  {placed.map((s, idx) => {
+                    const trackRow = s.track + 2  // row 1 = day numbers
+                    const isHead = s.isStart
+                    const isTail = s.isEnd
+                    if (s.kind === 'event') {
+                      const ev = s.item as Event
+                      const staffing = eventStaffing(ev)
+                      const reserved = ev.status === 'reserved'
+                      const chip = eventChipStyle(FAMILY_BUYING, reserved)
+                      return (
+                        <div key={`bar-ev-${idx}`} style={{
+                          gridColumn: `${s.startCol + 1} / span ${s.span}`,
+                          gridRow: trackRow, padding: '0 2px', zIndex: 1, position: 'relative',
+                        }}>
+                          <div
+                            onClick={() => onSelect(ev)}
+                            title={`${ev.store_name} — ${ev.start_date}${reserved ? ' (Save the Date)' : ''}`}
+                            style={{
+                              background: chip.background, color: chip.color, border: chip.border,
+                              fontSize: 12, fontWeight: 700,
+                              padding: '4px 8px',
+                              borderTopLeftRadius:    isHead ? 4 : 0,
+                              borderBottomLeftRadius: isHead ? 4 : 0,
+                              borderTopRightRadius:    isTail ? 4 : 0,
+                              borderBottomRightRadius: isTail ? 4 : 0,
+                              marginBottom: 2, cursor: 'pointer',
+                              overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+                              lineHeight: 1.2,
+                              borderLeftWidth:  isHead ? undefined : 0,
+                              borderRightWidth: isTail ? undefined : 0,
+                              position: 'relative',
+                              paddingRight: staffing.understaffed && isTail ? 22 : 8,
+                            }}>
+                            {isHead && '◆ '}{isHead ? ev.store_name : ' '}
+                            {staffing.understaffed && isTail && staffing.needed != null && (
+                              <span style={{ position: 'absolute', top: 2, right: 2 }}>
+                                <UnderstaffedBadge assigned={staffing.assigned} needed={staffing.needed} variant="icon" />
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    }
+                    if (s.kind === 'trade') {
+                      const t = s.item as TradeShowOverlay
+                      return (
+                        <div key={`bar-tr-${idx}`} style={{
+                          gridColumn: `${s.startCol + 1} / span ${s.span}`,
+                          gridRow: trackRow, padding: '0 2px', zIndex: 1, position: 'relative',
+                        }}>
+                          <div
+                            onClick={onOpenTradeShow ? (e) => { e.stopPropagation(); onOpenTradeShow(t.id) } : undefined}
+                            title={`Trade Show — ${t.name}\n${t.start_date} – ${t.end_date}${t.venue_city ? ` · ${t.venue_city}, ${t.venue_state || ''}` : ''}\nClick to open`}
+                            style={{
+                              background: CALENDAR_COLORS.trade.light,
+                              color: CALENDAR_COLORS.trade.text,
+                              border: `1px solid ${CALENDAR_COLORS.trade.main}`,
+                              fontSize: 11, fontWeight: 700,
+                              padding: '3px 7px',
+                              borderTopLeftRadius:    isHead ? 4 : 0,
+                              borderBottomLeftRadius: isHead ? 4 : 0,
+                              borderTopRightRadius:    isTail ? 4 : 0,
+                              borderBottomRightRadius: isTail ? 4 : 0,
+                              borderLeftWidth:  isHead ? undefined : 0,
+                              borderRightWidth: isTail ? undefined : 0,
+                              marginBottom: 2,
+                              overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+                              lineHeight: 1.2,
+                              cursor: onOpenTradeShow ? 'pointer' : 'default',
+                            }}>
+                            {isHead && '🎪 '}{isHead ? t.name : ' '}
+                          </div>
+                        </div>
+                      )
+                    }
+                    // trunk
+                    const t = s.item as TrunkShowOverlay
                     const rep = t.assigned_rep_id
                       ? users.find((u: any) => u.id === t.assigned_rep_id)?.name?.split(' ')[0]
                       : null
                     return (
-                      <div
-                        key={`trunk-${t.id}`}
-                        onClick={onOpenTrunkShow ? (e) => { e.stopPropagation(); onOpenTrunkShow(t.id) } : undefined}
-                        title={`Trunk Show — ${t.store_name}\n${t.start_date} – ${t.end_date}${t.city ? ` · ${t.city}, ${t.state || ''}` : ''}${rep ? `\nRep: ${rep}` : '\nUnassigned'}\nClick to open`}
-                        style={{
-                          background: CALENDAR_COLORS.trunk.light,
-                          color: CALENDAR_COLORS.trunk.text,
-                          border: `1px solid ${CALENDAR_COLORS.trunk.main}`,
-                          fontSize: 11, fontWeight: 700,
-                          padding: '3px 7px', borderRadius: 4,
-                          marginBottom: 3, overflow: 'hidden',
-                          whiteSpace: 'nowrap', textOverflow: 'ellipsis', lineHeight: 1.2,
-                          cursor: onOpenTrunkShow ? 'pointer' : 'default',
-                        }}>
-                        💼 {t.store_name}{rep ? ` · ${rep}` : ''}
+                      <div key={`bar-ts-${idx}`} style={{
+                        gridColumn: `${s.startCol + 1} / span ${s.span}`,
+                        gridRow: trackRow, padding: '0 2px', zIndex: 1, position: 'relative',
+                      }}>
+                        <div
+                          onClick={onOpenTrunkShow ? (e) => { e.stopPropagation(); onOpenTrunkShow(t.id) } : undefined}
+                          title={`Trunk Show — ${t.store_name}\n${t.start_date} – ${t.end_date}${t.city ? ` · ${t.city}, ${t.state || ''}` : ''}${rep ? `\nRep: ${rep}` : '\nUnassigned'}\nClick to open`}
+                          style={{
+                            background: CALENDAR_COLORS.trunk.light,
+                            color: CALENDAR_COLORS.trunk.text,
+                            border: `1px solid ${CALENDAR_COLORS.trunk.main}`,
+                            fontSize: 11, fontWeight: 700,
+                            padding: '3px 7px',
+                            borderTopLeftRadius:    isHead ? 4 : 0,
+                            borderBottomLeftRadius: isHead ? 4 : 0,
+                            borderTopRightRadius:    isTail ? 4 : 0,
+                            borderBottomRightRadius: isTail ? 4 : 0,
+                            borderLeftWidth:  isHead ? undefined : 0,
+                            borderRightWidth: isTail ? undefined : 0,
+                            marginBottom: 2,
+                            overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+                            lineHeight: 1.2,
+                            cursor: onOpenTrunkShow ? 'pointer' : 'default',
+                          }}>
+                          {isHead && '💼 '}{isHead ? t.store_name + (rep ? ` · ${rep}` : '') : ' '}
+                        </div>
                       </div>
                     )
                   })}
-                  {dayEvs.slice(0, visibleCount).map(ev => {
-                    const staffing = eventStaffing(ev)
-                    const reserved = ev.status === 'reserved'
-                    const chip = eventChipStyle(FAMILY_BUYING, reserved)
+                  {/* Layer 4: per-day decorations (shipments + vacations)
+                      below the bars. They live in their own grid row so
+                      bars don't push them around. */}
+                  {week.days.map((d, c) => {
+                    if (!d.day) return null
+                    const dayShips = shipmentsOnDay(d.day)
+                    const dayVacs = vacationsOnDay(d.day)
+                    if (dayShips.length === 0 && dayVacs.length === 0) return null
                     return (
-                      <div
-                        key={ev.id}
-                        onClick={() => onSelect(ev)}
-                        title={`${ev.store_name} — ${ev.start_date}${reserved ? ' (Save the Date)' : ''}`}
-                        style={{
-                          position: 'relative',
-                          background: chip.background, color: chip.color,
-                          border: chip.border,
-                          fontSize: 12, fontWeight: 700,
-                          padding: '4px 7px', borderRadius: 4,
-                          marginBottom: 3, cursor: 'pointer', overflow: 'hidden',
-                          whiteSpace: 'nowrap', textOverflow: 'ellipsis', lineHeight: 1.2,
-                          paddingRight: staffing.understaffed ? 22 : 7,
-                        }}>
-                        ◆ {ev.store_name}
-                        {staffing.understaffed && staffing.needed != null && (
-                          <span style={{ position: 'absolute', top: 2, right: 2 }}>
-                            <UnderstaffedBadge assigned={staffing.assigned} needed={staffing.needed} variant="icon" />
-                          </span>
-                        )}
+                      <div key={`dec-${c}`} style={{
+                        gridColumn: c + 1,
+                        gridRow: trackCount + 2,
+                        padding: '4px 8px 8px',
+                        zIndex: 1, position: 'relative',
+                        display: 'flex', flexDirection: 'column', gap: 2,
+                      }}>
+                        {dayShips.map(s => (
+                          <div key={s.id}
+                            onClick={() => onSelectShipment(s)}
+                            title={`Time to ship ${s.store_name} — ${s.jewelry_box_count}J + ${s.silver_box_count}S`}
+                            style={{
+                              background: '#fff8eb', color: '#92400e',
+                              border: '1px dashed #F59E0B',
+                              fontSize: 11, fontWeight: 800,
+                              padding: '3px 6px', borderRadius: 4,
+                              cursor: 'pointer', overflow: 'hidden',
+                              whiteSpace: 'nowrap', textOverflow: 'ellipsis', lineHeight: 1.2,
+                            }}>📦 Ship {s.store_name}</div>
+                        ))}
+                        {dayVacs.map(v => (
+                          <div key={v.id} title={v.note || 'Vacation'} style={{
+                            fontSize: 9, padding: '1px 5px', borderRadius: 99,
+                            background: v.isMe ? 'var(--green-pale)' : 'var(--cream2)',
+                            color: v.isMe ? 'var(--green-dark)' : 'var(--mist)',
+                            fontWeight: 700, alignSelf: 'flex-start', whiteSpace: 'nowrap',
+                            border: v.isMe ? '1px solid var(--green3)' : '1px solid var(--pearl)',
+                          }}>☀ {v.userName}</div>
+                        ))}
                       </div>
                     )
                   })}
-                  {overflow > 0 && (
-                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mist)', padding: '2px 4px' }}>
-                      +{overflow} more
-                    </div>
-                  )}
-                  {dayShips.map(s => (
-                    <div key={s.id}
-                      onClick={() => onSelectShipment(s)}
-                      title={`Time to ship ${s.store_name} — ${s.jewelry_box_count}J + ${s.silver_box_count}S`}
-                      style={{
-                        background: '#fff8eb', color: '#92400e',
-                        border: '1px dashed #F59E0B',
-                        fontSize: 11, fontWeight: 800,
-                        padding: '3px 6px', borderRadius: 4, marginBottom: 3,
-                        cursor: 'pointer', overflow: 'hidden',
-                        whiteSpace: 'nowrap', textOverflow: 'ellipsis', lineHeight: 1.2,
-                      }}>📦 Ship {s.store_name}</div>
-                  ))}
-                  {dayVacs.map(v => (
-                    <div key={v.id} title={v.note || 'Vacation'} style={{
-                      fontSize: 9, padding: '1px 5px', borderRadius: 99, marginTop: 2,
-                      background: v.isMe ? 'var(--green-pale)' : 'var(--cream2)',
-                      color: v.isMe ? 'var(--green-dark)' : 'var(--mist)',
-                      fontWeight: 700, display: 'inline-block', whiteSpace: 'nowrap',
-                      border: v.isMe ? '1px solid var(--green3)' : '1px solid var(--pearl)',
-                    }}>☀ {v.userName}</div>
-                  ))}
-                </>
-              )}
-            </div>
-          )
-        })}
-      </div>
+                </div>
+              )
+            })}
+          </div>
+        )
+      })()}
 
       {/* Mobile-only: expanded events for the selected day */}
       {isNarrow && selectedDay && (
