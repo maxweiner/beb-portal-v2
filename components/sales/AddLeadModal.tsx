@@ -761,6 +761,13 @@ function KindButton({ label, hint, selected, onClick }: {
         background: selected ? 'var(--green-pale)' : '#fff',
         border: '2px solid ' + (selected ? 'var(--green-dark)' : 'var(--pearl)'),
         display: 'flex', flexDirection: 'column', gap: 4,
+        // <button> defaults to nowrap in some browsers; force normal
+        // wrapping. min-width:0 lets the flex/grid parent shrink the
+        // cell below its content's intrinsic width so the long hint
+        // text wraps inside the button instead of spilling sideways.
+        minWidth: 0,
+        whiteSpace: 'normal',
+        wordBreak: 'break-word',
       }}>
       <div style={{ fontSize: 14, fontWeight: 800, color: selected ? 'var(--green-dark)' : 'var(--ink)' }}>
         {label}
