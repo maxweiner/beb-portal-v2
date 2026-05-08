@@ -43,6 +43,7 @@ interface Row {
 
 const URGENT_DAYS = 7
 const STALE_DAYS = 7   // items older than 7 days overdue are hidden
+const STORAGE_KEY = 'beb-dashboard-overdue-open'   // remembers the user's manual collapse choice across sessions
 
 // Roles that should see this widget. Anyone else gets nothing
 // (the parent dashboard renders the widget unconditionally; the
@@ -103,12 +104,29 @@ export default function CommsRemindersWidget({ setNav }: Props) {
   const overdueCount = sorted.filter(r => r.due_date < today).length
   const dueSoonCount = sorted.filter(r => r.due_date >= today).length
 
-  // Default-open when there's an overdue item; default-closed otherwise.
-  // Only set the initial value once we have data.
+  // Initial state resolution — runs once after the data loads:
+  //   1. Honor the user's last manual toggle (localStorage) when set.
+  //   2. Otherwise fall back to default-open-when-overdue, default-
+  //      closed-otherwise so a red item never silently hides.
   useEffect(() => {
     if (loading || open !== null) return
-    setOpen(overdueCount > 0)
-  }, [loading, open, overdueCount])
+    let saved: boolean | null = null
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY)
+      if (raw === '1') saved = true
+      else if (raw === '0') saved = false
+    } catch { /* localStorage unavailable */ }
+    setOpen(saved !== null ? saved : overdueCount > 0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading])
+
+  // Persist manual toggles. Skip the initial auto-set above so we
+  // only record explicit user decisions (open === null guard handles
+  // that — by the time persistence fires, open is a real boolean).
+  useEffect(() => {
+    if (open === null) return
+    try { window.localStorage.setItem(STORAGE_KEY, open ? '1' : '0') } catch {}
+  }, [open])
 
   if (!allowed) return null
   if (loading) return null
