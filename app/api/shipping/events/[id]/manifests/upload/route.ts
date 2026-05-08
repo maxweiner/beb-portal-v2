@@ -17,8 +17,18 @@ import { getAuthedUser, isAdminLike } from '@/lib/expenses/serverAuth'
 export const dynamic = 'force-dynamic'
 
 const BUCKET = 'manifests'
-const MAX_BYTES = 8 * 1024 * 1024
-const ALLOWED = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp'])
+const MAX_BYTES = 16 * 1024 * 1024
+const ALLOWED = new Set([
+  'image/jpeg', 'image/jpg', 'image/png', 'image/webp',
+  'application/pdf',
+])
+
+function extensionFor(contentType: string): string {
+  if (contentType === 'application/pdf') return 'pdf'
+  if (contentType === 'image/png')        return 'png'
+  if (contentType === 'image/webp')       return 'webp'
+  return 'jpg'
+}
 
 function admin() {
   return createClient(
@@ -69,10 +79,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   }
 
   const buffer = Buffer.from(await file.arrayBuffer())
-  const path = `events/${event.id}/${crypto.randomUUID()}.jpg`
+  const ext = extensionFor(contentType)
+  const path = `events/${event.id}/${crypto.randomUUID()}.${ext}`
 
   const { error: upErr } = await sb.storage.from(BUCKET).upload(path, buffer, {
-    contentType: 'image/jpeg',
+    contentType,
     upsert: false,
   })
   if (upErr) return NextResponse.json({ error: `Upload failed: ${upErr.message}` }, { status: 500 })

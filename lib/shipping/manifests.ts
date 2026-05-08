@@ -101,7 +101,13 @@ export async function uploadManifest(input: {
   const { data: session } = await supabase.auth.getSession()
   const token = session.session?.access_token
   const fd = new FormData()
-  fd.append('file', input.blob, 'manifest.jpg')
+  // Filename hint on the FormData entry — server uses contentType,
+  // not the filename, but this keeps logs / dev-tools tidy.
+  const ext = input.blob.type === 'application/pdf' ? 'pdf'
+            : input.blob.type === 'image/png'        ? 'png'
+            : input.blob.type === 'image/webp'       ? 'webp'
+            : 'jpg'
+  fd.append('file', input.blob, `manifest.${ext}`)
   fd.append('is_scan_style', String(input.isScanStyle))
   fd.append('box_label', input.boxLabel)
   const res = await fetch(`/api/shipping/events/${input.eventId}/manifests/upload`, {
