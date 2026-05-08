@@ -80,7 +80,7 @@ export default function SendFlow({
       const [showRes, tplRes] = await Promise.all([
         supabase
           .from('trunk_shows')
-          .select('id, store_id, start_date, end_date, status, assigned_rep_id, store:trunk_show_stores(id, name, primary_contact_email, primary_contact_name, email_1, contact_1)')
+          .select('id, store_id, start_date, end_date, status, assigned_rep_id, store:trunk_show_stores(id, name, city, state, primary_contact_email, primary_contact_name, email_1, contact_1)')
           .is('deleted_at', null)
           .neq('status', 'cancelled')
           .gte('end_date', todayIso)
