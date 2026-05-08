@@ -553,15 +553,22 @@ export interface TrunkShowHours {
 
 export type LeadInterestLevel = 'hot' | 'warm' | 'cold'
 export type LeadStatus = 'new' | 'contacted' | 'converted' | 'dead'
+export type LeadKind = 'trade_show' | 'buying_event' | 'trunk_show'
+export type LeadParking = 'own_lot' | 'shared_lot' | 'street' | 'none'
+export type LeadSqFootage = 'small' | 'medium' | 'large'
 
 export interface Lead {
   id: string
+  lead_kind: LeadKind
   first_name: string
   last_name: string
   company_name: string | null
   title: string | null
   email: string | null
   phone: string | null
+  store_phone: string | null
+  cell_phone: string | null
+  referral_source: string | null
   address_line_1: string | null
   address_line_2: string | null
   city: string | null
@@ -575,7 +582,27 @@ export interface Lead {
   interest_description: string | null
   follow_up_date: string | null
   status: LeadStatus
-  converted_to_store_id: string | null
+  // Buying-event captured profile
+  best_time_of_year: string | null
+  freestanding: boolean | null
+  parking: LeadParking | null
+  year_established: number | null
+  sq_footage: LeadSqFootage | null
+  currently_buys: boolean | null
+  // Trunk-show captured profile
+  locking_cases: boolean | null
+  rated_safe: boolean | null
+  sales_staff_count: number | null
+  years_in_business: number | null
+  sells_estate_jewelry: boolean | null
+  distance_to_airport_miles: number | null
+  // Conversion targets
+  converted_to_store_id: string | null  // legacy column kept for back-compat
+  converted_store_id: string | null
+  converted_trunk_show_store_id: string | null
+  converted_event_id: string | null
+  converted_trunk_show_id: string | null
+  converted_at: string | null
   notes: string | null
   business_card_image_url: string | null
   ocr_extracted_data: any
