@@ -262,7 +262,6 @@ export default function Leads({ setNav }: { setNav?: (n: NavPage) => void }) {
 
       {createOpen && (
         <AddLeadModal
-          defaultKind={activeKind}
           onCreated={(lead) => {
             setCreateOpen(false)
             void reload()
