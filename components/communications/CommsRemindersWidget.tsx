@@ -51,7 +51,7 @@ const STORAGE_KEY = 'beb-dashboard-overdue-open'   // remembers the user's manua
 const ALLOWED_ROLES = new Set(['superadmin', 'sales_rep', 'trunk_admin'])
 
 export default function CommsRemindersWidget({ setNav }: Props) {
-  const { user, setCommsSendIntent } = useApp()
+  const { user, setCommsSendIntent, setTrunkShowIntent } = useApp()
   const [rows, setRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState<boolean | null>(null)  // null = not yet decided
@@ -138,10 +138,11 @@ export default function CommsRemindersWidget({ setNav }: Props) {
       setNav?.('trunk-communications')
       return
     }
-    if (row.linked_action_type === 'marketing_postcard' || row.linked_action_type === 'marketing_proof') {
-      setNav?.('marketing')
-      return
-    }
+    // For every other action type — including marketing_postcard /
+    // marketing_proof — drop the user directly onto the specific
+    // trunk show via the existing intent. Saves them from re-finding
+    // the row in a long list.
+    setTrunkShowIntent({ trunkShowId: row.trunk_show_id })
     setNav?.('trunk-shows')
   }
 
