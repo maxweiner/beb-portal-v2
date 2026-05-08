@@ -23,7 +23,6 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { blockIfImpersonating } from '@/lib/impersonation/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,22 +35,20 @@ function admin() {
 }
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  // Same loose gating as the cancel endpoint: any signed-in user can
-  // hit delete-forever. The two surviving safeguards (event must
-  // already be cancelled + caller must type the confirm string) are
-  // the actual checkpoints. JWT verified inline so anonymous external
-  // callers still bounce.
+  // ⚠️ All restrictions stripped per request — only the bare-minimum
+  // JWT check remains so the endpoint isn't exposed to the open
+  // internet. To be locked back down once the auth flow is debugged.
   const sb = admin()
   const authHeader = req.headers.get('authorization') || ''
   const m = authHeader.match(/^Bearer\s+(.+)$/i)
-  if (!m) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!m) return NextResponse.json({ error: 'Unauthorized — no Bearer token' }, { status: 401 })
   const { data: tokenUser, error: tokenErr } = await sb.auth.getUser(m[1])
   if (tokenErr || !tokenUser?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({
+      error: 'Unauthorized — JWT failed verification',
+      detail: tokenErr?.message || 'no user in token',
+    }, { status: 401 })
   }
-
-  const blocked = await blockIfImpersonating(req)
-  if (blocked) return blocked
 
   const { data: event, error: evErr } = await sb
     .from('events')
@@ -60,26 +57,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     .maybeSingle()
   if (evErr) return NextResponse.json({ error: evErr.message }, { status: 500 })
   if (!event) return NextResponse.json({ error: 'Event not found' }, { status: 404 })
-
-  const body = await req.json().catch(() => ({}))
-  // force=true still skips the cancel-first rule. With the role gate
-  // gone, anyone can pass force=true — keeping it because it's still
-  // gated by the confirm string + the Admin Panel UI is the only
-  // surface that sets force.
-  const force = body?.force === true || body?.force === 1
-  if (event.status !== 'cancelled' && !force) {
-    return NextResponse.json({
-      error: 'Event must be cancelled first. Use Cancel Event, then Delete Forever.',
-    }, { status: 400 })
-  }
-
-  const confirm = String(body?.confirm || '').trim()
-  const expected = [event.store_name, event.start_date].filter(Boolean).map(s => s.toLowerCase())
-  if (!expected.includes(confirm.toLowerCase())) {
-    return NextResponse.json({
-      error: `Type the store name (${event.store_name}) or start date (${event.start_date}) to confirm.`,
-    }, { status: 400 })
-  }
 
   const { error: delErr } = await sb.from('events').delete().eq('id', event.id)
   if (delErr) return NextResponse.json({ error: `Delete failed: ${delErr.message}` }, { status: 500 })
