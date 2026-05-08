@@ -1,9 +1,13 @@
 'use client'
 
-// Lead detail page. Phase 6: every spec field editable, autosave
-// per-section. Phase 16 will add a Convert-to-Trunk-Show button
-// that pre-fills the trunk-show form. Phase 7 will add the
-// business-card thumbnail.
+// Lead detail page. Editable per-section autosave on the standard
+// fields, plus a per-kind "captured profile" panel for buying-event
+// and trunk-show leads (the prospect-research fields the rep gathered
+// up front). Convert button branches on lead_kind:
+//   • trade_show   — opens the legacy ConvertModal (manual store +
+//                    trunk-show create)
+//   • buying_event — opens BuyingConvertModal → POST /api/leads/.../convert
+//   • trunk_show   — opens TrunkConvertModal  → POST /api/leads/.../convert
 
 import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
@@ -155,15 +159,19 @@ export default function LeadDetail({ leadId, onBack, onChanged, onDeleted, setNa
         <AutosaveIndicator status={status} />
         {lead.status !== 'converted' && (
           <button onClick={() => setConvertOpen(true)} className="btn-primary btn-sm">
-            ✨ Convert to Trunk Show
+            {convertButtonLabel(lead.lead_kind)}
           </button>
         )}
-        {lead.status === 'converted' && lead.converted_to_store_id && (
+        {lead.status === 'converted' && (
           <button
-            onClick={() => setNav?.('trunk-shows')}
+            onClick={() => {
+              if (lead.lead_kind === 'buying_event') setNav?.('buying-events')
+              else if (lead.lead_kind === 'trunk_show') setNav?.('trunk-shows')
+              else setNav?.('trunk-shows')
+            }}
             className="btn-outline btn-sm"
           >
-            View trunk shows →
+            {viewConvertedTargetLabel(lead.lead_kind)}
           </button>
         )}
         {isAdmin && (
@@ -173,7 +181,7 @@ export default function LeadDetail({ leadId, onBack, onChanged, onDeleted, setNa
         )}
       </div>
 
-      {convertOpen && (
+      {convertOpen && lead.lead_kind === 'trade_show' && (
         <ConvertModal
           lead={lead}
           repOptions={repOptions}
@@ -181,14 +189,41 @@ export default function LeadDetail({ leadId, onBack, onChanged, onDeleted, setNa
           onConverted={async () => {
             setConvertOpen(false)
             onChanged()
-            // Re-fetch this lead so the badge flips to "Converted"
-            // and the action bar swaps button.
             try {
               const fresh = await getLead(lead.id)
               if (fresh) setLead(fresh)
             } catch { /* swallow */ }
-            // Navigate to Trunk Shows so the new row is in front
-            // of the user.
+            setNav?.('trunk-shows')
+          }}
+        />
+      )}
+      {convertOpen && lead.lead_kind === 'buying_event' && (
+        <BuyingConvertModal
+          lead={lead}
+          onClose={() => setConvertOpen(false)}
+          onConverted={async () => {
+            setConvertOpen(false)
+            onChanged()
+            try {
+              const fresh = await getLead(lead.id)
+              if (fresh) setLead(fresh)
+            } catch { /* swallow */ }
+            setNav?.('buying-events')
+          }}
+        />
+      )}
+      {convertOpen && lead.lead_kind === 'trunk_show' && (
+        <TrunkConvertModal
+          lead={lead}
+          repOptions={repOptions}
+          onClose={() => setConvertOpen(false)}
+          onConverted={async () => {
+            setConvertOpen(false)
+            onChanged()
+            try {
+              const fresh = await getLead(lead.id)
+              if (fresh) setLead(fresh)
+            } catch { /* swallow */ }
             setNav?.('trunk-shows')
           }}
         />
@@ -295,17 +330,91 @@ export default function LeadDetail({ leadId, onBack, onChanged, onDeleted, setNa
         </Field>
       </div>
 
-      {/* Phase placeholders */}
-      <div className="card" style={{ padding: 18, marginBottom: 14, opacity: 0.7 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginBottom: 6 }}>Coming soon on this page</div>
-        <ul style={{ fontSize: 12, color: 'var(--mist)', lineHeight: 1.6, paddingLeft: 18, margin: 0 }}>
-          <li>Business-card image preview — Phase 7</li>
-          <li>Notes timeline with author + timestamps — future</li>
-          <li>"Convert to Trunk Show Opportunity" — Phase 16</li>
-        </ul>
+      {/* Per-kind captured profile (read-only — gathered at lead time) */}
+      {lead.lead_kind === 'buying_event' && <BuyingProfile lead={lead} />}
+      {lead.lead_kind === 'trunk_show' && <TrunkProfile lead={lead} />}
+    </div>
+  )
+}
+
+/* ── Per-kind captured profile read-out ──────────────────── */
+
+const PARKING_LABEL: Record<string, string> = {
+  own_lot: 'Own Lot', shared_lot: 'Shared Lot', street: 'Street', none: 'None',
+}
+const SQ_LABEL: Record<string, string> = { small: 'Small', medium: 'Medium', large: 'Large' }
+
+function ProfileSection({ title, rows }: {
+  title: string
+  rows: { label: string; value: any }[]
+}) {
+  // Skip the section entirely when nothing is filled in.
+  const visible = rows.filter(r => r.value !== null && r.value !== undefined && r.value !== '')
+  if (visible.length === 0) return null
+  return (
+    <div className="card" style={{ padding: 20, marginBottom: 14 }}>
+      <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>
+        {title}
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {visible.map(r => (
+          <div key={r.label}>
+            <div style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>{r.label}</div>
+            <div style={{ fontSize: 13, color: 'var(--ink)', marginTop: 2 }}>{String(r.value)}</div>
+          </div>
+        ))}
       </div>
     </div>
   )
+}
+
+function yn(v: boolean | null | undefined): string | null {
+  if (v === null || v === undefined) return null
+  return v ? 'Yes' : 'No'
+}
+
+function BuyingProfile({ lead }: { lead: Lead }) {
+  return (
+    <ProfileSection title="Captured store profile" rows={[
+      { label: 'Best time of year', value: lead.best_time_of_year },
+      { label: 'Year established', value: lead.year_established },
+      { label: 'Square footage', value: lead.sq_footage ? SQ_LABEL[lead.sq_footage] : null },
+      { label: 'Parking', value: lead.parking ? PARKING_LABEL[lead.parking] : null },
+      { label: 'Freestanding building', value: yn(lead.freestanding) },
+      { label: 'Currently buys estate jewelry', value: yn(lead.currently_buys) },
+      { label: 'Store phone', value: lead.store_phone },
+      { label: 'Cell phone', value: lead.cell_phone },
+      { label: 'Referral source', value: lead.referral_source },
+    ]} />
+  )
+}
+
+function TrunkProfile({ lead }: { lead: Lead }) {
+  return (
+    <ProfileSection title="Captured store profile" rows={[
+      { label: 'Locking cases', value: yn(lead.locking_cases) },
+      { label: 'Rated safe on premises', value: yn(lead.rated_safe) },
+      { label: '# of sales staff', value: lead.sales_staff_count },
+      { label: 'Years in business', value: lead.years_in_business },
+      { label: 'Sells estate jewelry now', value: yn(lead.sells_estate_jewelry) },
+      { label: 'Distance to airport (mi)', value: lead.distance_to_airport_miles },
+      { label: 'Store phone', value: lead.store_phone },
+      { label: 'Cell phone', value: lead.cell_phone },
+      { label: 'Referral source', value: lead.referral_source },
+    ]} />
+  )
+}
+
+function convertButtonLabel(kind: Lead['lead_kind']): string {
+  if (kind === 'buying_event') return '✨ Convert + Reserve Buying Event'
+  if (kind === 'trunk_show')   return '✨ Convert + Reserve Trunk Show'
+  return '✨ Convert to Trunk Show'
+}
+
+function viewConvertedTargetLabel(kind: Lead['lead_kind']): string {
+  if (kind === 'buying_event') return 'View buying events →'
+  if (kind === 'trunk_show')   return 'View trunk shows →'
+  return 'View trunk shows →'
 }
 
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
@@ -441,6 +550,175 @@ function ConvertModal({
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+/* ── Buying-event convert modal ──────────────────────────── */
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession()
+  return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
+}
+
+function BuyingConvertModal({
+  lead, onClose, onConverted,
+}: {
+  lead: Lead
+  onClose: () => void
+  onConverted: () => void | Promise<void>
+}) {
+  const [startDate, setStartDate] = useState('')
+  const [buyersNeeded, setBuyersNeeded] = useState('3')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const valid = !!startDate
+
+  async function submit() {
+    if (!valid || busy) return
+    setBusy(true); setErr(null)
+    try {
+      const r = await fetch(`/api/leads/${lead.id}/convert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+        body: JSON.stringify({
+          start_date: startDate,
+          buyers_needed: Number(buyersNeeded) || 3,
+        }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j.error || `Convert failed (${r.status})`)
+      await onConverted()
+    } catch (e: any) {
+      setErr(e?.message || 'Could not convert')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <ConvertShell title="✨ Convert + Reserve Buying Event" onClose={onClose}
+      preface={<>Creates a <strong>{lead.company_name || 'store'}</strong> store record (if missing)
+        and a 📌 reserved (Save the Date) buying event on the chosen date. The lead row stays for history.</>}>
+      <Field label="Start date" required>
+        <DatePicker value={startDate} onChange={setStartDate} />
+      </Field>
+      <Field label="Buyers needed">
+        <input type="number" min={1} max={20} step={1} value={buyersNeeded}
+          onChange={e => setBuyersNeeded(e.target.value)} style={{ width: 120 }} />
+      </Field>
+      {err && <div style={{ background: '#FEE2E2', color: '#991B1B', padding: '8px 10px', borderRadius: 6, fontSize: 13, marginBottom: 8 }}>{err}</div>}
+      <ConvertActions onClose={onClose} disabled={!valid || busy} busy={busy}
+        confirmLabel="Save the Date" onConfirm={submit} />
+    </ConvertShell>
+  )
+}
+
+/* ── Trunk-show convert modal ────────────────────────────── */
+
+function TrunkConvertModal({
+  lead, repOptions, onClose, onConverted,
+}: {
+  lead: Lead
+  repOptions: any[]
+  onClose: () => void
+  onConverted: () => void | Promise<void>
+}) {
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [repId, setRepId] = useState<string>(lead.assigned_rep_id || '')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const valid = !!startDate && !!endDate && endDate >= startDate && !!repId
+
+  async function submit() {
+    if (!valid || busy) return
+    setBusy(true); setErr(null)
+    try {
+      const r = await fetch(`/api/leads/${lead.id}/convert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+        body: JSON.stringify({
+          start_date: startDate,
+          end_date: endDate,
+          assigned_rep_id: repId,
+        }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j.error || `Convert failed (${r.status})`)
+      await onConverted()
+    } catch (e: any) {
+      setErr(e?.message || 'Could not convert')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <ConvertShell title="✨ Convert + Reserve Trunk Show" onClose={onClose}
+      preface={<>Creates a <strong>{lead.company_name || 'store'}</strong> trunk-show store (if missing)
+        and a 📌 reserved (Save the Date) trunk show on the chosen dates. The lead row stays for history.</>}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3" style={{ marginBottom: 8 }}>
+        <Field label="Start date" required>
+          <DatePicker value={startDate} onChange={setStartDate} />
+        </Field>
+        <Field label="End date" required>
+          <DatePicker value={endDate} onChange={setEndDate} />
+        </Field>
+      </div>
+      <Field label="Assigned rep" required>
+        <select value={repId} onChange={e => setRepId(e.target.value)}>
+          <option value="">Pick a rep…</option>
+          {repOptions.map(u => (
+            <option key={u.id} value={u.id}>{u.name}</option>
+          ))}
+        </select>
+      </Field>
+      {err && <div style={{ background: '#FEE2E2', color: '#991B1B', padding: '8px 10px', borderRadius: 6, fontSize: 13, marginBottom: 8 }}>{err}</div>}
+      <ConvertActions onClose={onClose} disabled={!valid || busy} busy={busy}
+        confirmLabel="Save the Date" onConfirm={submit} />
+    </ConvertShell>
+  )
+}
+
+/* ── Shared modal shell ──────────────────────────────────── */
+
+function ConvertShell({ title, preface, onClose, children }: {
+  title: string
+  preface: React.ReactNode
+  onClose: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <div onClick={e => e.target === e.currentTarget && onClose()}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1100,
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+        padding: '6vh 16px',
+      }}>
+      <div style={{ width: 'min(560px, 100%)', background: '#fff', borderRadius: 12, padding: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)' }}>{title}</h2>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 22, color: 'var(--mist)' }}>×</button>
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--ash)', marginBottom: 12 }}>{preface}</div>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function ConvertActions({ onClose, disabled, busy, confirmLabel, onConfirm }: {
+  onClose: () => void
+  disabled: boolean
+  busy: boolean
+  confirmLabel: string
+  onConfirm: () => void
+}) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+      <button onClick={onClose} className="btn-outline btn-sm">Cancel</button>
+      <button onClick={onConfirm} disabled={disabled} className="btn-primary btn-sm">
+        {busy ? 'Converting…' : confirmLabel}
+      </button>
     </div>
   )
 }

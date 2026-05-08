@@ -7,6 +7,7 @@ import Checkbox from '@/components/ui/Checkbox'
 import PhoneInput from '@/components/ui/PhoneInput'
 import { rawDigits } from '@/lib/phone'
 import { StoreSearch, type PlaceData } from '@/lib/googlePlaces'
+import LeadProfileCard from '@/components/sales/LeadProfileCard'
 
 interface TrunkRep { id: string; name: string }
 
@@ -557,6 +558,9 @@ function Modal({ store, trunkReps, onClose, onSaved, onDelete }: {
               <iframe src={mapUrl} width="100%" height="200" style={{ border: 0, display: 'block' }} allowFullScreen loading="lazy" />
             </div>
           )}
+
+          {/* Captured lead profile (renders nothing if not lead-sourced) */}
+          <LeadProfileCard storeKind="trunk_show_store" targetId={store.id} />
 
           {/* Store Info */}
           <div className="card card-accent" style={{ margin: 0 }}>

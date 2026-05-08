@@ -9,24 +9,35 @@
 //   buyer: nothing
 
 import { supabase } from '@/lib/supabase'
-import type { Lead, LeadInterestLevel, LeadStatus } from '@/types'
+import type { Lead, LeadInterestLevel, LeadKind, LeadParking, LeadSqFootage, LeadStatus } from '@/types'
 import { lookupTerritoryRep } from './territories'
 
-const COLS = `id, first_name, last_name, company_name, title,
-  email, phone, address_line_1, address_line_2, city, state, zip,
+const COLS = `id, lead_kind, first_name, last_name, company_name, title,
+  email, phone, store_phone, cell_phone, referral_source,
+  address_line_1, address_line_2, city, state, zip,
   website, assigned_rep_id, captured_at_trade_show_id,
   captured_by_user_id, interest_level, interest_description,
-  follow_up_date, status, converted_to_store_id, notes,
-  business_card_image_url, ocr_extracted_data,
+  follow_up_date, status,
+  best_time_of_year, freestanding, parking, year_established,
+  sq_footage, currently_buys,
+  locking_cases, rated_safe, sales_staff_count, years_in_business,
+  sells_estate_jewelry, distance_to_airport_miles,
+  converted_to_store_id, converted_store_id, converted_trunk_show_store_id,
+  converted_event_id, converted_trunk_show_id, converted_at,
+  notes, business_card_image_url, ocr_extracted_data,
   created_at, updated_at, deleted_at`
 
 export interface LeadDraft {
+  lead_kind?: LeadKind
   first_name: string
   last_name: string
   company_name?: string | null
   title?: string | null
   email?: string | null
   phone?: string | null
+  store_phone?: string | null
+  cell_phone?: string | null
+  referral_source?: string | null
   address_line_1?: string | null
   address_line_2?: string | null
   city?: string | null
@@ -40,6 +51,20 @@ export interface LeadDraft {
   interest_description?: string | null
   follow_up_date?: string | null
   status?: LeadStatus
+  // Buying-event captured profile
+  best_time_of_year?: string | null
+  freestanding?: boolean | null
+  parking?: LeadParking | null
+  year_established?: number | null
+  sq_footage?: LeadSqFootage | null
+  currently_buys?: boolean | null
+  // Trunk-show captured profile
+  locking_cases?: boolean | null
+  rated_safe?: boolean | null
+  sales_staff_count?: number | null
+  years_in_business?: number | null
+  sells_estate_jewelry?: boolean | null
+  distance_to_airport_miles?: number | null
   notes?: string | null
 }
 
@@ -77,12 +102,16 @@ export async function createLead(draft: LeadDraft): Promise<Lead> {
   }
 
   const payload = {
+    lead_kind:       draft.lead_kind || 'trade_show',
     first_name: draft.first_name.trim(),
     last_name:  draft.last_name.trim(),
     company_name:    norm(draft.company_name),
     title:           norm(draft.title),
     email:           norm(draft.email),
     phone:           norm(draft.phone),
+    store_phone:     norm(draft.store_phone),
+    cell_phone:      norm(draft.cell_phone),
+    referral_source: norm(draft.referral_source),
     address_line_1:  norm(draft.address_line_1),
     address_line_2:  norm(draft.address_line_2),
     city:            norm(draft.city),
@@ -96,6 +125,18 @@ export async function createLead(draft: LeadDraft): Promise<Lead> {
     interest_description:  norm(draft.interest_description),
     follow_up_date:        draft.follow_up_date || null,
     status:                draft.status || 'new',
+    best_time_of_year:     norm(draft.best_time_of_year),
+    freestanding:          draft.freestanding ?? null,
+    parking:               draft.parking || null,
+    year_established:      draft.year_established ?? null,
+    sq_footage:            draft.sq_footage || null,
+    currently_buys:        draft.currently_buys ?? null,
+    locking_cases:         draft.locking_cases ?? null,
+    rated_safe:            draft.rated_safe ?? null,
+    sales_staff_count:     draft.sales_staff_count ?? null,
+    years_in_business:     draft.years_in_business ?? null,
+    sells_estate_jewelry:  draft.sells_estate_jewelry ?? null,
+    distance_to_airport_miles: draft.distance_to_airport_miles ?? null,
     notes:                 norm(draft.notes),
   }
   const { data, error } = await supabase.from('leads').insert(payload).select(COLS).single()
