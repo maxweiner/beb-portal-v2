@@ -5,6 +5,7 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { eventDisplayName } from '@/lib/eventName'
 import type { Event } from '@/types'
+import RecordChat from '@/components/chat/RecordChat'
 
 interface TravelFolder { id: string; event_id: string; name: string; sort_order: number }
 interface TravelItem { id: string; folder_id: string; event_id: string; type: 'note' | 'image'; content: string; image_url: string; file_name: string }
@@ -914,6 +915,13 @@ function ReservationCard({ res, user, workers, onDelete, onReload }: {
               <button onClick={() => onDelete(res.id)} className="btn-danger btn-sm" style={{ marginLeft: 'auto' }}>Delete</button>
             </div>
           )}
+
+          {/* Per-row chat — start a thread tied to this reservation
+              and message the buyer (or anyone) about it. Replies via
+              email or SMS land back here. */}
+          <div style={{ marginTop: 14 }}>
+            <RecordChat recordKind="travel_reservation" recordId={res.id} title="💬 Ask about this reservation" />
+          </div>
         </div>
       )}
     </div>
