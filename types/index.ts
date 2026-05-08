@@ -525,6 +525,9 @@ export interface TrunkShowStore {
   email_2: string | null
   url: string | null
   trunk_shows: boolean | null
+  /** Dormant flag. When false the store is hidden from default
+   *  list views; toggle "Show inactive" to manage it. */
+  active: boolean
   /** Single canonical recipient for trunk-show communications.
    *  Backfilled from email_1 + contact_1; admin can override
    *  without touching the legacy email_N + contact_N columns. */

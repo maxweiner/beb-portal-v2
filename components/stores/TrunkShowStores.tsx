@@ -28,6 +28,10 @@ const CONTACT_TITLE_OPTIONS = ['Owner', 'Manager', 'Staff'] as const
 interface TrunkShowStore {
   id: string
   trunk_shows: boolean | null
+  /** Dormant flag. When false the store is hidden from default
+   *  list views; toggle "Show inactive" in the list header to
+   *  manage. Distinct from trunk_shows (partner-status). */
+  active: boolean
   name: string
   ts_reps: string | null
   trunk_rep_user_id: string | null
@@ -52,7 +56,7 @@ interface TrunkShowStore {
   updated_at?: string
 }
 
-const COLS = `id, trunk_shows, name, ts_reps, trunk_rep_user_id, comments,
+const COLS = `id, trunk_shows, active, name, ts_reps, trunk_rep_user_id, comments,
   address_1, address_2, city, state, zip, store_phone,
   contact_1, contact_2, contact_3, email_1, email_2, url,
   primary_contact_email, primary_contact_name, contacts,
@@ -65,7 +69,12 @@ export default function TrunkShowStores() {
   const [selected, setSelected] = useState<TrunkShowStore | null>(null)
   const [search, setSearch] = useState('')
   const [stateFilter, setStateFilter] = useState<string>('')
+  // `activeFilter` here filters on the `trunk_shows` column (i.e.
+  // "is this a trunk-show partner?") — a separate concept from the
+  // new dormant flag. Kept as-is for back-compat.
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all')
+  // Dormant flag: stores with active=false are hidden by default.
+  const [showInactive, setShowInactive] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [newStore, setNewStore] = useState({
     name: '', address_1: '', city: '', state: '', zip: '', url: '', store_phone: '',
@@ -104,6 +113,7 @@ export default function TrunkShowStores() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return stores.filter(s => {
+      if (!showInactive && s.active === false) return false
       if (stateFilter && s.state !== stateFilter) return false
       if (activeFilter === 'active' && s.trunk_shows !== true) return false
       if (activeFilter === 'inactive' && s.trunk_shows === true) return false
@@ -115,7 +125,7 @@ export default function TrunkShowStores() {
       ].filter(Boolean).join(' ').toLowerCase()
       return hay.includes(q)
     })
-  }, [stores, search, stateFilter, activeFilter, repNameById])
+  }, [stores, search, stateFilter, activeFilter, showInactive, repNameById])
 
   const activeCount = useMemo(() => stores.filter(s => s.trunk_shows === true).length, [stores])
 
@@ -192,6 +202,12 @@ export default function TrunkShowStores() {
             <option value="active">Active trunk shows</option>
             <option value="inactive">Inactive</option>
           </select>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--mist)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={showInactive}
+              onChange={e => setShowInactive(e.target.checked)}
+              style={{ width: 'auto' }} />
+            Show inactive
+          </label>
           <button className="btn-primary" onClick={() => setShowAdd(true)}>+ Add Store</button>
         </div>
       </div>
@@ -256,10 +272,20 @@ export default function TrunkShowStores() {
                 <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--fog)' }}>No stores match your filters.</td></tr>
               )}
               {filtered.map(s => (
-                <tr key={s.id} onClick={() => setSelected(s)} style={{ cursor: 'pointer' }}
+                <tr key={s.id} onClick={() => setSelected(s)}
+                  style={{ cursor: 'pointer', opacity: s.active === false ? 0.55 : 1 }}
                   onMouseOver={e => (e.currentTarget as HTMLElement).style.background = 'var(--cream2)'}
                   onMouseOut={e => (e.currentTarget as HTMLElement).style.background = ''}>
-                  <td><span style={{ color: 'var(--green-dark)', fontWeight: 700 }}>◆ {s.name}</span></td>
+                  <td>
+                    <span style={{ color: 'var(--green-dark)', fontWeight: 700 }}>◆ {s.name}</span>
+                    {s.active === false && (
+                      <span style={{
+                        marginLeft: 8, padding: '1px 6px', borderRadius: 4,
+                        background: 'var(--cream2)', color: 'var(--mist)',
+                        fontSize: 10, fontWeight: 800, letterSpacing: '.04em',
+                      }}>INACTIVE</span>
+                    )}
+                  </td>
                   <td>{s.city || <span style={{ color: 'var(--silver)' }}>—</span>}</td>
                   <td>{s.state || <span style={{ color: 'var(--silver)' }}>—</span>}</td>
                   <td>
@@ -552,6 +578,34 @@ function Modal({ store, trunkReps, onClose, onSaved, onDelete }: {
         </div>
 
         <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+          {/* Inactive flag — when checked the store is dormant and
+              hidden from the default list. Toggle "Show inactive" in
+              the list header to see and reactivate. */}
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '10px 14px', borderRadius: 8,
+            background: details.active === false ? '#FFFBEB' : 'var(--cream2)',
+            border: '1px solid ' + (details.active === false ? '#FCD34D' : 'var(--pearl)'),
+            fontSize: 13, fontWeight: 700, cursor: 'pointer',
+            color: details.active === false ? '#92400E' : 'var(--ash)',
+          }}>
+            <input
+              type="checkbox"
+              checked={details.active === false}
+              onChange={async e => {
+                const next = !e.target.checked
+                set('active', next)
+                const { data, error } = await supabase
+                  .from('trunk_show_stores').update({ active: next }).eq('id', store.id)
+                  .select(COLS).single()
+                if (error) { alert('Save failed: ' + error.message); return }
+                onSaved(data as TrunkShowStore)
+              }}
+              style={{ width: 'auto' }}
+            />
+            <span>{details.active === false ? '⚠ Inactive — hidden from list' : 'Inactive (dormant store)'}</span>
+          </label>
 
           {mapUrl && (
             <div style={{ borderRadius: 'var(--r)', overflow: 'hidden', border: '1px solid var(--pearl)' }}>
