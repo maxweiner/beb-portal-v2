@@ -58,6 +58,18 @@ export async function getAuthedUser(req: Request): Promise<AuthedUser | null> {
       .maybeSingle()
     row = data
   }
+  // Final fallback: match the JWT email against any user's
+  // alternate_emails text[]. Mirrors what the client-side context
+  // loader already does so a Gmail-side login routes to the
+  // canonical bebllp row on Max's account.
+  if (!row && tokenUser.user.email) {
+    const { data } = await sb.from('users')
+      .select(COLS)
+      .contains('alternate_emails', [tokenUser.user.email])
+      .limit(1)
+      .maybeSingle()
+    row = data
+  }
   if (!row || row.active === false) return null
   return row as AuthedUser
 }
