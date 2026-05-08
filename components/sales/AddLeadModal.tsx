@@ -10,7 +10,7 @@
 // filled. The OCR card-scan path is hidden for those kinds since
 // they're prospect-research entries, not booth captures.
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { createLead } from '@/lib/sales/leads'
 import type { Lead, LeadInterestLevel, LeadKind, LeadParking, LeadSqFootage } from '@/types'
@@ -49,13 +49,24 @@ interface DupCandidate {
   state?: string | null
 }
 
-export default function AddLeadModal({ tradeShowId, defaultKind = 'trade_show', onCreated, onClose }: Props) {
+export default function AddLeadModal({ tradeShowId, defaultKind = 'buying_event', onCreated, onClose }: Props) {
   const { user, users } = useApp()
 
-  // When the modal is opened from inside a trade show, pin the kind.
-  const [kind, setKind] = useState<LeadKind>(tradeShowId ? 'trade_show' : defaultKind)
-  const showOcr = kind === 'trade_show'
+  // When opened from inside a trade show, pin kind='trade_show'. From
+  // the standalone Add Lead button the user can only pick buying_event
+  // or trunk_show — trade-show captures live on the trade show page
+  // itself, so removing it from the picker keeps the standalone modal
+  // focused on prospect-research entries.
+  const initialKind: LeadKind = tradeShowId
+    ? 'trade_show'
+    : (defaultKind === 'trade_show' ? 'buying_event' : defaultKind)
+  const [kind, setKind] = useState<LeadKind>(initialKind)
+  // Card scan applies to all three kinds — sales reps capture cards
+  // at booths (trade_show) AND we now lean into "scan instead of
+  // type" for buying-event + trunk-show prospect research too.
+  const showOcr = true
   const showStoreFields = kind !== 'trade_show'
+  const [scannerOpen, setScannerOpen] = useState(false)
 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -63,7 +74,6 @@ export default function AddLeadModal({ tradeShowId, defaultKind = 'trade_show', 
   const [scanNotice, setScanNotice] = useState<string | null>(null)
   const [dupes, setDupes] = useState<DupCandidate[]>([])
   const [dupAcked, setDupAcked] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const [draft, setDraft] = useState({
     first_name: '', last_name: '', company_name: '', title: '',
@@ -302,11 +312,12 @@ export default function AddLeadModal({ tradeShowId, defaultKind = 'trade_show', 
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 22, color: 'var(--mist)' }}>×</button>
         </div>
 
-        {/* Kind switcher (hidden when pre-pinned by tradeShowId) */}
+        {/* Kind switcher — only Buying Event + Trunk Show are user-
+            pickable. Trade-show captures happen from inside a trade
+            show (which sets tradeShowId and pins the kind). */}
         {!tradeShowId && (
           <div style={{ display: 'flex', gap: 6, marginBottom: 14, background: 'var(--cream2)', borderRadius: 6, padding: 4 }}>
             {([
-              ['trade_show',   '🎯 Trade Show'],
               ['buying_event', '💎 Buying Event'],
               ['trunk_show',   '👜 Trunk Show'],
             ] as [LeadKind, string][]).map(([k, label]) => {
@@ -341,7 +352,8 @@ export default function AddLeadModal({ tradeShowId, defaultKind = 'trade_show', 
           </div>
         )}
 
-        {/* Scan business card — only for trade-show flow */}
+        {/* Scan business card — full-screen scanner overlay, mirrors
+            the ID/receipt scanner flow in components/scan/ReceiptScanner. */}
         {showOcr && (
           <>
             <div style={{
@@ -355,27 +367,15 @@ export default function AddLeadModal({ tradeShowId, defaultKind = 'trade_show', 
                   Scan a business card
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--green-dark)', opacity: 0.75 }}>
-                  Auto-fills name, company, contact, address from the image. Review before saving.
+                  Auto-fills name, company, contact, address from the card. Review before saving.
                 </div>
               </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                style={{ display: 'none' }}
-                onChange={e => {
-                  const file = e.target.files?.[0]
-                  if (file) void handleScanFile(file)
-                  e.target.value = ''
-                }}
-              />
               <button
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => setScannerOpen(true)}
                 disabled={scanning || busy}
                 className="btn-primary btn-sm"
               >
-                {scanning ? 'Scanning…' : 'Scan card'}
+                {scanning ? 'Scanning…' : '📷 Scan card'}
               </button>
             </div>
             {scanNotice && (
@@ -386,6 +386,16 @@ export default function AddLeadModal({ tradeShowId, defaultKind = 'trade_show', 
               }}>{scanNotice}</div>
             )}
           </>
+        )}
+
+        {scannerOpen && (
+          <BusinessCardScanner
+            onClose={() => setScannerOpen(false)}
+            onCapture={async (file) => {
+              setScannerOpen(false)
+              await handleScanFile(file)
+            }}
+          />
         )}
 
         {/* Identity (always shown — store-pitch flows still want a primary contact) */}
@@ -630,5 +640,165 @@ function TriField({ label, value, onChange }: { label: string; value: boolean | 
         <option value="no">No</option>
       </select>
     </Field>
+  )
+}
+
+/**
+ * Full-screen business-card scanner. Mirrors the visual language of
+ * components/scan/ReceiptScanner: dark backdrop, dashed viewfinder
+ * frame in the centre with a "Position the card" prompt, big circular
+ * shutter, and a preview-with-Retake step after capture. Auto-opens
+ * the device camera on mount so the user lands directly in capture.
+ *
+ * onCapture receives the File object — the parent's existing
+ * handleScanFile() owns the canvas re-encode + Anthropic OCR call.
+ */
+function BusinessCardScanner({ onCapture, onClose }: {
+  onCapture: (file: File) => void | Promise<void>
+  onClose: () => void
+}) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [pickedFile, setPickedFile] = useState<File | null>(null)
+
+  const openCamera = () => {
+    if (!fileRef.current) return
+    fileRef.current.value = ''
+    fileRef.current.click()
+  }
+
+  // Auto-open the native camera the first time the scanner mounts so
+  // the user doesn't have to tap twice.
+  useEffect(() => {
+    const t = setTimeout(openCamera, 250)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setPickedFile(file)
+    const reader = new FileReader()
+    reader.onload = () => setPreviewUrl(reader.result as string)
+    reader.readAsDataURL(file)
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 1300, background: '#111',
+      display: 'flex', flexDirection: 'column', color: '#fff',
+    }}>
+      <input
+        ref={fileRef} type="file" accept="image/*" capture="environment"
+        style={{ display: 'none' }} onChange={handleFileChange}
+      />
+
+      {/* Header */}
+      <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <button
+          onClick={() => { setPreviewUrl(null); setPickedFile(null); onClose() }}
+          style={{ background: 'none', border: 'none', fontSize: 14, cursor: 'pointer', color: 'rgba(255,255,255,.6)' }}
+        >× Close</button>
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,.5)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+          Business card
+        </div>
+        <span style={{ width: 50 }} />
+      </div>
+
+      {/* Body */}
+      <div style={{
+        flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+        justifyContent: 'center', padding: 20, overflowY: 'auto',
+      }}>
+        {!previewUrl ? (
+          <>
+            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>
+              Scan business card
+            </div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,.55)', marginBottom: 22, textAlign: 'center' }}>
+              Frame the card inside the box, then tap the shutter.
+            </div>
+
+            {/* Viewfinder frame */}
+            <div style={{
+              width: 'min(320px, 80vw)',
+              aspectRatio: '1.6 / 1',  // standard US business card ratio
+              border: '2px dashed rgba(255,255,255,.35)',
+              borderRadius: 14,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              marginBottom: 28, position: 'relative',
+            }}>
+              {/* Corner ticks for that "scanner" feel */}
+              {[
+                { top: -1, left: -1, br: '14px 0 0 0' },
+                { top: -1, right: -1, br: '0 14px 0 0' },
+                { bottom: -1, left: -1, br: '0 0 0 14px' },
+                { bottom: -1, right: -1, br: '0 0 14px 0' },
+              ].map((c, i) => (
+                <div key={i} style={{
+                  position: 'absolute',
+                  width: 22, height: 22,
+                  borderTop:    c.top !== undefined    ? '3px solid #7EC8A0' : 'none',
+                  borderBottom: c.bottom !== undefined ? '3px solid #7EC8A0' : 'none',
+                  borderLeft:   c.left !== undefined   ? '3px solid #7EC8A0' : 'none',
+                  borderRight:  c.right !== undefined  ? '3px solid #7EC8A0' : 'none',
+                  ...c,
+                }} />
+              ))}
+              <div style={{ fontSize: 36, opacity: 0.25 }}>📇</div>
+            </div>
+
+            {/* Shutter */}
+            <button onClick={openCamera}
+              style={{
+                width: 72, height: 72, borderRadius: '50%',
+                background: '#fff', border: '4px solid rgba(255,255,255,.35)',
+                cursor: 'pointer',
+              }}
+              aria-label="Take photo"
+            />
+            <div style={{ color: 'rgba(255,255,255,.4)', fontSize: 12, marginTop: 8 }}>
+              Tap to capture
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>
+              Looks good?
+            </div>
+            <img
+              src={previewUrl}
+              alt="Captured card"
+              style={{
+                maxWidth: 'min(360px, 90vw)', maxHeight: '60vh',
+                borderRadius: 12, border: '2px solid rgba(255,255,255,.2)',
+                marginBottom: 18,
+              }}
+            />
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={openCamera}
+                style={{
+                  padding: '10px 16px', borderRadius: 8,
+                  border: '1px solid rgba(255,255,255,.25)',
+                  background: 'transparent', color: '#fff',
+                  fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                }}>
+                ↻ Retake
+              </button>
+              <button
+                onClick={() => { if (pickedFile) void onCapture(pickedFile) }}
+                style={{
+                  padding: '10px 18px', borderRadius: 8, border: 'none',
+                  background: '#7EC8A0', color: '#0F2A1B',
+                  fontSize: 13, fontWeight: 800, cursor: 'pointer',
+                }}>
+                ✓ Use this
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   )
 }
