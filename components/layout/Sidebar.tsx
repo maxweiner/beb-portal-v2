@@ -48,6 +48,7 @@ interface NavItem {
 // loop in the render block.
 const BEB_NAV: NavItem[] = [
   { id: 'dashboard',     label: 'Dashboard',         iconKey: 'dashboard' },
+  { id: 'calendar',      label: 'Calendar',          iconKey: 'schedule' },
   { label: 'Buying', section: true },
   // Nav id renames (2026-05-06): the buyer appointment-schedule page
   // moved from id 'calendar' → 'appointments' so that 'calendar' could
@@ -57,7 +58,6 @@ const BEB_NAV: NavItem[] = [
   { id: 'appointments',        label: 'Appointments',        iconKey: 'calendar' },
   { id: 'buying-events',       label: 'Buying Events',       iconKey: 'events' },
   { id: 'buying-event-stores', label: 'Buying Event Stores', iconKey: 'stores' },
-  { id: 'calendar',            label: 'Calendar',            iconKey: 'schedule' },
   { id: 'travel',              label: 'Travel Share',        iconKey: 'travel' },
   { id: 'dayentry',            label: 'Enter Buying Data',   iconKey: 'dayentry' },
   { label: 'Selling', section: true },
@@ -71,11 +71,11 @@ const BEB_NAV: NavItem[] = [
   { id: 'shipping',          label: 'Shipping',          iconKey: 'shipping' },
   { id: 'expenses',          label: 'Expenses',          iconKey: 'expenses' },
   { id: 'accounting-queue',  label: 'Accounting Queue',  iconKey: 'expenses' },
-  { id: 'reports',           label: 'Reports',           iconKey: 'reports' },
+  { id: 'broadcast',         label: '📣 Broadcast',      iconKey: 'marketing' },
   { id: 'customers',         label: 'Customers',         iconKey: 'staff' },
   { label: 'Admin', section: true },
   { id: 'admin',         label: 'Admin Panel',       iconKey: 'admin' },
-  { id: 'broadcast',     label: '📣 Broadcast',      iconKey: 'marketing' },
+  { id: 'reports',       label: 'Reports',           iconKey: 'reports' },
   { id: 'staff',         label: 'Staff',             iconKey: 'staff' },
   { id: 'data-research', label: 'Data Research',     iconKey: 'reports' },
   { id: 'financials',    label: 'Financials',        iconKey: 'financials' },
@@ -83,21 +83,21 @@ const BEB_NAV: NavItem[] = [
 
 const LIBERTY_NAV: NavItem[] = [
   { id: 'dashboard',     label: 'Dashboard',         iconKey: 'dashboard' },
+  { id: 'calendar',      label: 'Calendar',          iconKey: 'schedule' },
   { label: 'Buying', section: true },
   { id: 'appointments',        label: 'Appointments',        iconKey: 'calendar' },
   { id: 'buying-events',       label: 'Buying Events',       iconKey: 'events' },
   { id: 'buying-event-stores', label: 'Buying Event Stores', iconKey: 'stores' },
-  { id: 'calendar',            label: 'Calendar',            iconKey: 'schedule' },
   { id: 'travel',              label: 'Travel Share',        iconKey: 'travel' },
   { id: 'dayentry',            label: 'Enter Buying Data',   iconKey: 'dayentry' },
   { label: 'Operations', section: true },
   { id: 'marketing',    label: 'Marketing',      iconKey: 'marketing' },
   { id: 'shipping',     label: 'Shipping',       iconKey: 'shipping' },
   { id: 'expenses',     label: 'Expenses',       iconKey: 'expenses' },
-  { id: 'reports',      label: 'Reports',        iconKey: 'reports' },
   { id: 'customers',    label: 'Customers',      iconKey: 'staff' },
   { label: 'Admin', section: true },
   { id: 'liberty-admin', label: 'Liberty Admin Panel', iconKey: 'admin' },
+  { id: 'reports',       label: 'Reports',             iconKey: 'reports' },
   { id: 'staff',         label: 'Staff',               iconKey: 'staff' },
   { id: 'data-research', label: 'Data Research',       iconKey: 'reports' },
   { id: 'financials',    label: 'Financials',          iconKey: 'financials' },
