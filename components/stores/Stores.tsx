@@ -12,6 +12,7 @@ import WelcomeEmailSender from './WelcomeEmailSender'
 import PhoneInput from '@/components/ui/PhoneInput'
 import { formatPhoneDisplay, rawDigits } from '@/lib/phone'
 import { StoreSearch, parsePlaceAddress, useGoogleMaps } from '@/lib/googlePlaces'
+import LeadProfileCard from '@/components/sales/LeadProfileCard'
 
 interface Employee { id: string; store_id: string; name: string; phone: string; email: string }
 
@@ -491,6 +492,9 @@ function StoreModal({ store, onClose, refetchStores, onDelete }: {
               )}
             </div>
           </div>
+
+          {/* Captured lead profile (renders nothing if not lead-sourced) */}
+          <LeadProfileCard storeKind="store" targetId={store.id} />
 
           {/* Store Contacts */}
           <div className="card card-accent" style={{ margin: 0 }}>
