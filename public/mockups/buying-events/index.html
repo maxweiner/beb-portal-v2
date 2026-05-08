@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Buying Events — 5 Design Mockups</title>
+<style>
+  :root {
+    --ink: #1a1a16; --ash: #4A4A42; --mist: #A8A89A; --fog: #6B6B5F;
+    --cream: #FAF8F4; --cream2: #EDE7DA; --pearl: #D9D2C0;
+    --green: #1D6B44; --green-dark: #14532D; --green3: #7EC8A0; --green-pale: #E6F4EC;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    margin: 0; background: var(--cream); color: var(--ink);
+    padding: 40px 20px;
+  }
+  .container { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 28px; margin: 0 0 8px; }
+  .lede { color: var(--mist); margin: 0 0 32px; font-size: 15px; }
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: #fff; border: 1px solid var(--pearl); border-radius: 12px;
+    padding: 22px; cursor: pointer; transition: transform .12s, box-shadow .12s;
+    text-decoration: none; color: inherit; display: block;
+  }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.08); }
+  .num {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: var(--green-pale); color: var(--green-dark);
+    font-weight: 900; font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 12px;
+  }
+  .name { font-weight: 800; font-size: 17px; margin-bottom: 4px; }
+  .desc { font-size: 13px; color: var(--ash); line-height: 1.5; }
+  .strengths { font-size: 12px; color: var(--green-dark); margin-top: 10px; font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>◆ Buying Events — 5 design directions</h1>
+  <p class="lede">
+    Each mockup keeps every legacy function — they just organize it differently. Click in to see how drill-down works.
+  </p>
+
+  <div class="grid">
+    <a class="card" href="01-cards-expand.html">
+      <div class="num">1</div>
+      <div class="name">Cards · Expand-in-place</div>
+      <div class="desc">Compact event cards in a list. Click one and the full legacy panel slides open inline. Two states only: collapsed (clean) or expanded (full power).</div>
+      <div class="strengths">✓ Familiar · ✓ Minimal navigation</div>
+    </a>
+
+    <a class="card" href="02-master-detail.html">
+      <div class="num">2</div>
+      <div class="name">Master · Detail (two-pane)</div>
+      <div class="desc">Event list on the left, full detail on the right. Mail-app style. Always one click away from any function for the selected event.</div>
+      <div class="strengths">✓ Fastest switching · ✓ Always-visible context</div>
+    </a>
+
+    <a class="card" href="03-tabbed-detail.html">
+      <div class="num">3</div>
+      <div class="name">List → Tabbed detail page</div>
+      <div class="desc">Click an event → full-page detail with tabs (Overview · Buyers · Travel · Marketing · Days · Cancel). Each tab is uncluttered.</div>
+      <div class="strengths">✓ Most organized · ✓ Mobile-friendly</div>
+    </a>
+
+    <a class="card" href="04-kanban.html">
+      <div class="num">4</div>
+      <div class="name">Kanban · Workflow columns</div>
+      <div class="desc">Events flow left to right by phase: Save the Date → Booked → Marketing → This Week → Wrapping Up. Click a card to drill in.</div>
+      <div class="strengths">✓ Status at a glance · ✓ Pipeline view</div>
+    </a>
+
+    <a class="card" href="05-hub.html">
+      <div class="num">5</div>
+      <div class="name">Hub + action launchers</div>
+      <div class="desc">Each event card shows KPIs (buyers, $, days). Action launchers (Travel, Marketing, etc) open in modals — keeps the page tidy.</div>
+      <div class="strengths">✓ Cleanest top-level · ✓ Modal-first</div>
+    </a>
+  </div>
+</div>
+</body>
+</html>

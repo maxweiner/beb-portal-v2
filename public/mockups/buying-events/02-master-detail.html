@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>2 · Master / Detail</title>
+<style>
+  :root {
+    --ink: #1a1a16; --ash: #4A4A42; --mist: #A8A89A;
+    --cream: #FAF8F4; --cream2: #EDE7DA; --pearl: #D9D2C0;
+    --green: #1D6B44; --green-dark: #14532D; --green3: #7EC8A0; --green-pale: #E6F4EC;
+    --buying: #1E3A8A; --buying-pale: #DBEAFE;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+         margin: 0; background: var(--cream2); color: var(--ink); }
+  a { color: var(--green-dark); }
+  .top-back { padding: 14px 20px; background: #fff; border-bottom: 1px solid var(--pearl); }
+  .layout { display: grid; grid-template-columns: 320px 1fr; min-height: calc(100vh - 90px); }
+  @media (max-width: 720px) { .layout { grid-template-columns: 1fr; } }
+
+  .master {
+    background: #fff; border-right: 1px solid var(--pearl);
+    overflow-y: auto;
+  }
+  .master-header { padding: 16px 18px; border-bottom: 1px solid var(--cream2); position: sticky; top: 0; background: #fff; }
+  .master-header h2 { font-size: 18px; font-weight: 900; margin: 0 0 10px; }
+  .filter-bar { display: flex; gap: 4px; background: var(--cream2); border-radius: 6px; padding: 3px; margin-bottom: 8px; }
+  .filter-bar button {
+    flex: 1; padding: 5px 8px; border: none; cursor: pointer; border-radius: 4px;
+    font-size: 11px; font-weight: 700; background: transparent; color: var(--mist);
+  }
+  .filter-bar button.active { background: #fff; color: var(--green-dark); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+  .search { width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid var(--pearl); border-radius: 6px; }
+
+  .row {
+    padding: 12px 18px; border-bottom: 1px solid var(--cream2);
+    cursor: pointer; border-left: 3px solid transparent;
+  }
+  .row:hover { background: var(--cream); }
+  .row.selected { background: var(--green-pale); border-left-color: var(--green); }
+  .row .name { font-weight: 800; font-size: 13px; color: var(--ink); }
+  .row .meta { font-size: 11px; color: var(--mist); margin-top: 2px; }
+  .row .pills { margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap; }
+  .pill { font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 99; text-transform: uppercase; letter-spacing: .04em; }
+  .p-week { background: var(--buying-pale); color: var(--buying); }
+  .p-soon { background: #fef3c7; color: #92400e; }
+  .p-future { background: var(--cream2); color: var(--mist); }
+  .p-reserved { background: #fef3c7; color: #92400e; }
+
+  .detail { background: var(--cream); padding: 24px 28px; overflow-y: auto; }
+  .detail-header {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    flex-wrap: wrap; margin-bottom: 20px;
+  }
+  .detail h1 { font-size: 26px; margin: 0 0 4px; }
+  .detail .where { color: var(--mist); font-size: 14px; }
+  .detail .when { font-size: 13px; color: var(--ash); margin-top: 6px; }
+  .detail .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .btn { padding: 7px 12px; border: 1px solid var(--pearl); background: #fff; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 12px; }
+  .btn.danger { color: #b22234; border-color: #fecdd3; }
+  .btn.primary { background: var(--green); color: #fff; border-color: var(--green); }
+
+  .gates { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 18px; }
+  .gate { padding: 5px 10px; border-radius: 99; font-size: 11px; font-weight: 700; border: 1px solid; }
+  .g-green { background: var(--green-pale); color: var(--green-dark); border-color: var(--green3); }
+  .g-yellow { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+  .g-red { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+  .panel { background: #fff; border: 1px solid var(--pearl); border-radius: 8px; padding: 16px; }
+  .panel h3 { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--mist); margin: 0 0 10px; }
+  .panel .big { font-size: 24px; font-weight: 900; color: var(--ink); }
+  .panel .lil { font-size: 12px; color: var(--ash); }
+  .panel ul { padding-left: 18px; margin: 0; font-size: 13px; color: var(--ash); line-height: 1.6; }
+  .principle {
+    margin: 24px 28px 28px; padding: 14px 18px; background: #fff;
+    border: 1px solid var(--pearl); border-radius: 10px;
+    font-size: 13px; color: var(--ash); line-height: 1.55;
+  }
+  .principle b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="top-back"><a href="index.html">← Back to all mockups</a></div>
+
+<div class="layout">
+  <aside class="master">
+    <div class="master-header">
+      <h2>Buying Events</h2>
+      <div class="filter-bar">
+        <button class="active">Upcoming</button>
+        <button>This Week</button>
+        <button>Reserved</button>
+        <button>Past</button>
+      </div>
+      <input class="search" placeholder="🔍 Search store, city…">
+    </div>
+
+    <div class="row">
+      <div class="name">Kay Cameron Jewelers</div>
+      <div class="meta">Sayville, NY · May 7–9</div>
+      <div class="pills"><span class="pill p-week">This Week · Day 3</span></div>
+    </div>
+
+    <div class="row selected">
+      <div class="name">Pickens Jewelers</div>
+      <div class="meta">Atlanta, GA · May 12–14</div>
+      <div class="pills"><span class="pill p-soon">In 8 days</span></div>
+    </div>
+
+    <div class="row">
+      <div class="name">📌 Burkes Jewelers</div>
+      <div class="meta">Tampa, FL · May 21–23</div>
+      <div class="pills"><span class="pill p-reserved">Reserved</span></div>
+    </div>
+
+    <div class="row">
+      <div class="name">Adelphi Jewelers</div>
+      <div class="meta">Adelphi, MD · Jun 2–4</div>
+      <div class="pills"><span class="pill p-future">In 28 days</span></div>
+    </div>
+
+    <div class="row">
+      <div class="name">Sami's Diamonds</div>
+      <div class="meta">Phoenix, AZ · Jun 18–20</div>
+      <div class="pills"><span class="pill p-future">In 44 days</span></div>
+    </div>
+  </aside>
+
+  <main class="detail">
+    <div class="detail-header">
+      <div>
+        <h1>◆ Pickens Jewelers</h1>
+        <div class="where">Atlanta, GA</div>
+        <div class="when">📅 May 12 – May 14, 2026 · in 8 days</div>
+      </div>
+      <div class="actions">
+        <button class="btn">💰 Ad Spend</button>
+        <button class="btn">📊 Day Entry</button>
+        <button class="btn">📋 Checklist</button>
+        <button class="btn danger">🚫 Cancel</button>
+      </div>
+    </div>
+
+    <div class="gates">
+      <span class="gate g-green">👥 3/3 buyers</span>
+      <span class="gate g-yellow">✈️ Travel 2/3</span>
+      <span class="gate g-green">📣 Marketing</span>
+      <span class="gate g-green">📅 Booking live</span>
+      <span class="gate g-red">📦 Assets — none</span>
+      <span class="gate g-red">🎓 Staff not briefed</span>
+    </div>
+
+    <div class="grid">
+      <div class="panel">
+        <h3>Buyers (3 of 3)</h3>
+        <ul>
+          <li>Max Weiner — Lead</li>
+          <li>Tom Williams</li>
+          <li>Sami Reilly</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3>Total spend so far</h3>
+        <div class="big">$148,984</div>
+        <div class="lil">Day 1 of 3 entered</div>
+      </div>
+      <div class="panel">
+        <h3>Customers</h3>
+        <div class="big">24</div>
+        <div class="lil">100% close rate · 24 purchases</div>
+      </div>
+      <div class="panel">
+        <h3>Travel</h3>
+        <ul>
+          <li>Max — ✈️ + 🏨 ✓</li>
+          <li>Tom — ✈️ + 🏨 ✓</li>
+          <li>Sami — 🏨 ✓ · ✈️ <em>missing</em></li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3>Marketing</h3>
+        <ul>
+          <li>VDP — Done ✓</li>
+          <li>Postcard — Done ✓</li>
+          <li>Newspaper — Proofing</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3>Last visit notes</h3>
+        <ul>
+          <li>Postcard went out 2w late</li>
+          <li>Owner prefers Tue–Thu</li>
+        </ul>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="principle">
+  <b>How drill-down works:</b> The left list is a permanent navigator — every event one click away.
+  Click a row → the right pane fills with the full detail (gates, panels, action buttons). No page changes.
+  Tap a panel header (e.g. "Travel") to open the deeper editor as a secondary modal/inline expansion.
+  Mobile: pane stacks — list-only by default, tap event → detail covers full screen with a back button.
+</div>
+</body>
+</html>
