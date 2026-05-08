@@ -25,7 +25,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email'
-import { blockIfImpersonating } from '@/lib/impersonation/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,29 +41,22 @@ function escapeHtml(s: string): string {
 }
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  // Cancel-event is open to any signed-in user. The role/partner gate
-  // was removed because it kept catching legitimate ops staff whose
-  // public.users.email didn't line up with their auth-side email; the
-  // confirmation modal in the UI is now the only checkpoint. We still
-  // verify a Supabase JWT is present so anonymous external callers
-  // can't hit this endpoint, and we still block view-as / impersonation
-  // sessions from cancelling on someone else's behalf.
+  // ⚠️ All restrictions stripped per request — only the bare-minimum
+  // JWT check remains so the endpoint isn't exposed to the open
+  // internet. To be locked back down once the auth flow is debugged.
   const sb = admin()
   const authHeader = req.headers.get('authorization') || ''
   const m = authHeader.match(/^Bearer\s+(.+)$/i)
-  if (!m) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!m) return NextResponse.json({ error: 'Unauthorized — no Bearer token' }, { status: 401 })
   const { data: tokenUser, error: tokenErr } = await sb.auth.getUser(m[1])
   if (tokenErr || !tokenUser?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({
+      error: 'Unauthorized — JWT failed verification',
+      detail: tokenErr?.message || 'no user in token',
+    }, { status: 401 })
   }
 
-  const blocked = await blockIfImpersonating(req)
-  if (blocked) return blocked
-
-  // Resolve a public.users row when we can — purely for the audit
-  // cancelled_by field. If the caller's auth account isn't linked to
-  // a public.users row yet, we fall through with a null cancelled_by
-  // rather than refusing the cancel.
+  // Best-effort audit lookup; never blocks the cancel.
   const { data: caller } = await sb
     .from('users')
     .select('id, name, email')
@@ -74,11 +66,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const me = caller ? { id: caller.id, name: caller.name, email: caller.email }
                     : { id: null as string | null, name: tokenUser.user.email || 'Unknown', email: tokenUser.user.email || '' }
 
-  let body: any
-  try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
+  let body: any = {}
+  try { body = await req.json() } catch { /* swallow — empty body is fine */ }
 
-  const reason = String(body?.reason || '').trim()
-  if (!reason) return NextResponse.json({ error: 'Reason is required' }, { status: 400 })
+  const reason = String(body?.reason || '').trim() || 'No reason provided'
 
   const cancelAppointments = body?.cancel_appointments === true
   const emailBuyers        = body?.email_buyers        === true
@@ -94,9 +85,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     .maybeSingle()
   if (evErr) return NextResponse.json({ error: evErr.message }, { status: 500 })
   if (!event) return NextResponse.json({ error: 'Event not found' }, { status: 404 })
-  if (event.status === 'cancelled') {
-    return NextResponse.json({ error: 'Event is already cancelled' }, { status: 400 })
-  }
 
   // 1. Cancel the event itself. Only attach cancelled_by when we
   // resolved a public.users row — otherwise the FK would reject a
