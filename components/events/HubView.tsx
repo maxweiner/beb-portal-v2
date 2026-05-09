@@ -24,6 +24,7 @@ import type { Event, EventPromotionalAssetOrder, Store } from '@/types'
 import type { NavPage } from '@/app/page'
 import {
   EventReadinessCard,
+  BuyerPopover,
   type CampaignRow,
   type TravelRow,
   type TravelAckRow,
@@ -115,6 +116,7 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
   const [cancelEventId, setCancelEventId] = useState<string | null>(null)
   const [notesEventId, setNotesEventId] = useState<string | null>(null)
   const [manageEventId, setManageEventId] = useState<string | null>(null)
+  const [buyerPickerEventId, setBuyerPickerEventId] = useState<string | null>(null)
   const [customizeOpen, setCustomizeOpen] = useState(false)
 
   // Upcoming (default) vs Past time-window toggle.
@@ -335,7 +337,7 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
                   setNav?.('dayentry')
                   break
                 }
-                case 'buyers':    setManageEventId(ev.id); break
+                case 'buyers':    setBuyerPickerEventId(ev.id); break
                 case 'travel':    setTravelIntent({ eventId: ev.id }); setNav?.('travel'); break
                 case 'marketing': setNav?.('marketing'); break
                 case 'brief':     void toggleBriefed(ev); break
@@ -400,6 +402,23 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
               const others = prev.filter(o => o.event_id !== ev.id)
               return [...others, ...next]
             })}
+          />
+        )
+      })()}
+
+      {buyerPickerEventId && (() => {
+        const ev = events.find(e => e.id === buyerPickerEventId)
+        if (!ev) return null
+        const workers = (ev.workers || []).filter((w: any) => !w.deleted)
+        return (
+          <BuyerPickerModal
+            event={ev}
+            stores={stores}
+            workers={workers}
+            allUsers={users as any}
+            isAdmin={isAdmin}
+            onClose={() => setBuyerPickerEventId(null)}
+            onChange={(next) => setEvents(prev => prev.map(e => e.id === ev.id ? { ...e, workers: next } as Event : e))}
           />
         )
       })()}
@@ -751,6 +770,68 @@ function CustomizeModal({
             {hiddenCount === 0 ? 'All buttons visible' : `${hiddenCount} button${hiddenCount === 1 ? '' : 's'} hidden`}
           </span>
           <button onClick={onClose} className="btn-primary btn-sm">Done</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Buyer picker modal (wraps BuyerPopover in panel mode) ────
+
+function BuyerPickerModal({
+  event, stores, workers, allUsers, isAdmin, onClose, onChange,
+}: {
+  event: Event
+  stores: Store[]
+  workers: { id: string; name: string }[]
+  allUsers: { id: string; name: string }[] | undefined
+  isAdmin: boolean
+  onClose: () => void
+  onChange: (next: { id: string; name: string }[]) => void
+}) {
+  // Esc closes
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const display = eventDisplayName(event, stores)
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)',
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+        padding: 20, zIndex: 1000, overflow: 'auto',
+      }}
+    >
+      <div style={{
+        background: '#fff', borderRadius: 14, maxWidth: 420, width: '100%',
+        marginTop: 40, boxShadow: '0 20px 60px rgba(0,0,0,.3)',
+      }}>
+        <div style={{
+          padding: '14px 18px', borderBottom: '1px solid var(--cream2)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+        }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 800 }}>👥 Buyers</div>
+            <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 1 }}>{display}</div>
+          </div>
+          <button onClick={onClose} style={{
+            background: 'transparent', border: 0, fontSize: 22, color: 'var(--mist)', cursor: 'pointer',
+          }} aria-label="Close">×</button>
+        </div>
+        <div style={{ padding: '14px 18px' }}>
+          <BuyerPopover
+            eventId={event.id}
+            workers={workers}
+            allUsers={allUsers as any}
+            isAdmin={isAdmin}
+            onClose={onClose}
+            onChange={onChange}
+            presentation="panel"
+          />
         </div>
       </div>
     </div>

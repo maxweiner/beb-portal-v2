@@ -796,8 +796,9 @@ type GateLevel = 'green' | 'yellow' | 'red' | 'neutral'
 // Lightweight popover anchored under the buyer chip — shows who's
 // assigned (lead first) and offers a "Manage in Legacy" link.
 // Closes on outside click + Esc.
-function BuyerPopover({
+export function BuyerPopover({
   eventId, workers, allUsers, isAdmin, onClose, onChange,
+  presentation = 'popover',
 }: {
   eventId: string
   workers: { id: string; name: string }[]
@@ -805,11 +806,19 @@ function BuyerPopover({
   isAdmin: boolean
   onClose: () => void
   onChange: (workers: { id: string; name: string }[]) => void
+  /** 'popover' = absolute-positioned, anchored to a relative parent (legacy
+   *  behavior for the chip in PreEventTab). 'panel' = flat layout suitable
+   *  for embedding inside a modal dialog (used by HubView). */
+  presentation?: 'popover' | 'panel'
 }) {
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
+    // Click-outside-to-close only matters for the popover anchored inside a
+    // page. The 'panel' variant lives inside a modal which manages its own
+    // dismissal via backdrop + Escape.
+    if (presentation !== 'popover') return
     const onDoc = (e: MouseEvent) => {
       const el = e.target as HTMLElement
       if (!el.closest('[data-buyer-popover]')) onClose()
@@ -821,7 +830,7 @@ function BuyerPopover({
       document.removeEventListener('mousedown', onDoc)
       document.removeEventListener('keydown', onKey)
     }
-  }, [onClose])
+  }, [onClose, presentation])
 
   // PUT through the chokepoint so the buyer_added_to_event /
   // buyer_removed notifications fire as they do in legacy.
@@ -874,11 +883,13 @@ function BuyerPopover({
   return (
     <div
       data-buyer-popover
-      style={{
+      style={presentation === 'popover' ? {
         position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50,
         background: '#fff', border: '1px solid var(--cream2)', borderRadius: 8,
         boxShadow: '0 6px 20px rgba(0,0,0,.10)',
         padding: 10, minWidth: 280, maxWidth: 340,
+      } : {
+        background: '#fff', borderRadius: 8, padding: 0,
       }}
     >
       <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>
