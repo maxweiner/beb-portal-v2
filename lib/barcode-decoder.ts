@@ -13,6 +13,7 @@
  */
 
 import { decodePDF417FromImageData, decodePDF417FromBlob } from './barcodeScanner'
+import { decodePDF417FromImageDataZbar } from './zbarScanner'
 import { processForBarcode } from './image-processing'
 
 export type DecoderStrategy = 'native' | 'zxing' | 'upload-only'
@@ -28,6 +29,11 @@ export interface ScanDiagnostics {
    *  shows a non-PDF417 format, the camera is fine but the PDF417 either
    *  isn't framed or its modules are too small. */
   lastFormatSeen?: string | null
+  /** Which engine ran on the last attempt + which (if any) decoded the
+   *  barcode that finally succeeded. Lets us measure zxing vs zbar in
+   *  the wild and prune the loser later if one engine never wins. */
+  lastEngine?: 'zxing' | 'zbar' | null
+  winnerEngine?: 'zxing' | 'zbar' | null
 }
 
 export interface BarcodeDecoder {
@@ -200,11 +206,11 @@ class EnhancedZxingDecoder implements BarcodeDecoder {
 
       try {
         // Center-crop to a generous box around the viewfinder before passing
-        // to zxing. We widen to 90% × 60% (vs the visible 90% × 30% viewfinder)
-        // so users who frame the whole card instead of just the barcode still
-        // have the barcode region inside the crop. Cropping at native
-        // resolution preserves the fine PDF417 modules that get blurred when
-        // the whole frame is downscaled.
+        // to the decoder. We widen to 90% × 60% (vs the visible 90% × 30%
+        // viewfinder) so users who frame the whole card instead of just the
+        // barcode still have the barcode region inside the crop. Cropping at
+        // native resolution preserves the fine PDF417 modules that get
+        // blurred when the whole frame is downscaled.
         const vw = video.videoWidth
         const vh = video.videoHeight
         const cropW = Math.round(vw * 0.90)
@@ -220,32 +226,43 @@ class EnhancedZxingDecoder implements BarcodeDecoder {
 
         ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH)
         const imageData = ctx.getImageData(0, 0, cropW, cropH)
-        // Alternate: even tick = grayscale + contrast (preferred for
-        // most lighting); odd tick = also binarize (helps glossy codes
-        // under harsh overhead light where Otsu threshold > smooth).
-        const useBinarize = (this.tick++ % 2) === 1
+        // 4-way rotation: zxing-plain, zxing-binarize, zbar-plain, zbar-binarize.
+        // Both engines see both contrast modes within ~800ms.
+        const tickIdx = this.tick++ % 4
+        const engine: 'zxing' | 'zbar' = tickIdx < 2 ? 'zxing' : 'zbar'
+        const useBinarize = (tickIdx % 2) === 1
         processForBarcode(imageData, { binarize: useBinarize })
         ctx.putImageData(imageData, 0, 0)
         const processed = ctx.getImageData(0, 0, cropW, cropH)
 
         this.attempts++
-        // Every 4th attempt: also try ALL formats. If zxing CAN'T see anything
-        // at all, the issue is focus/lighting; if it sees QR/code-128/etc. but
-        // never PDF417, the issue is barcode framing or resolution. Cheap to
-        // run occasionally — costs ~50ms once a second.
+        // Every 4th attempt: also try ALL formats so we can spot non-PDF417
+        // hits (e.g. Code-128 on the front of the license).
         const tryAllFormats = (this.attempts % 4) === 0
-        const result = await decodePDF417FromImageData(processed, tryAllFormats)
+        const result = engine === 'zxing'
+          ? await decodePDF417FromImageData(processed, tryAllFormats)
+          : await decodePDF417FromImageDataZbar(processed, tryAllFormats)
         if (!this.running) return
         if (result?.isPDF417 && result.text) {
           this.stop()
+          onDiagnostic?.({
+            attempts: this.attempts,
+            lastFormatSeen: this.lastFormatSeen,
+            lastEngine: engine,
+            winnerEngine: engine,
+          })
           onResult(result.text)
           return
         }
         if (result && !result.isPDF417 && result.format) {
-          // Saw something — note it for diagnostics, keep scanning.
           this.lastFormatSeen = result.format
         }
-        onDiagnostic?.({ attempts: this.attempts, lastFormatSeen: this.lastFormatSeen })
+        onDiagnostic?.({
+          attempts: this.attempts,
+          lastFormatSeen: this.lastFormatSeen,
+          lastEngine: engine,
+          winnerEngine: null,
+        })
       } finally {
         this.inFlight = false
       }
@@ -256,13 +273,12 @@ class EnhancedZxingDecoder implements BarcodeDecoder {
 
   async decodeImage(image: HTMLImageElement | Blob): Promise<string | null> {
     try {
-      // Blob path — let zxing-wasm handle it (it scales internally).
+      // Blob path — try zxing's native blob path first, then fall back to a
+      // preprocessed canvas retry through both engines.
       if (image instanceof Blob) {
-        // Also run a preprocessed retry if the raw attempt misses.
         const raw = await decodePDF417FromBlob(image)
         if (raw?.isPDF417 && raw.text) return raw.text
 
-        // Draw to canvas, preprocess aggressively, retry.
         const bmp = await createImageBitmap(image)
         const canvas = getScratchCanvas()
         canvas.width = bmp.width
@@ -275,8 +291,15 @@ class EnhancedZxingDecoder implements BarcodeDecoder {
         // will have produced a well-exposed frame where Otsu's threshold
         // is reliable.
         processForBarcode(imageData, { binarize: true })
-        const retry = await decodePDF417FromImageData(imageData)
-        return retry?.isPDF417 && retry.text ? retry.text : null
+
+        // Try both engines on the preprocessed frame; whichever decodes wins.
+        const [zxingRetry, zbarRetry] = await Promise.all([
+          decodePDF417FromImageData(imageData),
+          decodePDF417FromImageDataZbar(imageData),
+        ])
+        if (zxingRetry?.isPDF417 && zxingRetry.text) return zxingRetry.text
+        if (zbarRetry?.isPDF417 && zbarRetry.text) return zbarRetry.text
+        return null
       }
 
       // HTMLImageElement path
@@ -289,8 +312,13 @@ class EnhancedZxingDecoder implements BarcodeDecoder {
       ctx.drawImage(image, 0, 0)
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
       processForBarcode(imageData, { binarize: true })
-      const result = await decodePDF417FromImageData(imageData)
-      return result?.isPDF417 && result.text ? result.text : null
+      const [zxingResult, zbarResult] = await Promise.all([
+        decodePDF417FromImageData(imageData),
+        decodePDF417FromImageDataZbar(imageData),
+      ])
+      if (zxingResult?.isPDF417 && zxingResult.text) return zxingResult.text
+      if (zbarResult?.isPDF417 && zbarResult.text) return zbarResult.text
+      return null
     } catch {
       return null
     }
