@@ -5,6 +5,7 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { NavPage } from '@/app/page'
 import { usePendingApprovals } from '@/components/expenses/usePendingApprovals'
+import { useReconciliationAlerts } from '@/components/reconciliation/useReconciliationAlerts'
 import { useRoleModules } from '@/lib/useRoleModules'
 import ViewAsSwitcher from '@/components/impersonation/ViewAsSwitcher'
 
@@ -73,6 +74,7 @@ const BEB_NAV: NavItem[] = [
   { id: 'shipping',          label: 'Shipping',          iconKey: 'shipping' },
   { id: 'expenses',          label: 'Expenses',          iconKey: 'expenses' },
   { id: 'accounting-queue',  label: 'Accounting Queue',  iconKey: 'expenses' },
+  { id: 'reconciliation',    label: 'Reconciliation',    iconKey: 'financials' },
   { id: 'broadcast',         label: '📣 Broadcast',      iconKey: 'marketing' },
   { id: 'customers',         label: 'Customers',         iconKey: 'staff' },
   { label: 'Admin', section: true },
@@ -96,6 +98,7 @@ const LIBERTY_NAV: NavItem[] = [
   { id: 'marketing',    label: 'Marketing',      iconKey: 'marketing' },
   { id: 'shipping',     label: 'Shipping',       iconKey: 'shipping' },
   { id: 'expenses',     label: 'Expenses',       iconKey: 'expenses' },
+  { id: 'reconciliation', label: 'Reconciliation', iconKey: 'financials' },
   { id: 'customers',    label: 'Customers',      iconKey: 'staff' },
   { label: 'Admin', section: true },
   { id: 'liberty-admin', label: 'Liberty Admin Panel', iconKey: 'admin' },
@@ -151,6 +154,7 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
   // every section closed except the one containing the active nav.
   // localStorage overrides if the user has manually toggled before.
   const { count: pendingApprovalCount } = usePendingApprovals()
+  const { count: reconciliationAlertCount } = useReconciliationAlerts()
   const [collapsed, setCollapsed] = useState<Set<string>>(() => {
     // Seed with every section label closed; the active section is opened
     // below in a useEffect once nav + NAV_ITEMS are stable.
@@ -299,6 +303,9 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
                 const meta = navItemById.get(pid)
                 if (!meta) return null
                 const showBadge = pid === 'expenses' && pendingApprovalCount > 0
+                const showReconBadge = pid === 'reconciliation' && reconciliationAlertCount > 0
+                const pinBadge = showBadge ? pendingApprovalCount
+                  : showReconBadge ? reconciliationAlertCount : 0
                 return (
                   <NavRow
                     key={`pin-${pid}`}
@@ -308,7 +315,7 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
                     pinned={true}
                     onClick={() => setNav(pid)}
                     onTogglePin={() => togglePin(pid)}
-                    badgeCount={showBadge ? pendingApprovalCount : 0}
+                    badgeCount={pinBadge}
                   />
                 )
               })}
@@ -366,6 +373,9 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
             if (item.id && !grantedModules.has(item.id)) return null
             if (currentSection && !currentOpen) return null
             const showExpensesBadge = item.id === 'expenses' && pendingApprovalCount > 0
+            const showReconBadge = item.id === 'reconciliation' && reconciliationAlertCount > 0
+            const badge = showExpensesBadge ? pendingApprovalCount
+              : showReconBadge ? reconciliationAlertCount : 0
             const navBtn = (
               <NavRow
                 label={item.label}
@@ -374,7 +384,7 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
                 pinned={isPinned(item.id!)}
                 onClick={() => setNav(item.id!)}
                 onTogglePin={() => togglePin(item.id!)}
-                badgeCount={showExpensesBadge ? pendingApprovalCount : 0}
+                badgeCount={badge}
               />
             )
             // Render pinned custom reports as sub-items right below "Reports".

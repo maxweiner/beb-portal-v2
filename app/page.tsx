@@ -43,6 +43,7 @@ import MobileDashboard from '@/components/mobile/MobileDashboard'
 import MobileDayEntry from '@/components/mobile/MobileDayEntry'
 import MobileTravel from '@/components/mobile/MobileTravel'
 import AccountingQueue from '@/components/accounting/AccountingQueue'
+import ReconciliationPage from '@/components/reconciliation/ReconciliationPage'
 import BroadcastPage from '@/components/broadcast/BroadcastPage'
 import BroadcastBanner from '@/components/broadcast/BroadcastBanner'
 import MobileStaff from '@/components/mobile/MobileStaff'
@@ -55,7 +56,7 @@ import { shouldUseMobile, setMobilePreference } from '@/lib/mobile'
 //   schedule     → calendar         (time-off + event calendar)
 //   events       → buying-events
 //   libertyadmin → liberty-admin
-export type NavPage = 'dashboard' | 'appointments' | 'buying-events' | 'calendar' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'buying-event-stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'liberty-admin' | 'recipients' | 'notification-templates' | 'data-research' | 'expenses' | 'financials' | 'customers' | 'trade-shows' | 'trunk-shows' | 'trunk-show-stores' | 'leads' | 'trunk-communications' | 'accounting-queue' | 'broadcast' | 'intake-lookup' | 'buy-intake'
+export type NavPage = 'dashboard' | 'appointments' | 'buying-events' | 'calendar' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'buying-event-stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'liberty-admin' | 'recipients' | 'notification-templates' | 'data-research' | 'expenses' | 'financials' | 'customers' | 'trade-shows' | 'trunk-shows' | 'trunk-show-stores' | 'leads' | 'trunk-communications' | 'accounting-queue' | 'broadcast' | 'intake-lookup' | 'buy-intake' | 'reconciliation'
 
 export default function Home() {
   const { user, loading, connectionError, reload } = useApp()
@@ -273,6 +274,7 @@ export default function Home() {
         {nav === 'travel'     && <ModuleWriteGate moduleId="travel"><Travel key={navKey} /></ModuleWriteGate>}
         {nav === 'marketing'  && <ModuleWriteGate moduleId="marketing"><Marketing key={navKey} /></ModuleWriteGate>}
         {nav === 'accounting-queue' && <ModuleGuard moduleId="accounting-queue"><ModuleWriteGate moduleId="accounting-queue"><AccountingQueue key={navKey} setNav={setNav} /></ModuleWriteGate></ModuleGuard>}
+        {nav === 'reconciliation' && <ModuleGuard moduleId="reconciliation"><ModuleWriteGate moduleId="reconciliation"><ReconciliationPage key={navKey} /></ModuleWriteGate></ModuleGuard>}
         {nav === 'broadcast' && <ModuleGuard moduleId="broadcast"><ModuleWriteGate moduleId="broadcast"><BroadcastPage key={navKey} /></ModuleWriteGate></ModuleGuard>}
         {nav === 'admin' && (
           <ModuleGuard moduleId="admin">
