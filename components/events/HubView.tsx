@@ -60,7 +60,7 @@ const LAUNCHERS: LauncherDef[] = [
     sub: "Today's data" },
   { key: 'buyers',    icon: '👥', label: 'Buyers',             locked: true,
     sub: 'Assigned roster' },
-  { key: 'promote',   icon: '✅', label: 'Promote to Booked',  locked: true, adminOnly: true,
+  { key: 'promote',   icon: '✅', label: 'Promote to Booked',  adminOnly: true,
     showWhen: ({ reserved }) => reserved,
     sub: 'Reserved → Booked' },
   { key: 'travel',    icon: '✈️', label: 'Travel',
@@ -117,6 +117,9 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
   const [manageEventId, setManageEventId] = useState<string | null>(null)
   const [customizeOpen, setCustomizeOpen] = useState(false)
 
+  // Upcoming (default) vs Past time-window toggle.
+  const [window, setWindow] = useState<'upcoming' | 'past'>('upcoming')
+
   // Per-user hidden-launchers list. Lives in users.preferences.buying_events_hub_hidden_launchers.
   const hiddenFromPrefs: LauncherKey[] = useMemo(() => {
     const arr = (user?.preferences as any)?.buying_events_hub_hidden_launchers
@@ -152,13 +155,20 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
     return () => { cancelled = true }
   }, [brand])
 
-  const upcoming = useMemo(() => {
+  const visibleEvents = useMemo(() => {
     const todayIso = new Date().toISOString().slice(0, 10)
+    if (window === 'past') {
+      return events
+        .filter(e => e.status !== 'cancelled')
+        .filter(e => !!e.start_date && eventEndIso(e.start_date) < todayIso)
+        // Most recent first.
+        .sort((a, b) => (b.start_date || '').localeCompare(a.start_date || ''))
+    }
     return events
       .filter(e => e.status !== 'cancelled')
       .filter(e => !!e.start_date && eventEndIso(e.start_date) >= todayIso)
       .sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''))
-  }, [events])
+  }, [events, window])
 
   const campaignsByEvent = useMemo(() => {
     const m = new Map<string, CampaignRow[]>()
@@ -236,8 +246,28 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         gap: 10, flexWrap: 'wrap', marginBottom: 14,
       }}>
-        <div style={{ color: 'var(--mist)', fontSize: 13 }}>
-          One card per event. Click any launcher to open its function.
+        {/* Upcoming / Past toggle */}
+        <div style={{
+          display: 'inline-flex', gap: 2, background: 'var(--cream2)',
+          padding: 2, borderRadius: 6,
+        }}>
+          {(['upcoming', 'past'] as const).map(w => {
+            const sel = window === w
+            return (
+              <button
+                key={w}
+                onClick={() => setWindow(w)}
+                style={{
+                  fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
+                  padding: '5px 14px', border: 'none', borderRadius: 4,
+                  background: sel ? '#fff' : 'transparent',
+                  color: sel ? 'var(--green-dark)' : 'var(--mist)',
+                  cursor: 'pointer',
+                  boxShadow: sel ? '0 1px 2px rgba(0,0,0,.06)' : 'none',
+                  textTransform: 'capitalize',
+                }}>{w}</button>
+            )
+          })}
         </div>
         <button
           onClick={() => setCustomizeOpen(true)}
@@ -246,17 +276,17 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
         >✏️ Customize buttons</button>
       </div>
 
-      {upcoming.length === 0 && (
+      {visibleEvents.length === 0 && (
         <div style={{
           background: '#fff', border: '1px solid var(--cream2)', borderRadius: 10,
           padding: 32, textAlign: 'center', color: 'var(--mist)', fontSize: 14,
         }}>
-          No upcoming buying events.
+          {window === 'past' ? 'No past buying events.' : 'No upcoming buying events.'}
         </div>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 21 }}>
-        {upcoming.map(ev => (
+        {visibleEvents.map(ev => (
           <HubCard
             key={ev.id}
             ev={ev}
@@ -391,21 +421,25 @@ function HubCard({
   const live = !reserved && startIso <= todayIso && endIso >= todayIso
   const soon = !reserved && !live && startIso > todayIso &&
     (new Date(startIso).getTime() - new Date(todayIso).getTime()) <= 7 * 86_400_000
+  const past = !reserved && !live && endIso !== '' && endIso < todayIso
 
   // Phase tag for hero
-  const phase: 'live' | 'soon' | 'upcoming' | 'reserved' =
-    reserved ? 'reserved' : live ? 'live' : soon ? 'soon' : 'upcoming'
+  const phase: 'live' | 'soon' | 'upcoming' | 'reserved' | 'past' =
+    reserved ? 'reserved' : past ? 'past' : live ? 'live' : soon ? 'soon' : 'upcoming'
 
   const heroBg =
     phase === 'live'      ? 'linear-gradient(160deg, #1E40AF 0%, #38BDF8 100%)' :
     phase === 'soon'      ? 'linear-gradient(160deg, #1E40AF 0%, #38BDF8 100%)' :
     phase === 'reserved'  ? 'linear-gradient(160deg, #92400E 0%, #D97706 100%)' :
+    phase === 'past'      ? 'linear-gradient(160deg, #1F2937 0%, #6B7280 100%)' :
                             'linear-gradient(160deg, #14532D 0%, #1D6B44 100%)'
 
+  const daysSinceEnd = past && endIso ? daysBetween(endIso, todayIso) : 0
   const phasePill =
     phase === 'live'     ? `Live · Day ${dayIndex(startIso, todayIso) + 1}` :
     phase === 'soon'     ? `In ${daysBetween(todayIso, startIso)} day${daysBetween(todayIso, startIso) === 1 ? '' : 's'}` :
     phase === 'reserved' ? 'Save the Date' :
+    phase === 'past'     ? (daysSinceEnd === 0 ? 'Just ended' : `Ended ${daysSinceEnd}d ago`) :
                            `In ${daysBetween(todayIso, startIso)} days`
 
   // KPIs
@@ -640,12 +674,10 @@ function CustomizeModal({
               return (
                 <div
                   key={l.key}
-                  onClick={() => !l.locked && onToggle(l.key)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 12,
                     padding: '10px 12px', background: 'var(--cream)',
                     border: '1px solid var(--pearl)', borderRadius: 8,
-                    cursor: l.locked ? 'not-allowed' : 'pointer',
                     opacity: l.locked ? 0.55 : 1,
                   }}
                 >
@@ -653,12 +685,17 @@ function CustomizeModal({
                     checked={isVisible}
                     disabled={l.locked}
                     onChange={() => !l.locked && onToggle(l.key)}
+                    labelStyle={{ flex: 1, gap: 12, cursor: l.locked ? 'not-allowed' : 'pointer' }}
+                    label={
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
+                        <span style={{ fontSize: 18 }}>{l.icon}</span>
+                        <span style={{ flex: 1 }}>
+                          <span style={{ display: 'block', fontWeight: 800, fontSize: 13 }}>{l.label}</span>
+                          {l.sub && <span style={{ display: 'block', fontSize: 11, color: 'var(--mist)' }}>{l.sub}</span>}
+                        </span>
+                      </span>
+                    }
                   />
-                  <span style={{ fontSize: 18 }}>{l.icon}</span>
-                  <span style={{ flex: 1 }}>
-                    <span style={{ display: 'block', fontWeight: 800, fontSize: 13 }}>{l.label}</span>
-                    {l.sub && <span style={{ display: 'block', fontSize: 11, color: 'var(--mist)' }}>{l.sub}</span>}
-                  </span>
                   {l.locked && (
                     <span style={{
                       fontSize: 10, background: 'var(--cream2)', color: 'var(--ash)',
