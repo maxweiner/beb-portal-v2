@@ -128,15 +128,15 @@ export default function ReconciliationPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | FindingStatus>('open')
   const [search, setSearch] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
-  const [matchedCount, setMatchedCount] = useState<number | null>(null)
   const [running, setRunning] = useState(false)
+  const [matchError, setMatchError] = useState<string | null>(null)
 
   const reloadRef = useRef<() => Promise<void>>(async () => {})
   reloadRef.current = async () => {
     if (!brand) return
     setError(null)
     try {
-      const [findingsRes, importRes, clearedCountRes, writtenCountRes] = await Promise.all([
+      const [findingsRes, importRes] = await Promise.all([
         withTimeout(
           supabase.from('reconciliation_findings').select('*').eq('brand', brand)
             .order('updated_at', { ascending: false }),
@@ -145,27 +145,9 @@ export default function ReconciliationPage() {
           supabase.from('cleared_check_imports').select('*').eq('brand', brand)
             .order('uploaded_at', { ascending: false }).limit(1),
         ),
-        withTimeout(
-          supabase.from('cleared_checks').select('id', { count: 'exact', head: true }).eq('brand', brand),
-        ),
-        // Approximate "matched" = cleared rows with no flagged finding for that check_number.
-        // Fast enough for a tile; real precision lives in the matcher's RETURNS JSONB.
-        withTimeout(
-          supabase.from('reconciliation_findings').select('check_number').eq('brand', brand),
-        ),
       ])
       setFindings((findingsRes.data || []) as Finding[])
       setLastImport((importRes.data?.[0] as ImportRow) || null)
-      const clearedTotal = (clearedCountRes as any).count ?? 0
-      const flaggedNumbers = new Set<string>(
-        ((writtenCountRes.data || []) as { check_number: string }[]).map(r => r.check_number),
-      )
-      // matched ≈ cleared rows whose check_number isn't in any finding row
-      const { data: clearedRowsData } = await withTimeout(
-        supabase.from('cleared_checks').select('check_number').eq('brand', brand),
-      )
-      const matched = (clearedRowsData || []).filter(r => !flaggedNumbers.has((r as any).check_number)).length
-      setMatchedCount(matched)
     } catch (e: any) {
       setError(e?.message || 'Failed to load')
       setFindings([])
@@ -176,13 +158,14 @@ export default function ReconciliationPage() {
   useEffect(() => { void reloadRef.current() }, [brand])
 
   const counts = useMemo(() => {
+    // All five counts now come straight from reconciliation_findings.
+    // The v2 matcher persists every type, including 'matched'.
     const by: Record<FindingType, number> = {
-      matched: matchedCount ?? 0,
-      amount_mismatch: 0, duplicate_clearing: 0, orphan_cleared: 0, outstanding: 0,
+      matched: 0, amount_mismatch: 0, duplicate_clearing: 0, orphan_cleared: 0, outstanding: 0,
     }
     for (const f of findings || []) by[f.finding_type] = (by[f.finding_type] || 0) + 1
     return by
-  }, [findings, matchedCount])
+  }, [findings])
 
   const filtered = useMemo(() => {
     if (!findings) return []
@@ -190,6 +173,9 @@ export default function ReconciliationPage() {
     return findings.filter(f => {
       if (tab === 'outstanding' && f.finding_type !== 'outstanding') return false
       if (tab === 'findings' && f.finding_type === 'outstanding') return false
+      // Matched findings clutter the working view — only show when the
+      // user explicitly picks the Matched chip.
+      if (tab === 'findings' && f.finding_type === 'matched' && typeFilter !== 'matched') return false
       if (typeFilter !== 'all' && f.finding_type !== typeFilter) return false
       if (statusFilter !== 'all' && f.status !== statusFilter) return false
       if (q) {
@@ -202,7 +188,7 @@ export default function ReconciliationPage() {
 
   async function reRunMatch() {
     if (!brand || running) return
-    setRunning(true); setError(null)
+    setRunning(true); setError(null); setMatchError(null)
     try {
       const session = await supabase.auth.getSession()
       const token = session.data.session?.access_token || ''
@@ -214,7 +200,7 @@ export default function ReconciliationPage() {
       const json = await res.json()
       if (!res.ok) throw new Error(json?.error || 'Match failed')
     } catch (e: any) {
-      setError(e?.message || 'Match failed')
+      setMatchError(e?.message || 'Match failed')
     }
     setRunning(false)
     await reloadRef.current()
@@ -271,7 +257,17 @@ export default function ReconciliationPage() {
         </div>
       </div>
 
-      <UploadCard brand={brand!} lastImport={lastImport} onImported={() => void reloadRef.current()} />
+      <UploadCard
+        brand={brand!}
+        lastImport={lastImport}
+        onImported={() => void reloadRef.current()}
+        onMatchError={setMatchError}
+      />
+      {matchError && (
+        <div className="card" style={{ padding: 10, marginBottom: 12, background: '#FEE2E2', color: '#991B1B' }}>
+          <strong>Match step failed:</strong> {matchError}. Cleared rows are saved; click "Re-run matching" once the issue is fixed.
+        </div>
+      )}
 
       <LetterSettings brand={brand!} />
 
@@ -349,11 +345,12 @@ export default function ReconciliationPage() {
 /* ──────────────────────────────────────────────────────────────── */
 
 function UploadCard({
-  brand, lastImport, onImported,
+  brand, lastImport, onImported, onMatchError,
 }: {
   brand: string
   lastImport: ImportRow | null | 'loading'
   onImported: () => void
+  onMatchError: (msg: string | null) => void
 }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -377,6 +374,9 @@ function UploadCard({
         imported: json.imported_count, skipped: json.skipped_count,
         duplicates: json.duplicate_count, filename: file.name,
       })
+      // The import succeeded but the matcher might have errored — surface
+      // it so we don't silently leave the user with no findings.
+      onMatchError(json?.match_error || null)
       onImported()
     } catch (e: any) {
       setErr(e?.message || 'Upload failed')
