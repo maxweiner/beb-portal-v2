@@ -24,6 +24,7 @@ import PartnerFinancials from '@/components/financials/PartnerFinancials'
 import Marketing from '@/components/marketing/Marketing'
 import Calendar from '@/components/calendar/Calendar'
 import AppointmentsAdmin from '@/components/appointments-admin/AppointmentsAdmin'
+import IntakeLookup from '@/components/intake/IntakeLookup'
 import { ModuleGuard } from '@/components/ui/ModuleGuard'
 import ModuleWriteGate from '@/components/ui/ModuleWriteGate'
 import { useRoleModules } from '@/lib/useRoleModules'
@@ -53,7 +54,7 @@ import { shouldUseMobile, setMobilePreference } from '@/lib/mobile'
 //   schedule     → calendar         (time-off + event calendar)
 //   events       → buying-events
 //   libertyadmin → liberty-admin
-export type NavPage = 'dashboard' | 'appointments' | 'buying-events' | 'calendar' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'buying-event-stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'liberty-admin' | 'recipients' | 'notification-templates' | 'data-research' | 'expenses' | 'financials' | 'customers' | 'trade-shows' | 'trunk-shows' | 'trunk-show-stores' | 'leads' | 'trunk-communications' | 'accounting-queue' | 'broadcast'
+export type NavPage = 'dashboard' | 'appointments' | 'buying-events' | 'calendar' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'buying-event-stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'liberty-admin' | 'recipients' | 'notification-templates' | 'data-research' | 'expenses' | 'financials' | 'customers' | 'trade-shows' | 'trunk-shows' | 'trunk-show-stores' | 'leads' | 'trunk-communications' | 'accounting-queue' | 'broadcast' | 'intake-lookup'
 
 export default function Home() {
   const { user, loading, connectionError, reload } = useApp()
@@ -321,6 +322,7 @@ export default function Home() {
             </ModuleWriteGate>
           </ModuleGuard>
         )}
+        {nav === 'intake-lookup' && <IntakeLookup key={navKey} />}
       </main>
     </div>
     </>

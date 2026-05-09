@@ -28,6 +28,9 @@ interface Props {
   storeId: string
   eventStartDate: string | null
   eventDisplayName: string
+  /** Override the day this worksheet is scoped to. Defaults to today.
+   *  The lookup tool uses this to open a historical worksheet for editing. */
+  dateIso?: string
   onClose: () => void
 }
 
@@ -74,7 +77,7 @@ const COMMISSION_OPTIONS: Array<{ key: 'rate_10' | 'rate_5' | 'rate_0' | 'store'
 const MAX_JEWELRY = 5
 
 export default function IntakeWorksheet({
-  eventId, storeId, eventStartDate, eventDisplayName, onClose,
+  eventId, storeId, eventStartDate, eventDisplayName, dateIso, onClose,
 }: Props) {
   const { user, users } = useApp()
   const [intakes, setIntakes] = useState<IntakeRow[]>([])
@@ -85,7 +88,7 @@ export default function IntakeWorksheet({
   const [submitMessage, setSubmitMessage] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
-  const todayIso = new Date().toISOString().slice(0, 10)
+  const todayIso = dateIso || new Date().toISOString().slice(0, 10)
   const todayStartIso = `${todayIso}T00:00:00`
   const todayEndIso = `${todayIso}T23:59:59.999`
 
