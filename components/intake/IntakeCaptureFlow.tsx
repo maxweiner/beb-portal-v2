@@ -1,24 +1,16 @@
 'use client'
 
 /**
- * Photo-first buy intake capture flow (Phase 1 of the intake → purchase
- * initiative — see docs/intake-purchase-spec.md).
+ * Photo-first buy intake capture flow.
  *
  * Step sequence:
  *   1. Buy form #
- *   2. Front of license (camera)
- *   3. Back of license (camera)
- *   4. Invoice (camera)
- *   5. Jewelry (1..5 photos, optional)
- *   6. Quick fields (amount, check #, commission, email, phone)
- *   7. Save → customer_intakes row + intake_photos rows
- *
- * Phase 1 has NO background worker — `processing_state` defaults to 'parsed'
- * because the buyer types every field manually. Phase 2 will start the worker
- * and switch the default to 'processing'.
- *
- * Buyer skips any optional step. Everything is editable later via the
- * worksheet (Phase 4) until the 3-day lock kicks in (Phase 8).
+ *   2. Front of license (live camera, license outline, 5s auto-capture)
+ *   3. Back of license (live camera, license outline, 5s auto-capture)
+ *   4. Invoice (live camera, "Buy Form" overlay, 5s auto-capture)
+ *   5. Jewelry (1..5 photos, file picker)
+ *   6. Quick fields (amount, check #, phone, email — commission editable behind a link)
+ *   7. Save → customer_intakes row + intake_photos rows + background OCR
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -48,6 +40,7 @@ const COMMISSION_OPTIONS: Array<{ key: CommissionBucket; label: string; pct: num
 ]
 
 const MAX_JEWELRY_PHOTOS = 5
+const AUTO_CAPTURE_SECONDS = 5
 
 interface Props {
   eventId: string
@@ -72,10 +65,10 @@ export default function IntakeCaptureFlow({ eventId, onClose, onSaved }: Props) 
   const [amount, setAmount] = useState('')
   const [checkNumber, setCheckNumber] = useState('')
   const [commission, setCommission] = useState<CommissionBucket>('rate_10')
+  const [showCommissionPicker, setShowCommissionPicker] = useState(false)
   const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
+  const [phone, setPhone] = useState('')  // raw digits
 
-  // Form-# uniqueness pre-check (buy_form_number is globally unique forever).
   async function checkFormNumberAvailable(n: string): Promise<{ ok: true } | { ok: false; reason: string }> {
     if (!/^\d{5}$/.test(n)) return { ok: false, reason: 'Form # must be exactly 5 digits.' }
     const { data, error } = await supabase
@@ -97,7 +90,6 @@ export default function IntakeCaptureFlow({ eventId, onClose, onSaved }: Props) 
     setStep('photo-front')
   }
 
-  // Save: insert customer_intakes row, upload photos, write intake_photos rows.
   async function save() {
     setStep('saving')
     setError('')
@@ -109,11 +101,8 @@ export default function IntakeCaptureFlow({ eventId, onClose, onSaved }: Props) 
       setError('Amount must be a non-negative number.'); setStep('quick-fields'); return
     }
 
-    // Decide whether the background processor will run. If the buyer
-    // captured a license front photo OR an invoice photo, we need parsing.
     const willProcess = !!(frontPhoto || invoicePhoto)
 
-    // 1. Insert the intake row first so we have an ID for storage paths.
     const { data: insertData, error: insertErr } = await supabase
       .from('customer_intakes')
       .insert({
@@ -125,7 +114,7 @@ export default function IntakeCaptureFlow({ eventId, onClose, onSaved }: Props) 
         commission_pct: opt.pct,
         commission_bucket: commission,
         intake_kind: 'purchase',
-        phone: phone || null,
+        phone: formatPhoneDisplay(phone) || null,
         email: email || null,
         processing_state: willProcess ? 'processing' : 'parsed',
       })
@@ -136,8 +125,6 @@ export default function IntakeCaptureFlow({ eventId, onClose, onSaved }: Props) 
     }
     const intakeId = insertData.id
 
-    // 2. Upload photos in parallel. Failures here don't roll back the intake;
-    //    user can retry from the worksheet.
     const uploadJobs: Promise<{ field: string; url: string } | null>[] = []
     if (frontPhoto)   uploadJobs.push(uploadIntakePhoto(frontPhoto,   { eventId, intakeId, kind: 'front'   }).then(url => ({ field: 'license_photo_url', url })).catch(() => null))
     if (backPhoto)    uploadJobs.push(uploadIntakePhoto(backPhoto,    { eventId, intakeId, kind: 'back'    }).then(url => ({ field: 'back_photo_url', url })).catch(() => null))
@@ -152,7 +139,6 @@ export default function IntakeCaptureFlow({ eventId, onClose, onSaved }: Props) 
       await supabase.from('customer_intakes').update(updateFields).eq('id', intakeId)
     }
 
-    // 3. Jewelry photos → intake_photos rows.
     const jewelryUploads = await Promise.all(
       jewelryPhotos.map((blob, i) =>
         uploadIntakePhoto(blob, { eventId, intakeId, kind: 'jewelry', index: i + 1 })
@@ -167,7 +153,6 @@ export default function IntakeCaptureFlow({ eventId, onClose, onSaved }: Props) 
       await supabase.from('intake_photos').insert(jewelryRows)
     }
 
-    // 4. Audit log.
     void supabase.from('intake_audit_log').insert({
       intake_id: intakeId,
       actor_user_id: user.id,
@@ -175,19 +160,12 @@ export default function IntakeCaptureFlow({ eventId, onClose, onSaved }: Props) 
       changed_fields: { intake_kind: [null, 'purchase'], buy_form_number: [null, buyFormNumber || null] },
     })
 
-    // 5. Background OCR (Phases 2 + 3). Fire-and-forget — worksheet
-    //    polls for the row's processing_state and updates live.
     if (willProcess) {
       void fetch(`/api/intake/${intakeId}/process`, { method: 'POST' }).catch(e => {
         console.warn('[intake] background process trigger failed', e)
       })
     }
 
-    // 6. Customer dedup (Phase 7). Best-effort — won't block on failure.
-    //    For Phase 1 the buyer hasn't typed first/last name (that comes from
-    //    license parse, which doesn't run yet), so dedup will usually only
-    //    succeed if phone or email was entered. Once Phase 2 ships, the
-    //    parsed name + DL will dramatically improve hit rate.
     if (phone || email) {
       void (async () => {
         try {
@@ -195,7 +173,9 @@ export default function IntakeCaptureFlow({ eventId, onClose, onSaved }: Props) 
           if (ev?.store_id) {
             const cid = await dedupAndUpsertCustomer({
               storeId: ev.store_id,
-              firstName: null, lastName: null, phone: phone || null, email: email || null,
+              firstName: null, lastName: null,
+              phone: formatPhoneDisplay(phone) || null,
+              email: email || null,
               licenseNumber: null, licenseState: null, dateOfBirth: null,
               addressLine1: null, addressCity: null, addressState: null, addressZip: null,
             })
@@ -213,7 +193,7 @@ export default function IntakeCaptureFlow({ eventId, onClose, onSaved }: Props) 
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: '#000', color: '#fff',
+      position: 'fixed', inset: 0, background: '#fff', color: 'var(--ink)',
       display: 'flex', flexDirection: 'column', zIndex: 2000,
     }}>
       <Header step={step} onClose={onClose} />
@@ -229,38 +209,44 @@ export default function IntakeCaptureFlow({ eventId, onClose, onSaved }: Props) 
         )}
 
         {step === 'photo-front' && (
-          <PhotoStep
+          <CameraCaptureStep
+            key="front"
             label="Front of license"
-            sub="Customer's photo side."
             existing={frontPhoto}
             onCapture={setFrontPhoto}
             onContinue={() => setStep('photo-back')}
             onSkip={() => setStep('photo-back')}
             onBack={() => setStep('form-number')}
+            overlay="license"
+            overlayLabel=""
           />
         )}
 
         {step === 'photo-back' && (
-          <PhotoStep
-            label="Back of license"
-            sub="The side with the big square barcode (PDF417)."
+          <CameraCaptureStep
+            key="back"
+            label="Back of license (PDF417)"
             existing={backPhoto}
             onCapture={setBackPhoto}
             onContinue={() => setStep('photo-invoice')}
             onSkip={() => setStep('photo-invoice')}
             onBack={() => setStep('photo-front')}
+            overlay="license"
+            overlayLabel=""
           />
         )}
 
         {step === 'photo-invoice' && (
-          <PhotoStep
-            label="Invoice / buy form"
-            sub="Capture the whole written form clearly."
+          <CameraCaptureStep
+            key="invoice"
+            label="Invoice / Buy Form"
             existing={invoicePhoto}
             onCapture={setInvoicePhoto}
             onContinue={() => setStep('photo-jewelry')}
             onSkip={() => setStep('photo-jewelry')}
             onBack={() => setStep('photo-back')}
+            overlay="paper"
+            overlayLabel="BUY FORM"
           />
         )}
 
@@ -278,15 +264,16 @@ export default function IntakeCaptureFlow({ eventId, onClose, onSaved }: Props) 
             amount={amount} onAmount={setAmount}
             checkNumber={checkNumber} onCheckNumber={setCheckNumber}
             commission={commission} onCommission={setCommission}
+            showCommissionPicker={showCommissionPicker} onShowCommissionPicker={setShowCommissionPicker}
             email={email} onEmail={setEmail}
-            phone={phone} onPhone={setPhone}
+            phoneDigits={phone} onPhoneDigits={setPhone}
             onSave={save}
             onBack={() => setStep('photo-jewelry')}
           />
         )}
 
         {step === 'saving' && (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: 'rgba(255,255,255,.7)' }}>
+          <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--mist)' }}>
             Saving intake… uploading photos…
           </div>
         )}
@@ -295,10 +282,10 @@ export default function IntakeCaptureFlow({ eventId, onClose, onSaved }: Props) 
           <div style={{ textAlign: 'center', padding: '60px 20px' }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
             <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Intake saved</div>
-            <div style={{ fontSize: 13, color: 'rgba(255,255,255,.6)', marginBottom: 24 }}>
+            <div style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 24 }}>
               Form #{buyFormNumber} is on today's worksheet.
             </div>
-            <button onClick={onClose} style={primaryBtn}>Done</button>
+            <button onClick={onClose} style={primaryBtnFull}>Done</button>
           </div>
         )}
 
@@ -306,8 +293,8 @@ export default function IntakeCaptureFlow({ eventId, onClose, onSaved }: Props) 
           <div style={{ textAlign: 'center', padding: '60px 20px' }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>⚠️</div>
             <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 8 }}>Save failed</div>
-            <div style={{ fontSize: 13, color: '#FCA5A5', marginBottom: 24 }}>{error || 'Unknown error.'}</div>
-            <button onClick={() => setStep('quick-fields')} style={primaryBtn}>Back to form</button>
+            <div style={{ fontSize: 13, color: '#B22234', marginBottom: 24 }}>{error || 'Unknown error.'}</div>
+            <button onClick={() => setStep('quick-fields')} style={primaryBtnFull}>Back to form</button>
           </div>
         )}
       </div>
@@ -315,7 +302,7 @@ export default function IntakeCaptureFlow({ eventId, onClose, onSaved }: Props) 
   )
 }
 
-// ── steps ─────────────────────────────────────────────────────
+// ── Header ────────────────────────────────────────────────────
 
 function Header({ step, onClose }: { step: Step; onClose: () => void }) {
   const titleByStep: Record<Step, string> = {
@@ -332,24 +319,26 @@ function Header({ step, onClose }: { step: Step; onClose: () => void }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,.1)',
+      padding: '12px 16px', borderBottom: '1px solid var(--cream2)', background: '#fff',
     }}>
       <button onClick={onClose} style={{
-        background: 'none', border: 'none', color: '#fff',
-        fontSize: 16, fontWeight: 700, cursor: 'pointer', padding: 0,
+        background: 'none', border: 'none', color: 'var(--ink)',
+        fontSize: 14, fontWeight: 700, cursor: 'pointer', padding: 0,
       }}>← Cancel</button>
-      <div style={{ fontWeight: 800, fontSize: 14 }}>{titleByStep[step]}</div>
+      <div style={{ fontWeight: 800, fontSize: 14, color: 'var(--ink)' }}>{titleByStep[step]}</div>
       <div style={{ width: 60 }} />
     </div>
   )
 }
+
+// ── Form-number step ─────────────────────────────────────────
 
 function FormNumberStep({
   value, onChange, onContinue,
 }: { value: string; onChange: (s: string) => void; onContinue: () => void }) {
   return (
     <div style={{ paddingTop: 20 }}>
-      <div style={{ fontSize: 14, color: 'rgba(255,255,255,.7)', marginBottom: 16, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 14, color: 'var(--ash)', marginBottom: 16, lineHeight: 1.5 }}>
         Type the 5-digit number from the top of the paper buy form.
       </div>
       <input
@@ -362,14 +351,14 @@ function FormNumberStep({
         placeholder="00000"
         style={{
           width: '100%', padding: '18px 16px', fontSize: 28, letterSpacing: 6,
-          background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.2)',
-          color: '#fff', borderRadius: 12, fontFamily: 'monospace', textAlign: 'center',
+          background: '#fff', border: '1px solid var(--pearl)',
+          color: 'var(--ink)', borderRadius: 12, fontFamily: 'monospace', textAlign: 'center',
         }}
       />
       <button
         onClick={onContinue}
         disabled={value.length !== 5}
-        style={{ ...primaryBtn, marginTop: 24, opacity: value.length === 5 ? 1 : 0.4 }}
+        style={{ ...primaryBtnFull, marginTop: 16, opacity: value.length === 5 ? 1 : 0.4 }}
       >
         Continue →
       </button>
@@ -377,20 +366,32 @@ function FormNumberStep({
   )
 }
 
-function PhotoStep({
-  label, sub, existing, onCapture, onContinue, onSkip, onBack,
-}: {
+// ── Camera capture step (live preview + overlay + auto-capture) ───
+
+interface CameraStepProps {
   label: string
-  sub: string
   existing: Blob | null
   onCapture: (b: Blob) => void
   onContinue: () => void
   onSkip: () => void
   onBack: () => void
-}) {
-  const fileRef = useRef<HTMLInputElement>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  overlay: 'license' | 'paper'
+  overlayLabel: string
+}
 
+function CameraCaptureStep({
+  label, existing, onCapture, onContinue, onSkip, onBack, overlay, overlayLabel,
+}: CameraStepProps) {
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const [cameraReady, setCameraReady] = useState(false)
+  const [cameraError, setCameraError] = useState<string | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [autoCountdown, setAutoCountdown] = useState<number>(AUTO_CAPTURE_SECONDS)
+  const [autoEnabled, setAutoEnabled] = useState(true)
+  const fallbackInputRef = useRef<HTMLInputElement | null>(null)
+
+  // Render existing preview if user has already captured.
   useEffect(() => {
     if (!existing) { setPreviewUrl(null); return }
     const url = URL.createObjectURL(existing)
@@ -398,57 +399,224 @@ function PhotoStep({
     return () => URL.revokeObjectURL(url)
   }, [existing])
 
-  const handleFile = (f: File | null | undefined) => {
+  // Open camera when step mounts (and we haven't captured yet).
+  useEffect(() => {
+    if (existing) return  // already captured — show preview, no camera
+    let cancelled = false
+    void (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+          audio: false,
+        })
+        if (cancelled) { stream.getTracks().forEach(t => t.stop()); return }
+        streamRef.current = stream
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+          try { await videoRef.current.play() } catch { /* autoplay policy */ }
+        }
+        setCameraReady(true)
+      } catch (e: any) {
+        setCameraError(e?.message || 'Camera unavailable. Use the file picker.')
+      }
+    })()
+    return () => {
+      cancelled = true
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop())
+        streamRef.current = null
+      }
+      if (videoRef.current) videoRef.current.srcObject = null
+    }
+  }, [existing])
+
+  // Auto-capture countdown — resets whenever the user taps the camera area
+  // (assumed to be a recompose) or toggles auto off.
+  useEffect(() => {
+    if (existing || !cameraReady || !autoEnabled) return
+    setAutoCountdown(AUTO_CAPTURE_SECONDS)
+    const timer = setInterval(() => {
+      setAutoCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(timer)
+          // Snap on next tick to give the state update a chance to propagate.
+          setTimeout(() => { void capture() }, 0)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existing, cameraReady, autoEnabled])
+
+  function resetAutoCountdown() {
+    setAutoCountdown(AUTO_CAPTURE_SECONDS)
+  }
+
+  async function capture() {
+    const v = videoRef.current
+    if (!v || v.videoWidth === 0) return
+    const canvas = document.createElement('canvas')
+    canvas.width = v.videoWidth
+    canvas.height = v.videoHeight
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.drawImage(v, 0, 0)
+    canvas.toBlob(b => {
+      if (b) onCapture(b)
+    }, 'image/jpeg', 0.9)
+  }
+
+  function handleFile(f: File | null | undefined) {
     if (!f) return
     onCapture(f)
   }
 
+  // Show retake/continue when we already have a photo.
+  if (previewUrl) {
+    return (
+      <div>
+        <img src={previewUrl} alt={label} style={{
+          width: '100%', maxHeight: '55vh', objectFit: 'contain',
+          background: '#111', borderRadius: 12,
+        }} />
+        <button
+          onClick={() => onCapture(null as any)}  // clear so the camera reopens
+          style={{ ...primaryBtnFull, marginTop: 16 }}
+        >🔄 Retake photo</button>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+          <button onClick={onBack} style={secondaryBtn}>← Back</button>
+          <button onClick={onContinue} style={primaryBtn}>Continue →</button>
+        </div>
+      </div>
+    )
+  }
+
+  // Camera-error fallback to file picker.
+  if (cameraError) {
+    return (
+      <div>
+        <div style={{ padding: 32, textAlign: 'center', color: 'var(--mist)', background: 'var(--cream)', borderRadius: 12, border: '1px dashed var(--pearl)' }}>
+          {cameraError}
+        </div>
+        <input
+          ref={fallbackInputRef} type="file" accept="image/*" capture="environment"
+          onChange={e => handleFile(e.target.files?.[0])}
+          style={{ display: 'none' }}
+        />
+        <button onClick={() => fallbackInputRef.current?.click()} style={{ ...primaryBtnFull, marginTop: 16 }}>
+          📷 Take photo
+        </button>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+          <button onClick={onBack} style={secondaryBtn}>← Back</button>
+          <button onClick={onSkip} style={secondaryBtn}>Skip →</button>
+        </div>
+      </div>
+    )
+  }
+
+  // Live camera with overlay + auto-capture countdown + manual button.
   return (
     <div>
-      <div style={{ fontSize: 14, color: 'rgba(255,255,255,.7)', marginBottom: 4 }}>{sub}</div>
-
-      {previewUrl ? (
-        <img src={previewUrl} alt={label} style={{
-          width: '100%', maxHeight: '50vh', objectFit: 'contain',
-          background: '#111', borderRadius: 12, marginTop: 12,
+      <div
+        onClick={resetAutoCountdown}
+        style={{
+          position: 'relative', width: '100%', aspectRatio: '3/4',
+          background: '#000', borderRadius: 12, overflow: 'hidden',
+        }}
+      >
+        <video ref={videoRef} playsInline muted autoPlay style={{
+          width: '100%', height: '100%', objectFit: 'cover',
         }} />
-      ) : (
+
+        {/* Overlay outline */}
         <div style={{
-          marginTop: 12, padding: 32, background: 'rgba(255,255,255,.04)',
-          border: '1px dashed rgba(255,255,255,.2)', borderRadius: 12,
-          textAlign: 'center', color: 'rgba(255,255,255,.5)', fontSize: 14,
+          position: 'absolute', inset: 0, display: 'flex',
+          alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
         }}>
-          No photo yet — tap below.
+          <div style={{
+            width: '88%',
+            aspectRatio: overlay === 'license' ? '1.586/1' : '8.5/11',
+            border: '3px solid #7EC8A0',
+            borderRadius: overlay === 'license' ? 12 : 4,
+            boxShadow: '0 0 0 9999px rgba(0,0,0,.45)',
+            position: 'relative',
+          }}>
+            {overlayLabel && (
+              <div style={{
+                position: 'absolute', top: '50%', left: '50%',
+                transform: 'translate(-50%, -50%)',
+                color: 'rgba(255,255,255,.55)', fontSize: 28, fontWeight: 900,
+                letterSpacing: '.1em', textTransform: 'uppercase',
+                textShadow: '0 2px 8px rgba(0,0,0,.7)',
+              }}>{overlayLabel}</div>
+            )}
+          </div>
         </div>
-      )}
 
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        onChange={e => handleFile(e.target.files?.[0])}
-        style={{ display: 'none' }}
-      />
+        {/* Status badge top-left */}
+        <div style={{
+          position: 'absolute', top: 10, left: 10,
+          background: 'rgba(0,0,0,.55)', color: '#fff',
+          padding: '4px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700,
+          display: 'flex', alignItems: 'center', gap: 6,
+        }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: cameraReady ? '#22C55E' : '#F59E0B' }} />
+          {cameraReady ? 'Camera ready' : 'Starting…'}
+        </div>
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-        <button onClick={onBack} style={secondaryBtn}>← Back</button>
-        <button onClick={() => fileRef.current?.click()} style={{ ...primaryBtn, flex: 1 }}>
-          {previewUrl ? '🔄 Retake' : '📷 Take photo'}
+        {/* Countdown badge top-right */}
+        {cameraReady && autoEnabled && autoCountdown > 0 && (
+          <div style={{
+            position: 'absolute', top: 10, right: 10,
+            background: 'rgba(220,38,38,.92)', color: '#fff',
+            padding: '4px 10px', borderRadius: 99, fontSize: 12, fontWeight: 800,
+          }}>
+            Auto in {autoCountdown}s
+          </div>
+        )}
+        {cameraReady && !autoEnabled && (
+          <div style={{
+            position: 'absolute', top: 10, right: 10,
+            background: 'rgba(0,0,0,.55)', color: '#fff',
+            padding: '4px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700,
+          }}>
+            Auto OFF
+          </div>
+        )}
+
+        {/* Auto toggle bottom-right */}
+        <button
+          onClick={(e) => { e.stopPropagation(); setAutoEnabled(v => !v) }}
+          style={{
+            position: 'absolute', bottom: 10, right: 10,
+            background: 'rgba(0,0,0,.55)', color: '#fff', border: 'none',
+            padding: '6px 12px', borderRadius: 99, fontSize: 11, fontWeight: 700,
+            cursor: 'pointer', fontFamily: 'inherit',
+          }}
+        >
+          {autoEnabled ? '⏸ Auto off' : '▶ Auto on'}
         </button>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        {!previewUrl && (
-          <button onClick={onSkip} style={{ ...secondaryBtn, flex: 1 }}>Skip for now</button>
-        )}
-        {previewUrl && (
-          <button onClick={onContinue} style={{ ...primaryBtn, flex: 1 }}>Continue →</button>
-        )}
+      <button onClick={() => void capture()} disabled={!cameraReady} style={{
+        ...primaryBtnFull, marginTop: 16,
+        opacity: cameraReady ? 1 : 0.4,
+        cursor: cameraReady ? 'pointer' : 'not-allowed',
+      }}>
+        📷 Take photo
+      </button>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+        <button onClick={onBack} style={secondaryBtn}>← Back</button>
+        <button onClick={onSkip} style={secondaryBtn}>Skip →</button>
       </div>
     </div>
   )
 }
+
+// ── Jewelry step ─────────────────────────────────────────────
 
 function JewelryStep({
   photos, onChange, onContinue, onBack,
@@ -468,7 +636,7 @@ function JewelryStep({
 
   return (
     <div>
-      <div style={{ fontSize: 14, color: 'rgba(255,255,255,.7)', marginBottom: 12, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 14, color: 'var(--ash)', marginBottom: 12, lineHeight: 1.5 }}>
         Up to {MAX_JEWELRY_PHOTOS} jewelry photos. Optional.
       </div>
 
@@ -478,9 +646,9 @@ function JewelryStep({
         ))}
         {photos.length < MAX_JEWELRY_PHOTOS && (
           <button onClick={() => fileRef.current?.click()} style={{
-            aspectRatio: '1/1', background: 'rgba(255,255,255,.05)',
-            border: '1px dashed rgba(255,255,255,.25)', borderRadius: 10,
-            color: 'rgba(255,255,255,.5)', fontSize: 32, cursor: 'pointer',
+            aspectRatio: '1/1', background: 'var(--cream)',
+            border: '1px dashed var(--pearl)', borderRadius: 10,
+            color: 'var(--mist)', fontSize: 32, cursor: 'pointer',
           }}>+</button>
         )}
       </div>
@@ -491,13 +659,14 @@ function JewelryStep({
         style={{ display: 'none' }}
       />
 
-      <div style={{ fontSize: 12, color: 'rgba(255,255,255,.5)', marginTop: 8 }}>
+      <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 8 }}>
         {photos.length} / {MAX_JEWELRY_PHOTOS} photos
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+      <button onClick={onContinue} style={{ ...primaryBtnFull, marginTop: 16 }}>Continue →</button>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
         <button onClick={onBack} style={secondaryBtn}>← Back</button>
-        <button onClick={onContinue} style={{ ...primaryBtn, flex: 1 }}>Continue →</button>
+        <button onClick={onContinue} style={secondaryBtn}>Skip →</button>
       </div>
     </div>
   )
@@ -522,15 +691,21 @@ function JewelryThumb({ blob, onRemove }: { blob: Blob; onRemove: () => void }) 
   )
 }
 
+// ── Quick fields step ────────────────────────────────────────
+
 function QuickFieldsStep(props: {
   amount: string; onAmount: (s: string) => void
   checkNumber: string; onCheckNumber: (s: string) => void
   commission: CommissionBucket; onCommission: (c: CommissionBucket) => void
+  showCommissionPicker: boolean; onShowCommissionPicker: (b: boolean) => void
   email: string; onEmail: (s: string) => void
-  phone: string; onPhone: (s: string) => void
+  phoneDigits: string; onPhoneDigits: (s: string) => void
   onSave: () => void
   onBack: () => void
 }) {
+  const phoneFormatted = formatPhoneDisplay(props.phoneDigits)
+  const commissionLabel = COMMISSION_OPTIONS.find(o => o.key === props.commission)?.label || '10%'
+
   return (
     <div>
       <Field label="Purchase amount ($)">
@@ -539,24 +714,6 @@ function QuickFieldsStep(props: {
           value={props.amount} onChange={e => props.onAmount(e.target.value.replace(/[^0-9.]/g, ''))}
           style={textInputStyle}
         />
-      </Field>
-
-      <Field label="Commission %">
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {COMMISSION_OPTIONS.map(o => {
-            const sel = props.commission === o.key
-            return (
-              <button key={o.key} onClick={() => props.onCommission(o.key)}
-                style={{
-                  padding: '8px 14px', borderRadius: 8, fontWeight: 700, fontSize: 13,
-                  background: sel ? '#fff' : 'rgba(255,255,255,.08)',
-                  color: sel ? '#000' : '#fff',
-                  border: sel ? '1px solid #fff' : '1px solid rgba(255,255,255,.2)',
-                  fontFamily: 'inherit', cursor: 'pointer',
-                }}>{o.label}</button>
-            )
-          })}
-        </div>
       </Field>
 
       <Field label="Check #">
@@ -569,8 +726,9 @@ function QuickFieldsStep(props: {
 
       <Field label="Phone">
         <input
-          inputMode="tel" placeholder="optional"
-          value={props.phone} onChange={e => props.onPhone(e.target.value)}
+          inputMode="tel" placeholder="555-555-5555"
+          value={phoneFormatted}
+          onChange={e => props.onPhoneDigits(e.target.value.replace(/\D/g, '').slice(0, 10))}
           style={textInputStyle}
         />
       </Field>
@@ -581,11 +739,66 @@ function QuickFieldsStep(props: {
           value={props.email} onChange={e => props.onEmail(e.target.value)}
           style={textInputStyle}
         />
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+          {['@gmail.com', '@yahoo.com', '@hotmail.com', '@aol.com'].map(suffix => (
+            <button
+              key={suffix}
+              type="button"
+              onClick={() => {
+                if (props.email.includes('@')) {
+                  // Replace existing domain
+                  props.onEmail(props.email.split('@')[0] + suffix)
+                } else {
+                  props.onEmail(props.email + suffix)
+                }
+              }}
+              style={{
+                padding: '5px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700,
+                background: 'var(--cream)', border: '1px solid var(--pearl)',
+                color: 'var(--ink)', cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >+{suffix}</button>
+          ))}
+        </div>
       </Field>
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 24 }}>
+      {/* Commission — small text link by default */}
+      <div style={{ margin: '10px 0 16px', fontSize: 13, color: 'var(--ash)' }}>
+        Commission: <strong>{commissionLabel}</strong>
+        {' · '}
+        <button
+          type="button"
+          onClick={() => props.onShowCommissionPicker(!props.showCommissionPicker)}
+          style={{
+            background: 'transparent', border: 'none', color: 'var(--green-dark)',
+            cursor: 'pointer', textDecoration: 'underline', fontSize: 13, padding: 0,
+            fontFamily: 'inherit',
+          }}
+        >
+          {props.showCommissionPicker ? 'hide' : 'edit'}
+        </button>
+        {props.showCommissionPicker && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+            {COMMISSION_OPTIONS.map(o => {
+              const sel = props.commission === o.key
+              return (
+                <button key={o.key} onClick={() => props.onCommission(o.key)}
+                  style={{
+                    padding: '8px 14px', borderRadius: 8, fontWeight: 700, fontSize: 13,
+                    background: sel ? 'var(--green)' : '#fff',
+                    color: sel ? '#fff' : 'var(--ink)',
+                    border: `1px solid ${sel ? 'var(--green)' : 'var(--pearl)'}`,
+                    fontFamily: 'inherit', cursor: 'pointer',
+                  }}>{o.label}</button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      <button onClick={props.onSave} style={{ ...primaryBtnFull, marginTop: 8 }}>💾 Save intake</button>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
         <button onClick={props.onBack} style={secondaryBtn}>← Back</button>
-        <button onClick={props.onSave} style={{ ...primaryBtn, flex: 1 }}>💾 Save intake</button>
       </div>
     </div>
   )
@@ -594,7 +807,7 @@ function QuickFieldsStep(props: {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 14 }}>
-      <div style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,.55)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>{label}</div>
       {children}
     </div>
   )
@@ -603,8 +816,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function ErrorBanner({ message, onDismiss }: { message: string; onDismiss: () => void }) {
   return (
     <div style={{
-      background: 'rgba(178,34,52,.18)', border: '1px solid rgba(255,200,200,.4)',
-      color: '#fecdd3', padding: '10px 12px', borderRadius: 8, marginBottom: 12,
+      background: '#FEF2F2', border: '1px solid #fecdd3',
+      color: '#B22234', padding: '10px 12px', borderRadius: 8, marginBottom: 12,
       fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
     }}>
       <span>⚠ {message}</span>
@@ -613,19 +826,36 @@ function ErrorBanner({ message, onDismiss }: { message: string; onDismiss: () =>
   )
 }
 
+// ── Helpers ───────────────────────────────────────────────────
+
+function formatPhoneDisplay(digits: string): string {
+  const d = (digits || '').replace(/\D/g, '').slice(0, 10)
+  if (d.length === 0) return ''
+  if (d.length <= 3) return d
+  if (d.length <= 6) return `${d.slice(0, 3)}-${d.slice(3)}`
+  return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`
+}
+
+// ── Styles ────────────────────────────────────────────────────
+
 const textInputStyle: React.CSSProperties = {
   width: '100%', padding: '12px 14px', fontSize: 15,
-  background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.2)',
-  color: '#fff', borderRadius: 10, fontFamily: 'inherit',
+  background: '#fff', border: '1px solid var(--pearl)',
+  color: 'var(--ink)', borderRadius: 10, fontFamily: 'inherit',
+}
+
+const primaryBtnFull: React.CSSProperties = {
+  width: '100%', padding: '14px 18px', borderRadius: 10, fontWeight: 800, fontSize: 15,
+  background: 'var(--green)', color: '#fff', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
 }
 
 const primaryBtn: React.CSSProperties = {
-  padding: '14px 18px', borderRadius: 10, fontWeight: 800, fontSize: 14,
-  background: '#fff', color: '#000', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+  padding: '12px 18px', borderRadius: 10, fontWeight: 800, fontSize: 14,
+  background: 'var(--green)', color: '#fff', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
 }
 
 const secondaryBtn: React.CSSProperties = {
-  padding: '14px 18px', borderRadius: 10, fontWeight: 700, fontSize: 14,
-  background: 'rgba(255,255,255,.08)', color: '#fff',
-  border: '1px solid rgba(255,255,255,.2)', cursor: 'pointer', fontFamily: 'inherit',
+  padding: '12px 18px', borderRadius: 10, fontWeight: 700, fontSize: 14,
+  background: '#fff', color: 'var(--ink)',
+  border: '1px solid var(--pearl)', cursor: 'pointer', fontFamily: 'inherit',
 }
