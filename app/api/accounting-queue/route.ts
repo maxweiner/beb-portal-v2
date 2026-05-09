@@ -64,7 +64,7 @@ export async function GET(req: Request) {
       id, status, user_id, event_id, brand,
       submitted_at, approved_at,
       total_expenses, total_compensation, bonus_amount, grand_total,
-      user:users(name),
+      user:users!user_id(name),
       event:events(store_name, start_date)
     `)
     .in('status', ['submitted_pending_review', 'approved'])

@@ -64,7 +64,7 @@ export async function POST(req: Request) {
     .from('expense_reports')
     .select(`
       id, status, user_id, brand, grand_total,
-      user:users(name, email),
+      user:users!user_id(name, email),
       event:events(store_name, start_date)
     `)
     .in('id', cleanIds)
