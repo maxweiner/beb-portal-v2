@@ -60,6 +60,7 @@ const BEB_NAV: NavItem[] = [
   { id: 'buying-event-stores', label: 'Buying Event Stores', iconKey: 'stores' },
   { id: 'travel',              label: 'Travel Share',        iconKey: 'travel' },
   { id: 'dayentry',            label: 'Enter Buying Data',   iconKey: 'dayentry' },
+  { id: 'intake-lookup',       label: 'Buy Form Lookup',     iconKey: 'reports' },
   { label: 'Selling', section: true },
   { id: 'trade-shows',       label: 'Trade Shows',       iconKey: 'tradeshows' },
   { id: 'trunk-shows',       label: 'Trunk Shows',       iconKey: 'trunkshows' },
