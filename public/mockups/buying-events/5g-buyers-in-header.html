@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>5g · Hub + buyer avatars in header</title>
+<style>
+  :root {
+    --ink: #1a1a16; --ash: #4A4A42; --mist: #A8A89A;
+    --cream: #FAF8F4; --cream2: #EDE7DA; --pearl: #D9D2C0;
+    --green: #1D6B44; --green-dark: #14532D; --green3: #7EC8A0; --green-pale: #E6F4EC;
+    --buying: #1E3A8A; --buying-pale: #DBEAFE;
+    /* Buyer avatar palette (matches the legacy strip style) */
+    --av-teal: #2A8A8A;
+    --av-green: #1D6B44;
+    --av-blue: #3B82F6;
+    --av-amber: #C97A1F;
+    --av-plum: #7C3AED;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+         margin: 0; background: var(--cream2); color: var(--ink); }
+  a { color: var(--green-dark); }
+  .top-back { padding: 14px 20px; background: #fff; border-bottom: 1px solid var(--pearl); }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
+  .header {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+    gap: 12px; margin-bottom: 20px;
+  }
+  h1 { font-size: 22px; margin: 0; }
+  .actions { display: flex; gap: 8px; }
+  .btn { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--pearl); background: #fff; cursor: pointer; font-weight: 700; font-size: 13px; }
+  .btn.primary { background: var(--green); color: #fff; border-color: var(--green); }
+
+  .event-hub {
+    background: #fff; border: 1px solid var(--pearl); border-radius: 14px;
+    overflow: hidden; margin-bottom: 16px;
+  }
+  .event-hub.reserved { border-style: dashed; border-color: var(--buying); }
+
+  .hub-top {
+    padding: 18px 22px; background: linear-gradient(160deg, #1E3A8A 0%, #1D4ED8 100%);
+    color: #fff;
+  }
+  .hub-top.upcoming { background: linear-gradient(160deg, #14532D 0%, var(--green) 100%); }
+  .hub-top.this-week { background: linear-gradient(160deg, #DC2626 0%, #F59E0B 100%); }
+  .hub-top.reserved-bg { background: linear-gradient(160deg, #92400E 0%, #D97706 100%); }
+  .hub-top h2 { margin: 0 0 4px; font-size: 20px; font-weight: 900; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .hub-top .where { color: rgba(255,255,255,.85); font-size: 13px; }
+  .hub-top .when { color: rgba(255,255,255,.7); font-size: 12px; margin-top: 4px; }
+  .hub-top .pill {
+    display: inline-block; padding: 3px 10px; border-radius: 99px;
+    background: rgba(255,255,255,.2); font-size: 11px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .04em;
+  }
+
+  /* === Buyer strip in the header === */
+  .buyers-row {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin-top: 12px;
+    padding: 8px 12px;
+    background: rgba(255,255,255,.85);
+    border-radius: 99px;
+    width: fit-content;
+    color: var(--ink);
+  }
+  .av-stack { display: inline-flex; align-items: center; }
+  .av {
+    width: 30px; height: 30px; border-radius: 50%;
+    color: #fff; font-weight: 800; font-size: 11px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px rgba(0,0,0,.05);
+    letter-spacing: -.02em;
+  }
+  .av + .av { margin-left: -10px; }
+  .av.teal { background: var(--av-teal); }
+  .av.green { background: var(--av-green); }
+  .av.blue { background: var(--av-blue); }
+  .av.amber { background: var(--av-amber); }
+  .av.plum { background: var(--av-plum); }
+  .av.empty {
+    background: #fff; color: var(--mist);
+    border: 2px dashed #B8B8A8; box-shadow: none;
+    font-size: 14px;
+  }
+  .buyers-row .names {
+    font-size: 13px; font-weight: 700; color: var(--ink);
+    white-space: nowrap;
+  }
+  .buyers-row .names .missing { color: #B22234; font-weight: 700; margin-left: 4px; }
+  .buyers-row.empty-state {
+    background: rgba(255,255,255,.6); color: var(--ink);
+  }
+
+  .kpis {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0;
+    border-top: 1px solid var(--cream2); border-bottom: 1px solid var(--cream2); background: var(--cream);
+  }
+  .kpi { padding: 14px 18px; border-right: 1px solid var(--cream2); }
+  .kpi:last-child { border-right: none; }
+  .kpi .l { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--mist); }
+  .kpi .v { font-size: 20px; font-weight: 900; color: var(--ink); margin-top: 2px; }
+  .kpi.warn .v { color: #92400e; }
+  .kpi.good .v { color: var(--green-dark); }
+
+  .launchers {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    padding: 14px; gap: 8px; background: #fff;
+  }
+  .launch {
+    background: var(--cream); border: 1px solid var(--pearl); border-radius: 8px;
+    padding: 12px 14px; text-align: left; cursor: pointer;
+    display: flex; align-items: center; gap: 10px;
+    font-family: inherit; font-size: 13px; font-weight: 700; color: var(--ink);
+    transition: background .12s;
+  }
+  .launch:hover { background: var(--green-pale); border-color: var(--green3); }
+  .launch .ico { font-size: 18px; }
+  .launch .lbl { display: block; }
+  .launch .lbl small { display: block; font-size: 10px; color: var(--mist); font-weight: 600; margin-top: 2px; }
+
+  .principle {
+    margin-top: 22px; padding: 14px 18px; background: #fff;
+    border: 1px solid var(--pearl); border-radius: 10px;
+    font-size: 13px; color: var(--ash); line-height: 1.55;
+  }
+  .principle b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="top-back"><a href="/mockups/buying-events/">← Back to all mockups</a></div>
+
+<div class="container">
+  <div class="header">
+    <h1>◆ Buying Events</h1>
+    <div class="actions">
+      <button class="btn">📌 Save the Date</button>
+      <button class="btn primary">+ New Event</button>
+    </div>
+  </div>
+
+  <!-- Event 1: This week -->
+  <div class="event-hub">
+    <div class="hub-top this-week">
+      <h2>Kay Cameron Jewelers <span class="pill">This week · Day 3</span></h2>
+      <div class="where">Sayville, NY</div>
+      <div class="when">📅 May 7 – May 9 · today is the last day</div>
+      <div class="buyers-row">
+        <div class="av-stack">
+          <span class="av teal" title="Max Weiner">MW</span>
+          <span class="av green" title="Tom Brady">TB</span>
+          <span class="av blue" title="Victor Adams">VA</span>
+        </div>
+        <span class="names">Max, Thomas, Victor</span>
+      </div>
+    </div>
+    <div class="kpis">
+      <div class="kpi good"><div class="l">Spent</div><div class="v">$311K</div></div>
+      <div class="kpi"><div class="l">Customers</div><div class="v">63</div></div>
+      <div class="kpi"><div class="l">Buyers</div><div class="v">3/3</div></div>
+      <div class="kpi"><div class="l">Close rate</div><div class="v">89%</div></div>
+    </div>
+    <div class="launchers">
+      <button class="launch"><span class="ico">📊</span><span class="lbl">Day Entry<small>Today's data</small></span></button>
+      <button class="launch"><span class="ico">👥</span><span class="lbl">Buyers<small>3 assigned</small></span></button>
+      <button class="launch"><span class="ico">✈️</span><span class="lbl">Travel<small>All booked</small></span></button>
+      <button class="launch"><span class="ico">📣</span><span class="lbl">Marketing<small>VDP + postcard</small></span></button>
+      <button class="launch"><span class="ico">📋</span><span class="lbl">Checklist<small>4 of 6 done</small></span></button>
+      <button class="launch"><span class="ico">📝</span><span class="lbl">Notes<small>2 lessons saved</small></span></button>
+    </div>
+  </div>
+
+  <!-- Event 2: Upcoming -->
+  <div class="event-hub">
+    <div class="hub-top upcoming">
+      <h2>Pickens Jewelers <span class="pill">In 8 days</span></h2>
+      <div class="where">Atlanta, GA</div>
+      <div class="when">📅 May 12 – May 14, 2026</div>
+      <div class="buyers-row">
+        <div class="av-stack">
+          <span class="av amber" title="Joe Romeo">JR</span>
+          <span class="av plum" title="Lori Smith">LS</span>
+          <span class="av teal" title="Marv Klein">MK</span>
+        </div>
+        <span class="names">Joe, Lori, Marv</span>
+      </div>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="l">Spent</div><div class="v">$148K</div></div>
+      <div class="kpi"><div class="l">Customers</div><div class="v">24</div></div>
+      <div class="kpi"><div class="l">Buyers</div><div class="v">3/3</div></div>
+      <div class="kpi warn"><div class="l">⚠ Open</div><div class="v">3</div></div>
+    </div>
+    <div class="launchers">
+      <button class="launch"><span class="ico">👥</span><span class="lbl">Buyers<small>3 assigned</small></span></button>
+      <button class="launch"><span class="ico">✈️</span><span class="lbl">Travel<small>2 of 3 booked</small></span></button>
+      <button class="launch"><span class="ico">📣</span><span class="lbl">Marketing<small>VDP done · postcard done</small></span></button>
+      <button class="launch"><span class="ico">📦</span><span class="lbl">Assets<small>None ordered</small></span></button>
+      <button class="launch"><span class="ico">🎓</span><span class="lbl">Brief staff<small>Not yet done</small></span></button>
+      <button class="launch"><span class="ico">📋</span><span class="lbl">Checklist<small>2 of 6 done</small></span></button>
+      <button class="launch"><span class="ico">💰</span><span class="lbl">Ad Spend<small>$2,840</small></span></button>
+      <button class="launch"><span class="ico">🚫</span><span class="lbl">Cancel<small>—</small></span></button>
+    </div>
+  </div>
+
+  <!-- Event 3: Reserved (only 2 of 3 buyers assigned) -->
+  <div class="event-hub reserved">
+    <div class="hub-top reserved-bg">
+      <h2>📌 Burkes Jewelers <span class="pill">Save the Date</span></h2>
+      <div class="where">Tampa, FL</div>
+      <div class="when">📅 May 21 – May 23 · 17 days from now · Reserved</div>
+      <div class="buyers-row">
+        <div class="av-stack">
+          <span class="av blue" title="Rich Welsch">RW</span>
+          <span class="av teal" title="Max Weiner">MW</span>
+          <span class="av empty" title="Open buyer slot">+</span>
+        </div>
+        <span class="names">Rich, Max <span class="missing">· 1 slot open</span></span>
+      </div>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="l">Buyers</div><div class="v">2/3</div></div>
+      <div class="kpi warn"><div class="l">Open gates</div><div class="v">5</div></div>
+      <div class="kpi"><div class="l">Marketing</div><div class="v">—</div></div>
+      <div class="kpi"><div class="l">Status</div><div class="v" style="font-size: 13px;">📌 Reserved</div></div>
+    </div>
+    <div class="launchers">
+      <button class="launch" style="background: var(--green-pale); border-color: var(--green3); color: var(--green-dark);"><span class="ico">✅</span><span class="lbl">Promote to Booked<small>Triggers notifications</small></span></button>
+      <button class="launch"><span class="ico">👥</span><span class="lbl">Buyers</span></button>
+      <button class="launch"><span class="ico">📣</span><span class="lbl">Marketing</span></button>
+      <button class="launch"><span class="ico">📋</span><span class="lbl">Checklist</span></button>
+      <button class="launch"><span class="ico">🚫</span><span class="lbl">Cancel</span></button>
+    </div>
+  </div>
+
+  <div class="principle">
+    <b>5g · Hub + buyer avatars in the header.</b> Same as #5, but adds the legacy "buyer chips" strip
+    inside the colored hero — overlapping initials in colored circles followed by first names. Open
+    slots show as a dashed "+" so understaffed events jump out at a glance. Hovering an avatar shows
+    full name. Most operationally useful variant when you're constantly asking "who's covering this one?"
+  </div>
+</div>
+</body>
+</html>
