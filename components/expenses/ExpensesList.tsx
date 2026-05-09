@@ -44,6 +44,7 @@ const STATUS_FILTERS: { id: 'all' | ExpenseReportStatus; label: string }[] = [
   { id: 'submitted_pending_review', label: 'Pending review' },
   { id: 'approved',                 label: 'Approved' },
   { id: 'paid',                     label: 'Paid' },
+  { id: 'no_expenses',              label: 'Already expensed' },
 ]
 
 // Accounting role doesn't need to see drafts ("active") — those are
@@ -275,6 +276,36 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
     await reload()
   }
 
+  // Soft-dismiss a draft as "already expensed elsewhere." Sets status
+  // to 'no_expenses' so the row stops cluttering the active queue but
+  // remains in the DB for audit. Reversible — see reactivateReport.
+  async function markNoExpenses(r: ReportRow) {
+    if (r.status !== 'active') return
+    if (!confirm(`Mark "${r.event_name}" as already expensed? It'll be hidden from the default list. You can find it under the "Already expensed" filter.`)) return
+    const { error: updErr } = await supabase
+      .from('expense_reports')
+      .update({ status: 'no_expenses' })
+      .eq('id', r.id)
+    if (updErr) {
+      alert(`Could not update: ${updErr.message}`)
+      return
+    }
+    await reload()
+  }
+
+  async function reactivateReport(r: ReportRow) {
+    if (r.status !== 'no_expenses') return
+    const { error: updErr } = await supabase
+      .from('expense_reports')
+      .update({ status: 'active' })
+      .eq('id', r.id)
+    if (updErr) {
+      alert(`Could not update: ${updErr.message}`)
+      return
+    }
+    await reload()
+  }
+
   // Load active templates once for the new-report picker.
   useEffect(() => {
     let cancelled = false
@@ -306,6 +337,10 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
       // Accounting never sees drafts ("active") — those reports
       // haven't been submitted yet and aren't ready for AP.
       if (isAccounting && r.status === 'active') return false
+      // 'no_expenses' is a soft-dismiss; only show on the explicit
+      // "Already expensed" filter (or via 'all'-style explicit pick).
+      // The 'all' chip is still considered an "active queue" view.
+      if (statusFilter === 'all' && r.status === 'no_expenses') return false
       if (statusFilter !== 'all' && r.status !== statusFilter) return false
       // Time gate: past = event already started (incl. running),
       // upcoming = strictly future.
@@ -431,6 +466,8 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
           ) : filtered.map(r => {
             const sc = STATUS_COLOR[r.status]
             const canDelete = r.status === 'active' && (r.user_id === user?.id || canSeeAll)
+            const canDismiss = r.status === 'active' && (r.user_id === user?.id || canSeeAll)
+            const canReactivate = r.status === 'no_expenses' && (r.user_id === user?.id || canSeeAll)
             return (
               <div key={r.id} className="card" style={{
                 position: 'relative', padding: 12, background: '#fff',
@@ -463,19 +500,44 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
                     <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--green-dark)' }}>Open →</span>
                   </div>
                 </button>
-                {canDelete && (
-                  <button
-                    onClick={e => { e.stopPropagation(); deleteReport(r) }}
-                    title="Delete this report"
-                    aria-label="Delete this report"
-                    style={{
-                      position: 'absolute', top: 8, right: 8,
-                      background: 'transparent', border: 'none',
-                      padding: 4, cursor: 'pointer', color: 'var(--mist)',
-                      fontSize: 16, lineHeight: 1,
-                    }}
-                  >×</button>
-                )}
+                <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4 }}>
+                  {canDismiss && (
+                    <button
+                      onClick={e => { e.stopPropagation(); markNoExpenses(r) }}
+                      title="Mark as already expensed (hide from list)"
+                      style={{
+                        background: 'transparent', border: '1px solid var(--cream2)',
+                        borderRadius: 6, padding: '2px 8px', cursor: 'pointer',
+                        color: 'var(--mist)', fontSize: 11, lineHeight: 1.3,
+                        fontFamily: 'inherit', whiteSpace: 'nowrap',
+                      }}
+                    >Already expensed</button>
+                  )}
+                  {canDelete && (
+                    <button
+                      onClick={e => { e.stopPropagation(); deleteReport(r) }}
+                      title="Delete this report"
+                      aria-label="Delete this report"
+                      style={{
+                        background: 'transparent', border: 'none',
+                        padding: 4, cursor: 'pointer', color: 'var(--mist)',
+                        fontSize: 16, lineHeight: 1,
+                      }}
+                    >×</button>
+                  )}
+                  {canReactivate && (
+                    <button
+                      onClick={e => { e.stopPropagation(); reactivateReport(r) }}
+                      title="Reopen as a draft (active) report"
+                      style={{
+                        background: 'transparent', border: '1px solid var(--cream2)',
+                        borderRadius: 6, padding: '2px 8px', cursor: 'pointer',
+                        color: 'var(--mist)', fontSize: 11, lineHeight: 1.3,
+                        fontFamily: 'inherit', whiteSpace: 'nowrap',
+                      }}
+                    >Reactivate</button>
+                  )}
+                </div>
               </div>
             )
           })}
@@ -525,17 +587,41 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
                       <button onClick={e => { e.stopPropagation(); onOpen(r.id) }}
                         className="btn-outline btn-sm">Open →</button>
                       {r.status === 'active' && (r.user_id === user?.id || canSeeAll) && (
+                        <>
+                          <button
+                            onClick={e => { e.stopPropagation(); markNoExpenses(r) }}
+                            title="Mark as already expensed (hide from list)"
+                            style={{
+                              marginLeft: 6, background: 'transparent',
+                              border: '1px solid var(--cream2)', borderRadius: 6,
+                              padding: '4px 8px', cursor: 'pointer', color: 'var(--mist)',
+                              fontSize: 12, lineHeight: 1, fontFamily: 'inherit',
+                            }}
+                          >Already expensed</button>
+                          <button
+                            onClick={e => { e.stopPropagation(); deleteReport(r) }}
+                            title="Delete this report"
+                            aria-label="Delete this report"
+                            style={{
+                              marginLeft: 6, background: 'transparent',
+                              border: '1px solid var(--cream2)', borderRadius: 6,
+                              padding: '4px 8px', cursor: 'pointer', color: 'var(--mist)',
+                              fontSize: 14, lineHeight: 1,
+                            }}
+                          >×</button>
+                        </>
+                      )}
+                      {r.status === 'no_expenses' && (r.user_id === user?.id || canSeeAll) && (
                         <button
-                          onClick={e => { e.stopPropagation(); deleteReport(r) }}
-                          title="Delete this report"
-                          aria-label="Delete this report"
+                          onClick={e => { e.stopPropagation(); reactivateReport(r) }}
+                          title="Reopen as a draft (active) report"
                           style={{
                             marginLeft: 6, background: 'transparent',
                             border: '1px solid var(--cream2)', borderRadius: 6,
                             padding: '4px 8px', cursor: 'pointer', color: 'var(--mist)',
-                            fontSize: 14, lineHeight: 1,
+                            fontSize: 12, lineHeight: 1, fontFamily: 'inherit',
                           }}
-                        >×</button>
+                        >Reactivate</button>
                       )}
                     </td>
                   </tr>

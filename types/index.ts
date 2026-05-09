@@ -50,7 +50,12 @@ export interface User {
 }
 
 // ── Expenses & Invoicing module ──────────────────────────────
-export type ExpenseReportStatus = 'active' | 'submitted_pending_review' | 'approved' | 'paid'
+export type ExpenseReportStatus =
+  | 'active'
+  | 'submitted_pending_review'
+  | 'approved'
+  | 'paid'
+  | 'no_expenses'
 
 export type ExpenseCategory =
   | 'flight'
