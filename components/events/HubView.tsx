@@ -397,8 +397,8 @@ function HubCard({
     reserved ? 'reserved' : live ? 'live' : soon ? 'soon' : 'upcoming'
 
   const heroBg =
-    phase === 'live'      ? 'linear-gradient(160deg, #DC2626 0%, #F59E0B 100%)' :
-    phase === 'soon'      ? 'linear-gradient(160deg, #DC2626 0%, #F59E0B 100%)' :
+    phase === 'live'      ? 'linear-gradient(160deg, #1E40AF 0%, #38BDF8 100%)' :
+    phase === 'soon'      ? 'linear-gradient(160deg, #1E40AF 0%, #38BDF8 100%)' :
     phase === 'reserved'  ? 'linear-gradient(160deg, #92400E 0%, #D97706 100%)' :
                             'linear-gradient(160deg, #14532D 0%, #1D6B44 100%)'
 
