@@ -32,26 +32,32 @@ function isViewMode(v: unknown): v is ViewMode {
 export default function BuyingEventsView({ setNav }: { setNav?: (n: NavPage) => void }) {
   const { user, events } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || user?.is_partner === true
-  // Hub is the new default. localStorage / DB-prefs override only if the user
-  // has explicitly switched away.
-  const [view, setView] = useState<ViewMode>('hub')
+  // No hardcoded default: lazy-init from localStorage so a returning user
+  // sees their last-used view immediately (no hub flash). Fall back to
+  // the original 'legacy' list for users with no preference saved at all.
+  const [view, setView] = useState<ViewMode>(() => {
+    if (typeof window === 'undefined') return 'legacy'
+    const saved = window.localStorage.getItem(STORAGE_KEY)
+    if (isViewMode(saved) && saved !== 'sheet') return saved
+    return 'legacy'
+  })
   const [phase, setPhase] = useState<Phase>('pre')
   const [createMode, setCreateMode] = useState<'scheduled' | 'reserved' | null>(null)
 
-  // Restore the user's preferred view on mount. DB pref (cross-device) wins
-  // over localStorage; localStorage wins over the default.
+  // Sync from DB pref (cross-device source of truth). Skip 'sheet' here too —
+  // see changeView for why we don't persist it.
   useEffect(() => {
     const dbPref = (user?.preferences as any)?.buying_events_view
-    if (isViewMode(dbPref)) { setView(dbPref); return }
-    if (typeof window === 'undefined') return
-    const saved = window.localStorage.getItem(STORAGE_KEY)
-    if (isViewMode(saved)) setView(saved)
-  }, [user?.preferences])
+    if (isViewMode(dbPref) && dbPref !== 'sheet' && dbPref !== view) setView(dbPref)
+  }, [user?.preferences, view])
 
   function changeView(v: ViewMode) {
     setView(v)
+    // Sheet is a peek/multi-edit view; don't make it the persisted last-used.
+    // Most folks expect their working view (hub/new/slim/legacy) to come back
+    // after a quick sheet excursion.
+    if (v === 'sheet') return
     if (typeof window !== 'undefined') window.localStorage.setItem(STORAGE_KEY, v)
-    // Best-effort cross-device persist. RLS allows self-row update on users.
     if (user?.id) {
       void (async () => {
         const { supabase } = await import('@/lib/supabase')
