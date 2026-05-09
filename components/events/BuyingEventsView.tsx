@@ -13,33 +13,82 @@ import { useEffect, useState } from 'react'
 import type { NavPage } from '@/app/page'
 import { useApp } from '@/lib/context'
 import Events from './Events'
+import HubView from './HubView'
 import PreEventTab from './PreEventTab'
 import DuringEventTab from './DuringEventTab'
 import PostEventTab from './PostEventTab'
 import CreateEventModal from './CreateEventModal'
 
-type ViewMode = 'new' | 'slim' | 'legacy'
+type ViewMode = 'hub' | 'new' | 'slim' | 'legacy'
 type Phase = 'pre' | 'during' | 'post'
 
 const STORAGE_KEY = 'beb-buying-events-view'
 
+function isViewMode(v: unknown): v is ViewMode {
+  return v === 'hub' || v === 'new' || v === 'slim' || v === 'legacy'
+}
+
 export default function BuyingEventsView({ setNav }: { setNav?: (n: NavPage) => void }) {
   const { user } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || user?.is_partner === true
-  const [view, setView] = useState<ViewMode>('new')
+  // Hub is the new default. localStorage / DB-prefs override only if the user
+  // has explicitly switched away.
+  const [view, setView] = useState<ViewMode>('hub')
   const [phase, setPhase] = useState<Phase>('pre')
   const [createMode, setCreateMode] = useState<'scheduled' | 'reserved' | null>(null)
 
-  // Restore the user's preferred view on mount.
+  // Restore the user's preferred view on mount. DB pref (cross-device) wins
+  // over localStorage; localStorage wins over the default.
   useEffect(() => {
+    const dbPref = (user?.preferences as any)?.buying_events_view
+    if (isViewMode(dbPref)) { setView(dbPref); return }
     if (typeof window === 'undefined') return
     const saved = window.localStorage.getItem(STORAGE_KEY)
-    if (saved === 'new' || saved === 'slim' || saved === 'legacy') setView(saved)
-  }, [])
+    if (isViewMode(saved)) setView(saved)
+  }, [user?.preferences])
 
   function changeView(v: ViewMode) {
     setView(v)
     if (typeof window !== 'undefined') window.localStorage.setItem(STORAGE_KEY, v)
+    // Best-effort cross-device persist. RLS allows self-row update on users.
+    if (user?.id) {
+      void (async () => {
+        const { supabase } = await import('@/lib/supabase')
+        const nextPrefs = { ...(user.preferences || {}), buying_events_view: v }
+        await supabase.from('users').update({ preferences: nextPrefs }).eq('id', user.id)
+      })()
+    }
+  }
+
+  // Hub view = per-event hub cards with launcher buttons (View 1 from mockups).
+  if (view === 'hub') {
+    return (
+      <div className="p-6" style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <ViewChooser view={view} onChange={changeView} />
+
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+          <div>
+            <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)', margin: '0 0 4px' }}>
+              ◆ Buying Events <span style={{ fontSize: 13, color: 'var(--mist)', fontWeight: 700 }}>· Hub</span>
+            </h1>
+          </div>
+          {isAdmin && (
+            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              <button onClick={() => setCreateMode('scheduled')} className="btn-primary btn-sm">+ New Event</button>
+              <button onClick={() => setCreateMode('reserved')} className="btn-outline btn-sm" title="Tentative date — Save the Date">
+                📌 Save the Date
+              </button>
+            </div>
+          )}
+        </div>
+
+        <HubView setNav={setNav} />
+
+        {createMode && (
+          <CreateEventModal mode={createMode} onClose={() => setCreateMode(null)} />
+        )}
+      </div>
+    )
   }
 
   // Legacy view = the existing Events component, untouched.
@@ -170,9 +219,13 @@ function ViewChooser({ view, onChange }: { view: ViewMode; onChange: (v: ViewMod
         display: 'flex', gap: 2, background: 'var(--cream2)',
         padding: 2, borderRadius: 6,
       }}>
-        {(['new', 'slim', 'legacy'] as ViewMode[]).map(v => {
+        {(['hub', 'new', 'slim', 'legacy'] as ViewMode[]).map(v => {
           const sel = view === v
-          const label = v === 'new' ? '✨ New' : v === 'slim' ? '📃 Slim' : '🗂 Legacy'
+          const label =
+            v === 'hub'    ? '🎯 Hub' :
+            v === 'new'    ? '✨ New' :
+            v === 'slim'   ? '📃 Slim' :
+                             '🗂 Legacy'
           return (
             <button key={v} onClick={() => onChange(v)}
               style={{

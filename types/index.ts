@@ -43,6 +43,10 @@ export interface User {
    *  We own the calendar; rep subscribes via the public URL. */
   trunk_show_calendar_id?: string | null
   trunk_show_calendar_subscribe_url?: string | null
+  /** Cross-device JSONB blob for misc UI prefs that don't deserve their own
+   *  column. First consumer: Buying Events Hub view (which launchers are
+   *  hidden + which view tab the user last picked). DB default '{}'. */
+  preferences?: Record<string, any>
 }
 
 // ── Expenses & Invoicing module ──────────────────────────────
