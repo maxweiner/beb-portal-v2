@@ -22,6 +22,16 @@ interface LicenseScannerProps {
   onComplete?: (intakeId: string) => void
 }
 
+/** zxing format strings for 1D barcodes. The front of every US license has
+ *  a Code-128 with the document discriminator; the back has the PDF417 we
+ *  want. If diagnostics show only a 1D format being detected, the camera is
+ *  almost certainly aimed at the front and the user needs to flip the card. */
+const ONE_D_FORMATS = new Set(['Code128', 'Code-128', 'Code39', 'Code-39', 'Codabar', 'EAN-13', 'EAN-8', 'UPC-A', 'UPC-E', 'ITF', 'Code93', 'Code-93'])
+function isOneDimensional(format: string): boolean {
+  // zxing-wasm has shifted format casing across versions; match loosely.
+  return ONE_D_FORMATS.has(format) || ONE_D_FORMATS.has(format.replace(/[-_]/g, ''))
+}
+
 /** Display helpers — turn nullable fields into safe UI strings. */
 const s = (v: string | null) => v ?? ''
 const formatHeight = (inches: number | null): string => {
@@ -517,6 +527,21 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
                       {diag.lastFormatSeen ? ` · saw: ${diag.lastFormatSeen}` : ''}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Hint banner: if we see a 1D barcode but never PDF417, the user
+                  is almost certainly scanning the FRONT of the license. Surface
+                  a clear "flip the card" prompt so they don't keep retrying. */}
+              {!cameraError && diag.lastFormatSeen && isOneDimensional(diag.lastFormatSeen) && (
+                <div style={{
+                  position: 'absolute', top: 60, left: '50%', transform: 'translateX(-50%)',
+                  background: 'rgba(245,158,11,.95)', color: '#1a1a16',
+                  padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+                  maxWidth: '85%', textAlign: 'center', zIndex: 5,
+                  boxShadow: '0 4px 12px rgba(0,0,0,.3)',
+                }}>
+                  ↻ Flip the license — the PDF417 (large 2D square barcode) is on the <em>back</em>.
                 </div>
               )}
 
