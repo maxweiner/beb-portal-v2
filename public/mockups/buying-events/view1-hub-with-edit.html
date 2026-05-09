@@ -161,15 +161,85 @@
   }
   .modal-foot .left { font-size: 12px; color: var(--mist); }
 
-  /* === View 2 (legacy stub) === */
-  .legacy-stub {
-    background: #fff; border: 1px solid var(--pearl); border-radius: 14px;
-    padding: 22px; text-align: center; color: var(--ash);
+  /* === View 2 (legacy, dense everything-visible) === */
+  .legacy {
+    background: #fff; border: 1px solid var(--pearl); border-radius: 12px;
+    margin-bottom: 14px; overflow: hidden;
   }
-  .legacy-stub h3 { margin: 0 0 6px; color: var(--ink); }
-  .legacy-stub .placeholder {
-    margin-top: 18px; padding: 30px; background: var(--cream); border: 1px dashed var(--pearl); border-radius: 10px;
-    color: var(--mist); font-size: 13px;
+  .legacy-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 14px 18px; border-bottom: 1px solid var(--cream2); background: var(--cream);
+  }
+  .legacy-head .title { font-size: 16px; font-weight: 800; }
+  .legacy-head .meta { font-size: 12px; color: var(--mist); margin-top: 2px; }
+  .legacy-head .pill { display: inline-block; padding: 3px 9px; border-radius: 99px; font-size: 11px; font-weight: 800;
+                       text-transform: uppercase; letter-spacing: .04em; }
+  .legacy-head .pill.this-week { background: #fee2e2; color: #991b1b; }
+  .legacy-head .pill.upcoming { background: var(--green-pale); color: var(--green-dark); }
+  .legacy-head .pill.reserved { background: #fef3c7; color: #92400e; }
+  .legacy-row {
+    display: grid; grid-template-columns: 130px 1fr; gap: 0;
+    border-bottom: 1px solid var(--cream2);
+  }
+  .legacy-row:last-child { border-bottom: none; }
+  .legacy-row .lab {
+    background: var(--cream); padding: 10px 14px;
+    font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--ash);
+    border-right: 1px solid var(--cream2);
+  }
+  .legacy-row .val { padding: 10px 14px; font-size: 13px; color: var(--ink); }
+  .legacy-row .val .muted { color: var(--mist); }
+  .legacy-row .val a { color: var(--green-dark); font-weight: 700; text-decoration: none; }
+  .legacy-row .val a:hover { text-decoration: underline; }
+  .legacy-actions {
+    padding: 12px 18px; background: var(--cream); display: flex; gap: 6px; flex-wrap: wrap;
+  }
+  .legacy-actions button {
+    background: #fff; border: 1px solid var(--pearl); border-radius: 6px;
+    padding: 6px 11px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit;
+  }
+  .legacy-actions button:hover { background: var(--green-pale); border-color: var(--green3); }
+  .legacy-actions button.danger { color: #b22234; }
+
+  /* === Slim view (Teri's pick) === */
+  .slim-table {
+    background: #fff; border: 1px solid var(--pearl); border-radius: 10px;
+    overflow: hidden;
+  }
+  .slim-row {
+    display: grid;
+    grid-template-columns: 110px 1fr 130px 90px 100px 80px 36px;
+    align-items: center;
+    border-bottom: 1px solid var(--cream2);
+  }
+  .slim-row:last-child { border-bottom: none; }
+  .slim-row.head {
+    background: var(--cream); font-size: 10px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .06em; color: var(--mist);
+  }
+  .slim-row > div { padding: 9px 12px; font-size: 13px; }
+  .slim-row .name { font-weight: 800; }
+  .slim-row .name .where { font-size: 11px; color: var(--mist); font-weight: 600; }
+  .slim-row .right { text-align: right; }
+  .slim-row .pill { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 10px; font-weight: 800;
+                    text-transform: uppercase; letter-spacing: .04em; }
+  .slim-row .pill.this-week { background: #fee2e2; color: #991b1b; }
+  .slim-row .pill.upcoming { background: var(--green-pale); color: var(--green-dark); }
+  .slim-row .pill.reserved { background: #fef3c7; color: #92400e; }
+  .slim-row .av-stack .av {
+    width: 22px; height: 22px; font-size: 9px; border-width: 1.5px;
+  }
+  .slim-row .av-stack .av + .av { margin-left: -8px; }
+  .slim-row .open-tag { font-size: 11px; color: #b22234; font-weight: 700; margin-left: 6px; }
+  .slim-row .menu {
+    background: transparent; border: 0; cursor: pointer; font-size: 18px; color: var(--mist);
+    text-align: center; font-family: inherit;
+  }
+  .slim-row .menu:hover { color: var(--ink); }
+  .slim-row:hover { background: #FBF9F4; cursor: pointer; }
+  @media (max-width: 760px) {
+    .slim-row { grid-template-columns: 90px 1fr 70px 36px; }
+    .slim-row .col-dates, .slim-row .col-spent, .slim-row .col-customers { display: none; }
   }
 
   .principle {
@@ -198,6 +268,7 @@
   <div class="view-toggle">
     <button id="v1Btn" class="active" onclick="setView(1)">View 1 · Hub</button>
     <button id="v2Btn" onclick="setView(2)">View 2 · Legacy</button>
+    <button id="vSlimBtn" onclick="setView('slim')">Slim ⚡<small style="opacity:.6; font-weight:600; margin-left:4px;">Teri's pick</small></button>
   </div>
 
   <!-- ===== VIEW 1 ===== -->
@@ -282,16 +353,206 @@
     </div>
   </div>
 
-  <!-- ===== VIEW 2 (legacy stub) ===== -->
+  <!-- ===== VIEW 2 — Legacy dense ===== -->
   <div id="view2" class="hidden">
-    <div class="legacy-stub">
-      <h3>View 2 · Legacy</h3>
-      <p>The dense, all-in-one buying events page that exists today. Every field, every section, all on one screen — useful when you need to dig deep without drilling in.</p>
-      <div class="placeholder">[ Existing legacy buying events page renders here ]</div>
+
+    <div class="legacy">
+      <div class="legacy-head">
+        <div>
+          <div class="title">Kay Cameron Jewelers <span class="pill this-week">This week · Day 3</span></div>
+          <div class="meta">Sayville, NY · May 7 – May 9, 2026 · Buying Event</div>
+        </div>
+        <div><strong>$311K</strong> spent · 89% close</div>
+      </div>
+      <div class="legacy-row">
+        <div class="lab">Buyers</div>
+        <div class="val">Max Weiner, Tom Brady, Victor Adams <span class="muted">· 3 of 3 confirmed</span></div>
+      </div>
+      <div class="legacy-row">
+        <div class="lab">Travel</div>
+        <div class="val">All booked — <a href="#">3 flights</a>, <a href="#">2 hotel reservations</a>, <a href="#">1 rental car</a></div>
+      </div>
+      <div class="legacy-row">
+        <div class="lab">Marketing</div>
+        <div class="val">VDP live · Postcard mailed 4/22 · Email blast 5/2 · <a href="#">View campaign</a></div>
+      </div>
+      <div class="legacy-row">
+        <div class="lab">Day stats</div>
+        <div class="val">Day 1: $98K / 21 cust · Day 2: $130K / 24 cust · <strong>Day 3 (live): $83K / 18 cust</strong></div>
+      </div>
+      <div class="legacy-row">
+        <div class="lab">Checklist</div>
+        <div class="val">8 of 8 complete <span class="muted">· last item: Pre-event prep call</span></div>
+      </div>
+      <div class="legacy-row">
+        <div class="lab">Notes</div>
+        <div class="val">2 unread <span class="muted">· from store: "Need more diamond loupes for Day 3"</span></div>
+      </div>
+      <div class="legacy-actions">
+        <button>📊 Day Entry</button>
+        <button>👥 Buyers</button>
+        <button>✈️ Travel</button>
+        <button>📣 Marketing</button>
+        <button>📋 Checklist</button>
+        <button>📝 Notes</button>
+        <button class="danger">🚫 Cancel</button>
+      </div>
     </div>
+
+    <div class="legacy">
+      <div class="legacy-head">
+        <div>
+          <div class="title">Pickens Jewelers <span class="pill upcoming">In 8 days</span></div>
+          <div class="meta">Atlanta, GA · May 12 – May 14, 2026 · Buying Event</div>
+        </div>
+        <div><strong>$148K</strong> projected · 3 open gates</div>
+      </div>
+      <div class="legacy-row">
+        <div class="lab">Buyers</div>
+        <div class="val">Joe Romeo, Lori Smith, Marv Klein <span class="muted">· 3 of 3 confirmed</span></div>
+      </div>
+      <div class="legacy-row">
+        <div class="lab">Travel</div>
+        <div class="val">2 of 3 booked — <span style="color:#b22234;">Lori still needs hotel + flight</span></div>
+      </div>
+      <div class="legacy-row">
+        <div class="lab">Marketing</div>
+        <div class="val">VDP done · Postcard done · <strong>Confirmation letter due tomorrow</strong></div>
+      </div>
+      <div class="legacy-row">
+        <div class="lab">Assets</div>
+        <div class="val"><span style="color:#b22234;">None ordered</span> · <a href="#">Order signage</a></div>
+      </div>
+      <div class="legacy-row">
+        <div class="lab">Brief staff</div>
+        <div class="val"><span style="color:#b22234;">2 buyers haven't acknowledged</span></div>
+      </div>
+      <div class="legacy-row">
+        <div class="lab">Checklist</div>
+        <div class="val">5 of 8 complete · 3 open gates</div>
+      </div>
+      <div class="legacy-row">
+        <div class="lab">Ad spend</div>
+        <div class="val">$2,840 spent / $2,500 budget <span class="muted">· over budget</span></div>
+      </div>
+      <div class="legacy-actions">
+        <button>👥 Buyers</button>
+        <button>✈️ Travel</button>
+        <button>📣 Marketing</button>
+        <button>📦 Assets</button>
+        <button>🎓 Brief staff</button>
+        <button>📋 Checklist</button>
+        <button>💰 Ad spend</button>
+        <button class="danger">🚫 Cancel</button>
+      </div>
+    </div>
+
+    <div class="legacy">
+      <div class="legacy-head">
+        <div>
+          <div class="title">📌 Burkes Jewelers <span class="pill reserved">Save the Date</span></div>
+          <div class="meta">Tampa, FL · May 21 – May 23, 2026 · Reserved (not confirmed)</div>
+        </div>
+        <div><strong>Reserved</strong> · 5 open gates</div>
+      </div>
+      <div class="legacy-row">
+        <div class="lab">Buyers</div>
+        <div class="val">Rich Welsch, Max Weiner <span style="color:#b22234;">· 1 slot open</span></div>
+      </div>
+      <div class="legacy-row">
+        <div class="lab">Travel</div>
+        <div class="val"><span class="muted">Locked until promoted to Booked</span></div>
+      </div>
+      <div class="legacy-row">
+        <div class="lab">Marketing</div>
+        <div class="val"><span class="muted">Locked until promoted to Booked</span></div>
+      </div>
+      <div class="legacy-row">
+        <div class="lab">Status</div>
+        <div class="val">📌 Reserved on 4/15 by Max <span class="muted">· decide go/no-go this week</span></div>
+      </div>
+      <div class="legacy-actions">
+        <button>✅ Promote to Booked</button>
+        <button>👥 Buyers</button>
+        <button>📋 Checklist</button>
+        <button class="danger">🚫 Cancel</button>
+      </div>
+    </div>
+
     <div class="principle">
-      <b>View 2 · Legacy.</b> Kept available as a fallback so power users can switch back any time.
-      View 1 is the new default, but the toggle at the top remembers your choice per device.
+      <b>View 2 · Legacy.</b> The dense everything-visible layout. No drill-down, no modals — every
+      field for every event lives on the same screen. Kept available so anyone who prefers to scan
+      everything at once can switch back at any time.
+    </div>
+  </div>
+
+  <!-- ===== SLIM VIEW (Teri's pick) ===== -->
+  <div id="viewSlim" class="hidden">
+    <div class="slim-table">
+      <div class="slim-row head">
+        <div>Status</div>
+        <div>Event</div>
+        <div class="col-dates">Dates</div>
+        <div>Buyers</div>
+        <div class="col-spent right">Spent</div>
+        <div class="col-customers right">Cust</div>
+        <div></div>
+      </div>
+
+      <div class="slim-row">
+        <div><span class="pill this-week">This wk · Day 3</span></div>
+        <div class="name">Kay Cameron Jewelers <div class="where">Sayville, NY</div></div>
+        <div class="col-dates">May 7 – May 9</div>
+        <div>
+          <span class="av-stack">
+            <span class="av teal" title="Max Weiner">MW</span>
+            <span class="av green" title="Tom Brady">TB</span>
+            <span class="av blue" title="Victor Adams">VA</span>
+          </span>
+        </div>
+        <div class="col-spent right"><strong>$311K</strong></div>
+        <div class="col-customers right">63</div>
+        <div><button class="menu" title="More">⋯</button></div>
+      </div>
+
+      <div class="slim-row">
+        <div><span class="pill upcoming">In 8 days</span></div>
+        <div class="name">Pickens Jewelers <div class="where">Atlanta, GA</div></div>
+        <div class="col-dates">May 12 – May 14</div>
+        <div>
+          <span class="av-stack">
+            <span class="av amber" title="Joe Romeo">JR</span>
+            <span class="av plum" title="Lori Smith">LS</span>
+            <span class="av teal" title="Marv Klein">MK</span>
+          </span>
+        </div>
+        <div class="col-spent right">$148K</div>
+        <div class="col-customers right">24</div>
+        <div><button class="menu" title="More">⋯</button></div>
+      </div>
+
+      <div class="slim-row">
+        <div><span class="pill reserved">Reserved</span></div>
+        <div class="name">📌 Burkes Jewelers <div class="where">Tampa, FL</div></div>
+        <div class="col-dates">May 21 – May 23</div>
+        <div>
+          <span class="av-stack">
+            <span class="av blue" title="Rich Welsch">RW</span>
+            <span class="av teal" title="Max Weiner">MW</span>
+            <span class="av empty" title="Open buyer slot">+</span>
+          </span>
+          <span class="open-tag">1 open</span>
+        </div>
+        <div class="col-spent right muted">—</div>
+        <div class="col-customers right muted">—</div>
+        <div><button class="menu" title="More">⋯</button></div>
+      </div>
+    </div>
+
+    <div class="principle">
+      <b>Slim · Teri's pick.</b> One row per event. Just status, name + city, dates, buyer chips,
+      spend, customer count, and a "⋯" menu. Click any row to drill into the full event. No KPI cells,
+      no launcher buttons — fastest way to scan everything when you know exactly what you're looking for.
     </div>
   </div>
 </div>
@@ -397,8 +658,10 @@
   function setView(n) {
     document.getElementById('view1').classList.toggle('hidden', n !== 1);
     document.getElementById('view2').classList.toggle('hidden', n !== 2);
+    document.getElementById('viewSlim').classList.toggle('hidden', n !== 'slim');
     document.getElementById('v1Btn').classList.toggle('active', n === 1);
     document.getElementById('v2Btn').classList.toggle('active', n === 2);
+    document.getElementById('vSlimBtn').classList.toggle('active', n === 'slim');
     document.getElementById('editBtn').classList.toggle('hidden', n !== 1);
   }
 
