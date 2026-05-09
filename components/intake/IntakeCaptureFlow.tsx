@@ -25,6 +25,7 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import { uploadIntakePhoto } from '@/lib/intake/photoUpload'
+import { dedupAndUpsertCustomer } from '@/lib/intake/customerDedup'
 
 type Step =
   | 'form-number'
@@ -169,6 +170,30 @@ export default function IntakeCaptureFlow({ eventId, onClose, onSaved }: Props) 
       action: 'create',
       changed_fields: { intake_kind: [null, 'purchase'], buy_form_number: [null, buyFormNumber || null] },
     })
+
+    // 5. Customer dedup (Phase 7). Best-effort — won't block on failure.
+    //    For Phase 1 the buyer hasn't typed first/last name (that comes from
+    //    license parse, which doesn't run yet), so dedup will usually only
+    //    succeed if phone or email was entered. Once Phase 2 ships, the
+    //    parsed name + DL will dramatically improve hit rate.
+    if (phone || email) {
+      void (async () => {
+        try {
+          const { data: ev } = await supabase.from('events').select('store_id').eq('id', eventId).single()
+          if (ev?.store_id) {
+            const cid = await dedupAndUpsertCustomer({
+              storeId: ev.store_id,
+              firstName: null, lastName: null, phone: phone || null, email: email || null,
+              licenseNumber: null, licenseState: null, dateOfBirth: null,
+              addressLine1: null, addressCity: null, addressState: null, addressZip: null,
+            })
+            if (cid) await supabase.from('customer_intakes').update({ customer_id: cid }).eq('id', intakeId)
+          }
+        } catch (e) {
+          console.warn('[intake] post-save dedup skipped', e)
+        }
+      })()
+    }
 
     setStep('done')
     onSaved?.(intakeId)
