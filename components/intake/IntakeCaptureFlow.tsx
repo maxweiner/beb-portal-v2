@@ -218,7 +218,7 @@ export default function IntakeCaptureFlow({ eventId, onClose, onSaved }: Props) 
             onSkip={() => setStep('photo-back')}
             onBack={() => setStep('form-number')}
             overlay="license"
-            overlayLabel=""
+            overlayLabel="ID FRONT"
           />
         )}
 
@@ -232,7 +232,7 @@ export default function IntakeCaptureFlow({ eventId, onClose, onSaved }: Props) 
             onSkip={() => setStep('photo-invoice')}
             onBack={() => setStep('photo-front')}
             overlay="license"
-            overlayLabel=""
+            overlayLabel="ID BACK"
           />
         )}
 
@@ -481,13 +481,12 @@ function CameraCaptureStep({
           width: '100%', maxHeight: '55vh', objectFit: 'contain',
           background: '#111', borderRadius: 12,
         }} />
-        <button
-          onClick={() => onCapture(null as any)}  // clear so the camera reopens
-          style={{ ...primaryBtnFull, marginTop: 16 }}
-        >🔄 Retake photo</button>
+        <button onClick={onContinue} style={{ ...primaryBtnFullTall, marginTop: 16 }}>
+          Continue →
+        </button>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
           <button onClick={onBack} style={secondaryBtn}>← Back</button>
-          <button onClick={onContinue} style={primaryBtn}>Continue →</button>
+          <button onClick={() => onCapture(null as any)} style={secondaryBtn}>🔄 Retake</button>
         </div>
       </div>
     )
@@ -663,7 +662,7 @@ function JewelryStep({
         {photos.length} / {MAX_JEWELRY_PHOTOS} photos
       </div>
 
-      <button onClick={onContinue} style={{ ...primaryBtnFull, marginTop: 16 }}>Continue →</button>
+      <button onClick={onContinue} style={{ ...primaryBtnFullTall, marginTop: 16 }}>Continue →</button>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
         <button onClick={onBack} style={secondaryBtn}>← Back</button>
         <button onClick={onContinue} style={secondaryBtn}>Skip →</button>
@@ -846,6 +845,14 @@ const textInputStyle: React.CSSProperties = {
 
 const primaryBtnFull: React.CSSProperties = {
   width: '100%', padding: '14px 18px', borderRadius: 10, fontWeight: 800, fontSize: 15,
+  background: 'var(--green)', color: '#fff', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+}
+
+/** Double-height variant of primaryBtnFull — used for the most-tappable
+ *  "Continue" actions on photo previews + jewelry step where users will be
+ *  thumbing through quickly with a customer at the counter. */
+const primaryBtnFullTall: React.CSSProperties = {
+  width: '100%', padding: '28px 18px', borderRadius: 12, fontWeight: 800, fontSize: 17,
   background: 'var(--green)', color: '#fff', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
 }
 
