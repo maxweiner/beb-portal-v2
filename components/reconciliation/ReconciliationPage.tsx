@@ -781,7 +781,16 @@ function FindingDetailModal({
 }) {
   const [finding, setFinding] = useState<Finding | null>(null)
   const [clearings, setClearings] = useState<ClearedCheck[]>([])
-  const [writtenChecks, setWrittenChecks] = useState<{ source: string; amount: number; day_number: number | null; payment_type: string | null }[]>([])
+  const [writtenChecks, setWrittenChecks] = useState<{
+    source_table: 'buyer_checks' | 'event_days'
+    source_id: string
+    source_label: string
+    amount: number
+    day_number: number | null
+    payment_type: string | null
+  }[]>([])
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -805,11 +814,11 @@ function FindingDetailModal({
             .order('cleared_date', { ascending: true }),
         ),
         withTimeout(
-          supabase.from('buyer_checks').select('amount, day_number, payment_type, event_id')
+          supabase.from('buyer_checks').select('id, amount, day_number, payment_type, event_id')
             .eq('check_number', f.check_number),
         ),
         withTimeout(
-          supabase.from('event_days').select('day_number, store_commission_check_amount, store_commission_check_number, event_id')
+          supabase.from('event_days').select('id, day_number, store_commission_check_amount, store_commission_check_number, event_id')
             .eq('store_commission_check_number', f.check_number),
         ),
       ])
@@ -817,15 +826,51 @@ function FindingDetailModal({
       setClearings((clearedRes.data || []) as ClearedCheck[])
       const writes: typeof writtenChecks = []
       for (const r of (buyerChecksRes.data || []) as any[]) {
-        writes.push({ source: 'buyer_checks', amount: Number(r.amount) || 0, day_number: r.day_number, payment_type: r.payment_type })
+        writes.push({
+          source_table: 'buyer_checks', source_id: r.id, source_label: 'buyer_checks',
+          amount: Number(r.amount) || 0, day_number: r.day_number, payment_type: r.payment_type,
+        })
       }
       for (const r of (edRes.data || []) as any[]) {
-        writes.push({ source: 'event_days commission', amount: Number(r.store_commission_check_amount) || 0, day_number: r.day_number, payment_type: null })
+        writes.push({
+          source_table: 'event_days', source_id: r.id, source_label: 'event_days commission',
+          amount: Number(r.store_commission_check_amount) || 0, day_number: r.day_number, payment_type: null,
+        })
       }
       setWrittenChecks(writes)
     })()
     return () => { cancelled = true }
   }, [findingId])
+
+  async function saveWrittenAmount(source_table: 'buyer_checks' | 'event_days', source_id: string) {
+    if (!finding) return
+    const v = Number(editValue)
+    if (!Number.isFinite(v) || v < 0) { setErr('Enter a non-negative number'); return }
+    setBusy(true); setErr(null)
+    try {
+      const session = await supabase.auth.getSession()
+      const token = session.data.session?.access_token || ''
+      const res = await fetch(`/api/reconciliation/findings/${finding.id}/edit-written`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ source_table, source_id, new_amount: v }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json?.error || 'Update failed')
+      // Update local row + close edit state
+      setWrittenChecks(prev => prev.map(w =>
+        w.source_id === source_id && w.source_table === source_table
+          ? { ...w, amount: v }
+          : w,
+      ))
+      setEditingId(null)
+      setEditValue('')
+      onChanged()
+    } catch (e: any) {
+      setErr(e?.message || 'Update failed')
+    }
+    setBusy(false)
+  }
 
   async function setStatus(next: FindingStatus) {
     if (!finding) return
@@ -965,17 +1010,47 @@ function FindingDetailModal({
 
             {writtenChecks.length > 0 && (
               <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>Written sources</div>
+                <div style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>
+                  Written sources <span style={{ fontWeight: 600, textTransform: 'none' }}>· click ✎ to fix a typo'd amount</span>
+                </div>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <tbody>
-                    {writtenChecks.map((w, i) => (
-                      <tr key={i} style={{ borderTop: '1px solid var(--pearl)' }}>
-                        <td style={{ padding: 6 }}>{w.source}</td>
-                        <td style={{ padding: 6 }}>{fmtMoney(w.amount)}</td>
-                        <td style={{ padding: 6, color: 'var(--mist)' }}>day {w.day_number ?? '—'}</td>
-                        <td style={{ padding: 6, color: 'var(--mist)' }}>{w.payment_type || ''}</td>
-                      </tr>
-                    ))}
+                    {writtenChecks.map((w) => {
+                      const isEditing = editingId === w.source_id
+                      return (
+                        <tr key={w.source_id} style={{ borderTop: '1px solid var(--pearl)' }}>
+                          <td style={{ padding: 6 }}>{w.source_label}</td>
+                          <td style={{ padding: 6, whiteSpace: 'nowrap' }}>
+                            {isEditing ? (
+                              <input type="number" min={0} step="0.01" value={editValue}
+                                onChange={e => setEditValue(e.target.value)}
+                                autoFocus
+                                style={{ width: 100, padding: '4px 6px', fontSize: 12, border: '1px solid var(--pearl)', borderRadius: 4 }} />
+                            ) : (
+                              <strong>{fmtMoney(w.amount)}</strong>
+                            )}
+                          </td>
+                          <td style={{ padding: 6, color: 'var(--mist)' }}>day {w.day_number ?? '—'}</td>
+                          <td style={{ padding: 6, color: 'var(--mist)' }}>{w.payment_type || ''}</td>
+                          <td style={{ padding: 6, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            {isEditing ? (
+                              <>
+                                <button onClick={() => saveWrittenAmount(w.source_table, w.source_id)}
+                                  disabled={busy} className="btn-primary btn-xs">Save</button>
+                                <button onClick={() => { setEditingId(null); setEditValue('') }}
+                                  disabled={busy} className="btn-outline btn-xs" style={{ marginLeft: 4 }}>Cancel</button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => { setEditingId(w.source_id); setEditValue(w.amount.toFixed(2)) }}
+                                disabled={busy}
+                                title="Edit this amount in the underlying ledger"
+                                className="btn-outline btn-xs">✎ Edit</button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
