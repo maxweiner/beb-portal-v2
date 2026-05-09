@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
+import Checkbox from '@/components/ui/Checkbox'
 
 const withTimeout = <T,>(promise: PromiseLike<T>, ms = 15000): Promise<T> => {
   return Promise.race([
@@ -130,6 +131,8 @@ export default function ReconciliationPage() {
   const [openId, setOpenId] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
   const [matchError, setMatchError] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
 
   const reloadRef = useRef<() => Promise<void>>(async () => {})
   reloadRef.current = async () => {
@@ -204,6 +207,33 @@ export default function ReconciliationPage() {
     }
     setRunning(false)
     await reloadRef.current()
+  }
+
+  // Clear selection on context changes so we never apply a status flip
+  // to rows the user can't currently see.
+  useEffect(() => { setSelected(new Set()) }, [brand, tab, typeFilter, statusFilter, search])
+
+  async function bulkSetStatus(next: FindingStatus) {
+    if (selected.size === 0 || bulkBusy) return
+    const label = STATUS_LABEL[next].toLowerCase()
+    if (!confirm(`Mark ${selected.size} finding${selected.size === 1 ? '' : 's'} as ${label}?`)) return
+    setBulkBusy(true); setError(null)
+    try {
+      const session = await supabase.auth.getSession()
+      const token = session.data.session?.access_token || ''
+      const res = await fetch('/api/reconciliation/findings/bulk', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ids: Array.from(selected), status: next }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json?.error || 'Bulk update failed')
+      setSelected(new Set())
+      await reloadRef.current()
+    } catch (e: any) {
+      setError(e?.message || 'Bulk update failed')
+    }
+    setBulkBusy(false)
   }
 
   function exportCsv() {
@@ -319,6 +349,20 @@ export default function ReconciliationPage() {
         ))}
       </div>
 
+      {selected.size > 0 && (
+        <div className="card" style={{
+          padding: '8px 12px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8,
+          background: 'var(--cream2)', flexWrap: 'wrap',
+        }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink)' }}>{selected.size} selected</span>
+          <div style={{ flex: 1 }} />
+          <button onClick={() => bulkSetStatus('resolved')} disabled={bulkBusy} className="btn-primary btn-xs">Mark resolved</button>
+          <button onClick={() => bulkSetStatus('ignored')}  disabled={bulkBusy} className="btn-outline btn-xs">Mark ignored</button>
+          <button onClick={() => bulkSetStatus('disputed')} disabled={bulkBusy} className="btn-outline btn-xs">Mark disputed</button>
+          <button onClick={() => setSelected(new Set())}    disabled={bulkBusy} className="btn-outline btn-xs">Cancel</button>
+        </div>
+      )}
+
       {findings === null ? (
         <div className="card" style={{ padding: 30, textAlign: 'center', color: 'var(--mist)' }}>Loading…</div>
       ) : tab === 'outstanding' ? (
@@ -328,7 +372,24 @@ export default function ReconciliationPage() {
           {(findings.length === 0) ? 'Upload a Wells Fargo CSV to start.' : 'Nothing matches the current filters.'}
         </div>
       ) : (
-        <FindingsTable findings={filtered} onOpen={setOpenId} />
+        <FindingsTable
+          findings={filtered}
+          onOpen={setOpenId}
+          selected={selected}
+          onToggleSelect={(id) => {
+            setSelected(prev => {
+              const next = new Set(prev)
+              if (next.has(id)) next.delete(id); else next.add(id)
+              return next
+            })
+          }}
+          onToggleAll={() => {
+            const allIds = filtered.map(f => f.id)
+            const allSelected = allIds.every(id => selected.has(id))
+            setSelected(allSelected ? new Set() : new Set(allIds))
+          }}
+          allSelected={filtered.length > 0 && filtered.every(f => selected.has(f.id))}
+        />
       )}
 
       {openId && (
@@ -574,13 +635,25 @@ function SummaryTiles({
   )
 }
 
-function FindingsTable({ findings, onOpen }: { findings: Finding[]; onOpen: (id: string) => void }) {
+function FindingsTable({
+  findings, onOpen, selected, onToggleSelect, onToggleAll, allSelected,
+}: {
+  findings: Finding[]
+  onOpen: (id: string) => void
+  selected: Set<string>
+  onToggleSelect: (id: string) => void
+  onToggleAll: () => void
+  allSelected: boolean
+}) {
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
             <tr style={{ background: 'var(--cream2)' }}>
+              <th style={{ padding: '8px 10px', width: 28 }}>
+                <Checkbox checked={allSelected} onChange={onToggleAll} size={16} />
+              </th>
               {['Check #', 'Type', 'Written', 'Cleared', 'Δ', 'Cleared on', 'Payee · Event', 'Status', ''].map(h => (
                 <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--mist)' }}>{h}</th>
               ))}
@@ -590,9 +663,17 @@ function FindingsTable({ findings, onOpen }: { findings: Finding[]; onOpen: (id:
             {findings.map(f => {
               const tc = TYPE_COLOR[f.finding_type]
               const sc = STATUS_COLOR[f.status]
+              const isSelected = selected.has(f.id)
               return (
                 <tr key={f.id} onClick={() => onOpen(f.id)}
-                  style={{ cursor: 'pointer', borderTop: '1px solid var(--pearl)' }}>
+                  style={{
+                    cursor: 'pointer', borderTop: '1px solid var(--pearl)',
+                    background: isSelected ? 'var(--cream2)' : undefined,
+                  }}>
+                  <td style={{ padding: '8px 10px', width: 28 }}
+                    onClick={e => { e.stopPropagation(); onToggleSelect(f.id) }}>
+                    <Checkbox checked={isSelected} onChange={() => onToggleSelect(f.id)} size={16} />
+                  </td>
                   <td style={{ padding: '8px 10px', fontWeight: 700 }}>{f.check_number}</td>
                   <td style={{ padding: '8px 10px' }}>
                     <span style={{ background: tc.bg, color: tc.fg, padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap' }}>
