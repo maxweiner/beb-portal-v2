@@ -151,6 +151,9 @@ class EnhancedZxingDecoder implements BarcodeDecoder {
   private timer: number | null = null
   private running = false
   private inFlight = false
+  /** Alternates 0/1 across attempts so we cover both contrast-stretched and
+   *  binarized passes without doubling the per-frame cost. */
+  private tick = 0
 
   startScanning(video: HTMLVideoElement, onResult: (raw: string) => void) {
     this.running = true
@@ -162,19 +165,33 @@ class EnhancedZxingDecoder implements BarcodeDecoder {
       this.inFlight = true
 
       try {
+        // Center-crop to the viewfinder area before passing to zxing.
+        // The on-screen viewfinder is roughly the center 90% × 30% of the
+        // visible video; we widen vertically to 40% to absorb misaligned
+        // shots. Cropping at native resolution preserves the fine PDF417
+        // modules that get blurred when the whole frame is downscaled.
+        const vw = video.videoWidth
+        const vh = video.videoHeight
+        const cropW = Math.round(vw * 0.80)
+        const cropH = Math.round(vh * 0.40)
+        const cropX = Math.round((vw - cropW) / 2)
+        const cropY = Math.round((vh - cropH) / 2)
+
         const canvas = getScratchCanvas()
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
+        canvas.width = cropW
+        canvas.height = cropH
         const ctx = canvas.getContext('2d', { willReadFrequently: true })
         if (!ctx) return
 
-        ctx.drawImage(video, 0, 0)
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-        processForBarcode(imageData)
+        ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH)
+        const imageData = ctx.getImageData(0, 0, cropW, cropH)
+        // Alternate: even tick = grayscale + contrast (preferred for
+        // most lighting); odd tick = also binarize (helps glossy codes
+        // under harsh overhead light where Otsu threshold > smooth).
+        const useBinarize = (this.tick++ % 2) === 1
+        processForBarcode(imageData, { binarize: useBinarize })
         ctx.putImageData(imageData, 0, 0)
-        // Pull the processed data back so decodePDF417FromImageData sees
-        // the sharpened copy.
-        const processed = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        const processed = ctx.getImageData(0, 0, cropW, cropH)
 
         const result = await decodePDF417FromImageData(processed)
         if (!this.running) return

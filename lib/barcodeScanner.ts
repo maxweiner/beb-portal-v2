@@ -70,7 +70,11 @@ export async function decodePDF417FromImageData(
 ): Promise<ScanResult | null> {
   ensureWasm()
   try {
-    const scaled = downscaleImageData(imageData, 1280)
+    // PA + a few other states pack ~30% more data into the PDF417 than
+    // the average license, which means narrower modules. 1280 px wide
+    // was too aggressive for those — 1600 keeps enough resolution for
+    // dense codes while still letting iPhone Chrome decode in <300ms.
+    const scaled = downscaleImageData(imageData, 1600)
 
     // Always try PDF417 first
     const pdf417Results = await readBarcodes(scaled, PDF417_OPTIONS)
