@@ -61,11 +61,11 @@ export async function GET(req: Request) {
   const { data: reports, error } = await sb
     .from('expense_reports')
     .select(`
-      id, status, user_id, event_id, brand,
+      id, status, user_id, event_id,
       submitted_at, approved_at,
       total_expenses, total_compensation, bonus_amount, grand_total,
       user:users!user_id(name),
-      event:events(store_name, start_date)
+      event:events(store_name, start_date, brand)
     `)
     .in('status', ['submitted_pending_review', 'approved'])
     .order('submitted_at', { ascending: true })
@@ -99,7 +99,7 @@ export async function GET(req: Request) {
       buyer_name: r.user?.name || '(unknown)',
       event_id: r.event_id,
       event_label: evLabel,
-      brand: r.brand,
+      brand: ev?.brand ?? null,
       submitted_at: r.submitted_at,
       approved_at: r.approved_at,
       age_days: age,

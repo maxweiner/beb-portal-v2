@@ -63,7 +63,7 @@ export async function POST(req: Request) {
   const { data: reports, error: fetchErr } = await sb
     .from('expense_reports')
     .select(`
-      id, status, user_id, brand, grand_total,
+      id, status, user_id, grand_total,
       user:users!user_id(name, email),
       event:events(store_name, start_date)
     `)
