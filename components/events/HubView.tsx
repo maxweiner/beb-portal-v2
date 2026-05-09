@@ -40,8 +40,8 @@ import { CALENDAR_COLORS } from '@/lib/calendarColors'
 // them out). `requires` controls per-event visibility (e.g. promote
 // only on reserved). `adminOnly` hides for non-admins.
 type LauncherKey =
-  | 'day_entry' | 'buyers' | 'travel' | 'shipping' | 'marketing' | 'brief'
-  | 'notes' | 'assets' | 'checklist' | 'ad_spend'
+  | 'day_entry' | 'buyers' | 'travel' | 'shipping' | 'marketing' | 'appointments'
+  | 'expenses' | 'brief' | 'notes' | 'assets' | 'checklist' | 'ad_spend'
   | 'promote' | 'cancel'
 
 interface LauncherDef {
@@ -70,6 +70,10 @@ const LAUNCHERS: LauncherDef[] = [
     sub: 'Inbound + outbound' },
   { key: 'marketing', icon: '📣', label: 'Marketing',
     sub: 'VDP, postcards, comms' },
+  { key: 'appointments', icon: '📅', label: 'Appointments',
+    sub: 'Booked + waitlist' },
+  { key: 'expenses',  icon: '🧾', label: 'Expenses',
+    sub: 'Submit / approve' },
   { key: 'assets',    icon: '🪧', label: 'Assets',
     sub: 'Signage, printables' },
   { key: 'brief',     icon: '🎓', label: 'Brief Staff', adminOnly: true,
@@ -343,6 +347,8 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
                 case 'travel':    setTravelIntent({ eventId: ev.id }); setNav?.('travel'); break
                 case 'shipping':  setNav?.('shipping'); break
                 case 'marketing': setNav?.('marketing'); break
+                case 'appointments': setNav?.('appointments'); break
+                case 'expenses':  setNav?.('expenses'); break
                 case 'brief':     void toggleBriefed(ev); break
                 case 'notes':     setNotesEventId(ev.id); break
                 case 'assets':    setManageEventId(ev.id); break
