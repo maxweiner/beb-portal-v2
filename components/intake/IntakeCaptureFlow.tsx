@@ -707,21 +707,31 @@ function QuickFieldsStep(props: {
 
   return (
     <div>
-      <Field label="Purchase amount ($)">
-        <input
-          inputMode="decimal" placeholder="0.00"
-          value={props.amount} onChange={e => props.onAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-          style={textInputStyle}
-        />
-      </Field>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+        <Field label="Purchase $" noMargin>
+          <div style={{ position: 'relative' }}>
+            <span style={{
+              position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
+              fontSize: 15, fontWeight: 800, color: 'var(--mist)', pointerEvents: 'none',
+            }}>$</span>
+            <input
+              inputMode="numeric"
+              placeholder="0"
+              value={props.amount}
+              onChange={e => props.onAmount(e.target.value.replace(/\D/g, ''))}
+              style={{ ...textInputStyle, paddingLeft: 26 }}
+            />
+          </div>
+        </Field>
 
-      <Field label="Check #">
-        <input
-          inputMode="numeric" placeholder="optional"
-          value={props.checkNumber} onChange={e => props.onCheckNumber(e.target.value)}
-          style={textInputStyle}
-        />
-      </Field>
+        <Field label="Check #" noMargin>
+          <input
+            inputMode="numeric" placeholder="optional"
+            value={props.checkNumber} onChange={e => props.onCheckNumber(e.target.value.replace(/\D/g, ''))}
+            style={textInputStyle}
+          />
+        </Field>
+      </div>
 
       <Field label="Phone">
         <input
@@ -803,9 +813,9 @@ function QuickFieldsStep(props: {
   )
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children, noMargin }: { label: string; children: React.ReactNode; noMargin?: boolean }) {
   return (
-    <div style={{ marginBottom: 14 }}>
+    <div style={{ marginBottom: noMargin ? 0 : 14 }}>
       <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>{label}</div>
       {children}
     </div>
