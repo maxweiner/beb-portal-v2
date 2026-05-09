@@ -263,20 +263,77 @@ export default function SendFlow({
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div className="field">
             <label className="fl">Trunk show</label>
-            <input
-              value={showSearch}
-              onChange={e => setShowSearch(e.target.value)}
-              placeholder="Search by store, city, state, or rep…"
-              style={{ marginBottom: 6 }}
-            />
-            <select value={trunkShowId} onChange={e => setTrunkShowId(e.target.value)}>
-              <option value="">— Select trunk show —</option>
-              {filteredShows.map(s => (
-                <option key={s.id} value={s.id}>
-                  {(s as any)._store?.name || 'Trunk show'} · {s.start_date}
-                </option>
-              ))}
-            </select>
+            {selectedShow ? (
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                gap: 8, padding: '8px 10px', border: '1px solid var(--pearl)',
+                borderRadius: 6, background: 'var(--cream)',
+              }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {(selectedShow as any)._store?.name || 'Trunk show'} · {selectedShow.start_date}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setTrunkShowId(''); setShowSearch('') }}
+                  style={{
+                    background: 'transparent', border: 'none', color: 'var(--mist)',
+                    cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                  }}
+                >change</button>
+              </div>
+            ) : (
+              <>
+                <input
+                  value={showSearch}
+                  onChange={e => setShowSearch(e.target.value)}
+                  placeholder="Search by store, city, state, or rep…"
+                  autoFocus
+                />
+                {filteredShows.length > 0 && (
+                  <div style={{
+                    marginTop: 4, maxHeight: 220, overflowY: 'auto',
+                    border: '1px solid var(--pearl)', borderRadius: 6, background: '#fff',
+                  }}>
+                    {filteredShows.slice(0, 50).map(s => {
+                      const store = (s as any)._store
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => { setTrunkShowId(s.id); setShowSearch('') }}
+                          style={{
+                            display: 'block', width: '100%', textAlign: 'left',
+                            padding: '8px 10px', background: '#fff', border: 'none',
+                            borderBottom: '1px solid var(--pearl)', cursor: 'pointer',
+                            fontSize: 13, fontFamily: 'inherit',
+                          }}
+                        >
+                          <span style={{ fontWeight: 700, color: 'var(--ink)' }}>
+                            {store?.name || 'Trunk show'}
+                          </span>
+                          <span style={{ color: 'var(--mist)' }}>
+                            {' · '}{s.start_date}
+                            {store?.city ? ` · ${store.city}${store.state ? `, ${store.state}` : ''}` : ''}
+                          </span>
+                        </button>
+                      )
+                    })}
+                    {filteredShows.length > 50 && (
+                      <div style={{ padding: '6px 10px', fontSize: 11, color: 'var(--mist)', fontStyle: 'italic' }}>
+                        Showing first 50 — refine your search to see more.
+                      </div>
+                    )}
+                  </div>
+                )}
+                {showSearch && filteredShows.length === 0 && (
+                  <div style={{ marginTop: 4, padding: '8px 10px', fontSize: 12, color: 'var(--mist)', fontStyle: 'italic' }}>
+                    No trunk shows match.
+                  </div>
+                )}
+              </>
+            )}
           </div>
           <div className="field">
             <label className="fl">Template</label>

@@ -9,6 +9,8 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useApp } from '@/lib/context'
+import type { NavPage } from '@/app/page'
 
 interface CommsSend {
   id: string
@@ -51,6 +53,11 @@ interface Props {
   /** When set, scope to this trunk show. Omit for the global view. */
   trunkShowId?: string
   title?: string
+  /** Optional override for navigation. Per-show panels (e.g. inside
+   *  TrunkShowDetail) usually don't have a NavPage setter handy — when
+   *  omitted we still wire the failed-row action via the shared
+   *  CommsSendIntent in AppContext, but skip the page-nav step. */
+  setNav?: (n: NavPage) => void
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -58,12 +65,26 @@ async function authHeaders(): Promise<Record<string, string>> {
   return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
 }
 
-export default function CommsLogPanel({ trunkShowId, title = '📨 Communications Log' }: Props) {
+export default function CommsLogPanel({ trunkShowId, title = '📨 Communications Log', setNav }: Props) {
+  const { setCommsSendIntent } = useApp()
   const [rows, setRows] = useState<CommsSend[]>([])
   const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [reschedFor, setReschedFor] = useState<string | null>(null)
   const [reschedDate, setReschedDate] = useState('')
+
+  /** Open the original message in the SendFlow so the user can fix and
+   *  re-send. Used on failed / bounced / cancelled rows. Requires both
+   *  trunk_show_id and template_id — without a template the SendFlow
+   *  can't pre-fill the body. */
+  function openOriginal(r: CommsSend) {
+    if (!r.template_id) {
+      alert('This entry has no template attached, so it can\'t be re-opened automatically. Open the trunk show and pick the template manually.')
+      return
+    }
+    setCommsSendIntent({ trunkShowId: r.trunk_show_id, templateId: r.template_id })
+    setNav?.('trunk-communications')
+  }
 
   async function load() {
     let q: any = supabase
@@ -188,6 +209,20 @@ export default function CommsLogPanel({ trunkShowId, title = '📨 Communication
                     )}
                   </div>
                 </div>
+
+                {/* Failed / bounced / cancelled — let the user jump back to the
+                    original template + show in the SendFlow to fix and re-send. */}
+                {(r.delivery_status === 'failed' || r.delivery_status === 'bounced' || r.delivery_status === 'cancelled') && (
+                  <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <button
+                      onClick={() => openOriginal(r)}
+                      className="btn-outline btn-xs"
+                      title="Re-open this template + trunk show in the Send Flow"
+                    >
+                      📨 Open original
+                    </button>
+                  </div>
+                )}
 
                 {isPending && (
                   <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
