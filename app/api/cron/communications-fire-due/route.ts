@@ -12,6 +12,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email'
+import { formatRecipients } from '@/lib/communications/recipients'
 
 export const dynamic = 'force-dynamic'
 
@@ -72,7 +73,10 @@ export async function GET(req: Request) {
       const subject = row.subject_line_rendered
       const bodyText = row.body_rendered
       const fromHeader = `${row.from_name || row.from_email} <${row.from_email}>`
-      const toForResend = row.to_name ? `${row.to_name} <${row.to_email}>` : row.to_email
+      // to_email + to_name may be comma-separated when the scheduler
+      // picked multiple flagged contacts. Resend rejects a single
+      // comma-joined string — split + pair them properly.
+      const { toForResend } = formatRecipients(row.to_email, row.to_name)
 
       // PDF generation (best-effort).
       let pdfBuffer: Buffer | null = null
