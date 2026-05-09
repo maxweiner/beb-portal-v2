@@ -349,7 +349,7 @@ export default function TrunkShowDetail({ trunkShowId, onBack, onChanged, onDele
 
       {/* Communications log — sent, scheduled, cancelled, failed in
           one unified panel with inline cancel/reschedule actions. */}
-      <CommsLogPanel trunkShowId={show.id} />
+      <CommsLogPanel trunkShowId={show.id} setNav={setNav} />
 
       {/* Legacy comms section — kept for the View PDF / View email /
           Resend actions which CommsLogPanel doesn't surface yet. */}
