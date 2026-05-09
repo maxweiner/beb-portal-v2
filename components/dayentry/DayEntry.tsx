@@ -89,6 +89,10 @@ export default function DayEntry() {
   // Same pattern as 5% — collapsed unless the saved row already has a value.
   const [show0pct, setShow0pct] = useState(false)
   const [checks, setChecks] = useState<CheckRow[]>([emptyCheck()])
+  // rowIndex → "Check # already used at <event>" warning. Non-blocking;
+  // user can ignore and save anyway. Populated by the effect below
+  // whenever the check_number column changes.
+  const [checkNumberWarnings, setCheckNumberWarnings] = useState<Record<number, string>>({})
   const [inputMode, setInputMode] = useState<InputMode>('grid')
   const [pdfModalDay, setPdfModalDay] = useState<number | 'recap' | null>(null)
   // Per-(user, store) preference. Mirrors mobile's
@@ -156,6 +160,80 @@ export default function DayEntry() {
     loadExisting()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEventId, selectedDay])
+
+  /* ── Duplicate check-number lookup ──
+   * For every non-empty check_number in the current rows, look it up
+   * in buyer_checks AND event_days store-commission. Excludes rows from
+   * the user's current (event, day, day-level) bucket so re-saving
+   * doesn't false-positive on its own data. Also flags duplicates
+   * within the current rows themselves. Non-blocking — autosave still
+   * runs; we just surface a yellow note under each conflicting input.
+   */
+  useEffect(() => {
+    if (!selectedEventId) return
+    const numbers = Array.from(new Set(
+      checks.map(c => c.check_number.trim()).filter(Boolean),
+    ))
+    if (numbers.length === 0) { setCheckNumberWarnings({}); return }
+
+    let cancelled = false
+    const handle = setTimeout(async () => {
+      try {
+        // (a) buyer_checks rows with these numbers, joined to events.
+        const { data: bcRows } = await supabase
+          .from('buyer_checks')
+          .select('check_number, event_id, day_number, entry_id, events(store_name, start_date)')
+          .in('check_number', numbers)
+        // (b) event_days store-commission with these numbers.
+        const { data: edRows } = await supabase
+          .from('event_days')
+          .select('store_commission_check_number, event_id, day_number, events(store_name, start_date)')
+          .in('store_commission_check_number', numbers)
+
+        if (cancelled) return
+
+        const conflictByNumber = new Map<string, string>()
+        for (const r of (bcRows || []) as any[]) {
+          // Skip the user's own day-level rows for this event/day.
+          if (r.event_id === selectedEventId && r.day_number === selectedDay && r.entry_id == null) continue
+          const ev = r.events
+          const label = [ev?.store_name, ev?.start_date].filter(Boolean).join(' · ') + ` · day ${r.day_number ?? '?'}`
+          if (!conflictByNumber.has(r.check_number)) conflictByNumber.set(r.check_number, label)
+        }
+        for (const r of (edRows || []) as any[]) {
+          if (r.event_id === selectedEventId && r.day_number === selectedDay) continue
+          const ev = r.events
+          const label = [ev?.store_name, ev?.start_date].filter(Boolean).join(' · ') + ` · day ${r.day_number ?? '?'} (commission)`
+          const num = r.store_commission_check_number as string
+          if (!conflictByNumber.has(num)) conflictByNumber.set(num, label)
+        }
+
+        // Within-current-rows duplicates: same number on >1 row.
+        const rowCounts = new Map<string, number>()
+        for (const c of checks) {
+          const n = c.check_number.trim()
+          if (n) rowCounts.set(n, (rowCounts.get(n) || 0) + 1)
+        }
+
+        const next: Record<number, string> = {}
+        checks.forEach((c, i) => {
+          const n = c.check_number.trim()
+          if (!n) return
+          if ((rowCounts.get(n) || 0) > 1) {
+            next[i] = `Already entered above on this same form — duplicates will SUM and look like a mismatch.`
+            return
+          }
+          const conflict = conflictByNumber.get(n)
+          if (conflict) {
+            next[i] = `Already used at: ${conflict}. Are you sure?`
+          }
+        })
+        if (cancelled) return
+        setCheckNumberWarnings(next)
+      } catch { /* swallow — non-blocking */ }
+    }, 400)
+    return () => { cancelled = true; clearTimeout(handle) }
+  }, [checks, selectedEventId, selectedDay])
 
   /* ── Form # column preference (mirrors MobileDayEntry) ── */
   useEffect(() => {
@@ -894,7 +972,15 @@ export default function DayEntry() {
                             </td>
                             <td style={{ padding: '4px 8px' }}>
                               <input type="text" value={c.check_number} onChange={e => updateCheck(i, 'check_number', e.target.value)}
-                                placeholder="—" style={{ width: 90, fontSize: 13, padding: '4px 8px' }} />
+                                placeholder="—" style={{
+                                  width: 90, fontSize: 13, padding: '4px 8px',
+                                  borderColor: checkNumberWarnings[i] ? '#D97706' : undefined,
+                                }} />
+                              {checkNumberWarnings[i] && (
+                                <div style={{ fontSize: 10, color: '#92400E', marginTop: 2, maxWidth: 180 }}>
+                                  ⚠ {checkNumberWarnings[i]}
+                                </div>
+                              )}
                             </td>
                             <td style={{ padding: '4px 8px' }}>
                               <div style={{ position: 'relative', width: 110 }}>
@@ -949,7 +1035,17 @@ export default function DayEntry() {
                         </div>
                         <div>
                           <label className="fl">Check #</label>
-                          <input type="text" value={c.check_number} onChange={e => updateCheck(i, 'check_number', e.target.value)} placeholder="—" style={{ width: 100 }} />
+                          <input type="text" value={c.check_number} onChange={e => updateCheck(i, 'check_number', e.target.value)}
+                            placeholder="—"
+                            style={{
+                              width: 100,
+                              borderColor: checkNumberWarnings[i] ? '#D97706' : undefined,
+                            }} />
+                          {checkNumberWarnings[i] && (
+                            <div style={{ fontSize: 10, color: '#92400E', marginTop: 2, maxWidth: 200 }}>
+                              ⚠ {checkNumberWarnings[i]}
+                            </div>
+                          )}
                         </div>
                         <div>
                           <label className="fl">Amount</label>
