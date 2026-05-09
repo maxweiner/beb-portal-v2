@@ -788,6 +788,8 @@ function FindingDetailModal({
     amount: number
     day_number: number | null
     payment_type: string | null
+    event_id: string | null
+    event_label: string | null
   }[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
@@ -824,17 +826,40 @@ function FindingDetailModal({
       ])
       if (cancelled) return
       setClearings((clearedRes.data || []) as ClearedCheck[])
+
+      // Resolve event labels for every source row so the user can tell
+      // which event each duplicate came from.
+      const allEventIds = Array.from(new Set([
+        ...((buyerChecksRes.data || []) as any[]).map(r => r.event_id),
+        ...((edRes.data || []) as any[]).map(r => r.event_id),
+      ].filter(Boolean) as string[]))
+      let eventById = new Map<string, { store_name: string | null; start_date: string | null }>()
+      if (allEventIds.length > 0) {
+        const { data: evRows } = await withTimeout(
+          supabase.from('events').select('id, store_name, start_date').in('id', allEventIds),
+        )
+        eventById = new Map(((evRows || []) as any[]).map(e => [e.id, { store_name: e.store_name, start_date: e.start_date }]))
+      }
+      const labelFor = (event_id: string | null): string | null => {
+        if (!event_id) return null
+        const e = eventById.get(event_id)
+        if (!e) return null
+        return [e.store_name, e.start_date ? fmtDate(e.start_date) : null].filter(Boolean).join(' · ')
+      }
+
       const writes: typeof writtenChecks = []
       for (const r of (buyerChecksRes.data || []) as any[]) {
         writes.push({
           source_table: 'buyer_checks', source_id: r.id, source_label: 'buyer_checks',
           amount: Number(r.amount) || 0, day_number: r.day_number, payment_type: r.payment_type,
+          event_id: r.event_id, event_label: labelFor(r.event_id),
         })
       }
       for (const r of (edRes.data || []) as any[]) {
         writes.push({
           source_table: 'event_days', source_id: r.id, source_label: 'event_days commission',
           amount: Number(r.store_commission_check_amount) || 0, day_number: r.day_number, payment_type: null,
+          event_id: r.event_id, event_label: labelFor(r.event_id),
         })
       }
       setWrittenChecks(writes)
@@ -1013,13 +1038,33 @@ function FindingDetailModal({
                 <div style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>
                   Written sources <span style={{ fontWeight: 600, textTransform: 'none' }}>· click ✎ to fix a typo'd amount</span>
                 </div>
+                {writtenChecks.length > 1 && (
+                  <div style={{ marginBottom: 8, padding: 8, background: '#FEF3C7', color: '#92400E', borderRadius: 6, fontSize: 12 }}>
+                    ⚠ This check number was entered into the ledger {writtenChecks.length} times across different events. Most likely one of them is a typo (someone wrote the wrong number on a different check). The matcher sums all the amounts as the "written" total — so a real one-clearing match looks like a mismatch until the duplicate entries are fixed or deleted.
+                  </div>
+                )}
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--cream2)' }}>
+                      <th style={{ padding: 6, textAlign: 'left', fontSize: 10, color: 'var(--mist)' }}>Event</th>
+                      <th style={{ padding: 6, textAlign: 'left', fontSize: 10, color: 'var(--mist)' }}>Source</th>
+                      <th style={{ padding: 6, textAlign: 'left', fontSize: 10, color: 'var(--mist)' }}>Amount</th>
+                      <th style={{ padding: 6, textAlign: 'left', fontSize: 10, color: 'var(--mist)' }}>Day</th>
+                      <th style={{ padding: 6, textAlign: 'right' }}></th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {writtenChecks.map((w) => {
                       const isEditing = editingId === w.source_id
                       return (
                         <tr key={w.source_id} style={{ borderTop: '1px solid var(--pearl)' }}>
-                          <td style={{ padding: 6 }}>{w.source_label}</td>
+                          <td style={{ padding: 6 }}>
+                            <div>{w.event_label || <span style={{ color: 'var(--mist)' }}>(unknown event)</span>}</div>
+                            {w.payment_type && (
+                              <div style={{ fontSize: 10, color: 'var(--mist)' }}>{w.payment_type}</div>
+                            )}
+                          </td>
+                          <td style={{ padding: 6, color: 'var(--mist)' }}>{w.source_label}</td>
                           <td style={{ padding: 6, whiteSpace: 'nowrap' }}>
                             {isEditing ? (
                               <input type="number" min={0} step="0.01" value={editValue}
@@ -1031,7 +1076,6 @@ function FindingDetailModal({
                             )}
                           </td>
                           <td style={{ padding: 6, color: 'var(--mist)' }}>day {w.day_number ?? '—'}</td>
-                          <td style={{ padding: 6, color: 'var(--mist)' }}>{w.payment_type || ''}</td>
                           <td style={{ padding: 6, textAlign: 'right', whiteSpace: 'nowrap' }}>
                             {isEditing ? (
                               <>
