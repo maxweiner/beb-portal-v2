@@ -94,6 +94,7 @@ export default function MobileDayEntry() {
   const [show5pct, setShow5pct] = useState(false)
   const [show0pct, setShow0pct] = useState(false)
   const [checks, setChecks] = useState<CheckRow[]>([emptyCheck()])
+  const [checkNumberWarnings, setCheckNumberWarnings] = useState<Record<number, string>>({})
   // Form # column visibility — per-store default (stores.default_form_number_visible)
   // with a per-user override persisted in localStorage at
   // beb-form-no-{user_id}-{store_id}.
@@ -220,6 +221,58 @@ export default function MobileDayEntry() {
   useEffect(() => {
     if (selectedEventId) loadEntries()
   }, [selectedEventId, selectedDay])
+
+  /* Duplicate check-number warnings — non-blocking. See DayEntry for
+   * the full rationale; same logic, same heuristics, smaller render. */
+  useEffect(() => {
+    if (!selectedEventId) return
+    const numbers = Array.from(new Set(checks.map(c => c.check_number.trim()).filter(Boolean)))
+    if (numbers.length === 0) { setCheckNumberWarnings({}); return }
+    let cancelled = false
+    const handle = setTimeout(async () => {
+      try {
+        const [{ data: bcRows }, { data: edRows }] = await Promise.all([
+          supabase.from('buyer_checks')
+            .select('check_number, event_id, day_number, entry_id, events(store_name, start_date)')
+            .in('check_number', numbers),
+          supabase.from('event_days')
+            .select('store_commission_check_number, event_id, day_number, events(store_name, start_date)')
+            .in('store_commission_check_number', numbers),
+        ])
+        if (cancelled) return
+        const conflict = new Map<string, string>()
+        for (const r of (bcRows || []) as any[]) {
+          if (r.event_id === selectedEventId && r.day_number === selectedDay && r.entry_id == null) continue
+          const ev = r.events
+          const label = [ev?.store_name, ev?.start_date].filter(Boolean).join(' · ') + ` · day ${r.day_number ?? '?'}`
+          if (!conflict.has(r.check_number)) conflict.set(r.check_number, label)
+        }
+        for (const r of (edRows || []) as any[]) {
+          if (r.event_id === selectedEventId && r.day_number === selectedDay) continue
+          const ev = r.events
+          const label = [ev?.store_name, ev?.start_date].filter(Boolean).join(' · ') + ` · day ${r.day_number ?? '?'} (commission)`
+          const num = r.store_commission_check_number as string
+          if (!conflict.has(num)) conflict.set(num, label)
+        }
+        const rowCounts = new Map<string, number>()
+        for (const c of checks) {
+          const n = c.check_number.trim()
+          if (n) rowCounts.set(n, (rowCounts.get(n) || 0) + 1)
+        }
+        const next: Record<number, string> = {}
+        checks.forEach((c, i) => {
+          const n = c.check_number.trim()
+          if (!n) return
+          if ((rowCounts.get(n) || 0) > 1) { next[i] = 'Duplicate on this form'; return }
+          const conf = conflict.get(n)
+          if (conf) next[i] = `Already used: ${conf}`
+        })
+        if (cancelled) return
+        setCheckNumberWarnings(next)
+      } catch { /* swallow */ }
+    }, 400)
+    return () => { cancelled = true; clearTimeout(handle) }
+  }, [checks, selectedEventId, selectedDay])
 
   const loadEntries = async () => {
     hydratedRef.current = false
@@ -801,11 +854,12 @@ export default function MobileDayEntry() {
                     <input type="text" inputMode="numeric" value={c.check_number}
                       onChange={e => setField('check_number', e.target.value)}
                       placeholder={i === 0 ? '1045' : ''}
+                      title={checkNumberWarnings[i] ? `⚠ ${checkNumberWarnings[i]}` : undefined}
                       style={{
                         ...compactInputStyle,
                         gridRow: 1, gridColumn: checkCol,
-                        border: `1.5px solid ${isAuto ? 'var(--green3)' : 'var(--pearl)'}`,
-                        background: isAuto ? 'var(--green-pale)' : '#FFFFFF',
+                        border: `1.5px solid ${checkNumberWarnings[i] ? '#D97706' : (isAuto ? 'var(--green3)' : 'var(--pearl)')}`,
+                        background: checkNumberWarnings[i] ? '#FFFBEB' : (isAuto ? 'var(--green-pale)' : '#FFFFFF'),
                       }} />
 
                     {formColVisible && (
