@@ -503,6 +503,13 @@ export interface TrunkShow {
   proofed_at: string | null
   final_files_sent_at: string | null
   post_event_questionnaire_sent_at: string | null
+  /** Per-milestone "who marked it done" — NULL for legacy rows. */
+  confirmation_letter_sent_by: string | null
+  postcards_email_sent_by: string | null
+  postcards_ordered_by: string | null
+  proofed_by: string | null
+  final_files_sent_by: string | null
+  post_event_questionnaire_sent_by: string | null
   created_at: string
   updated_at: string
   deleted_at: string | null

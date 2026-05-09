@@ -18,18 +18,19 @@ import PreEventTab from './PreEventTab'
 import DuringEventTab from './DuringEventTab'
 import PostEventTab from './PostEventTab'
 import CreateEventModal from './CreateEventModal'
+import BuyingEventSheet from './BuyingEventSheet'
 
-type ViewMode = 'hub' | 'new' | 'slim' | 'legacy'
+type ViewMode = 'hub' | 'new' | 'slim' | 'legacy' | 'sheet'
 type Phase = 'pre' | 'during' | 'post'
 
 const STORAGE_KEY = 'beb-buying-events-view'
 
 function isViewMode(v: unknown): v is ViewMode {
-  return v === 'hub' || v === 'new' || v === 'slim' || v === 'legacy'
+  return v === 'hub' || v === 'new' || v === 'slim' || v === 'legacy' || v === 'sheet'
 }
 
 export default function BuyingEventsView({ setNav }: { setNav?: (n: NavPage) => void }) {
-  const { user } = useApp()
+  const { user, events } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || user?.is_partner === true
   // Hub is the new default. localStorage / DB-prefs override only if the user
   // has explicitly switched away.
@@ -97,6 +98,39 @@ export default function BuyingEventsView({ setNav }: { setNav?: (n: NavPage) => 
       <div>
         <ViewChooser view={view} onChange={changeView} />
         <Events setNav={setNav} />
+      </div>
+    )
+  }
+
+  // Sheet view = spreadsheet-style multi-event editor.
+  if (view === 'sheet') {
+    return (
+      <div className="p-6" style={{ maxWidth: 1400, margin: '0 auto' }}>
+        <ViewChooser view={view} onChange={changeView} />
+
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+          <div>
+            <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)', margin: '0 0 4px' }}>
+              ◆ Buying Events <span style={{ fontSize: 13, color: 'var(--mist)', fontWeight: 700 }}>· Sheet</span>
+            </h1>
+            <div style={{ color: 'var(--mist)', fontSize: 13 }}>
+              Edit many events at once — readiness, buyers needed, store, dates.
+            </div>
+          </div>
+          {isAdmin && (
+            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              <button onClick={() => setCreateMode('reserved')} className="btn-outline btn-sm" title="Tentative date — Save the Date">
+                📌 Save the Date
+              </button>
+            </div>
+          )}
+        </div>
+
+        <BuyingEventSheet events={events} />
+
+        {createMode && (
+          <CreateEventModal mode={createMode} onClose={() => setCreateMode(null)} />
+        )}
       </div>
     )
   }
@@ -219,12 +253,13 @@ function ViewChooser({ view, onChange }: { view: ViewMode; onChange: (v: ViewMod
         display: 'flex', gap: 2, background: 'var(--cream2)',
         padding: 2, borderRadius: 6,
       }}>
-        {(['hub', 'new', 'slim', 'legacy'] as ViewMode[]).map(v => {
+        {(['hub', 'new', 'slim', 'sheet', 'legacy'] as ViewMode[]).map(v => {
           const sel = view === v
           const label =
             v === 'hub'    ? '🎯 Hub' :
             v === 'new'    ? '✨ New' :
             v === 'slim'   ? '📃 Slim' :
+            v === 'sheet'  ? '⊞ Sheet' :
                              '🗂 Legacy'
           return (
             <button key={v} onClick={() => onChange(v)}
