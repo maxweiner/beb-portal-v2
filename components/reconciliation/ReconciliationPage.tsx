@@ -1,0 +1,818 @@
+'use client'
+
+// Wells Fargo cleared-check reconciliation. Imports a WF activity
+// CSV, isolates check rows, runs the matcher, and surfaces five
+// finding categories (matched / amount mismatch / duplicate clearing
+// / orphan cleared / outstanding) with status workflow.
+//
+// Brand-scoped: uses the active brand from useApp(); each brand has
+// its own bank account and findings.
+
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useApp } from '@/lib/context'
+import { supabase } from '@/lib/supabase'
+
+const withTimeout = <T,>(promise: PromiseLike<T>, ms = 15000): Promise<T> => {
+  return Promise.race([
+    Promise.resolve(promise) as Promise<T>,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error('Request timed out')), ms),
+    ),
+  ])
+}
+
+type FindingType = 'matched' | 'amount_mismatch' | 'duplicate_clearing' | 'orphan_cleared' | 'outstanding'
+type FindingStatus = 'open' | 'disputed' | 'resolved' | 'ignored'
+
+interface Finding {
+  id: string
+  brand: string
+  check_number: string
+  finding_type: FindingType
+  status: FindingStatus
+  written_amount: number | null
+  cleared_amount_total: number | null
+  cleared_count: number
+  amount_delta: number | null
+  written_date: string | null
+  cleared_dates: string[] | null
+  payee_label: string | null
+  event_id: string | null
+  event_label: string | null
+  note: string | null
+  resolved_by: string | null
+  resolved_at: string | null
+  created_at: string
+  updated_at: string
+  last_matched_at: string
+}
+
+interface ClearedCheck {
+  id: string
+  brand: string
+  check_number: string
+  cleared_date: string
+  cleared_amount: number
+  description: string
+  status: string | null
+  created_at: string
+}
+
+interface ImportRow {
+  id: string
+  filename: string
+  uploaded_by: string
+  uploaded_at: string
+  row_count: number
+  imported_count: number
+  skipped_count: number
+  duplicate_count: number
+}
+
+const TYPE_LABEL: Record<FindingType, string> = {
+  matched: 'Matched',
+  amount_mismatch: 'Amount mismatch',
+  duplicate_clearing: 'Duplicate clearing',
+  orphan_cleared: 'Orphan cleared',
+  outstanding: 'Outstanding',
+}
+const TYPE_ICON: Record<FindingType, string> = {
+  matched: '✅',
+  amount_mismatch: '⚠️',
+  duplicate_clearing: '🚨',
+  orphan_cleared: '❓',
+  outstanding: '📭',
+}
+const TYPE_COLOR: Record<FindingType, { bg: string; fg: string }> = {
+  matched:            { bg: '#D1FAE5', fg: '#065F46' },
+  amount_mismatch:    { bg: '#FEF3C7', fg: '#92400E' },
+  duplicate_clearing: { bg: '#FEE2E2', fg: '#991B1B' },
+  orphan_cleared:     { bg: '#E0E7FF', fg: '#3730A3' },
+  outstanding:        { bg: '#F5F5F4', fg: '#78716C' },
+}
+const STATUS_LABEL: Record<FindingStatus, string> = {
+  open: 'Open', disputed: 'Disputed', resolved: 'Resolved', ignored: 'Ignored',
+}
+const STATUS_COLOR: Record<FindingStatus, { bg: string; fg: string }> = {
+  open:     { bg: '#FEF3C7', fg: '#92400E' },
+  disputed: { bg: '#FEE2E2', fg: '#991B1B' },
+  resolved: { bg: '#D1FAE5', fg: '#065F46' },
+  ignored:  { bg: '#E5E7EB', fg: '#374151' },
+}
+
+function fmtMoney(n: number | null | undefined): string {
+  if (n == null) return '—'
+  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const d = new Date(iso.length <= 10 ? iso + 'T12:00:00' : iso)
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+function daysSince(iso: string | null | undefined): number {
+  if (!iso) return 0
+  const d = new Date(iso.length <= 10 ? iso + 'T12:00:00' : iso)
+  return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000))
+}
+
+export default function ReconciliationPage() {
+  const { user, brand } = useApp()
+  const isAllowed = user?.role === 'accounting' || user?.role === 'admin' || user?.role === 'superadmin' || user?.is_partner === true
+
+  // null = loading; [] = loaded but empty; non-empty = data
+  const [findings, setFindings] = useState<Finding[] | null>(null)
+  const [lastImport, setLastImport] = useState<ImportRow | null | 'loading'>('loading')
+  const [error, setError] = useState<string | null>(null)
+  const [tab, setTab] = useState<'findings' | 'outstanding'>('findings')
+  const [typeFilter, setTypeFilter] = useState<'all' | FindingType>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | FindingStatus>('open')
+  const [search, setSearch] = useState('')
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [matchedCount, setMatchedCount] = useState<number | null>(null)
+  const [running, setRunning] = useState(false)
+
+  const reloadRef = useRef<() => Promise<void>>(async () => {})
+  reloadRef.current = async () => {
+    if (!brand) return
+    setError(null)
+    try {
+      const [findingsRes, importRes, clearedCountRes, writtenCountRes] = await Promise.all([
+        withTimeout(
+          supabase.from('reconciliation_findings').select('*').eq('brand', brand)
+            .order('updated_at', { ascending: false }),
+        ),
+        withTimeout(
+          supabase.from('cleared_check_imports').select('*').eq('brand', brand)
+            .order('uploaded_at', { ascending: false }).limit(1),
+        ),
+        withTimeout(
+          supabase.from('cleared_checks').select('id', { count: 'exact', head: true }).eq('brand', brand),
+        ),
+        // Approximate "matched" = cleared rows with no flagged finding for that check_number.
+        // Fast enough for a tile; real precision lives in the matcher's RETURNS JSONB.
+        withTimeout(
+          supabase.from('reconciliation_findings').select('check_number').eq('brand', brand),
+        ),
+      ])
+      setFindings((findingsRes.data || []) as Finding[])
+      setLastImport((importRes.data?.[0] as ImportRow) || null)
+      const clearedTotal = (clearedCountRes as any).count ?? 0
+      const flaggedNumbers = new Set<string>(
+        ((writtenCountRes.data || []) as { check_number: string }[]).map(r => r.check_number),
+      )
+      // matched ≈ cleared rows whose check_number isn't in any finding row
+      const { data: clearedRowsData } = await withTimeout(
+        supabase.from('cleared_checks').select('check_number').eq('brand', brand),
+      )
+      const matched = (clearedRowsData || []).filter(r => !flaggedNumbers.has((r as any).check_number)).length
+      setMatchedCount(matched)
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load')
+      setFindings([])
+      setLastImport(null)
+    }
+  }
+
+  useEffect(() => { void reloadRef.current() }, [brand])
+
+  const counts = useMemo(() => {
+    const by: Record<FindingType, number> = {
+      matched: matchedCount ?? 0,
+      amount_mismatch: 0, duplicate_clearing: 0, orphan_cleared: 0, outstanding: 0,
+    }
+    for (const f of findings || []) by[f.finding_type] = (by[f.finding_type] || 0) + 1
+    return by
+  }, [findings, matchedCount])
+
+  const filtered = useMemo(() => {
+    if (!findings) return []
+    const q = search.trim().toLowerCase()
+    return findings.filter(f => {
+      if (tab === 'outstanding' && f.finding_type !== 'outstanding') return false
+      if (tab === 'findings' && f.finding_type === 'outstanding') return false
+      if (typeFilter !== 'all' && f.finding_type !== typeFilter) return false
+      if (statusFilter !== 'all' && f.status !== statusFilter) return false
+      if (q) {
+        const blob = [f.check_number, f.payee_label, f.event_label, f.note].filter(Boolean).join(' ').toLowerCase()
+        if (!blob.includes(q)) return false
+      }
+      return true
+    })
+  }, [findings, tab, typeFilter, statusFilter, search])
+
+  async function reRunMatch() {
+    if (!brand || running) return
+    setRunning(true); setError(null)
+    try {
+      const session = await supabase.auth.getSession()
+      const token = session.data.session?.access_token || ''
+      const res = await fetch('/api/reconciliation/match', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ brand }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json?.error || 'Match failed')
+    } catch (e: any) {
+      setError(e?.message || 'Match failed')
+    }
+    setRunning(false)
+    await reloadRef.current()
+  }
+
+  function exportCsv() {
+    const header = ['Check #', 'Type', 'Status', 'Written', 'Cleared', 'Delta', 'Cleared dates', 'Written date', 'Payee', 'Event', 'Note']
+    const lines = [header.join(',')]
+    for (const f of filtered) {
+      const row = [
+        f.check_number,
+        TYPE_LABEL[f.finding_type],
+        STATUS_LABEL[f.status],
+        f.written_amount?.toFixed(2) || '',
+        f.cleared_amount_total?.toFixed(2) || '',
+        f.amount_delta?.toFixed(2) || '',
+        (f.cleared_dates || []).join(' '),
+        f.written_date || '',
+        f.payee_label || '',
+        f.event_label || '',
+        (f.note || '').replace(/[\r\n,]/g, ' '),
+      ]
+      lines.push(row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `reconciliation-${brand}-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
+  }
+
+  if (!isAllowed) {
+    return (
+      <div className="p-6" style={{ maxWidth: 800, margin: '0 auto' }}>
+        <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--mist)' }}>
+          You don't have access to the reconciliation tool. Ask an admin if you should.
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-6" style={{ maxWidth: 1300, margin: '0 auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, gap: 10, flexWrap: 'wrap' }}>
+        <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)' }}>
+          🏦 Reconciliation <span style={{ fontSize: 13, color: 'var(--mist)', fontWeight: 700 }}>· {brand?.toUpperCase()}</span>
+        </h1>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={reRunMatch} disabled={running} className="btn-outline btn-sm">
+            {running ? 'Matching…' : '↻ Re-run matching'}
+          </button>
+          <button onClick={exportCsv} className="btn-outline btn-sm">⬇ Export CSV</button>
+        </div>
+      </div>
+
+      <UploadCard brand={brand!} lastImport={lastImport} onImported={() => void reloadRef.current()} />
+
+      {error && (
+        <div className="card" style={{ padding: 12, marginBottom: 12, background: '#FEE2E2', color: '#991B1B' }}>{error}</div>
+      )}
+
+      <SummaryTiles counts={counts} active={typeFilter} onClick={(t) => { setTab(t === 'outstanding' ? 'outstanding' : 'findings'); setTypeFilter(t === 'matched' ? 'all' : t) }} />
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 4, background: 'var(--cream2)', padding: 4, borderRadius: 10, width: 'fit-content', marginBottom: 12 }}>
+        {(['findings', 'outstanding'] as const).map(t => {
+          const sel = tab === t
+          return (
+            <button key={t} onClick={() => { setTab(t); setTypeFilter('all') }}
+              style={{
+                fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
+                padding: '6px 14px', border: 'none', borderRadius: 6,
+                background: sel ? '#fff' : 'transparent',
+                color: sel ? 'var(--green-dark)' : 'var(--mist)', cursor: 'pointer',
+                boxShadow: sel ? '0 1px 3px rgba(0,0,0,.06)' : 'none',
+              }}>
+              {t === 'findings' ? 'Findings' : 'Outstanding'}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Filters */}
+      <div className="card" style={{ marginBottom: 10, padding: 10, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <input type="search" value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Search check #, payee, event, note…"
+          style={{ flex: '1 1 240px', maxWidth: 360, fontSize: 12, padding: '6px 10px' }} />
+        {tab === 'findings' && (
+          <>
+            {(['all', 'amount_mismatch', 'duplicate_clearing', 'orphan_cleared'] as const).map(t => (
+              <button key={t} onClick={() => setTypeFilter(t)}
+                className={typeFilter === t ? 'btn-primary btn-xs' : 'btn-outline btn-xs'}>
+                {t === 'all' ? 'All' : TYPE_LABEL[t as FindingType]}
+              </button>
+            ))}
+          </>
+        )}
+        <div style={{ flex: 1 }} />
+        {(['all', 'open', 'disputed', 'resolved', 'ignored'] as const).map(s => (
+          <button key={s} onClick={() => setStatusFilter(s)}
+            className={statusFilter === s ? 'btn-primary btn-xs' : 'btn-outline btn-xs'}
+            style={{ textTransform: 'capitalize' }}>{s}</button>
+        ))}
+      </div>
+
+      {findings === null ? (
+        <div className="card" style={{ padding: 30, textAlign: 'center', color: 'var(--mist)' }}>Loading…</div>
+      ) : tab === 'outstanding' ? (
+        <OutstandingTable findings={filtered} onOpen={setOpenId} />
+      ) : filtered.length === 0 ? (
+        <div className="card" style={{ padding: 30, textAlign: 'center', color: 'var(--mist)' }}>
+          {(findings.length === 0) ? 'Upload a Wells Fargo CSV to start.' : 'Nothing matches the current filters.'}
+        </div>
+      ) : (
+        <FindingsTable findings={filtered} onOpen={setOpenId} />
+      )}
+
+      {openId && (
+        <FindingDetailModal
+          findingId={openId}
+          onClose={() => setOpenId(null)}
+          onChanged={() => void reloadRef.current()}
+        />
+      )}
+    </div>
+  )
+}
+
+/* ──────────────────────────────────────────────────────────────── */
+
+function UploadCard({
+  brand, lastImport, onImported,
+}: {
+  brand: string
+  lastImport: ImportRow | null | 'loading'
+  onImported: () => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const [last, setLast] = useState<{ imported: number; skipped: number; duplicates: number; filename: string } | null>(null)
+
+  async function handleFile(file: File) {
+    if (!file) return
+    setBusy(true); setErr(null); setLast(null)
+    try {
+      const text = await file.text()
+      const session = await supabase.auth.getSession()
+      const token = session.data.session?.access_token || ''
+      const res = await fetch('/api/reconciliation/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ brand, filename: file.name, csv: text }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json?.error || 'Upload failed')
+      setLast({
+        imported: json.imported_count, skipped: json.skipped_count,
+        duplicates: json.duplicate_count, filename: file.name,
+      })
+      onImported()
+    } catch (e: any) {
+      setErr(e?.message || 'Upload failed')
+    }
+    setBusy(false)
+  }
+
+  return (
+    <div className="card" style={{ padding: 14, marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink)', marginBottom: 4 }}>
+            Wells Fargo CSV import
+          </div>
+          {lastImport === 'loading' ? (
+            <div style={{ fontSize: 12, color: 'var(--mist)' }}>Loading last import…</div>
+          ) : lastImport ? (
+            <div style={{ fontSize: 12, color: 'var(--mist)' }}>
+              Last: <strong>{lastImport.filename}</strong> · {fmtDate(lastImport.uploaded_at)} · {lastImport.imported_count} imported, {lastImport.duplicate_count} duplicates, {lastImport.skipped_count} skipped
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: 'var(--mist)' }}>No imports yet.</div>
+          )}
+        </div>
+        <label className="btn-primary btn-sm" style={{ cursor: 'pointer' }}>
+          {busy ? 'Importing…' : '⬆ Upload CSV'}
+          <input type="file" accept=".csv,text/csv" disabled={busy}
+            onChange={e => { const f = e.target.files?.[0]; if (f) void handleFile(f); e.currentTarget.value = '' }}
+            style={{ display: 'none' }} />
+        </label>
+      </div>
+      {err && <div style={{ marginTop: 8, padding: 8, background: '#FEE2E2', color: '#991B1B', borderRadius: 6, fontSize: 12 }}>{err}</div>}
+      {last && (
+        <div style={{ marginTop: 8, padding: 8, background: '#D1FAE5', color: '#065F46', borderRadius: 6, fontSize: 12 }}>
+          ✓ {last.filename}: imported {last.imported}, skipped {last.skipped}, {last.duplicates} duplicates.
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SummaryTiles({
+  counts, active, onClick,
+}: {
+  counts: Record<FindingType, number>
+  active: 'all' | FindingType
+  onClick: (t: FindingType) => void
+}) {
+  const tiles: { type: FindingType }[] = [
+    { type: 'matched' },
+    { type: 'amount_mismatch' },
+    { type: 'duplicate_clearing' },
+    { type: 'orphan_cleared' },
+    { type: 'outstanding' },
+  ]
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, marginBottom: 12 }}>
+      {tiles.map(t => {
+        const c = TYPE_COLOR[t.type]
+        const isActive = active === t.type
+        return (
+          <button key={t.type} onClick={() => onClick(t.type)}
+            style={{
+              textAlign: 'left', padding: '12px 14px', borderRadius: 10,
+              background: c.bg, border: isActive ? `2px solid ${c.fg}` : '1px solid var(--cream2)',
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: c.fg, textTransform: 'uppercase', letterSpacing: '.04em' }}>
+              {TYPE_ICON[t.type]} {TYPE_LABEL[t.type]}
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: c.fg, marginTop: 4 }}>
+              {counts[t.type] ?? 0}
+            </div>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function FindingsTable({ findings, onOpen }: { findings: Finding[]; onOpen: (id: string) => void }) {
+  return (
+    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>
+            <tr style={{ background: 'var(--cream2)' }}>
+              {['Check #', 'Type', 'Written', 'Cleared', 'Δ', 'Cleared on', 'Payee · Event', 'Status', ''].map(h => (
+                <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--mist)' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {findings.map(f => {
+              const tc = TYPE_COLOR[f.finding_type]
+              const sc = STATUS_COLOR[f.status]
+              return (
+                <tr key={f.id} onClick={() => onOpen(f.id)}
+                  style={{ cursor: 'pointer', borderTop: '1px solid var(--pearl)' }}>
+                  <td style={{ padding: '8px 10px', fontWeight: 700 }}>{f.check_number}</td>
+                  <td style={{ padding: '8px 10px' }}>
+                    <span style={{ background: tc.bg, color: tc.fg, padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap' }}>
+                      {TYPE_ICON[f.finding_type]} {TYPE_LABEL[f.finding_type]}
+                    </span>
+                  </td>
+                  <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{fmtMoney(f.written_amount)}</td>
+                  <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                    {fmtMoney(f.cleared_amount_total)}
+                    {f.cleared_count > 1 && <span style={{ color: 'var(--mist)' }}> ×{f.cleared_count}</span>}
+                  </td>
+                  <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: f.amount_delta && Math.abs(f.amount_delta) > 0.01 ? '#991B1B' : 'var(--mist)' }}>
+                    {f.amount_delta != null ? fmtMoney(Math.abs(f.amount_delta)) : '—'}
+                  </td>
+                  <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: 'var(--mist)' }}>
+                    {(f.cleared_dates || []).slice(0, 2).map(fmtDate).join(', ') || '—'}
+                  </td>
+                  <td style={{ padding: '8px 10px' }}>
+                    <div style={{ fontSize: 12 }}>{f.payee_label || '—'}</div>
+                    <div style={{ fontSize: 11, color: 'var(--mist)' }}>{f.event_label || '—'}</div>
+                  </td>
+                  <td style={{ padding: '8px 10px' }}>
+                    <span style={{ background: sc.bg, color: sc.fg, padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 800 }}>
+                      {STATUS_LABEL[f.status]}
+                    </span>
+                  </td>
+                  <td style={{ padding: '8px 10px', textAlign: 'right' }}>→</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function OutstandingTable({ findings, onOpen }: { findings: Finding[]; onOpen: (id: string) => void }) {
+  // Bucket by age of written_date.
+  const buckets: { label: string; range: [number, number]; color: string; bg: string; rows: Finding[] }[] = [
+    { label: '0–30 days',  range: [0, 30],     color: '#065F46', bg: '#D1FAE5', rows: [] },
+    { label: '30–60 days', range: [30, 60],    color: '#92400E', bg: '#FEF3C7', rows: [] },
+    { label: '60–90 days', range: [60, 90],    color: '#9A3412', bg: '#FED7AA', rows: [] },
+    { label: '90+ days',   range: [90, Infinity], color: '#991B1B', bg: '#FEE2E2', rows: [] },
+  ]
+  for (const f of findings) {
+    const age = daysSince(f.written_date)
+    const b = buckets.find(b => age >= b.range[0] && age < b.range[1])
+    if (b) b.rows.push(f)
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {buckets.map(b => (
+        <div key={b.label} className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ padding: '8px 12px', background: b.bg, color: b.color, fontWeight: 800, fontSize: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>{b.label}</span>
+            <span>
+              {b.rows.length} outstanding
+              {b.range[0] >= 90 && b.rows.length > 0 && (
+                <span style={{ marginLeft: 8, fontWeight: 600, fontSize: 11 }}>
+                  · consider stop-payment + reissue
+                </span>
+              )}
+            </span>
+          </div>
+          {b.rows.length > 0 && (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <tbody>
+                  {b.rows.map(f => (
+                    <tr key={f.id} onClick={() => onOpen(f.id)} style={{ cursor: 'pointer', borderTop: '1px solid var(--pearl)' }}>
+                      <td style={{ padding: '8px 12px', fontWeight: 700 }}>#{f.check_number}</td>
+                      <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>{fmtMoney(f.written_amount)}</td>
+                      <td style={{ padding: '8px 12px' }}>
+                        <div style={{ fontSize: 12 }}>{f.payee_label || '—'}</div>
+                        <div style={{ fontSize: 11, color: 'var(--mist)' }}>{f.event_label || '—'}</div>
+                      </td>
+                      <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', color: 'var(--mist)' }}>
+                        Written {fmtDate(f.written_date)} · {daysSince(f.written_date)}d ago
+                      </td>
+                      <td style={{ padding: '8px 12px', textAlign: 'right' }}>→</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function FindingDetailModal({
+  findingId, onClose, onChanged,
+}: {
+  findingId: string
+  onClose: () => void
+  onChanged: () => void
+}) {
+  const [finding, setFinding] = useState<Finding | null>(null)
+  const [clearings, setClearings] = useState<ClearedCheck[]>([])
+  const [writtenChecks, setWrittenChecks] = useState<{ source: string; amount: number; day_number: number | null; payment_type: string | null }[]>([])
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const { data, error } = await withTimeout(
+        supabase.from('reconciliation_findings').select('*').eq('id', findingId).maybeSingle(),
+      )
+      if (cancelled) return
+      if (error || !data) { setErr(error?.message || 'Finding not found'); return }
+      setFinding(data as Finding)
+      setNote((data as Finding).note || '')
+
+      const f = data as Finding
+      const [clearedRes, buyerChecksRes, edRes] = await Promise.all([
+        withTimeout(
+          supabase.from('cleared_checks').select('*')
+            .eq('brand', f.brand).eq('check_number', f.check_number)
+            .order('cleared_date', { ascending: true }),
+        ),
+        withTimeout(
+          supabase.from('buyer_checks').select('amount, day_number, payment_type, event_id')
+            .eq('check_number', f.check_number),
+        ),
+        withTimeout(
+          supabase.from('event_days').select('day_number, store_commission_check_amount, store_commission_check_number, event_id')
+            .eq('store_commission_check_number', f.check_number),
+        ),
+      ])
+      if (cancelled) return
+      setClearings((clearedRes.data || []) as ClearedCheck[])
+      const writes: typeof writtenChecks = []
+      for (const r of (buyerChecksRes.data || []) as any[]) {
+        writes.push({ source: 'buyer_checks', amount: Number(r.amount) || 0, day_number: r.day_number, payment_type: r.payment_type })
+      }
+      for (const r of (edRes.data || []) as any[]) {
+        writes.push({ source: 'event_days commission', amount: Number(r.store_commission_check_amount) || 0, day_number: r.day_number, payment_type: null })
+      }
+      setWrittenChecks(writes)
+    })()
+    return () => { cancelled = true }
+  }, [findingId])
+
+  async function setStatus(next: FindingStatus) {
+    if (!finding) return
+    setBusy(true); setErr(null)
+    try {
+      const session = await supabase.auth.getSession()
+      const token = session.data.session?.access_token || ''
+      const res = await fetch(`/api/reconciliation/findings/${finding.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status: next, note }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json?.error || 'Update failed')
+      setFinding(json.finding as Finding)
+      onChanged()
+    } catch (e: any) {
+      setErr(e?.message || 'Update failed')
+    }
+    setBusy(false)
+  }
+
+  async function saveNote() {
+    if (!finding) return
+    setBusy(true); setErr(null)
+    try {
+      const session = await supabase.auth.getSession()
+      const token = session.data.session?.access_token || ''
+      const res = await fetch(`/api/reconciliation/findings/${finding.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ note }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json?.error || 'Save failed')
+      setFinding(json.finding as Finding)
+      onChanged()
+    } catch (e: any) { setErr(e?.message || 'Save failed') }
+    setBusy(false)
+  }
+
+  async function markNotEventCheck() {
+    if (!finding) return
+    if (!confirm(`Mark check #${finding.check_number} as not an event check (rent, payroll, vendor)? Future imports will auto-classify it as ignored.`)) return
+    setBusy(true); setErr(null)
+    try {
+      const session = await supabase.auth.getSession()
+      const token = session.data.session?.access_token || ''
+      const res = await fetch(`/api/reconciliation/findings/${finding.id}/mark-not-event-check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ note }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json?.error || 'Failed')
+      onChanged()
+      onClose()
+    } catch (e: any) { setErr(e?.message || 'Failed') }
+    setBusy(false)
+  }
+
+  function downloadDisputeLetter() {
+    if (!finding) return
+    window.open(`/api/reconciliation/findings/${finding.id}/dispute-letter`, '_blank')
+  }
+
+  return (
+    <div onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)',
+        zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+      }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{
+          background: '#fff', borderRadius: 12, maxWidth: 700, width: '100%',
+          maxHeight: '90vh', overflow: 'auto', padding: 22, fontFamily: 'inherit',
+        }}>
+        {!finding ? (
+          <div>Loading…</div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                  {TYPE_ICON[finding.finding_type]} {TYPE_LABEL[finding.finding_type]}
+                </div>
+                <div style={{ fontSize: 20, fontWeight: 900 }}>Check #{finding.check_number}</div>
+              </div>
+              <button onClick={onClose} style={{ background: 'transparent', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--mist)' }}>×</button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em' }}>Written</div>
+                <div style={{ fontSize: 18, fontWeight: 800 }}>{fmtMoney(finding.written_amount)}</div>
+                <div style={{ fontSize: 12, color: 'var(--mist)' }}>{finding.payee_label || '—'}</div>
+                <div style={{ fontSize: 12, color: 'var(--mist)' }}>{finding.event_label || '—'}</div>
+                <div style={{ fontSize: 12, color: 'var(--mist)' }}>Date: {fmtDate(finding.written_date)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em' }}>Cleared</div>
+                <div style={{ fontSize: 18, fontWeight: 800 }}>
+                  {fmtMoney(finding.cleared_amount_total)}
+                  {finding.cleared_count > 1 && <span style={{ color: 'var(--mist)', fontSize: 13 }}> ({finding.cleared_count}×)</span>}
+                </div>
+                {finding.amount_delta != null && Math.abs(finding.amount_delta) > 0.01 && (
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#991B1B', marginTop: 4 }}>
+                    Δ {fmtMoney(Math.abs(finding.amount_delta))} {finding.amount_delta > 0 ? 'short' : 'over'}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {clearings.length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>Clearings</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--cream2)' }}>
+                      <th style={{ padding: 6, textAlign: 'left' }}>Date</th>
+                      <th style={{ padding: 6, textAlign: 'left' }}>Amount</th>
+                      <th style={{ padding: 6, textAlign: 'left' }}>Description</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clearings.map(c => (
+                      <tr key={c.id} style={{ borderTop: '1px solid var(--pearl)' }}>
+                        <td style={{ padding: 6 }}>{fmtDate(c.cleared_date)}</td>
+                        <td style={{ padding: 6 }}>{fmtMoney(c.cleared_amount)}</td>
+                        <td style={{ padding: 6 }}>{c.description}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {writtenChecks.length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>Written sources</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <tbody>
+                    {writtenChecks.map((w, i) => (
+                      <tr key={i} style={{ borderTop: '1px solid var(--pearl)' }}>
+                        <td style={{ padding: 6 }}>{w.source}</td>
+                        <td style={{ padding: 6 }}>{fmtMoney(w.amount)}</td>
+                        <td style={{ padding: 6, color: 'var(--mist)' }}>day {w.day_number ?? '—'}</td>
+                        <td style={{ padding: 6, color: 'var(--mist)' }}>{w.payment_type || ''}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em' }}>Note</label>
+              <textarea value={note} onChange={e => setNote(e.target.value)} rows={3}
+                placeholder="Optional context for this finding"
+                style={{ width: '100%', boxSizing: 'border-box', padding: 8, fontSize: 13, fontFamily: 'inherit', borderRadius: 6, border: '1px solid var(--pearl)' }} />
+              <button onClick={saveNote} disabled={busy} className="btn-outline btn-xs" style={{ marginTop: 4 }}>Save note</button>
+            </div>
+
+            {err && <div style={{ padding: 8, background: '#FEE2E2', color: '#991B1B', borderRadius: 6, fontSize: 12, marginBottom: 8 }}>{err}</div>}
+
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {finding.finding_type === 'orphan_cleared' && (
+                <button onClick={markNotEventCheck} disabled={busy} className="btn-outline btn-sm">
+                  Not an event check
+                </button>
+              )}
+              {(finding.finding_type === 'amount_mismatch' || finding.finding_type === 'duplicate_clearing') && (
+                <button onClick={downloadDisputeLetter} disabled={busy} className="btn-outline btn-sm">
+                  ⇣ Dispute letter PDF
+                </button>
+              )}
+              {finding.status !== 'open' && (
+                <button onClick={() => setStatus('open')} disabled={busy} className="btn-outline btn-sm">Reopen</button>
+              )}
+              {finding.status !== 'disputed' && (
+                <button onClick={() => setStatus('disputed')} disabled={busy} className="btn-outline btn-sm">Mark disputed</button>
+              )}
+              {finding.status !== 'resolved' && (
+                <button onClick={() => setStatus('resolved')} disabled={busy} className="btn-primary btn-sm">Resolve</button>
+              )}
+              {finding.status !== 'ignored' && (
+                <button onClick={() => setStatus('ignored')} disabled={busy} className="btn-outline btn-sm">Ignore</button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
