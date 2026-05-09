@@ -33,6 +33,7 @@ import CancelEventModal from './CancelEventModal'
 import EventNotesPanel from './EventNotesPanel'
 import ManifestCaptureModal from '@/components/shipping/ManifestCaptureModal'
 import { fetchManifestsForEvents } from '@/lib/shipping/manifests'
+import IntakeCaptureFlow from '@/components/intake/IntakeCaptureFlow'
 import Checkbox from '@/components/ui/Checkbox'
 import { CALENDAR_COLORS } from '@/lib/calendarColors'
 
@@ -42,7 +43,7 @@ import { CALENDAR_COLORS } from '@/lib/calendarColors'
 // them out). `requires` controls per-event visibility (e.g. promote
 // only on reserved). `adminOnly` hides for non-admins.
 type LauncherKey =
-  | 'day_entry' | 'buyers' | 'travel' | 'shipping' | 'manifest' | 'marketing'
+  | 'day_entry' | 'buyers' | 'intake' | 'travel' | 'shipping' | 'manifest' | 'marketing'
   | 'appointments' | 'expenses' | 'brief' | 'notes' | 'assets' | 'checklist'
   | 'ad_spend' | 'promote' | 'cancel'
 
@@ -63,6 +64,9 @@ const LAUNCHERS: LauncherDef[] = [
     sub: "Today's data" },
   { key: 'buyers',    icon: '👥', label: 'Buyers',             locked: true,
     sub: 'Assigned roster' },
+  { key: 'intake',    icon: '🪪', label: 'Buy Intake',
+    sub: 'Scan + log purchase',
+    showWhen: ({ reserved }) => !reserved },
   { key: 'promote',   icon: '✅', label: 'Promote to Booked',  adminOnly: true,
     showWhen: ({ reserved }) => reserved,
     sub: 'Reserved → Booked' },
@@ -127,6 +131,7 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
   const [notesEventId, setNotesEventId] = useState<string | null>(null)
   const [manageEventId, setManageEventId] = useState<string | null>(null)
   const [buyerPickerEventId, setBuyerPickerEventId] = useState<string | null>(null)
+  const [intakeEventId, setIntakeEventId] = useState<string | null>(null)
   const [manifestEventId, setManifestEventId] = useState<string | null>(null)
   /** Existing box labels for the event whose manifest modal is currently open.
    *  Lazily fetched so we can drive the "replace?" warning + preset pills. */
@@ -352,6 +357,7 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
                   break
                 }
                 case 'buyers':    setBuyerPickerEventId(ev.id); break
+                case 'intake':    setIntakeEventId(ev.id); break
                 case 'travel':    setTravelIntent({ eventId: ev.id }); setNav?.('travel'); break
                 case 'shipping':  setNav?.('shipping'); break
                 case 'manifest': {
@@ -432,6 +438,14 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
           />
         )
       })()}
+
+      {intakeEventId && (
+        <IntakeCaptureFlow
+          eventId={intakeEventId}
+          onClose={() => setIntakeEventId(null)}
+          onSaved={() => setIntakeEventId(null)}
+        />
+      )}
 
       {manifestEventId && (() => {
         const ev = events.find(e => e.id === manifestEventId)
