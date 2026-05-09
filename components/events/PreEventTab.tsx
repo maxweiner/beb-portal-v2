@@ -28,20 +28,20 @@ import type { NavPage } from '@/app/page'
 import CancelEventModal from './CancelEventModal'
 import { CALENDAR_COLORS } from '@/lib/calendarColors'
 
-type CampaignRow = {
+export type CampaignRow = {
   event_id: string
   flow_type: 'vdp' | 'postcard' | 'newspaper'
   status: 'setup' | 'planning' | 'proofing' | 'payment' | 'done'
   paid_at: string | null
 }
 
-type TravelRow = {
+export type TravelRow = {
   event_id: string
   buyer_id: string
   type: 'flight' | 'hotel' | 'rental_car'
 }
 
-type TravelAckRow = {
+export type TravelAckRow = {
   event_id: string
   buyer_id: string
   type: string  // 'self_flight' | 'self_hotel' | 'no_flight' | 'no_hotel' | 'no_rental_car'
@@ -49,14 +49,14 @@ type TravelAckRow = {
 
 type BookingRow = { store_id: string; day1_start: string | null }
 
-type LastEventNote = {
+export type LastEventNote = {
   id: string
   category: 'worked' | 'didnt_work' | 'do_differently'
   content: string
   user_name: string
   created_at: string
 }
-type LastEventLesson = {
+export type LastEventLesson = {
   /** The trunk show / buying event we pulled notes from. */
   pastEventId: string
   pastEventStartDate: string
@@ -375,7 +375,7 @@ export default function PreEventTab({ setNav, slim = false }: Props) {
 
 // ── Per-event card ─────────────────────────────────────────────
 
-interface CardProps {
+export interface CardProps {
   ev: Event
   campaigns: CampaignRow[]
   travel: TravelRow[]
@@ -408,7 +408,7 @@ interface CardProps {
   onToggleExpand?: () => void
 }
 
-function EventReadinessCard({
+export function EventReadinessCard({
   ev, campaigns, travel, travelAcks, bookingLive, assetOrders, lastLesson, allEvents, stores,
   isAdmin, canCancel, currentUserId, currentUserName, setNav, onOpenTravel, onPromoted, onAssetEdit, onMarkBriefed, onSetOverride, onCarriedForward, onCancelClick,
   allUsers, onWorkersChange,
