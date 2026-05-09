@@ -115,6 +115,12 @@
   .launch.danger { color: #b22234; }
   .launch .ico { font-size: 18px; }
   .launch .lbl small { display: block; font-size: 10px; color: var(--mist); font-weight: 600; margin-top: 2px; }
+  /* Smaller avatars when used inline as launcher subtitle */
+  .launch .av-stack { margin-top: 4px; }
+  .launch .av-stack .av {
+    width: 20px; height: 20px; font-size: 9px; border-width: 1.5px;
+  }
+  .launch .av-stack .av + .av { margin-left: -7px; }
 
   /* === Edit launchers modal === */
   .modal-backdrop {
@@ -203,13 +209,6 @@
         <h2>Kay Cameron Jewelers <span class="pill">This week · Day 3</span></h2>
         <div class="where">Sayville, NY</div>
         <div class="when">📅 May 7 – May 9 · today is the last day</div>
-        <div class="buyers-row">
-          <div class="av-stack">
-            <span class="av teal" title="Max Weiner">MW</span>
-            <span class="av green" title="Tom Brady">TB</span>
-            <span class="av blue" title="Victor Adams">VA</span>
-          </div>
-        </div>
       </div>
       <div class="kpis">
         <div class="kpi good"><div class="l">Spent</div><div class="v">$311K</div></div>
@@ -219,7 +218,7 @@
       </div>
       <div class="launchers">
         <button class="launch" data-launcher="day_entry"><span class="ico">📊</span><span class="lbl">Day Entry<small>Today's data</small></span></button>
-        <button class="launch" data-launcher="buyers"><span class="ico">👥</span><span class="lbl">Buyers<small>3 assigned</small></span></button>
+        <button class="launch" data-launcher="buyers"><span class="ico">👥</span><span class="lbl">Buyers<span class="av-stack"><span class="av teal" title="Max Weiner">MW</span><span class="av green" title="Tom Brady">TB</span><span class="av blue" title="Victor Adams">VA</span></span></span></button>
         <button class="launch" data-launcher="travel"><span class="ico">✈️</span><span class="lbl">Travel<small>All booked</small></span></button>
         <button class="launch" data-launcher="marketing"><span class="ico">📣</span><span class="lbl">Marketing<small>VDP + postcard</small></span></button>
         <button class="launch" data-launcher="checklist"><span class="ico">📋</span><span class="lbl">Checklist<small>4 of 6 done</small></span></button>
@@ -233,13 +232,6 @@
         <h2>Pickens Jewelers <span class="pill">In 8 days</span></h2>
         <div class="where">Atlanta, GA</div>
         <div class="when">📅 May 12 – May 14, 2026</div>
-        <div class="buyers-row">
-          <div class="av-stack">
-            <span class="av amber" title="Joe Romeo">JR</span>
-            <span class="av plum" title="Lori Smith">LS</span>
-            <span class="av teal" title="Marv Klein">MK</span>
-          </div>
-        </div>
       </div>
       <div class="kpis">
         <div class="kpi"><div class="l">Spent</div><div class="v">$148K</div></div>
@@ -248,7 +240,7 @@
         <div class="kpi warn"><div class="l">⚠ Open</div><div class="v">3</div></div>
       </div>
       <div class="launchers">
-        <button class="launch" data-launcher="buyers"><span class="ico">👥</span><span class="lbl">Buyers<small>3 assigned</small></span></button>
+        <button class="launch" data-launcher="buyers"><span class="ico">👥</span><span class="lbl">Buyers<span class="av-stack"><span class="av amber" title="Joe Romeo">JR</span><span class="av plum" title="Lori Smith">LS</span><span class="av teal" title="Marv Klein">MK</span></span></span></button>
         <button class="launch" data-launcher="travel"><span class="ico">✈️</span><span class="lbl">Travel<small>2 of 3 booked</small></span></button>
         <button class="launch" data-launcher="marketing"><span class="ico">📣</span><span class="lbl">Marketing<small>VDP done · postcard done</small></span></button>
         <button class="launch" data-launcher="assets"><span class="ico">📦</span><span class="lbl">Assets<small>None ordered</small></span></button>
@@ -265,13 +257,6 @@
         <h2>📌 Burkes Jewelers <span class="pill">Save the Date</span></h2>
         <div class="where">Tampa, FL</div>
         <div class="when">📅 May 21 – May 23 · 17 days from now · Reserved</div>
-        <div class="buyers-row">
-          <div class="av-stack">
-            <span class="av blue" title="Rich Welsch">RW</span>
-            <span class="av teal" title="Max Weiner">MW</span>
-            <span class="av empty" title="Open buyer slot">+</span>
-          </div>
-        </div>
       </div>
       <div class="kpis">
         <div class="kpi"><div class="l">Buyers</div><div class="v">2/3</div></div>
@@ -281,7 +266,7 @@
       </div>
       <div class="launchers">
         <button class="launch promote" data-launcher="promote"><span class="ico">✅</span><span class="lbl">Promote to Booked<small>Triggers notifications</small></span></button>
-        <button class="launch" data-launcher="buyers"><span class="ico">👥</span><span class="lbl">Buyers</span></button>
+        <button class="launch" data-launcher="buyers"><span class="ico">👥</span><span class="lbl">Buyers<span class="av-stack"><span class="av blue" title="Rich Welsch">RW</span><span class="av teal" title="Max Weiner">MW</span><span class="av empty" title="Open buyer slot">+</span></span></span></button>
         <button class="launch" data-launcher="marketing"><span class="ico">📣</span><span class="lbl">Marketing</span></button>
         <button class="launch" data-launcher="checklist"><span class="ico">📋</span><span class="lbl">Checklist</span></button>
         <button class="launch danger" data-launcher="cancel"><span class="ico">🚫</span><span class="lbl">Cancel</span></button>
@@ -289,10 +274,11 @@
     </div>
 
     <div class="principle">
-      <b>View 1 · Hub.</b> Per-event hub with phase-colored hero, buyer chips, KPIs, and action launchers.
-      Click <b>✏️ Customize buttons</b> at the top to choose which launchers appear on every card. The
-      preference saves to your account so the page stays as you set it. <i>Day Entry, Buyers and Promote
-      to Booked are always-on (locked) because they're load-bearing for the workflow.</i>
+      <b>View 1 · Hub.</b> Per-event hub with phase-colored hero, KPIs, and action launchers. Buyer
+      avatars live inside the Buyers launcher (open slots show as a dashed "+"). Click
+      <b>✏️ Customize buttons</b> at the top to choose which launchers appear on every card. The
+      preference saves to your account so the page stays as you set it. <i>Day Entry, Buyers, and
+      Promote to Booked are always-on (locked) because they're load-bearing for the workflow.</i>
     </div>
   </div>
 
