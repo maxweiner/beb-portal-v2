@@ -58,6 +58,10 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
   // — accounting needs all reports for AP processing, RLS now permits it.
   const canSeeAll = user?.role === 'superadmin' || user?.role === 'accounting'
   const isAccounting = user?.role === 'accounting'
+  // Users without the is_trunk_rep flag shouldn't see trunk-show
+  // expense reports at all — they're not on the rep rotation. Same
+  // gate that drives the trunk-show rep dropdown elsewhere.
+  const isTrunkRep = (user as any)?.is_trunk_rep === true
   const isNarrow = useIsNarrow()
 
   const [rows, setRows] = useState<ReportRow[]>([])
@@ -306,6 +310,22 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
     await reload()
   }
 
+  // From the picker: create a no_expenses report for an event the
+  // user doesn't intend to expense, skipping the create-then-dismiss
+  // dance. The row goes straight to the "Already expensed" filter.
+  async function dismissEventFromPicker(eventId: string, eventName: string) {
+    if (!user) return
+    if (!confirm(`Skip "${eventName}" — mark as already expensed? You can reactivate it later from the "Already expensed" filter.`)) return
+    const { error: insertErr } = await supabase
+      .from('expense_reports')
+      .insert({ event_id: eventId, user_id: user.id, status: 'no_expenses' })
+    if (insertErr) {
+      alert(`Could not skip: ${insertErr.message}`)
+      return
+    }
+    await reload()
+  }
+
   // Load active templates once for the new-report picker.
   useEffect(() => {
     let cancelled = false
@@ -360,9 +380,13 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
       // longer a worker. Trunk-show / trade-show reports (no event_id)
       // are unaffected.
       if (mobileWorkerEventIds && r.event_id && !mobileWorkerEventIds.has(r.event_id)) return false
+      // Hide trunk-show reports entirely from non-trunk-reps. Auto-
+      // create or admin imports may have left phantoms; non-reps have
+      // no business with them.
+      if (!isTrunkRep && (r as any).trunk_show_id) return false
       return true
     })
-  }, [rows, statusFilter, userFilter, timeFilter, todayIsoLocal, canSeeAll, isAccounting, user?.id, mobileWorkerEventIds])
+  }, [rows, statusFilter, userFilter, timeFilter, todayIsoLocal, canSeeAll, isAccounting, isTrunkRep, user?.id, mobileWorkerEventIds])
 
   // For the new-report picker: only events the user is an assigned
   // worker on (no point creating an expense report for an event you
@@ -662,11 +686,12 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
             <PickerBody
               creating={creating}
               eligibleEvents={eligibleEvents}
-              trunkShows={trunkShowsList}
+              trunkShows={isTrunkRep ? trunkShowsList : []}
               tradeShows={tradeShowsList}
               existingTrunkIds={new Set(rows.filter(r => r.user_id === user?.id).map(r => (r as any).trunk_show_id).filter(Boolean) as string[])}
               existingTradeIds={new Set(rows.filter(r => r.user_id === user?.id).map(r => (r as any).trade_show_id).filter(Boolean) as string[])}
               onPick={(p) => createReport(p)}
+              onDismissEvent={dismissEventFromPicker}
             />
           </div>
         </div>
@@ -679,7 +704,7 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
 
 function PickerBody({
   creating, eligibleEvents, trunkShows, tradeShows,
-  existingTrunkIds, existingTradeIds, onPick,
+  existingTrunkIds, existingTradeIds, onPick, onDismissEvent,
 }: {
   creating: boolean
   eligibleEvents: Event[]
@@ -688,6 +713,7 @@ function PickerBody({
   existingTrunkIds: Set<string>
   existingTradeIds: Set<string>
   onPick: (p: { kind: 'buying' | 'trunk' | 'trade'; id: string }) => void
+  onDismissEvent: (eventId: string, eventName: string) => void
 }) {
   const [kind, setKind] = useState<'buying' | 'trunk' | 'trade'>('buying')
   const showTrunk = trunkShows.length > 0
@@ -723,9 +749,17 @@ function PickerBody({
         eligibleEvents.length === 0 ? (
           <Empty msg="No buying events without a report. Create an event first, or open an existing report from the list." />
         ) : (
-          <PickList items={eligibleEvents.map(ev => ({
-            id: ev.id, label: ev.store_name, sub: formatDateLong(ev.start_date),
-          }))} disabled={creating} onPick={(id) => onPick({ kind: 'buying', id })} />
+          <PickList
+            items={eligibleEvents.map(ev => ({
+              id: ev.id, label: ev.store_name, sub: formatDateLong(ev.start_date),
+            }))}
+            disabled={creating}
+            onPick={(id) => onPick({ kind: 'buying', id })}
+            onDismiss={(id) => {
+              const ev = eligibleEvents.find(e => e.id === id)
+              if (ev) onDismissEvent(ev.id, ev.store_name)
+            }}
+          />
         )
       )}
       {kind === 'trunk' && (
@@ -750,27 +784,53 @@ function PickerBody({
   )
 }
 
-function PickList({ items, disabled, onPick }: {
+function PickList({ items, disabled, onPick, onDismiss }: {
   items: { id: string; label: string; sub: string }[]
   disabled: boolean
   onPick: (id: string) => void
+  onDismiss?: (id: string) => void
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {items.map(it => (
-        <button key={it.id} disabled={disabled} onClick={() => onPick(it.id)}
+        <div key={it.id}
           style={{
-            textAlign: 'left', padding: '12px 14px', borderRadius: 8,
-            background: '#fff', border: '1px solid var(--cream2)', cursor: 'pointer',
+            position: 'relative',
+            padding: '12px 14px', borderRadius: 8,
+            background: '#fff', border: '1px solid var(--cream2)',
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            fontFamily: 'inherit',
           }}>
-          <div>
+          <button disabled={disabled} onClick={() => onPick(it.id)}
+            style={{
+              flex: 1, textAlign: 'left',
+              background: 'transparent', border: 'none', padding: 0,
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}>
             <div style={{ fontWeight: 800, color: 'var(--ink)' }}>{it.label}</div>
             <div style={{ fontSize: 12, color: 'var(--mist)' }}>{it.sub}</div>
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {onDismiss && (
+              <button
+                onClick={() => onDismiss(it.id)}
+                disabled={disabled}
+                title="Skip — mark as already expensed"
+                style={{
+                  background: 'transparent', border: '1px solid var(--cream2)',
+                  borderRadius: 6, padding: '4px 8px',
+                  color: 'var(--mist)', fontSize: 11, cursor: 'pointer',
+                  fontFamily: 'inherit', whiteSpace: 'nowrap',
+                }}
+              >Skip</button>
+            )}
+            <button disabled={disabled} onClick={() => onPick(it.id)}
+              style={{
+                background: 'transparent', border: 'none',
+                color: 'var(--green)', fontWeight: 700, cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: 14,
+              }}>+ Create</button>
           </div>
-          <span style={{ color: 'var(--green)', fontWeight: 700 }}>+ Create</span>
-        </button>
+        </div>
       ))}
     </div>
   )
