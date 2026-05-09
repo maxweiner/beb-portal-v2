@@ -331,16 +331,19 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
 
   // For the new-report picker: only events the user is an assigned
   // worker on (no point creating an expense report for an event you
-  // didn't work) and that don't already have a report for this user.
-  // Sorted newest-first so today's / this-week's events are at the top.
+  // didn't work) AND that have already started (you can't expense a
+  // future event), AND that don't already have a report for this
+  // user. Sorted newest-first so the most recently worked event is
+  // at the top.
   const eligibleEvents = useMemo(() => {
     if (!user) return []
     const ownReportEventIds = new Set(rows.filter(r => r.user_id === user.id).map(r => r.event_id))
     return events
       .filter(e => isWorkerAssigned(e, user.id))
+      .filter(e => e.start_date && e.start_date <= todayIsoLocal)
       .filter(e => !ownReportEventIds.has(e.id))
       .sort((a, b) => (b.start_date || '').localeCompare(a.start_date || ''))
-  }, [events, rows, user?.id])
+  }, [events, rows, user?.id, todayIsoLocal])
 
   async function createReport(parent: { kind: 'buying' | 'trunk' | 'trade'; id: string }) {
     if (!user) return
