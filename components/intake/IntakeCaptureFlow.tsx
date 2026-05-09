@@ -358,7 +358,7 @@ function FormNumberStep({
       <button
         onClick={onContinue}
         disabled={value.length !== 5}
-        style={{ ...primaryBtnFull, marginTop: 16, opacity: value.length === 5 ? 1 : 0.4 }}
+        style={{ ...primaryBtnFullTall, marginTop: 16, opacity: value.length === 5 ? 1 : 0.4 }}
       >
         Continue →
       </button>
@@ -504,7 +504,7 @@ function CameraCaptureStep({
           onChange={e => handleFile(e.target.files?.[0])}
           style={{ display: 'none' }}
         />
-        <button onClick={() => fallbackInputRef.current?.click()} style={{ ...primaryBtnFull, marginTop: 16 }}>
+        <button onClick={() => fallbackInputRef.current?.click()} style={{ ...primaryBtnFullTall, marginTop: 16 }}>
           📷 Take photo
         </button>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
@@ -600,7 +600,7 @@ function CameraCaptureStep({
       </div>
 
       <button onClick={() => void capture()} disabled={!cameraReady} style={{
-        ...primaryBtnFull, marginTop: 16,
+        ...primaryBtnFullTall, marginTop: 16,
         opacity: cameraReady ? 1 : 0.4,
         cursor: cameraReady ? 'pointer' : 'not-allowed',
       }}>
@@ -805,7 +805,7 @@ function QuickFieldsStep(props: {
         )}
       </div>
 
-      <button onClick={props.onSave} style={{ ...primaryBtnFull, marginTop: 8 }}>💾 Save intake</button>
+      <button onClick={props.onSave} style={{ ...primaryBtnFullTall, marginTop: 8 }}>💾 Save intake</button>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
         <button onClick={props.onBack} style={secondaryBtn}>← Back</button>
       </div>
