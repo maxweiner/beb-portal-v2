@@ -30,6 +30,7 @@ import {
 } from './PreEventTab'
 import CancelEventModal from './CancelEventModal'
 import EventNotesPanel from './EventNotesPanel'
+import Checkbox from '@/components/ui/Checkbox'
 import { CALENDAR_COLORS } from '@/lib/calendarColors'
 
 // ── Launcher catalog ─────────────────────────────────────────
@@ -254,7 +255,7 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
         </div>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 21 }}>
         {upcoming.map(ev => (
           <HubCard
             key={ev.id}
@@ -436,11 +437,11 @@ function HubCard({
       borderStyle: reserved ? 'dashed' : 'solid',
       borderRadius: 14, overflow: 'hidden',
     }}>
-      {/* Hero */}
-      <div style={{ padding: '18px 22px', background: heroBg, color: '#fff' }}>
+      {/* Hero — 15% shorter than original (padding + line gaps tightened) */}
+      <div style={{ padding: '12px 22px', background: heroBg, color: '#fff' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <div>
-            <div style={{ fontSize: 20, fontWeight: 900, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 19, fontWeight: 900, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', lineHeight: 1.2 }}>
               {reserved && <span aria-hidden>📌</span>}
               {display}
               <span style={{
@@ -449,11 +450,8 @@ function HubCard({
                 textTransform: 'uppercase', letterSpacing: '.04em',
               }}>{phasePill}</span>
             </div>
-            <div style={{ color: 'rgba(255,255,255,.85)', fontSize: 13, marginTop: 4 }}>
-              {store?.city}{store?.state ? `, ${store.state}` : ''}
-            </div>
-            <div style={{ color: 'rgba(255,255,255,.7)', fontSize: 12, marginTop: 2 }}>
-              📅 {range}
+            <div style={{ color: 'rgba(255,255,255,.85)', fontSize: 12.5, marginTop: 2 }}>
+              {store?.city}{store?.state ? `, ${store.state}` : ''} · 📅 {range}
             </div>
           </div>
         </div>
@@ -638,10 +636,11 @@ function CustomizeModal({
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {LAUNCHERS.map(l => {
-              const isHidden = hidden.has(l.key) && !l.locked
+              const isVisible = !(hidden.has(l.key) && !l.locked)
               return (
-                <label
+                <div
                   key={l.key}
+                  onClick={() => !l.locked && onToggle(l.key)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 12,
                     padding: '10px 12px', background: 'var(--cream)',
@@ -650,12 +649,10 @@ function CustomizeModal({
                     opacity: l.locked ? 0.55 : 1,
                   }}
                 >
-                  <input
-                    type="checkbox"
-                    checked={!isHidden}
+                  <Checkbox
+                    checked={isVisible}
                     disabled={l.locked}
                     onChange={() => !l.locked && onToggle(l.key)}
-                    style={{ width: 18, height: 18, accentColor: 'var(--green)' }}
                   />
                   <span style={{ fontSize: 18 }}>{l.icon}</span>
                   <span style={{ flex: 1 }}>
@@ -669,7 +666,7 @@ function CustomizeModal({
                       textTransform: 'uppercase', letterSpacing: '.04em',
                     }}>🔒 Always</span>
                   )}
-                </label>
+                </div>
               )
             })}
           </div>
