@@ -481,7 +481,7 @@ export type TrunkShowStatus = 'reserved' | 'scheduled' | 'in_progress' | 'comple
  *  (planning stage, not yet confirmed). 'cancelled' = decided not to
  *  run, kept visible with strikethrough. Hard-deletion is also
  *  available via the Delete action. */
-export type EventStatus = 'reserved' | 'scheduled' | 'cancelled'
+export type EventStatus = 'reserved' | 'scheduled' | 'completed' | 'cancelled'
 
 export interface TrunkShow {
   id: string
