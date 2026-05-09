@@ -201,46 +201,61 @@
   .legacy-actions button:hover { background: var(--green-pale); border-color: var(--green3); }
   .legacy-actions button.danger { color: #b22234; }
 
-  /* === Slim view (Teri's pick) === */
-  .slim-table {
-    background: #fff; border: 1px solid var(--pearl); border-radius: 10px;
-    overflow: hidden;
+  /* === Slim view (Pre-Event accordion — what's in the app today) === */
+  .slim-list { display: flex; flex-direction: column; gap: 8px; }
+  .slim-card {
+    background: #fff;
+    border: 1px solid var(--cream2);
+    border-radius: 10px;
+    border-left: 4px solid var(--buying);
+    padding: 12px 16px;
   }
-  .slim-row {
-    display: grid;
-    grid-template-columns: 110px 1fr 130px 90px 100px 80px 36px;
-    align-items: center;
-    border-bottom: 1px solid var(--cream2);
+  .slim-card.reserved { border-left-style: dashed; }
+  .slim-card .row {
+    display: flex; width: 100%; align-items: center; justify-content: space-between;
+    gap: 12px; background: transparent; border: 0; padding: 0;
+    cursor: pointer; font-family: inherit; text-align: left; color: inherit;
   }
-  .slim-row:last-child { border-bottom: none; }
-  .slim-row.head {
-    background: var(--cream); font-size: 10px; font-weight: 800;
-    text-transform: uppercase; letter-spacing: .06em; color: var(--mist);
+  .slim-card .left { display: flex; align-items: baseline; gap: 12px; flex: 1; min-width: 0; }
+  .slim-card .name {
+    font-size: 18px; font-weight: 800; color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .slim-row > div { padding: 9px 12px; font-size: 13px; }
-  .slim-row .name { font-weight: 800; }
-  .slim-row .name .where { font-size: 11px; color: var(--mist); font-weight: 600; }
-  .slim-row .right { text-align: right; }
-  .slim-row .pill { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 10px; font-weight: 800;
-                    text-transform: uppercase; letter-spacing: .04em; }
-  .slim-row .pill.this-week { background: #fee2e2; color: #991b1b; }
-  .slim-row .pill.upcoming { background: var(--green-pale); color: var(--green-dark); }
-  .slim-row .pill.reserved { background: #fef3c7; color: #92400e; }
-  .slim-row .av-stack .av {
-    width: 22px; height: 22px; font-size: 9px; border-width: 1.5px;
+  .slim-card .reserved-tag {
+    display: inline-block; font-size: 9px; font-weight: 800; letter-spacing: .04em;
+    background: var(--buying-pale); color: var(--buying); padding: 1px 5px; border-radius: 3px;
+    margin-right: 8px; vertical-align: middle;
   }
-  .slim-row .av-stack .av + .av { margin-left: -8px; }
-  .slim-row .open-tag { font-size: 11px; color: #b22234; font-weight: 700; margin-left: 6px; }
-  .slim-row .menu {
-    background: transparent; border: 0; cursor: pointer; font-size: 18px; color: var(--mist);
-    text-align: center; font-family: inherit;
+  .slim-card .range { font-size: 14px; font-weight: 700; color: var(--mist); white-space: nowrap; }
+  .slim-card .chev {
+    font-size: 11px; color: var(--mist); flex-shrink: 0;
+    display: inline-block; transition: transform .15s ease;
   }
-  .slim-row .menu:hover { color: var(--ink); }
-  .slim-row:hover { background: #FBF9F4; cursor: pointer; }
-  @media (max-width: 760px) {
-    .slim-row { grid-template-columns: 90px 1fr 70px 36px; }
-    .slim-row .col-dates, .slim-row .col-spent, .slim-row .col-customers { display: none; }
+  .slim-card.open .chev { transform: rotate(90deg); }
+
+  .slim-card .body { display: none; margin-top: 12px; }
+  .slim-card.open .body { display: block; }
+  .slim-card .meta-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; flex-wrap: wrap; margin: 0 0 12px;
   }
+  .slim-card .meta-row .where { font-size: 12px; color: var(--mist); }
+  .slim-card .actions-inline { display: flex; gap: 6px; flex-wrap: wrap; }
+  .slim-card .btn-sm {
+    padding: 5px 10px; font-size: 12px; font-weight: 700; border-radius: 6px;
+    border: 1px solid var(--pearl); background: #fff; cursor: pointer; font-family: inherit;
+  }
+  .slim-card .btn-sm.primary { background: var(--green); color: #fff; border-color: var(--green); }
+  .slim-card .btn-sm.danger { color: #B22234; border-color: #fecdd3; }
+
+  .gates { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip-gate {
+    font-size: 12px; font-weight: 700; padding: 5px 10px;
+    border-radius: 999px; border: 1px solid;
+  }
+  .chip-gate.ok   { background: var(--green-pale); color: var(--green-dark); border-color: var(--green3); }
+  .chip-gate.warn { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+  .chip-gate.todo { background: var(--cream); color: var(--ash); border-color: var(--pearl); }
 
   .principle {
     margin-top: 22px; padding: 14px 18px; background: #fff;
@@ -268,7 +283,7 @@
   <div class="view-toggle">
     <button id="v1Btn" class="active" onclick="setView(1)">View 1 · Hub</button>
     <button id="v2Btn" onclick="setView(2)">View 2 · Legacy</button>
-    <button id="vSlimBtn" onclick="setView('slim')">Slim ⚡<small style="opacity:.6; font-weight:600; margin-left:4px;">Teri's pick</small></button>
+    <button id="vSlimBtn" onclick="setView('slim')">📃 Slim</button>
   </div>
 
   <!-- ===== VIEW 1 ===== -->
@@ -486,73 +501,95 @@
     </div>
   </div>
 
-  <!-- ===== SLIM VIEW (Teri's pick) ===== -->
+  <!-- ===== SLIM VIEW (Pre-Event accordion — exactly what's in the app) ===== -->
   <div id="viewSlim" class="hidden">
-    <div class="slim-table">
-      <div class="slim-row head">
-        <div>Status</div>
-        <div>Event</div>
-        <div class="col-dates">Dates</div>
-        <div>Buyers</div>
-        <div class="col-spent right">Spent</div>
-        <div class="col-customers right">Cust</div>
-        <div></div>
+    <div class="slim-list">
+
+      <!-- Kay Cameron — collapsed -->
+      <div class="slim-card" data-slim>
+        <button class="row" onclick="toggleSlim(this)">
+          <div class="left">
+            <div class="name">Kay Cameron Jewelers</div>
+            <div class="range">May 7 – May 9</div>
+          </div>
+          <span class="chev">▶</span>
+        </button>
+        <div class="body">
+          <div class="meta-row">
+            <div class="where">Sayville, NY</div>
+            <div class="actions-inline">
+              <button class="btn-sm danger">🚫 Cancel</button>
+            </div>
+          </div>
+          <div class="gates">
+            <span class="chip-gate ok">3 buyers</span>
+            <span class="chip-gate ok">Travel ✓</span>
+            <span class="chip-gate ok">Marketing ✓</span>
+            <span class="chip-gate ok">Brief ✓</span>
+            <span class="chip-gate ok">Checklist 8/8</span>
+          </div>
+        </div>
       </div>
 
-      <div class="slim-row">
-        <div><span class="pill this-week">This wk · Day 3</span></div>
-        <div class="name">Kay Cameron Jewelers <div class="where">Sayville, NY</div></div>
-        <div class="col-dates">May 7 – May 9</div>
-        <div>
-          <span class="av-stack">
-            <span class="av teal" title="Max Weiner">MW</span>
-            <span class="av green" title="Tom Brady">TB</span>
-            <span class="av blue" title="Victor Adams">VA</span>
-          </span>
+      <!-- Pickens — collapsed -->
+      <div class="slim-card" data-slim>
+        <button class="row" onclick="toggleSlim(this)">
+          <div class="left">
+            <div class="name">Pickens Jewelers</div>
+            <div class="range">May 12 – May 14</div>
+          </div>
+          <span class="chev">▶</span>
+        </button>
+        <div class="body">
+          <div class="meta-row">
+            <div class="where">Atlanta, GA</div>
+            <div class="actions-inline">
+              <button class="btn-sm danger">🚫 Cancel</button>
+            </div>
+          </div>
+          <div class="gates">
+            <span class="chip-gate ok">3 buyers</span>
+            <span class="chip-gate warn">Travel 2/3</span>
+            <span class="chip-gate warn">Confirmation due</span>
+            <span class="chip-gate todo">Assets — none</span>
+            <span class="chip-gate warn">Brief 1/3</span>
+            <span class="chip-gate warn">Checklist 5/8</span>
+          </div>
         </div>
-        <div class="col-spent right"><strong>$311K</strong></div>
-        <div class="col-customers right">63</div>
-        <div><button class="menu" title="More">⋯</button></div>
       </div>
 
-      <div class="slim-row">
-        <div><span class="pill upcoming">In 8 days</span></div>
-        <div class="name">Pickens Jewelers <div class="where">Atlanta, GA</div></div>
-        <div class="col-dates">May 12 – May 14</div>
-        <div>
-          <span class="av-stack">
-            <span class="av amber" title="Joe Romeo">JR</span>
-            <span class="av plum" title="Lori Smith">LS</span>
-            <span class="av teal" title="Marv Klein">MK</span>
-          </span>
+      <!-- Burkes — open by default + reserved styling -->
+      <div class="slim-card reserved open" data-slim>
+        <button class="row" onclick="toggleSlim(this)">
+          <div class="left">
+            <div class="name"><span class="reserved-tag">📌 RESERVED</span>Burkes Jewelers</div>
+            <div class="range">May 21 – May 23</div>
+          </div>
+          <span class="chev">▶</span>
+        </button>
+        <div class="body">
+          <div class="meta-row">
+            <div class="where">Tampa, FL</div>
+            <div class="actions-inline">
+              <button class="btn-sm primary">✅ Promote to Booked</button>
+              <button class="btn-sm danger">🚫 Cancel</button>
+            </div>
+          </div>
+          <div class="gates">
+            <span class="chip-gate warn">2 of 3 buyers · 1 open</span>
+            <span class="chip-gate todo">Travel · locked</span>
+            <span class="chip-gate todo">Marketing · locked</span>
+            <span class="chip-gate warn">Checklist 0/5</span>
+          </div>
         </div>
-        <div class="col-spent right">$148K</div>
-        <div class="col-customers right">24</div>
-        <div><button class="menu" title="More">⋯</button></div>
       </div>
 
-      <div class="slim-row">
-        <div><span class="pill reserved">Reserved</span></div>
-        <div class="name">📌 Burkes Jewelers <div class="where">Tampa, FL</div></div>
-        <div class="col-dates">May 21 – May 23</div>
-        <div>
-          <span class="av-stack">
-            <span class="av blue" title="Rich Welsch">RW</span>
-            <span class="av teal" title="Max Weiner">MW</span>
-            <span class="av empty" title="Open buyer slot">+</span>
-          </span>
-          <span class="open-tag">1 open</span>
-        </div>
-        <div class="col-spent right muted">—</div>
-        <div class="col-customers right muted">—</div>
-        <div><button class="menu" title="More">⋯</button></div>
-      </div>
     </div>
 
     <div class="principle">
-      <b>Slim · Teri's pick.</b> One row per event. Just status, name + city, dates, buyer chips,
-      spend, customer count, and a "⋯" menu. Click any row to drill into the full event. No KPI cells,
-      no launcher buttons — fastest way to scan everything when you know exactly what you're looking for.
+      <b>Slim · Teri's pick.</b> Mirrors the existing in-app Slim view — single-line accordion rows
+      (big event name + date range + ▶ chevron). Click a row to expand the full pre-event panel
+      (gate chips + actions). Reserved events get a left-border dashed treatment and a "📌 RESERVED" tag.
     </div>
   </div>
 </div>
@@ -667,6 +704,13 @@
 
   document.getElementById('editBtn').addEventListener('click', openModal);
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+  // Slim accordion toggle.
+  function toggleSlim(btn) {
+    const card = btn.closest('[data-slim]');
+    if (card) card.classList.toggle('open');
+  }
+  window.toggleSlim = toggleSlim;
 
   applyVisibility();
 </script>
