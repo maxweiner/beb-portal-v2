@@ -161,12 +161,17 @@ export default function ReconciliationPage() {
   useEffect(() => { void reloadRef.current() }, [brand])
 
   const counts = useMemo(() => {
-    // All five counts now come straight from reconciliation_findings.
-    // The v2 matcher persists every type, including 'matched'.
+    // Tiles show what needs attention — open findings only. Resolved /
+    // disputed / ignored stay in the DB (so a future re-clearing of a
+    // resolved orphan still fires as a new duplicate_clearing finding)
+    // but they don't pad the working count.
     const by: Record<FindingType, number> = {
       matched: 0, amount_mismatch: 0, duplicate_clearing: 0, orphan_cleared: 0, outstanding: 0,
     }
-    for (const f of findings || []) by[f.finding_type] = (by[f.finding_type] || 0) + 1
+    for (const f of findings || []) {
+      if (f.status !== 'open') continue
+      by[f.finding_type] = (by[f.finding_type] || 0) + 1
+    }
     return by
   }, [findings])
 
