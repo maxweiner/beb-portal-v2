@@ -287,6 +287,8 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
     { id: 'dashboard',     label: 'Dashboard',           icon: '⌂' },
     { id: 'buying-events', label: 'Buying Events',       icon: '◆' },
     { id: 'dayentry',      label: 'Enter Buying Data',   icon: '📝' },
+    { id: 'buy-intake',    label: 'Buy Intake',          icon: '🪪' },
+    { id: 'intake-lookup', label: 'Buy Form Lookup',     icon: '🔎' },
     { id: 'appointments',  label: 'Appointments',        icon: '📅' },
     { id: 'calendar',      label: 'Calendar',            icon: '🗓' },
     swapItem,
