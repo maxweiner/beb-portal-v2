@@ -273,6 +273,8 @@ export default function ReconciliationPage() {
 
       <UploadCard brand={brand!} lastImport={lastImport} onImported={() => void reloadRef.current()} />
 
+      <LetterSettings brand={brand!} />
+
       {error && (
         <div className="card" style={{ padding: 12, marginBottom: 12, background: '#FEE2E2', color: '#991B1B' }}>{error}</div>
       )}
@@ -410,6 +412,123 @@ function UploadCard({
       {last && (
         <div style={{ marginTop: 8, padding: 8, background: '#D1FAE5', color: '#065F46', borderRadius: 6, fontSize: 12 }}>
           ✓ {last.filename}: imported {last.imported}, skipped {last.skipped}, {last.duplicates} duplicates.
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LetterSettings({ brand }: { brand: string }) {
+  const [open, setOpen] = useState(false)
+  const [address, setAddress] = useState('')
+  const [lastFour, setLastFour] = useState('')
+  const [loaded, setLoaded] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const { user } = useApp()
+
+  useEffect(() => {
+    if (!open || loaded) return
+    let cancelled = false
+    void (async () => {
+      const { data } = await withTimeout(
+        supabase.from('settings').select('key, value')
+          .in('key', [`reconciliation.${brand}.address`, `reconciliation.${brand}.account_last_four`]),
+      )
+      if (cancelled) return
+      const byKey = new Map<string, any>(((data || []) as any[]).map(r => [r.key, r.value]))
+      const stripQuotes = (v: any) => typeof v === 'string' ? v.replace(/^"|"$/g, '') : ''
+      setAddress(stripQuotes(byKey.get(`reconciliation.${brand}.address`)))
+      setLastFour(stripQuotes(byKey.get(`reconciliation.${brand}.account_last_four`)))
+      setLoaded(true)
+    })()
+    return () => { cancelled = true }
+  }, [open, brand, loaded])
+
+  // Reset cached values when brand switches.
+  useEffect(() => { setLoaded(false); setMsg(null); setErr(null) }, [brand])
+
+  async function save() {
+    setBusy(true); setErr(null); setMsg(null)
+    try {
+      // Match the existing settings pattern (TagsAndEngagement et al.):
+      // values are JSON.stringify'd into JSONB so reads always come
+      // back as a JSON-encoded string the readers can strip.
+      const rows = [
+        { key: `reconciliation.${brand}.address`,
+          value: JSON.stringify(address.trim() || ''),
+          updated_at: new Date().toISOString(), updated_by: user?.id || null },
+        { key: `reconciliation.${brand}.account_last_four`,
+          value: JSON.stringify(lastFour.trim().slice(0, 4) || ''),
+          updated_at: new Date().toISOString(), updated_by: user?.id || null },
+      ]
+      const { error } = await withTimeout(
+        supabase.from('settings').upsert(rows, { onConflict: 'key' }),
+      )
+      if (error) throw new Error(error.message)
+      setMsg('Saved.')
+      setTimeout(() => setMsg(null), 1800)
+    } catch (e: any) {
+      setErr(e?.message || 'Save failed')
+    }
+    setBusy(false)
+  }
+
+  return (
+    <div className="card" style={{ padding: 0, marginBottom: 12, overflow: 'hidden' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%', textAlign: 'left',
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          padding: '10px 14px', fontFamily: 'inherit',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          fontSize: 12, color: 'var(--mist)',
+        }}>
+        <span><strong style={{ color: 'var(--ink)' }}>Dispute letter settings</strong> · {brand?.toUpperCase()}</span>
+        <span>{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <div style={{ padding: '0 14px 14px', borderTop: '1px solid var(--pearl)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12, marginTop: 12 }}>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                Brand address (printed at the top of the letter)
+              </label>
+              <textarea
+                value={address}
+                onChange={e => setAddress(e.target.value)}
+                rows={3}
+                placeholder={'123 Main St\nSuite 200\nAnytown, ST 12345'}
+                style={{ width: '100%', boxSizing: 'border-box', padding: 8, fontSize: 13, fontFamily: 'inherit', borderRadius: 6, border: '1px solid var(--pearl)' }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                Account last 4
+              </label>
+              <input
+                type="text"
+                value={lastFour}
+                onChange={e => setLastFour(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                placeholder="1234"
+                inputMode="numeric"
+                maxLength={4}
+                style={{ width: '100%', boxSizing: 'border-box', padding: 8, fontSize: 13, fontFamily: 'inherit', borderRadius: 6, border: '1px solid var(--pearl)' }}
+              />
+              <div style={{ fontSize: 10, color: 'var(--mist)', marginTop: 4 }}>
+                Shown as "Account ending ··{lastFour || '____'}" in the letter subject.
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+            <button onClick={save} disabled={busy} className="btn-primary btn-sm">
+              {busy ? 'Saving…' : 'Save'}
+            </button>
+            {msg && <span style={{ fontSize: 12, color: 'var(--green)' }}>✓ {msg}</span>}
+            {err && <span style={{ fontSize: 12, color: '#991B1B' }}>{err}</span>}
+          </div>
         </div>
       )}
     </div>
