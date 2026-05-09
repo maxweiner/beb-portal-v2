@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>5d · Pill chips</title>
+<style>
+  :root {
+    --ink: #1a1a16; --ash: #4A4A42; --mist: #A8A89A;
+    --cream: #FAF8F4; --cream2: #EDE7DA; --pearl: #D9D2C0;
+    --green: #1D6B44; --green-dark: #14532D; --green3: #7EC8A0; --green-pale: #E6F4EC;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+         margin: 0; background: var(--cream2); color: var(--ink); }
+  a { color: var(--green-dark); }
+  .top-back { padding: 14px 20px; background: #fff; border-bottom: 1px solid var(--pearl); }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
+  .header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
+  h1 { font-size: 24px; margin: 0; }
+  .actions { display: flex; gap: 8px; }
+  .btn { padding: 8px 14px; border-radius: 7px; border: 1px solid var(--pearl); background: #fff; cursor: pointer; font-weight: 700; font-size: 13px; }
+  .btn.primary { background: var(--green); color: #fff; border-color: var(--green); }
+
+  .hub {
+    background: #fff; border: 1px solid var(--pearl); border-radius: 14px;
+    margin-bottom: 14px; overflow: hidden;
+  }
+
+  .hero {
+    padding: 18px 22px; color: #fff;
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+  }
+  .hero.this-week { background: linear-gradient(160deg, #DC2626 0%, #F59E0B 100%); }
+  .hero.upcoming { background: linear-gradient(160deg, #14532D 0%, var(--green) 100%); }
+  .hero.reserved { background: linear-gradient(160deg, #92400E 0%, #D97706 100%); }
+  .hero h2 { font-size: 22px; margin: 6px 0 4px 0; line-height: 1.15; }
+  .hero .meta { font-size: 13px; opacity: .92; }
+
+  .pill { display: inline-block; padding: 4px 10px; border-radius: 99px; font-size: 11px; font-weight: 800;
+          text-transform: uppercase; letter-spacing: .04em; background: rgba(255,255,255,.85); color: #1a1a16; }
+
+  .stats {
+    display: flex; gap: 24px; padding: 14px 22px;
+    border-bottom: 1px solid var(--cream2); background: var(--cream);
+  }
+  .stat .l { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--mist); font-weight: 700; }
+  .stat .v { font-size: 20px; font-weight: 800; line-height: 1.1; }
+  .stat.warn .v { color: #92400E; }
+
+  /* Pill chip launchers — minimal, focused on text */
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 14px 22px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #fff; border: 1px solid var(--pearl); border-radius: 999px;
+    padding: 6px 12px; font-size: 12px; font-weight: 700; cursor: pointer;
+    font-family: inherit; transition: all .15s ease;
+  }
+  .chip:hover { background: var(--green-pale); border-color: var(--green3); }
+  .chip .badge {
+    display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 9px;
+    font-size: 10px; line-height: 16px; font-weight: 800;
+    background: var(--cream2); color: var(--ash); text-align: center;
+  }
+  .chip.primary { background: var(--green); color: #fff; border-color: var(--green); }
+  .chip.primary .badge { background: rgba(255,255,255,.25); color: #fff; }
+  .chip.warn .badge { background: #fbbf24; color: #78350F; }
+  .chip.danger { color: #b22234; border-color: #fecdd3; }
+
+  .principle { margin-top: 24px; padding: 16px 20px; background: #fff; border: 1px solid var(--pearl); border-radius: 12px; font-size: 14px; color: var(--ash); line-height: 1.55; }
+  .principle b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="top-back"><a href="/mockups/buying-events/">← Back to all mockups</a></div>
+
+<div class="container">
+  <div class="header">
+    <h1>◆ Buying Events</h1>
+    <div class="actions">
+      <button class="btn">📌 Save the Date</button>
+      <button class="btn primary">+ New Event</button>
+    </div>
+  </div>
+
+  <div class="hub">
+    <div class="hero this-week">
+      <div>
+        <span class="pill">This week · Day 3</span>
+        <h2>Kay Cameron Jewelers</h2>
+        <div class="meta">📍 Sayville, NY · 📅 May 7–9, 2026</div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="l">Spent</div><div class="v">$311K</div></div>
+      <div class="stat"><div class="l">Customers</div><div class="v">63</div></div>
+      <div class="stat"><div class="l">Buyers</div><div class="v">3/3</div></div>
+      <div class="stat"><div class="l">Close rate</div><div class="v">89%</div></div>
+    </div>
+    <div class="chips">
+      <button class="chip primary">📊 Day Entry <span class="badge">3</span></button>
+      <button class="chip">👥 Buyers <span class="badge">3</span></button>
+      <button class="chip">✈️ Travel</button>
+      <button class="chip">📣 Marketing</button>
+      <button class="chip">📋 Checklist <span class="badge">8/8</span></button>
+      <button class="chip">📝 Notes <span class="badge">2</span></button>
+    </div>
+  </div>
+
+  <div class="hub">
+    <div class="hero upcoming">
+      <div>
+        <span class="pill">In 8 days</span>
+        <h2>Pickens Jewelers</h2>
+        <div class="meta">📍 Atlanta, GA · 📅 May 12–14, 2026</div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="l">Spent</div><div class="v">$148K</div></div>
+      <div class="stat"><div class="l">Customers</div><div class="v">24</div></div>
+      <div class="stat"><div class="l">Buyers</div><div class="v">3/3</div></div>
+      <div class="stat warn"><div class="l">⚠ Open gates</div><div class="v">3</div></div>
+    </div>
+    <div class="chips">
+      <button class="chip">👥 Buyers <span class="badge">3/3</span></button>
+      <button class="chip warn">✈️ Travel <span class="badge">2/3</span></button>
+      <button class="chip warn">📣 Marketing <span class="badge">!</span></button>
+      <button class="chip">📦 Assets</button>
+      <button class="chip warn">🎓 Brief Staff <span class="badge">2</span></button>
+      <button class="chip warn">📋 Checklist <span class="badge">3</span></button>
+      <button class="chip">💰 Ad Spend</button>
+      <button class="chip danger">🚫 Cancel</button>
+    </div>
+  </div>
+
+  <div class="hub">
+    <div class="hero reserved">
+      <div>
+        <span class="pill">Save the Date · Reserved</span>
+        <h2>📌 Burkes Jewelers</h2>
+        <div class="meta">📍 Tampa, FL · 📅 May 21–23, 2026</div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="l">Buyers</div><div class="v">2/3</div></div>
+      <div class="stat warn"><div class="l">Open gates</div><div class="v">5</div></div>
+    </div>
+    <div class="chips">
+      <button class="chip primary">✅ Promote to Booked</button>
+      <button class="chip">👥 Buyers <span class="badge">2/3</span></button>
+      <button class="chip">📣 Marketing 🔒</button>
+      <button class="chip warn">📋 Checklist <span class="badge">5</span></button>
+      <button class="chip danger">🚫 Cancel</button>
+    </div>
+  </div>
+
+  <div class="principle">
+    <b>5d · Pill chips.</b> Action launchers shrink to single-line rounded chips with optional count
+    badges. Visually quietest variant — looks like a row of tags. Lets you cram 8+ actions on a card
+    without dominating the card. Color/badges call attention to the things that need work; everything
+    else fades. Best when most days you just want to glance and move on.
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>5a · Compact density</title>
+<style>
+  :root {
+    --ink: #1a1a16; --ash: #4A4A42; --mist: #A8A89A;
+    --cream: #FAF8F4; --cream2: #EDE7DA; --pearl: #D9D2C0;
+    --green: #1D6B44; --green-dark: #14532D; --green3: #7EC8A0; --green-pale: #E6F4EC;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+         margin: 0; background: var(--cream2); color: var(--ink); }
+  a { color: var(--green-dark); }
+  .top-back { padding: 14px 20px; background: #fff; border-bottom: 1px solid var(--pearl); }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
+  .header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+  h1 { font-size: 22px; margin: 0; }
+  .actions { display: flex; gap: 8px; }
+  .btn { padding: 7px 12px; border-radius: 6px; border: 1px solid var(--pearl); background: #fff; cursor: pointer; font-weight: 700; font-size: 12px; }
+  .btn.primary { background: var(--green); color: #fff; border-color: var(--green); }
+
+  .hub {
+    background: #fff; border: 1px solid var(--pearl); border-radius: 10px;
+    margin-bottom: 8px; overflow: hidden;
+  }
+  .hub.reserved { border-style: dashed; }
+  .top-bar {
+    display: grid; grid-template-columns: 8px 1fr auto;
+    align-items: center; gap: 12px;
+    padding: 10px 14px;
+  }
+  .accent { background: var(--green); align-self: stretch; min-height: 32px; border-radius: 2px; }
+  .accent.this-week { background: #DC2626; }
+  .accent.reserved { background: #D97706; }
+  .accent.upcoming { background: var(--green); }
+  .top-bar h2 { font-size: 14px; font-weight: 800; margin: 0; }
+  .top-bar .meta { font-size: 11px; color: var(--mist); margin-top: 1px; }
+  .pill { display: inline-block; padding: 2px 7px; border-radius: 99; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+  .pill-week { background: #fee2e2; color: #991b1b; }
+  .pill-upcoming { background: var(--green-pale); color: var(--green-dark); }
+  .pill-reserved { background: #fef3c7; color: #92400e; }
+
+  .stats {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;
+    border-top: 1px solid var(--cream2); background: var(--cream);
+    font-size: 11px;
+  }
+  .stat { padding: 6px 14px; border-right: 1px solid var(--cream2); }
+  .stat:last-child { border-right: none; }
+  .stat .l { color: var(--mist); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; font-size: 10px; }
+  .stat .v { font-size: 14px; font-weight: 800; margin-top: 1px; }
+  .stat.warn .v { color: #92400e; }
+
+  .launchers {
+    display: flex; gap: 4px; flex-wrap: wrap;
+    padding: 8px 12px; border-top: 1px solid var(--cream2);
+  }
+  .launch {
+    background: var(--cream); border: 1px solid var(--pearl); border-radius: 5px;
+    padding: 5px 10px; font-size: 11px; font-weight: 700; cursor: pointer;
+    font-family: inherit;
+  }
+  .launch:hover { background: var(--green-pale); border-color: var(--green3); }
+  .launch.danger { color: #b22234; border-color: #fecdd3; }
+  .launch.primary { background: var(--green); color: #fff; border-color: var(--green); }
+
+  .principle { margin-top: 22px; padding: 14px 18px; background: #fff; border: 1px solid var(--pearl); border-radius: 10px; font-size: 13px; color: var(--ash); line-height: 1.55; }
+  .principle b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="top-back"><a href="/mockups/buying-events/">← Back to all mockups</a></div>
+
+<div class="container">
+  <div class="header">
+    <h1>◆ Buying Events</h1>
+    <div class="actions">
+      <button class="btn">📌 Save the Date</button>
+      <button class="btn primary">+ New Event</button>
+    </div>
+  </div>
+
+  <div class="hub">
+    <div class="top-bar">
+      <div class="accent this-week"></div>
+      <div>
+        <h2>Kay Cameron Jewelers <span class="pill pill-week">This week · Day 3</span></h2>
+        <div class="meta">Sayville, NY · May 7–9</div>
+      </div>
+      <div></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="l">Spent</div><div class="v">$311K</div></div>
+      <div class="stat"><div class="l">Customers</div><div class="v">63</div></div>
+      <div class="stat"><div class="l">Buyers</div><div class="v">3/3</div></div>
+      <div class="stat"><div class="l">Close</div><div class="v">89%</div></div>
+    </div>
+    <div class="launchers">
+      <button class="launch primary">📊 Day Entry</button>
+      <button class="launch">👥 Buyers</button>
+      <button class="launch">✈️ Travel</button>
+      <button class="launch">📣 Marketing</button>
+      <button class="launch">📋 Checklist</button>
+      <button class="launch">📝 Notes</button>
+    </div>
+  </div>
+
+  <div class="hub">
+    <div class="top-bar">
+      <div class="accent upcoming"></div>
+      <div>
+        <h2>Pickens Jewelers <span class="pill pill-upcoming">In 8 days</span></h2>
+        <div class="meta">Atlanta, GA · May 12–14</div>
+      </div>
+      <div></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="l">Spent</div><div class="v">$148K</div></div>
+      <div class="stat"><div class="l">Customers</div><div class="v">24</div></div>
+      <div class="stat"><div class="l">Buyers</div><div class="v">3/3</div></div>
+      <div class="stat warn"><div class="l">⚠ Open</div><div class="v">3</div></div>
+    </div>
+    <div class="launchers">
+      <button class="launch">👥 Buyers</button>
+      <button class="launch">✈️ Travel 2/3</button>
+      <button class="launch">📣 Marketing</button>
+      <button class="launch">📦 Assets</button>
+      <button class="launch">🎓 Brief Staff</button>
+      <button class="launch">📋 Checklist</button>
+      <button class="launch">💰 Ad Spend</button>
+      <button class="launch danger">🚫 Cancel</button>
+    </div>
+  </div>
+
+  <div class="hub reserved">
+    <div class="top-bar">
+      <div class="accent reserved"></div>
+      <div>
+        <h2>📌 Burkes Jewelers <span class="pill pill-reserved">Save the Date</span></h2>
+        <div class="meta">Tampa, FL · May 21–23</div>
+      </div>
+      <div></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="l">Buyers</div><div class="v">2/3</div></div>
+      <div class="stat warn"><div class="l">Open</div><div class="v">5</div></div>
+      <div class="stat"><div class="l">Marketing</div><div class="v">—</div></div>
+      <div class="stat"><div class="l">Status</div><div class="v" style="font-size:11px;">📌 Reserved</div></div>
+    </div>
+    <div class="launchers">
+      <button class="launch primary">✅ Promote</button>
+      <button class="launch">👥 Buyers</button>
+      <button class="launch">📣 Marketing</button>
+      <button class="launch">📋 Checklist</button>
+      <button class="launch danger">🚫 Cancel</button>
+    </div>
+  </div>
+
+  <div class="principle">
+    <b>5a · Compact density.</b> Same hub-with-launchers idea but stripped to its tightest form.
+    Thin colored accent bar on the left, smaller stat cells, smaller launcher chips. 3-4 events fit
+    on screen at once on a laptop without scrolling. Best for power users who want everything visible.
+  </div>
+</div>
+</body>
+</html>
