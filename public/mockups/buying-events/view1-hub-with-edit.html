@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>View 1 (Hub) + customize launchers</title>
+<style>
+  :root {
+    --ink: #1a1a16; --ash: #4A4A42; --mist: #A8A89A;
+    --cream: #FAF8F4; --cream2: #EDE7DA; --pearl: #D9D2C0;
+    --green: #1D6B44; --green-dark: #14532D; --green3: #7EC8A0; --green-pale: #E6F4EC;
+    --buying: #1E3A8A; --buying-pale: #DBEAFE;
+    --av-teal: #2A8A8A; --av-green: #1D6B44; --av-blue: #3B82F6;
+    --av-amber: #C97A1F; --av-plum: #7C3AED;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+         margin: 0; background: var(--cream2); color: var(--ink); }
+  a { color: var(--green-dark); }
+  .top-back { padding: 14px 20px; background: #fff; border-bottom: 1px solid var(--pearl); }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
+  .header {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+    gap: 12px; margin-bottom: 14px;
+  }
+  h1 { font-size: 22px; margin: 0; }
+  .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .btn { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--pearl); background: #fff; cursor: pointer; font-weight: 700; font-size: 13px; font-family: inherit; }
+  .btn:hover { background: var(--cream); }
+  .btn.primary { background: var(--green); color: #fff; border-color: var(--green); }
+  .btn.primary:hover { background: var(--green-dark); }
+  .btn.subtle { background: transparent; border-color: transparent; color: var(--ash); }
+  .btn.subtle:hover { background: var(--cream); border-color: var(--pearl); }
+
+  /* === View toggle === */
+  .view-toggle {
+    display: inline-flex; padding: 3px; background: #fff; border: 1px solid var(--pearl);
+    border-radius: 99px; margin-bottom: 18px;
+  }
+  .view-toggle button {
+    background: transparent; border: 0; padding: 7px 16px; font-size: 13px;
+    font-weight: 700; cursor: pointer; border-radius: 99px; color: var(--ash);
+    font-family: inherit;
+  }
+  .view-toggle button.active {
+    background: var(--green); color: #fff;
+  }
+
+  /* === Hub card === */
+  .event-hub {
+    background: #fff; border: 1px solid var(--pearl); border-radius: 14px;
+    overflow: hidden; margin-bottom: 16px;
+  }
+  .event-hub.reserved { border-style: dashed; border-color: var(--buying); }
+  .hub-top {
+    padding: 18px 22px; background: linear-gradient(160deg, #1E3A8A 0%, #1D4ED8 100%); color: #fff;
+    position: relative;
+  }
+  .hub-top.upcoming { background: linear-gradient(160deg, #14532D 0%, var(--green) 100%); }
+  .hub-top.this-week { background: linear-gradient(160deg, #DC2626 0%, #F59E0B 100%); }
+  .hub-top.reserved-bg { background: linear-gradient(160deg, #92400E 0%, #D97706 100%); }
+  .hub-top h2 { margin: 0 0 4px; font-size: 20px; font-weight: 900; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .hub-top .where { color: rgba(255,255,255,.85); font-size: 13px; }
+  .hub-top .when { color: rgba(255,255,255,.7); font-size: 12px; margin-top: 4px; }
+  .hub-top .pill {
+    display: inline-block; padding: 3px 10px; border-radius: 99px;
+    background: rgba(255,255,255,.2); font-size: 11px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .04em;
+  }
+
+  .buyers-row {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin-top: 12px; padding: 8px 12px;
+    background: rgba(255,255,255,.85);
+    border-radius: 99px; width: fit-content; color: var(--ink);
+  }
+  .av-stack { display: inline-flex; align-items: center; }
+  .av {
+    width: 30px; height: 30px; border-radius: 50%;
+    color: #fff; font-weight: 800; font-size: 11px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.05);
+  }
+  .av + .av { margin-left: -10px; }
+  .av.teal { background: var(--av-teal); } .av.green { background: var(--av-green); }
+  .av.blue { background: var(--av-blue); } .av.amber { background: var(--av-amber); }
+  .av.plum { background: var(--av-plum); }
+  .av.empty { background: #fff; color: var(--mist); border: 2px dashed #B8B8A8; box-shadow: none; font-size: 14px; }
+  .buyers-row .names { font-size: 13px; font-weight: 700; }
+  .buyers-row .names .missing { color: #B22234; margin-left: 4px; }
+
+  .kpis {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    border-top: 1px solid var(--cream2); border-bottom: 1px solid var(--cream2); background: var(--cream);
+  }
+  .kpi { padding: 14px 18px; border-right: 1px solid var(--cream2); }
+  .kpi:last-child { border-right: none; }
+  .kpi .l { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--mist); }
+  .kpi .v { font-size: 20px; font-weight: 900; margin-top: 2px; }
+  .kpi.warn .v { color: #92400e; }
+  .kpi.good .v { color: var(--green-dark); }
+
+  .launchers {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    padding: 14px; gap: 8px; background: #fff;
+  }
+  .launch {
+    background: var(--cream); border: 1px solid var(--pearl); border-radius: 8px;
+    padding: 12px 14px; text-align: left; cursor: pointer;
+    display: flex; align-items: center; gap: 10px;
+    font-family: inherit; font-size: 13px; font-weight: 700; color: var(--ink);
+  }
+  .launch:hover { background: var(--green-pale); border-color: var(--green3); }
+  .launch.promote { background: var(--green-pale); border-color: var(--green3); color: var(--green-dark); }
+  .launch.danger { color: #b22234; }
+  .launch .ico { font-size: 18px; }
+  .launch .lbl small { display: block; font-size: 10px; color: var(--mist); font-weight: 600; margin-top: 2px; }
+
+  /* === Edit launchers modal === */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.45);
+    display: none; align-items: center; justify-content: center;
+    padding: 20px; z-index: 100;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: #fff; border-radius: 14px; max-width: 520px; width: 100%;
+    max-height: 90vh; overflow: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,.3);
+  }
+  .modal-head { padding: 18px 22px; border-bottom: 1px solid var(--cream2); display: flex; justify-content: space-between; align-items: center; }
+  .modal-head h3 { margin: 0; font-size: 17px; }
+  .modal-head .x { background: transparent; border: 0; cursor: pointer; font-size: 22px; color: var(--mist); }
+  .modal-body { padding: 18px 22px; }
+  .modal-body .lede { color: var(--ash); font-size: 13px; margin: 0 0 14px; line-height: 1.5; }
+  .check-list { display: flex; flex-direction: column; gap: 6px; }
+  .check-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px; background: var(--cream); border: 1px solid var(--pearl); border-radius: 8px;
+    cursor: pointer;
+  }
+  .check-row:hover { background: var(--green-pale); border-color: var(--green3); }
+  .check-row input { width: 18px; height: 18px; cursor: pointer; accent-color: var(--green); }
+  .check-row .ico { font-size: 18px; }
+  .check-row .meta { flex: 1; }
+  .check-row .lbl { font-weight: 800; font-size: 13px; }
+  .check-row .sub { font-size: 11px; color: var(--mist); margin-top: 1px; }
+  .check-row.locked { opacity: .55; cursor: not-allowed; }
+  .check-row.locked input { pointer-events: none; }
+  .lock-tag { font-size: 10px; background: var(--cream2); color: var(--ash); padding: 2px 7px; border-radius: 99px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+
+  .modal-foot {
+    padding: 14px 22px; border-top: 1px solid var(--cream2);
+    display: flex; gap: 8px; justify-content: space-between; align-items: center;
+  }
+  .modal-foot .left { font-size: 12px; color: var(--mist); }
+
+  /* === View 2 (legacy stub) === */
+  .legacy-stub {
+    background: #fff; border: 1px solid var(--pearl); border-radius: 14px;
+    padding: 22px; text-align: center; color: var(--ash);
+  }
+  .legacy-stub h3 { margin: 0 0 6px; color: var(--ink); }
+  .legacy-stub .placeholder {
+    margin-top: 18px; padding: 30px; background: var(--cream); border: 1px dashed var(--pearl); border-radius: 10px;
+    color: var(--mist); font-size: 13px;
+  }
+
+  .principle {
+    margin-top: 22px; padding: 14px 18px; background: #fff;
+    border: 1px solid var(--pearl); border-radius: 10px;
+    font-size: 13px; color: var(--ash); line-height: 1.55;
+  }
+  .principle b { color: var(--ink); }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="top-back"><a href="/mockups/buying-events/">← Back to all mockups</a></div>
+
+<div class="container">
+  <div class="header">
+    <h1>◆ Buying Events</h1>
+    <div class="actions">
+      <button class="btn subtle" id="editBtn">✏️ Customize buttons</button>
+      <button class="btn">📌 Save the Date</button>
+      <button class="btn primary">+ New Event</button>
+    </div>
+  </div>
+
+  <div class="view-toggle">
+    <button id="v1Btn" class="active" onclick="setView(1)">View 1 · Hub</button>
+    <button id="v2Btn" onclick="setView(2)">View 2 · Legacy</button>
+  </div>
+
+  <!-- ===== VIEW 1 ===== -->
+  <div id="view1">
+
+    <!-- Event 1: This week -->
+    <div class="event-hub">
+      <div class="hub-top this-week">
+        <h2>Kay Cameron Jewelers <span class="pill">This week · Day 3</span></h2>
+        <div class="where">Sayville, NY</div>
+        <div class="when">📅 May 7 – May 9 · today is the last day</div>
+        <div class="buyers-row">
+          <div class="av-stack">
+            <span class="av teal" title="Max Weiner">MW</span>
+            <span class="av green" title="Tom Brady">TB</span>
+            <span class="av blue" title="Victor Adams">VA</span>
+          </div>
+          <span class="names">Max, Thomas, Victor</span>
+        </div>
+      </div>
+      <div class="kpis">
+        <div class="kpi good"><div class="l">Spent</div><div class="v">$311K</div></div>
+        <div class="kpi"><div class="l">Customers</div><div class="v">63</div></div>
+        <div class="kpi"><div class="l">Buyers</div><div class="v">3/3</div></div>
+        <div class="kpi"><div class="l">Close rate</div><div class="v">89%</div></div>
+      </div>
+      <div class="launchers">
+        <button class="launch" data-launcher="day_entry"><span class="ico">📊</span><span class="lbl">Day Entry<small>Today's data</small></span></button>
+        <button class="launch" data-launcher="buyers"><span class="ico">👥</span><span class="lbl">Buyers<small>3 assigned</small></span></button>
+        <button class="launch" data-launcher="travel"><span class="ico">✈️</span><span class="lbl">Travel<small>All booked</small></span></button>
+        <button class="launch" data-launcher="marketing"><span class="ico">📣</span><span class="lbl">Marketing<small>VDP + postcard</small></span></button>
+        <button class="launch" data-launcher="checklist"><span class="ico">📋</span><span class="lbl">Checklist<small>4 of 6 done</small></span></button>
+        <button class="launch" data-launcher="notes"><span class="ico">📝</span><span class="lbl">Notes<small>2 lessons saved</small></span></button>
+      </div>
+    </div>
+
+    <!-- Event 2: Upcoming -->
+    <div class="event-hub">
+      <div class="hub-top upcoming">
+        <h2>Pickens Jewelers <span class="pill">In 8 days</span></h2>
+        <div class="where">Atlanta, GA</div>
+        <div class="when">📅 May 12 – May 14, 2026</div>
+        <div class="buyers-row">
+          <div class="av-stack">
+            <span class="av amber" title="Joe Romeo">JR</span>
+            <span class="av plum" title="Lori Smith">LS</span>
+            <span class="av teal" title="Marv Klein">MK</span>
+          </div>
+          <span class="names">Joe, Lori, Marv</span>
+        </div>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><div class="l">Spent</div><div class="v">$148K</div></div>
+        <div class="kpi"><div class="l">Customers</div><div class="v">24</div></div>
+        <div class="kpi"><div class="l">Buyers</div><div class="v">3/3</div></div>
+        <div class="kpi warn"><div class="l">⚠ Open</div><div class="v">3</div></div>
+      </div>
+      <div class="launchers">
+        <button class="launch" data-launcher="buyers"><span class="ico">👥</span><span class="lbl">Buyers<small>3 assigned</small></span></button>
+        <button class="launch" data-launcher="travel"><span class="ico">✈️</span><span class="lbl">Travel<small>2 of 3 booked</small></span></button>
+        <button class="launch" data-launcher="marketing"><span class="ico">📣</span><span class="lbl">Marketing<small>VDP done · postcard done</small></span></button>
+        <button class="launch" data-launcher="assets"><span class="ico">📦</span><span class="lbl">Assets<small>None ordered</small></span></button>
+        <button class="launch" data-launcher="brief_staff"><span class="ico">🎓</span><span class="lbl">Brief staff<small>Not yet done</small></span></button>
+        <button class="launch" data-launcher="checklist"><span class="ico">📋</span><span class="lbl">Checklist<small>2 of 6 done</small></span></button>
+        <button class="launch" data-launcher="ad_spend"><span class="ico">💰</span><span class="lbl">Ad Spend<small>$2,840</small></span></button>
+        <button class="launch danger" data-launcher="cancel"><span class="ico">🚫</span><span class="lbl">Cancel<small>—</small></span></button>
+      </div>
+    </div>
+
+    <!-- Event 3: Reserved -->
+    <div class="event-hub reserved">
+      <div class="hub-top reserved-bg">
+        <h2>📌 Burkes Jewelers <span class="pill">Save the Date</span></h2>
+        <div class="where">Tampa, FL</div>
+        <div class="when">📅 May 21 – May 23 · 17 days from now · Reserved</div>
+        <div class="buyers-row">
+          <div class="av-stack">
+            <span class="av blue" title="Rich Welsch">RW</span>
+            <span class="av teal" title="Max Weiner">MW</span>
+            <span class="av empty" title="Open buyer slot">+</span>
+          </div>
+          <span class="names">Rich, Max <span class="missing">· 1 slot open</span></span>
+        </div>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><div class="l">Buyers</div><div class="v">2/3</div></div>
+        <div class="kpi warn"><div class="l">Open gates</div><div class="v">5</div></div>
+        <div class="kpi"><div class="l">Marketing</div><div class="v">—</div></div>
+        <div class="kpi"><div class="l">Status</div><div class="v" style="font-size: 13px;">📌 Reserved</div></div>
+      </div>
+      <div class="launchers">
+        <button class="launch promote" data-launcher="promote"><span class="ico">✅</span><span class="lbl">Promote to Booked<small>Triggers notifications</small></span></button>
+        <button class="launch" data-launcher="buyers"><span class="ico">👥</span><span class="lbl">Buyers</span></button>
+        <button class="launch" data-launcher="marketing"><span class="ico">📣</span><span class="lbl">Marketing</span></button>
+        <button class="launch" data-launcher="checklist"><span class="ico">📋</span><span class="lbl">Checklist</span></button>
+        <button class="launch danger" data-launcher="cancel"><span class="ico">🚫</span><span class="lbl">Cancel</span></button>
+      </div>
+    </div>
+
+    <div class="principle">
+      <b>View 1 · Hub.</b> Per-event hub with phase-colored hero, buyer chips, KPIs, and action launchers.
+      Click <b>✏️ Customize buttons</b> at the top to choose which launchers appear on every card. The
+      preference saves to your account so the page stays as you set it. <i>Day Entry, Buyers and Promote
+      to Booked are always-on (locked) because they're load-bearing for the workflow.</i>
+    </div>
+  </div>
+
+  <!-- ===== VIEW 2 (legacy stub) ===== -->
+  <div id="view2" class="hidden">
+    <div class="legacy-stub">
+      <h3>View 2 · Legacy</h3>
+      <p>The dense, all-in-one buying events page that exists today. Every field, every section, all on one screen — useful when you need to dig deep without drilling in.</p>
+      <div class="placeholder">[ Existing legacy buying events page renders here ]</div>
+    </div>
+    <div class="principle">
+      <b>View 2 · Legacy.</b> Kept available as a fallback so power users can switch back any time.
+      View 1 is the new default, but the toggle at the top remembers your choice per device.
+    </div>
+  </div>
+</div>
+
+<!-- ===== Edit launchers modal ===== -->
+<div class="modal-backdrop" id="modal" onclick="if(event.target===this) closeModal()">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>✏️ Customize launcher buttons</h3>
+      <button class="x" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <p class="lede">Show or hide each action launcher across every event card. Toggle a row to see it apply live.</p>
+      <div class="check-list" id="checkList"></div>
+    </div>
+    <div class="modal-foot">
+      <span class="left" id="footStatus">All buttons visible</span>
+      <div>
+        <button class="btn subtle" onclick="resetAll()">Reset to default</button>
+        <button class="btn primary" onclick="closeModal()">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // List of all possible launchers. `locked` ones can't be hidden.
+  const LAUNCHERS = [
+    { key: 'day_entry',   icon: '📊', label: 'Day Entry',         sub: 'Live data during event',     locked: true },
+    { key: 'buyers',      icon: '👥', label: 'Buyers',            sub: 'Assigned roster',            locked: true },
+    { key: 'promote',     icon: '✅', label: 'Promote to Booked', sub: 'Reserved → Booked workflow', locked: true },
+    { key: 'travel',      icon: '✈️', label: 'Travel',            sub: 'Flights, hotels, cars' },
+    { key: 'marketing',   icon: '📣', label: 'Marketing',         sub: 'VDP, postcards, comms' },
+    { key: 'assets',      icon: '📦', label: 'Assets',            sub: 'Signage and printables' },
+    { key: 'brief_staff', icon: '🎓', label: 'Brief Staff',       sub: 'Pre-event walkthrough' },
+    { key: 'checklist',   icon: '📋', label: 'Checklist',         sub: 'Pre/in/post event tasks' },
+    { key: 'notes',       icon: '📝', label: 'Notes',             sub: 'Lessons learned' },
+    { key: 'ad_spend',    icon: '💰', label: 'Ad Spend',          sub: 'Paid social spend' },
+    { key: 'cancel',      icon: '🚫', label: 'Cancel',            sub: 'Soft-cancel the event' },
+  ];
+
+  // Persisted preference (try localStorage so toggling persists across reloads in the mockup).
+  const STORAGE_KEY = 'beb-mockup-hub-launcher-prefs';
+  function loadPrefs() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch { return null; }
+  }
+  function savePrefs(prefs) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs)); } catch {}
+  }
+
+  // visible state (key → bool). default: every launcher visible.
+  let visible = loadPrefs() || Object.fromEntries(LAUNCHERS.map(l => [l.key, true]));
+
+  function applyVisibility() {
+    document.querySelectorAll('[data-launcher]').forEach(el => {
+      const key = el.getAttribute('data-launcher');
+      if (visible[key] === false) el.classList.add('hidden');
+      else el.classList.remove('hidden');
+    });
+    const hiddenCount = LAUNCHERS.filter(l => visible[l.key] === false).length;
+    const status = document.getElementById('footStatus');
+    if (status) {
+      status.textContent = hiddenCount === 0
+        ? 'All buttons visible'
+        : `${hiddenCount} button${hiddenCount === 1 ? '' : 's'} hidden`;
+    }
+    savePrefs(visible);
+  }
+
+  function buildCheckList() {
+    const wrap = document.getElementById('checkList');
+    wrap.innerHTML = '';
+    LAUNCHERS.forEach(l => {
+      const row = document.createElement('label');
+      row.className = 'check-row' + (l.locked ? ' locked' : '');
+      row.innerHTML = `
+        <input type="checkbox" ${visible[l.key] !== false ? 'checked' : ''} ${l.locked ? 'disabled' : ''} data-key="${l.key}">
+        <span class="ico">${l.icon}</span>
+        <span class="meta">
+          <span class="lbl">${l.label}</span>
+          <span class="sub">${l.sub}</span>
+        </span>
+        ${l.locked ? '<span class="lock-tag">🔒 always</span>' : ''}
+      `;
+      const input = row.querySelector('input');
+      input.addEventListener('change', e => {
+        if (l.locked) { input.checked = true; return; }
+        visible[l.key] = e.target.checked;
+        applyVisibility();
+      });
+      wrap.appendChild(row);
+    });
+  }
+
+  function openModal()  { buildCheckList(); document.getElementById('modal').classList.add('open'); }
+  function closeModal() { document.getElementById('modal').classList.remove('open'); }
+  function resetAll()   { visible = Object.fromEntries(LAUNCHERS.map(l => [l.key, true])); buildCheckList(); applyVisibility(); }
+
+  function setView(n) {
+    document.getElementById('view1').classList.toggle('hidden', n !== 1);
+    document.getElementById('view2').classList.toggle('hidden', n !== 2);
+    document.getElementById('v1Btn').classList.toggle('active', n === 1);
+    document.getElementById('v2Btn').classList.toggle('active', n === 2);
+    document.getElementById('editBtn').classList.toggle('hidden', n !== 1);
+  }
+
+  document.getElementById('editBtn').addEventListener('click', openModal);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+  applyVisibility();
+</script>
+</body>
+</html>
