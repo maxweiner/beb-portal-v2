@@ -598,29 +598,65 @@ function IntakeRowCard({
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-            {(row.processing_state === 'parse_failed' || row.processing_state === 'parsed') && (
-              <button onClick={async () => {
-                setError(null)
-                try {
-                  const res = await fetch(`/api/intake/${row.id}/process`, { method: 'POST' })
-                  if (!res.ok) {
-                    const j = await res.json().catch(() => ({}))
-                    setError(j.error || `Reprocess failed (${res.status})`)
-                    return
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center', marginTop: 16, flexWrap: 'wrap' }}>
+            {/* Superadmin-only hard delete on the left so it's away from Save. */}
+            {currentUser?.role === 'superadmin' ? (
+              <button
+                onClick={async () => {
+                  setError(null)
+                  const ok = confirm(
+                    `Hard-delete intake form #${row.buy_form_number || '—'}?\n\n` +
+                    `This permanently removes the row, audit log, and all photos. ` +
+                    `Form #${row.buy_form_number || '—'} will be reusable. This cannot be undone.`,
+                  )
+                  if (!ok) return
+                  try {
+                    const session = await (await import('@/lib/supabase')).supabase.auth.getSession()
+                    const token = session.data.session?.access_token
+                    const res = await fetch(`/api/intake/${row.id}`, {
+                      method: 'DELETE',
+                      headers: token ? { Authorization: `Bearer ${token}` } : {},
+                    })
+                    if (!res.ok) {
+                      const j = await res.json().catch(() => ({}))
+                      setError(j.error || `Delete failed (${res.status})`)
+                      return
+                    }
+                    onChanged()
+                  } catch (e: any) {
+                    setError(e?.message || 'Delete failed')
                   }
-                  onChanged()
-                } catch (e: any) {
-                  setError(e?.message || 'Reprocess failed')
-                }
-              }} style={secondaryBtn}>♻ Reprocess OCR</button>
-            )}
-            <button onClick={save} disabled={!editPerm.canEdit || saving} style={{
-              ...primaryBtn, opacity: (editPerm.canEdit && !saving) ? 1 : 0.45,
-              cursor: (editPerm.canEdit && !saving) ? 'pointer' : 'not-allowed',
-            }}>
-              {saving ? 'Saving…' : '💾 Save changes'}
-            </button>
+                }}
+                style={{ ...secondaryBtn, color: '#B22234', borderColor: '#fecdd3' }}
+              >
+                🗑 Delete forever
+              </button>
+            ) : <span />}
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              {(row.processing_state === 'parse_failed' || row.processing_state === 'parsed') && (
+                <button onClick={async () => {
+                  setError(null)
+                  try {
+                    const res = await fetch(`/api/intake/${row.id}/process`, { method: 'POST' })
+                    if (!res.ok) {
+                      const j = await res.json().catch(() => ({}))
+                      setError(j.error || `Reprocess failed (${res.status})`)
+                      return
+                    }
+                    onChanged()
+                  } catch (e: any) {
+                    setError(e?.message || 'Reprocess failed')
+                  }
+                }} style={secondaryBtn}>♻ Reprocess OCR</button>
+              )}
+              <button onClick={save} disabled={!editPerm.canEdit || saving} style={{
+                ...primaryBtn, opacity: (editPerm.canEdit && !saving) ? 1 : 0.45,
+                cursor: (editPerm.canEdit && !saving) ? 'pointer' : 'not-allowed',
+              }}>
+                {saving ? 'Saving…' : '💾 Save changes'}
+              </button>
+            </div>
           </div>
         </div>
       )}
