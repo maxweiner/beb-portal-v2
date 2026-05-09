@@ -98,7 +98,7 @@ function initials(name: string): string {
 // ── Component ────────────────────────────────────────────────
 export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
   const ctx = useApp()
-  const { stores, user, brand, users, setTravelIntent, setDayEntryIntent, reload } = ctx
+  const { stores, user, brand, users, setTravelIntent, setDayEntryIntent } = ctx
 
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || user?.is_partner === true
   const canCancel = user?.role === 'superadmin' || user?.is_partner === true
@@ -121,14 +121,21 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
   const [window, setWindow] = useState<'upcoming' | 'past'>('upcoming')
 
   // Per-user hidden-launchers list. Lives in users.preferences.buying_events_hub_hidden_launchers.
-  const hiddenFromPrefs: LauncherKey[] = useMemo(() => {
+  // Initialized from the DB once on mount; thereafter, the local state is the
+  // source of truth for this session. Saves write through to the DB. We
+  // intentionally don't sync local state from `user.preferences` on every
+  // re-render — AppContext can refetch users on focus/poll, which would
+  // otherwise blow away an in-flight toggle before the round-trip completes.
+  const initialHidden = useMemo<Set<LauncherKey>>(() => {
     const arr = (user?.preferences as any)?.buying_events_hub_hidden_launchers
-    return Array.isArray(arr) ? arr.filter((k: string): k is LauncherKey =>
+    if (!Array.isArray(arr)) return new Set()
+    return new Set(arr.filter((k: string): k is LauncherKey =>
       LAUNCHERS.some(l => l.key === k && !l.locked)
-    ) : []
-  }, [user?.preferences])
-  const [hidden, setHidden] = useState<Set<LauncherKey>>(new Set(hiddenFromPrefs))
-  useEffect(() => { setHidden(new Set(hiddenFromPrefs)) }, [hiddenFromPrefs])
+    ))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const [hidden, setHidden] = useState<Set<LauncherKey>>(initialHidden)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   // Fetch readiness data (mirrors PreEventTab).
   useEffect(() => {
@@ -195,16 +202,30 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
   }, [travelAcks])
 
   async function saveHidden(next: Set<LauncherKey>) {
+    // Optimistic local update — UI reflects the change immediately.
     setHidden(next)
+    setSaveError(null)
     if (!user?.id) return
     const nextPrefs = { ...(user.preferences || {}), buying_events_hub_hidden_launchers: Array.from(next) }
-    const { error } = await supabase.from('users').update({ preferences: nextPrefs }).eq('id', user.id)
+    const { error, data, status } = await supabase
+      .from('users')
+      .update({ preferences: nextPrefs })
+      .eq('id', user.id)
+      .select('preferences')
     if (error) {
-      console.error('Failed to save hub launcher prefs', error)
+      console.error('[HubView] save hub launcher prefs failed', { status, error })
+      setSaveError(error.message)
       return
     }
-    // Refresh AppContext.user so other components see the change.
-    void reload(brand)
+    if (!data || data.length === 0) {
+      // RLS silently rejected the update (no rows matched the WITH CHECK).
+      console.error('[HubView] save returned 0 rows — likely RLS rejection on users row', { userId: user.id })
+      setSaveError('Settings could not be saved (permission denied)')
+      return
+    }
+    // Don't call reload() here — that would refetch every user/store/event in
+    // the app just to mirror a value we already have locally. Local state is
+    // already correct; the next page load will read the persisted value.
   }
 
   function toggleHidden(key: LauncherKey) {
@@ -388,6 +409,7 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
           hidden={hidden}
           onToggle={toggleHidden}
           onClose={() => setCustomizeOpen(false)}
+          saveError={saveError}
         />
       )}
     </div>
@@ -640,8 +662,13 @@ function Launcher({
 // ── Customize-buttons modal ──────────────────────────────────
 
 function CustomizeModal({
-  hidden, onToggle, onClose,
-}: { hidden: Set<LauncherKey>; onToggle: (k: LauncherKey) => void; onClose: () => void }) {
+  hidden, onToggle, onClose, saveError,
+}: {
+  hidden: Set<LauncherKey>
+  onToggle: (k: LauncherKey) => void
+  onClose: () => void
+  saveError: string | null
+}) {
   const hiddenCount = Array.from(hidden).length
   return (
     <div
@@ -708,6 +735,14 @@ function CustomizeModal({
             })}
           </div>
         </div>
+        {saveError && (
+          <div style={{
+            padding: '10px 22px', background: '#FEF2F2', color: '#B22234',
+            fontSize: 12, fontWeight: 700, borderTop: '1px solid #fecdd3',
+          }}>
+            ⚠ {saveError}
+          </div>
+        )}
         <div style={{
           padding: '14px 22px', borderTop: '1px solid var(--cream2)',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
