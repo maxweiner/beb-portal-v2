@@ -46,11 +46,13 @@ type ReadinessKey = typeof READINESS[number]['key']
 const STATUS_LABEL: Record<EventStatus, string> = {
   reserved: 'Reserved',
   scheduled: 'Scheduled',
+  completed: 'Completed',
   cancelled: 'Cancelled',
 }
 const STATUS_COLOR: Record<EventStatus, { bg: string; fg: string }> = {
   reserved:  { bg: '#FFFBEB', fg: '#92400E' },
   scheduled: { bg: '#FEF3C7', fg: '#92400E' },
+  completed: { bg: '#DBEAFE', fg: '#1E40AF' },
   cancelled: { bg: '#E5E7EB', fg: '#374151' },
 }
 
@@ -115,7 +117,14 @@ export default function BuyingEventSheet({ events }: SheetProps) {
       return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
     })()
     let base = events.slice()
-    if (statusFilter !== 'all') base = base.filter(e => (e.status || 'scheduled') === statusFilter)
+    if (statusFilter === 'all') {
+      // Default-hide completed — they pile up over time and clutter the
+      // working view. Use the 'completed' chip (or 'all' is misleading)
+      // to bring them back.
+      base = base.filter(e => (e.status || 'scheduled') !== 'completed')
+    } else {
+      base = base.filter(e => (e.status || 'scheduled') === statusFilter)
+    }
     if (!showPast) base = base.filter(e => !e.start_date || eventEndIso(e.start_date) >= cutoff)
     if (q) {
       base = base.filter(e => {
@@ -160,7 +169,7 @@ export default function BuyingEventSheet({ events }: SheetProps) {
           placeholder="Search store…"
           style={{ flex: '1 1 200px', maxWidth: 320, fontSize: 12, padding: '6px 10px' }}
         />
-        {(['all', 'scheduled', 'reserved', 'cancelled'] as const).map(f => (
+        {(['all', 'scheduled', 'reserved', 'completed', 'cancelled'] as const).map(f => (
           <button key={f} onClick={() => setStatusFilter(f)}
             className={statusFilter === f ? 'btn-primary btn-xs' : 'btn-outline btn-xs'}
             style={{ textTransform: 'capitalize' }}>
@@ -325,6 +334,7 @@ function SheetRow({
           >
             <option value="scheduled">Scheduled</option>
             <option value="reserved">📌 Reserved</option>
+            <option value="completed">Completed</option>
           </select>
         ) : (
           <span style={{
