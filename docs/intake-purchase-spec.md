@@ -210,7 +210,7 @@ These pre-fill — buyer can still edit the Day Entry screen manually after.
 2. **Phase 2 — background processor.** API route + queue. Decodes PDF417 from back-of-license photo. Updates row to `parsed`/`parse_failed`. Worksheet shows live status via Realtime.
 3. **Phase 3 — invoice OCR.** Add OCR pass via Anthropic Vision in the same background route. Pre-fills form #, check #, amount when confident.
 4. **Phase 4 — worksheet.** Per-day list + edit + submit-to-Day-Entry. Blocks submit while any row is `processing`.
-5. **Phase 5 — greeter check-in.** Tied to appointments, with optional license capture.
+5. **Phase 5 — greeter check-in.** **DEFERRED — build later.** Tied to appointments, with optional license capture. Build order skips this and goes 4 → 6.
 6. **Phase 6 — buy-form lookup tool.** Search page.
 7. **Phase 7 — customer dedup.** Auto-upsert into `customers` + dedup-confirm prompt.
 8. **Phase 8 — audit log + 3-day edit lock.**
