@@ -119,6 +119,11 @@
   .launch .ico { font-size: 18px; }
   .launch .lbl { display: block; }
   .launch .lbl small { display: block; font-size: 10px; color: var(--mist); font-weight: 600; margin-top: 2px; }
+  .launch .av-stack { margin-top: 4px; }
+  .launch .av-stack .av {
+    width: 20px; height: 20px; font-size: 9px; border-width: 1.5px;
+  }
+  .launch .av-stack .av + .av { margin-left: -7px; }
 
   .principle {
     margin-top: 22px; padding: 14px 18px; background: #fff;
@@ -146,13 +151,6 @@
       <h2>Kay Cameron Jewelers <span class="pill">This week · Day 3</span></h2>
       <div class="where">Sayville, NY</div>
       <div class="when">📅 May 7 – May 9 · today is the last day</div>
-      <div class="buyers-row">
-        <div class="av-stack">
-          <span class="av teal" title="Max Weiner">MW</span>
-          <span class="av green" title="Tom Brady">TB</span>
-          <span class="av blue" title="Victor Adams">VA</span>
-        </div>
-      </div>
     </div>
     <div class="kpis">
       <div class="kpi good"><div class="l">Spent</div><div class="v">$311K</div></div>
@@ -162,7 +160,7 @@
     </div>
     <div class="launchers">
       <button class="launch"><span class="ico">📊</span><span class="lbl">Day Entry<small>Today's data</small></span></button>
-      <button class="launch"><span class="ico">👥</span><span class="lbl">Buyers<small>3 assigned</small></span></button>
+      <button class="launch"><span class="ico">👥</span><span class="lbl">Buyers<span class="av-stack"><span class="av teal" title="Max Weiner">MW</span><span class="av green" title="Tom Brady">TB</span><span class="av blue" title="Victor Adams">VA</span></span></span></button>
       <button class="launch"><span class="ico">✈️</span><span class="lbl">Travel<small>All booked</small></span></button>
       <button class="launch"><span class="ico">📣</span><span class="lbl">Marketing<small>VDP + postcard</small></span></button>
       <button class="launch"><span class="ico">📋</span><span class="lbl">Checklist<small>4 of 6 done</small></span></button>
@@ -176,13 +174,6 @@
       <h2>Pickens Jewelers <span class="pill">In 8 days</span></h2>
       <div class="where">Atlanta, GA</div>
       <div class="when">📅 May 12 – May 14, 2026</div>
-      <div class="buyers-row">
-        <div class="av-stack">
-          <span class="av amber" title="Joe Romeo">JR</span>
-          <span class="av plum" title="Lori Smith">LS</span>
-          <span class="av teal" title="Marv Klein">MK</span>
-        </div>
-      </div>
     </div>
     <div class="kpis">
       <div class="kpi"><div class="l">Spent</div><div class="v">$148K</div></div>
@@ -191,7 +182,7 @@
       <div class="kpi warn"><div class="l">⚠ Open</div><div class="v">3</div></div>
     </div>
     <div class="launchers">
-      <button class="launch"><span class="ico">👥</span><span class="lbl">Buyers<small>3 assigned</small></span></button>
+      <button class="launch"><span class="ico">👥</span><span class="lbl">Buyers<span class="av-stack"><span class="av amber" title="Joe Romeo">JR</span><span class="av plum" title="Lori Smith">LS</span><span class="av teal" title="Marv Klein">MK</span></span></span></button>
       <button class="launch"><span class="ico">✈️</span><span class="lbl">Travel<small>2 of 3 booked</small></span></button>
       <button class="launch"><span class="ico">📣</span><span class="lbl">Marketing<small>VDP done · postcard done</small></span></button>
       <button class="launch"><span class="ico">📦</span><span class="lbl">Assets<small>None ordered</small></span></button>
@@ -208,13 +199,6 @@
       <h2>📌 Burkes Jewelers <span class="pill">Save the Date</span></h2>
       <div class="where">Tampa, FL</div>
       <div class="when">📅 May 21 – May 23 · 17 days from now · Reserved</div>
-      <div class="buyers-row">
-        <div class="av-stack">
-          <span class="av blue" title="Rich Welsch">RW</span>
-          <span class="av teal" title="Max Weiner">MW</span>
-          <span class="av empty" title="Open buyer slot">+</span>
-        </div>
-      </div>
     </div>
     <div class="kpis">
       <div class="kpi"><div class="l">Buyers</div><div class="v">2/3</div></div>
@@ -224,7 +208,7 @@
     </div>
     <div class="launchers">
       <button class="launch" style="background: var(--green-pale); border-color: var(--green3); color: var(--green-dark);"><span class="ico">✅</span><span class="lbl">Promote to Booked<small>Triggers notifications</small></span></button>
-      <button class="launch"><span class="ico">👥</span><span class="lbl">Buyers</span></button>
+      <button class="launch"><span class="ico">👥</span><span class="lbl">Buyers<span class="av-stack"><span class="av blue" title="Rich Welsch">RW</span><span class="av teal" title="Max Weiner">MW</span><span class="av empty" title="Open buyer slot">+</span></span></span></button>
       <button class="launch"><span class="ico">📣</span><span class="lbl">Marketing</span></button>
       <button class="launch"><span class="ico">📋</span><span class="lbl">Checklist</span></button>
       <button class="launch"><span class="ico">🚫</span><span class="lbl">Cancel</span></button>
@@ -232,10 +216,10 @@
   </div>
 
   <div class="principle">
-    <b>5g · Hub + buyer avatars in the header.</b> Same as #5, but adds the legacy "buyer chips" strip
-    inside the colored hero — overlapping initials in colored circles followed by first names. Open
-    slots show as a dashed "+" so understaffed events jump out at a glance. Hovering an avatar shows
-    full name. Most operationally useful variant when you're constantly asking "who's covering this one?"
+    <b>5g · Hub + buyer avatars on the Buyers button.</b> Same as #5, with overlapping initials shown
+    underneath the Buyers launcher (instead of in the hero — the hero stayed too tall). Open slots
+    show as a dashed "+" so understaffed events jump out at a glance. Hover an avatar for the full name.
+    Most operationally useful variant when you're constantly asking "who's covering this one?"
   </div>
 </div>
 </body>
