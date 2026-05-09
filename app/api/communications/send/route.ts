@@ -24,6 +24,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getAuthedUser } from '@/lib/expenses/serverAuth'
 import { blockIfImpersonating } from '@/lib/impersonation/server'
 import { sendEmail } from '@/lib/email'
+import { formatRecipients } from '@/lib/communications/recipients'
 import { renderAndUploadLetter } from '@/lib/communications/generatePdf'
 
 export const dynamic = 'force-dynamic'
@@ -87,11 +88,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Subject and body are required' }, { status: 400 })
   }
 
-  // Parse the comma-separated lists. Multiple recipients fan
-  // out to Resend's `to` array. Names are zipped by index when
-  // available; missing names are fine.
-  const emails = to_email.split(',').map(s => s.trim()).filter(Boolean)
-  const names  = (to_name || '').split(',').map(s => s.trim())
+  // Split comma-separated recipients into the right shape for Resend.
+  const { toForResend, emails } = formatRecipients(to_email, to_name)
   if (emails.length === 0) {
     return NextResponse.json({ error: 'At least one recipient email required' }, { status: 400 })
   }
@@ -100,10 +98,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `Invalid email: ${e}` }, { status: 400 })
     }
   }
-  // Resend accepts either a string or string[] for `to`.
-  const toForResend: string | string[] = emails.length === 1
-    ? (names[0] ? `${names[0]} <${emails[0]}>` : emails[0])
-    : emails.map((e, i) => names[i] ? `${names[i]} <${e}>` : e)
 
   const sb = admin()
 
