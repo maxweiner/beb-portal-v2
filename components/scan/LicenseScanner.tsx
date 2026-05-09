@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { parseAAMVABarcode, isValidParsedLicense, type ParsedLicense } from '@/lib/aamva-parser'
 import {
   createBarcodeDecoder, getDecoderStrategy, CAMERA_CONSTRAINTS,
-  type BarcodeDecoder, type DecoderStrategy,
+  type BarcodeDecoder, type DecoderStrategy, type ScanDiagnostics,
 } from '@/lib/barcode-decoder'
 import { compressLicensePhoto, dataURLtoBlob, uploadLicensePhoto } from '@/lib/licensePhotoUtils'
 import {
@@ -67,6 +67,8 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
   const [torchOn, setTorchOn] = useState(false)
   const [torchSupported, setTorchSupported] = useState(false)
   const [showUploadFallback, setShowUploadFallback] = useState(false)
+  const [cameraRes, setCameraRes] = useState<{ w: number; h: number } | null>(null)
+  const [diag, setDiag] = useState<ScanDiagnostics>({ attempts: 0, lastFormatSeen: null })
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -124,10 +126,14 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
     if (!mountedRef.current) { stream.getTracks().forEach(t => t.stop()); return }
     streamRef.current = stream
 
-    // Torch capability probe
+    // Torch capability probe + actual delivered camera resolution.
     const track = stream.getVideoTracks()[0]
     const caps = (track.getCapabilities?.() || {}) as any
     setTorchSupported(!!caps.torch)
+    const settings = (track.getSettings?.() || {}) as any
+    if (settings.width && settings.height) {
+      setCameraRes({ w: settings.width, h: settings.height })
+    }
 
     if (!videoRef.current) return
     videoRef.current.srcObject = stream
@@ -144,7 +150,9 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
     scanStartedAtRef.current = Date.now()
     recordScanAttempt()
 
-    decoder.startScanning(videoRef.current, handleDecoded)
+    decoder.startScanning(videoRef.current, handleDecoded, (d) => {
+      if (mountedRef.current) setDiag(d)
+    })
 
     // 30-second fallback — surface the upload button prominently.
     fallbackTimerRef.current = setTimeout(() => {
@@ -164,7 +172,9 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
       if (decoderRef.current) {
         const current = decoderRef.current
         // Restart scanning on the same decoder instance (it stopped itself).
-        if (videoRef.current) current.startScanning(videoRef.current, handleDecoded)
+        if (videoRef.current) current.startScanning(videoRef.current, handleDecoded, (d) => {
+          if (mountedRef.current) setDiag(d)
+        })
       }
       return
     }
@@ -496,6 +506,17 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
                   }}>
                     {strategy === 'native' ? '⚡ Native scanner' : strategy === 'zxing' ? '🔍 Enhanced scanner' : 'Upload only'}
                   </div>
+                  {/* Live diagnostics — read this to me if a scan won't decode. */}
+                  {cameraRes && (
+                    <div style={{
+                      fontSize: 10, color: 'rgba(255,255,255,.6)', fontFamily: 'monospace',
+                      background: 'rgba(0,0,0,.35)', padding: '2px 6px', borderRadius: 4,
+                      alignSelf: 'flex-start',
+                    }}>
+                      {cameraRes.w}×{cameraRes.h} · frames: {diag.attempts}
+                      {diag.lastFormatSeen ? ` · saw: ${diag.lastFormatSeen}` : ''}
+                    </div>
+                  )}
                 </div>
               )}
 

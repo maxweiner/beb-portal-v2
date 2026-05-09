@@ -17,11 +17,29 @@ import { processForBarcode } from './image-processing'
 
 export type DecoderStrategy = 'native' | 'zxing' | 'upload-only'
 
+/** Lightweight diagnostic snapshot the decoder pushes to callers each
+ *  attempt. Lets the scanner UI surface "we're scanning, this many frames
+ *  attempted, last format detected (if any)" so a user staring at a stuck
+ *  viewfinder knows whether the issue is the camera or the barcode. */
+export interface ScanDiagnostics {
+  attempts: number
+  /** Last barcode format any decoder saw — even if it wasn't PDF417. Useful
+   *  signal: if this stays empty, image quality / focus is the issue. If it
+   *  shows a non-PDF417 format, the camera is fine but the PDF417 either
+   *  isn't framed or its modules are too small. */
+  lastFormatSeen?: string | null
+}
+
 export interface BarcodeDecoder {
   readonly strategy: 'native' | 'zxing'
   /** Continuously scan a live video element. Calls `onResult` on first
-   *  successful decode. Caller is expected to invoke `stop()` afterwards. */
-  startScanning(video: HTMLVideoElement, onResult: (raw: string) => void): void
+   *  successful decode. Caller is expected to invoke `stop()` afterwards.
+   *  `onDiagnostic` (optional) fires once per attempt with progress info. */
+  startScanning(
+    video: HTMLVideoElement,
+    onResult: (raw: string) => void,
+    onDiagnostic?: (d: ScanDiagnostics) => void,
+  ): void
   /** One-shot decode of a static image or blob (upload fallback). */
   decodeImage(image: HTMLImageElement | Blob): Promise<string | null>
   /** Halt the scanning loop and release any resources. */
@@ -66,14 +84,20 @@ class NativeBarcodeDecoder implements BarcodeDecoder {
   private rafId: number | null = null
   private running = false
   private lastAttempt = 0
+  private attempts = 0
 
   constructor() {
     const w = window as any
     this.detector = new w.BarcodeDetector({ formats: ['pdf417'] })
   }
 
-  startScanning(video: HTMLVideoElement, onResult: (raw: string) => void) {
+  startScanning(
+    video: HTMLVideoElement,
+    onResult: (raw: string) => void,
+    onDiagnostic?: (d: ScanDiagnostics) => void,
+  ) {
     this.running = true
+    this.attempts = 0
     const MIN_INTERVAL_MS = 300
 
     const tick = async (t: number) => {
@@ -90,6 +114,7 @@ class NativeBarcodeDecoder implements BarcodeDecoder {
       }
 
       try {
+        this.attempts++
         const results = await this.detector.detect(video)
         if (!this.running) return
         if (results && results.length > 0 && results[0].rawValue) {
@@ -98,6 +123,7 @@ class NativeBarcodeDecoder implements BarcodeDecoder {
           onResult(raw)
           return
         }
+        onDiagnostic?.({ attempts: this.attempts, lastFormatSeen: null })
       } catch {
         // Detector may throw transiently on frame that isn't ready yet.
       }
@@ -154,9 +180,17 @@ class EnhancedZxingDecoder implements BarcodeDecoder {
   /** Alternates 0/1 across attempts so we cover both contrast-stretched and
    *  binarized passes without doubling the per-frame cost. */
   private tick = 0
+  private attempts = 0
+  private lastFormatSeen: string | null = null
 
-  startScanning(video: HTMLVideoElement, onResult: (raw: string) => void) {
+  startScanning(
+    video: HTMLVideoElement,
+    onResult: (raw: string) => void,
+    onDiagnostic?: (d: ScanDiagnostics) => void,
+  ) {
     this.running = true
+    this.attempts = 0
+    this.lastFormatSeen = null
     const INTERVAL_MS = 200
 
     const attempt = async () => {
@@ -165,15 +199,16 @@ class EnhancedZxingDecoder implements BarcodeDecoder {
       this.inFlight = true
 
       try {
-        // Center-crop to the viewfinder area before passing to zxing.
-        // The on-screen viewfinder is roughly the center 90% × 30% of the
-        // visible video; we widen vertically to 40% to absorb misaligned
-        // shots. Cropping at native resolution preserves the fine PDF417
-        // modules that get blurred when the whole frame is downscaled.
+        // Center-crop to a generous box around the viewfinder before passing
+        // to zxing. We widen to 90% × 60% (vs the visible 90% × 30% viewfinder)
+        // so users who frame the whole card instead of just the barcode still
+        // have the barcode region inside the crop. Cropping at native
+        // resolution preserves the fine PDF417 modules that get blurred when
+        // the whole frame is downscaled.
         const vw = video.videoWidth
         const vh = video.videoHeight
-        const cropW = Math.round(vw * 0.80)
-        const cropH = Math.round(vh * 0.40)
+        const cropW = Math.round(vw * 0.90)
+        const cropH = Math.round(vh * 0.60)
         const cropX = Math.round((vw - cropW) / 2)
         const cropY = Math.round((vh - cropH) / 2)
 
@@ -193,13 +228,24 @@ class EnhancedZxingDecoder implements BarcodeDecoder {
         ctx.putImageData(imageData, 0, 0)
         const processed = ctx.getImageData(0, 0, cropW, cropH)
 
-        const result = await decodePDF417FromImageData(processed)
+        this.attempts++
+        // Every 4th attempt: also try ALL formats. If zxing CAN'T see anything
+        // at all, the issue is focus/lighting; if it sees QR/code-128/etc. but
+        // never PDF417, the issue is barcode framing or resolution. Cheap to
+        // run occasionally — costs ~50ms once a second.
+        const tryAllFormats = (this.attempts % 4) === 0
+        const result = await decodePDF417FromImageData(processed, tryAllFormats)
         if (!this.running) return
         if (result?.isPDF417 && result.text) {
           this.stop()
           onResult(result.text)
           return
         }
+        if (result && !result.isPDF417 && result.format) {
+          // Saw something — note it for diagnostics, keep scanning.
+          this.lastFormatSeen = result.format
+        }
+        onDiagnostic?.({ attempts: this.attempts, lastFormatSeen: this.lastFormatSeen })
       } finally {
         this.inFlight = false
       }
