@@ -13,6 +13,7 @@ import {
 } from '@/lib/sales/trunkShows'
 import type { TrunkShow, TrunkShowStatus } from '@/types'
 import TrunkShowDetail from './TrunkShowDetail'
+import TrunkShowSheet from './TrunkShowSheet'
 import DatePicker from '@/components/ui/DatePicker'
 
 const STATUS_LABEL: Record<TrunkShowStatus, string> = {
@@ -30,7 +31,7 @@ const STATUS_COLOR: Record<TrunkShowStatus, { bg: string; fg: string }> = {
 
 type Filter = 'all' | 'reserved' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
 type Sort = 'date-desc' | 'date-asc' | 'rep' | 'store'
-type View = 'cards' | 'columns' | 'list'
+type View = 'cards' | 'columns' | 'list' | 'sheet'
 
 export default function TrunkShows({ setNav }: { setNav?: (n: import('@/app/page').NavPage) => void } = {}) {
   const { user, trunkShowStores, users, trunkShowIntent, setTrunkShowIntent } = useApp()
@@ -43,6 +44,9 @@ export default function TrunkShows({ setNav }: { setNav?: (n: import('@/app/page
   const [sort, setSort] = useState<Sort>('date-desc')
   const [view, setView] = useState<View>('cards')
   const [search, setSearch] = useState('')
+  // Default: hide trunk shows whose end_date is more than 30 days ago.
+  // Toggle to bring historical rows back into view.
+  const [showPast, setShowPast] = useState(false)
   const [createOpen, setCreateOpen] = useState<false | 'scheduled' | 'reserved'>(false)
   const [openId, setOpenId] = useState<string | null>(null)
 
@@ -69,7 +73,13 @@ export default function TrunkShows({ setNav }: { setNav?: (n: import('@/app/page
     const q = search.trim().toLowerCase()
     const repName = (r: TrunkShow) => (r.assigned_rep_id ? usersById.get(r.assigned_rep_id)?.name : null) || '~'
     const storeName = (r: TrunkShow) => storesById.get(r.store_id)?.name || '~'
+    const cutoff = (() => {
+      const d = new Date()
+      d.setDate(d.getDate() - 30)
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+    })()
     let base = rows.filter(r => filter === 'all' || effectiveStatus(r) === filter)
+    if (!showPast) base = base.filter(r => r.end_date >= cutoff)
     if (q) {
       base = base.filter(r => {
         const store = storesById.get(r.store_id)
@@ -91,7 +101,7 @@ export default function TrunkShows({ setNav }: { setNav?: (n: import('@/app/page
         default:          return b.start_date.localeCompare(a.start_date)
       }
     })
-  }, [rows, filter, sort, search, usersById, storesById])
+  }, [rows, filter, sort, search, showPast, usersById, storesById])
 
   if (openId) {
     return (
@@ -161,7 +171,7 @@ export default function TrunkShows({ setNav }: { setNav?: (n: import('@/app/page
         ))}
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', gap: 4, background: 'var(--cream2)', padding: 2, borderRadius: 6 }}>
-          {([['cards', '🗂'], ['columns', '🧱'], ['list', '☰']] as [View, string][]).map(([v, icon]) => (
+          {([['cards', '🗂'], ['columns', '🧱'], ['list', '☰'], ['sheet', '⊞']] as [View, string][]).map(([v, icon]) => (
             <button key={v} onClick={() => setView(v)}
               title={v}
               style={{
@@ -194,6 +204,13 @@ export default function TrunkShows({ setNav }: { setNav?: (n: import('@/app/page
             <option value="store">Store name</option>
           </select>
         </label>
+        <button
+          onClick={() => setShowPast(p => !p)}
+          className={showPast ? 'btn-primary btn-xs' : 'btn-outline btn-xs'}
+          title={showPast ? 'Hide trunk shows older than 30 days' : 'Show all historical trunk shows'}
+        >
+          {showPast ? 'All time' : 'Recent'}
+        </button>
         <span style={{ fontSize: 11, color: 'var(--mist)' }}>{filtered.length} of {rows.length}</span>
       </div>
 
@@ -252,6 +269,8 @@ export default function TrunkShows({ setNav }: { setNav?: (n: import('@/app/page
         </div>
       ) : view === 'columns' ? (
         <ColumnsView shows={filtered} usersById={usersById} storesById={storesById} onOpen={setOpenId} />
+      ) : view === 'sheet' ? (
+        <TrunkShowSheet shows={filtered} onChanged={() => void reload()} onOpen={setOpenId} />
       ) : (
         <ListView shows={filtered} usersById={usersById} storesById={storesById} onOpen={setOpenId} />
       )}

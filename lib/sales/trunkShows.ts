@@ -6,7 +6,23 @@ import { supabase } from '@/lib/supabase'
 import type { TrunkShow, TrunkShowHours, TrunkShowStatus } from '@/types'
 
 const SHOW_COLS = `id, store_id, start_date, end_date, assigned_rep_id,
-  status, notes, created_at, updated_at, deleted_at`
+  status, notes, vip_showing,
+  confirmation_letter_sent_at, postcards_email_sent_at, postcards_ordered_at,
+  proofed_at, final_files_sent_at, post_event_questionnaire_sent_at,
+  confirmation_letter_sent_by, postcards_email_sent_by, postcards_ordered_by,
+  proofed_by, final_files_sent_by, post_event_questionnaire_sent_by,
+  created_at, updated_at, deleted_at`
+
+/** Milestone column groups, used by the sheet UI to render five
+ *  checkbox+date columns and to auto-stamp date+user on toggle. */
+export const TRUNK_SHOW_MILESTONES = [
+  { key: 'confirmation_letter_sent', label: 'Confirmation Letter' },
+  { key: 'postcards_email_sent',     label: 'Postcards Email' },
+  { key: 'postcards_ordered',        label: 'Postcards Ordered' },
+  { key: 'proofed',                  label: 'Proofed' },
+  { key: 'final_files_sent',         label: 'Final Files Sent' },
+] as const
+export type TrunkShowMilestoneKey = typeof TRUNK_SHOW_MILESTONES[number]['key']
 
 const HOURS_COLS = `id, trunk_show_id, show_date, open_time, close_time, created_at`
 
@@ -44,6 +60,12 @@ export interface TrunkShowDraft {
   proofed_at?: string | null
   final_files_sent_at?: string | null
   post_event_questionnaire_sent_at?: string | null
+  confirmation_letter_sent_by?: string | null
+  postcards_email_sent_by?: string | null
+  postcards_ordered_by?: string | null
+  proofed_by?: string | null
+  final_files_sent_by?: string | null
+  post_event_questionnaire_sent_by?: string | null
 }
 
 export async function createTrunkShow(draft: TrunkShowDraft): Promise<TrunkShow> {
@@ -81,7 +103,9 @@ export async function updateTrunkShow(id: string, patch: Partial<TrunkShowDraft>
   if (patch.notes !== undefined) update.notes = patch.notes?.trim() || null
   if (patch.vip_showing !== undefined) update.vip_showing = patch.vip_showing
   for (const k of ['confirmation_letter_sent_at', 'postcards_email_sent_at', 'postcards_ordered_at',
-                   'proofed_at', 'final_files_sent_at', 'post_event_questionnaire_sent_at'] as const) {
+                   'proofed_at', 'final_files_sent_at', 'post_event_questionnaire_sent_at',
+                   'confirmation_letter_sent_by', 'postcards_email_sent_by', 'postcards_ordered_by',
+                   'proofed_by', 'final_files_sent_by', 'post_event_questionnaire_sent_by'] as const) {
     if (patch[k] !== undefined) update[k] = patch[k] || null
   }
   if (Object.keys(update).length === 0) return
