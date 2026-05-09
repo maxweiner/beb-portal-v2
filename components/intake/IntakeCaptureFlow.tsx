@@ -109,6 +109,10 @@ export default function IntakeCaptureFlow({ eventId, onClose, onSaved }: Props) 
       setError('Amount must be a non-negative number.'); setStep('quick-fields'); return
     }
 
+    // Decide whether the background processor will run. If the buyer
+    // captured a license front photo OR an invoice photo, we need parsing.
+    const willProcess = !!(frontPhoto || invoicePhoto)
+
     // 1. Insert the intake row first so we have an ID for storage paths.
     const { data: insertData, error: insertErr } = await supabase
       .from('customer_intakes')
@@ -123,7 +127,7 @@ export default function IntakeCaptureFlow({ eventId, onClose, onSaved }: Props) 
         intake_kind: 'purchase',
         phone: phone || null,
         email: email || null,
-        processing_state: 'parsed',  // Phase 1: manual entry, no worker
+        processing_state: willProcess ? 'processing' : 'parsed',
       })
       .select('id')
       .single()
@@ -171,7 +175,15 @@ export default function IntakeCaptureFlow({ eventId, onClose, onSaved }: Props) 
       changed_fields: { intake_kind: [null, 'purchase'], buy_form_number: [null, buyFormNumber || null] },
     })
 
-    // 5. Customer dedup (Phase 7). Best-effort — won't block on failure.
+    // 5. Background OCR (Phases 2 + 3). Fire-and-forget — worksheet
+    //    polls for the row's processing_state and updates live.
+    if (willProcess) {
+      void fetch(`/api/intake/${intakeId}/process`, { method: 'POST' }).catch(e => {
+        console.warn('[intake] background process trigger failed', e)
+      })
+    }
+
+    // 6. Customer dedup (Phase 7). Best-effort — won't block on failure.
     //    For Phase 1 the buyer hasn't typed first/last name (that comes from
     //    license parse, which doesn't run yet), so dedup will usually only
     //    succeed if phone or email was entered. Once Phase 2 ships, the

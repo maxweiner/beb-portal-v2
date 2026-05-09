@@ -132,6 +132,15 @@ export default function IntakeWorksheet({
 
   useEffect(() => { void fetchAll() }, [eventId, todayIso])
 
+  // Live-refresh while any row is still processing — Phases 2/3 rely on
+  // the user seeing parsed fields appear without manual refresh.
+  useEffect(() => {
+    const anyProc = intakes.some(r => r.processing_state === 'processing')
+    if (!anyProc) return
+    const t = setInterval(() => { void fetchAll() }, 3000)
+    return () => clearInterval(t)
+  }, [intakes])
+
   const visible = useMemo(() => {
     if (filter === 'mine' && user?.id) return intakes.filter(r => r.buyer_id === user.id)
     return intakes
@@ -590,6 +599,22 @@ function IntakeRowCard({
           </div>
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+            {(row.processing_state === 'parse_failed' || row.processing_state === 'parsed') && (
+              <button onClick={async () => {
+                setError(null)
+                try {
+                  const res = await fetch(`/api/intake/${row.id}/process`, { method: 'POST' })
+                  if (!res.ok) {
+                    const j = await res.json().catch(() => ({}))
+                    setError(j.error || `Reprocess failed (${res.status})`)
+                    return
+                  }
+                  onChanged()
+                } catch (e: any) {
+                  setError(e?.message || 'Reprocess failed')
+                }
+              }} style={secondaryBtn}>♻ Reprocess OCR</button>
+            )}
             <button onClick={save} disabled={!editPerm.canEdit || saving} style={{
               ...primaryBtn, opacity: (editPerm.canEdit && !saving) ? 1 : 0.45,
               cursor: (editPerm.canEdit && !saving) ? 'pointer' : 'not-allowed',
@@ -691,6 +716,11 @@ const closeBtn: React.CSSProperties = {
 const primaryBtn: React.CSSProperties = {
   background: 'var(--green)', color: '#fff', border: 'none',
   padding: '8px 14px', borderRadius: 6, fontWeight: 800, fontSize: 13,
+  cursor: 'pointer', fontFamily: 'inherit',
+}
+const secondaryBtn: React.CSSProperties = {
+  background: '#fff', color: 'var(--ink)', border: '1px solid var(--pearl)',
+  padding: '8px 14px', borderRadius: 6, fontWeight: 700, fontSize: 13,
   cursor: 'pointer', fontFamily: 'inherit',
 }
 const input: React.CSSProperties = {
