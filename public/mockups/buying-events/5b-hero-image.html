@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>5b · Hero image</title>
+<style>
+  :root {
+    --ink: #1a1a16; --ash: #4A4A42; --mist: #A8A89A;
+    --cream: #FAF8F4; --cream2: #EDE7DA; --pearl: #D9D2C0;
+    --green: #1D6B44; --green-dark: #14532D; --green3: #7EC8A0; --green-pale: #E6F4EC;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+         margin: 0; background: var(--cream2); color: var(--ink); }
+  a { color: var(--green-dark); }
+  .top-back { padding: 14px 20px; background: #fff; border-bottom: 1px solid var(--pearl); }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
+  .header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
+  h1 { font-size: 24px; margin: 0; }
+  .actions { display: flex; gap: 8px; }
+  .btn { padding: 8px 14px; border-radius: 7px; border: 1px solid var(--pearl); background: #fff; cursor: pointer; font-weight: 700; font-size: 13px; }
+  .btn.primary { background: var(--green); color: #fff; border-color: var(--green); }
+
+  .hub {
+    background: #fff; border: 1px solid var(--pearl); border-radius: 14px;
+    margin-bottom: 14px; overflow: hidden; box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+  }
+
+  /* Hero with image background + dark gradient overlay so text reads */
+  .hero {
+    position: relative; height: 180px; color: #fff;
+    background-size: cover; background-position: center;
+  }
+  .hero::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(0,0,0,.10) 0%, rgba(0,0,0,.65) 100%);
+  }
+  .hero.kay { background-image: linear-gradient(135deg, #DC2626 0%, #F59E0B 100%); }
+  .hero.pickens { background-image: linear-gradient(135deg, #14532D 0%, #1D6B44 100%); }
+  .hero.burkes {
+    background-image: linear-gradient(135deg, #92400E 0%, #D97706 100%);
+  }
+
+  .hero-content { position: relative; z-index: 1; padding: 16px 20px; height: 100%;
+                  display: flex; flex-direction: column; justify-content: space-between; }
+  .hero-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .pill { display: inline-block; padding: 4px 10px; border-radius: 99px; font-size: 11px; font-weight: 800;
+           text-transform: uppercase; letter-spacing: .04em; background: rgba(255,255,255,.85); color: #1a1a16; }
+  .pill.warn { background: #fbbf24; color: #78350F; }
+  .hero h2 { font-size: 24px; margin: 0; line-height: 1.15; font-weight: 800; }
+  .hero .meta { margin-top: 4px; font-size: 13px; opacity: .92; }
+  .hero .reserved-tag { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; opacity: .85; }
+  .logo-circle {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: rgba(255,255,255,.9); display: flex; align-items: center; justify-content: center;
+    font-size: 22px; box-shadow: 0 2px 8px rgba(0,0,0,.2);
+  }
+
+  .stats {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    border-bottom: 1px solid var(--cream2);
+  }
+  .stat { padding: 12px 18px; border-right: 1px solid var(--cream2); }
+  .stat:last-child { border-right: none; }
+  .stat .l { color: var(--mist); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; font-size: 11px; }
+  .stat .v { font-size: 22px; font-weight: 800; margin-top: 2px; }
+  .stat.warn .v { color: #92400E; }
+
+  .launchers { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+               gap: 10px; padding: 14px 18px; background: var(--cream); }
+  .launch {
+    background: #fff; border: 1px solid var(--pearl); border-radius: 9px; padding: 10px 12px;
+    cursor: pointer; font-family: inherit; text-align: left; transition: all .15s ease;
+  }
+  .launch:hover { background: var(--green-pale); border-color: var(--green3); transform: translateY(-1px); }
+  .launch .ic { font-size: 18px; line-height: 1; }
+  .launch .lb { font-weight: 800; font-size: 13px; margin-top: 4px; }
+  .launch .sb { font-size: 11px; color: var(--mist); margin-top: 2px; }
+  .launch.primary { background: var(--green); color: #fff; border-color: var(--green); }
+  .launch.primary .sb { color: rgba(255,255,255,.85); }
+  .launch.danger { color: #b22234; border-color: #fecdd3; }
+
+  .principle { margin-top: 24px; padding: 16px 20px; background: #fff; border: 1px solid var(--pearl); border-radius: 12px; font-size: 14px; color: var(--ash); line-height: 1.55; }
+  .principle b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="top-back"><a href="/mockups/buying-events/">← Back to all mockups</a></div>
+
+<div class="container">
+  <div class="header">
+    <h1>◆ Buying Events</h1>
+    <div class="actions">
+      <button class="btn">📌 Save the Date</button>
+      <button class="btn primary">+ New Event</button>
+    </div>
+  </div>
+
+  <div class="hub">
+    <div class="hero kay">
+      <div class="hero-content">
+        <div class="hero-row">
+          <div class="logo-circle">💍</div>
+          <span class="pill warn">This week · Day 3</span>
+        </div>
+        <div>
+          <h2>Kay Cameron Jewelers</h2>
+          <div class="meta">📍 Sayville, NY · May 7–9, 2026</div>
+        </div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="l">Spent</div><div class="v">$311K</div></div>
+      <div class="stat"><div class="l">Customers</div><div class="v">63</div></div>
+      <div class="stat"><div class="l">Buyers</div><div class="v">3/3</div></div>
+      <div class="stat"><div class="l">Close rate</div><div class="v">89%</div></div>
+    </div>
+    <div class="launchers">
+      <button class="launch primary">
+        <div class="ic">📊</div><div class="lb">Day Entry</div><div class="sb">Day 3 of 3 · update now</div>
+      </button>
+      <button class="launch"><div class="ic">👥</div><div class="lb">Buyers</div><div class="sb">Tom · Marv · Lori</div></button>
+      <button class="launch"><div class="ic">✈️</div><div class="lb">Travel</div><div class="sb">All booked</div></button>
+      <button class="launch"><div class="ic">📣</div><div class="lb">Marketing</div><div class="sb">Live · all sent</div></button>
+      <button class="launch"><div class="ic">📋</div><div class="lb">Checklist</div><div class="sb">8/8 complete</div></button>
+      <button class="launch"><div class="ic">📝</div><div class="lb">Notes</div><div class="sb">2 unread</div></button>
+    </div>
+  </div>
+
+  <div class="hub">
+    <div class="hero pickens">
+      <div class="hero-content">
+        <div class="hero-row">
+          <div class="logo-circle">💎</div>
+          <span class="pill">In 8 days</span>
+        </div>
+        <div>
+          <h2>Pickens Jewelers</h2>
+          <div class="meta">📍 Atlanta, GA · May 12–14, 2026</div>
+        </div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="l">Spent</div><div class="v">$148K</div></div>
+      <div class="stat"><div class="l">Customers</div><div class="v">24</div></div>
+      <div class="stat"><div class="l">Buyers</div><div class="v">3/3</div></div>
+      <div class="stat warn"><div class="l">⚠ Open gates</div><div class="v">3</div></div>
+    </div>
+    <div class="launchers">
+      <button class="launch"><div class="ic">👥</div><div class="lb">Buyers</div><div class="sb">3/3 confirmed</div></button>
+      <button class="launch"><div class="ic">✈️</div><div class="lb">Travel</div><div class="sb">2 of 3 booked</div></button>
+      <button class="launch"><div class="ic">📣</div><div class="lb">Marketing</div><div class="sb">Confirmation due</div></button>
+      <button class="launch"><div class="ic">📦</div><div class="lb">Assets</div><div class="sb">Signage, flyers</div></button>
+      <button class="launch"><div class="ic">🎓</div><div class="lb">Brief Staff</div><div class="sb">2 buyers pending</div></button>
+      <button class="launch"><div class="ic">📋</div><div class="lb">Checklist</div><div class="sb">3 open · 5 done</div></button>
+      <button class="launch"><div class="ic">💰</div><div class="lb">Ad Spend</div><div class="sb">$0 / $2.5k</div></button>
+      <button class="launch danger"><div class="ic">🚫</div><div class="lb">Cancel Event</div><div class="sb">&nbsp;</div></button>
+    </div>
+  </div>
+
+  <div class="hub">
+    <div class="hero burkes">
+      <div class="hero-content">
+        <div class="hero-row">
+          <div class="logo-circle">📌</div>
+          <span class="pill">Save the Date</span>
+        </div>
+        <div>
+          <div class="reserved-tag">📌 Reserved</div>
+          <h2>Burkes Jewelers</h2>
+          <div class="meta">📍 Tampa, FL · May 21–23, 2026</div>
+        </div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="l">Buyers</div><div class="v">2/3</div></div>
+      <div class="stat warn"><div class="l">Open gates</div><div class="v">5</div></div>
+      <div class="stat"><div class="l">Marketing</div><div class="v">—</div></div>
+      <div class="stat"><div class="l">Status</div><div class="v" style="font-size:14px; color:#92400E;">📌 Reserved</div></div>
+    </div>
+    <div class="launchers">
+      <button class="launch primary"><div class="ic">✅</div><div class="lb">Promote to Booked</div><div class="sb">Set date · open marketing</div></button>
+      <button class="launch"><div class="ic">👥</div><div class="lb">Buyers</div><div class="sb">2/3 confirmed</div></button>
+      <button class="launch"><div class="ic">📣</div><div class="lb">Marketing</div><div class="sb">Locked until promote</div></button>
+      <button class="launch"><div class="ic">📋</div><div class="lb">Checklist</div><div class="sb">5 to start</div></button>
+      <button class="launch danger"><div class="ic">🚫</div><div class="lb">Cancel</div><div class="sb">Release reservation</div></button>
+    </div>
+  </div>
+
+  <div class="principle">
+    <b>5b · Hero image.</b> The colored gradient becomes a tall hero with logo circle, status pill,
+    and big event name in white type. More photographic and emotionally distinct than the standard hub.
+    Each card feels like its own page. Best when you want operators to recognize an event by feel rather
+    than by reading the city/state line. Hero gradient still encodes phase color.
+  </div>
+</div>
+</body>
+</html>

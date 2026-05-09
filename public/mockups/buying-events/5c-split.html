@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>5c · Side-by-side split</title>
+<style>
+  :root {
+    --ink: #1a1a16; --ash: #4A4A42; --mist: #A8A89A;
+    --cream: #FAF8F4; --cream2: #EDE7DA; --pearl: #D9D2C0;
+    --green: #1D6B44; --green-dark: #14532D; --green3: #7EC8A0; --green-pale: #E6F4EC;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+         margin: 0; background: var(--cream2); color: var(--ink); }
+  a { color: var(--green-dark); }
+  .top-back { padding: 14px 20px; background: #fff; border-bottom: 1px solid var(--pearl); }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px 20px; }
+  .header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
+  h1 { font-size: 24px; margin: 0; }
+  .actions { display: flex; gap: 8px; }
+  .btn { padding: 8px 14px; border-radius: 7px; border: 1px solid var(--pearl); background: #fff; cursor: pointer; font-weight: 700; font-size: 13px; }
+  .btn.primary { background: var(--green); color: #fff; border-color: var(--green); }
+
+  .hub {
+    display: grid; grid-template-columns: 360px 1fr;
+    background: #fff; border: 1px solid var(--pearl); border-radius: 14px;
+    margin-bottom: 14px; overflow: hidden;
+  }
+  @media (max-width: 800px) { .hub { grid-template-columns: 1fr; } }
+
+  .left { padding: 20px 22px; color: #fff; display: flex; flex-direction: column; justify-content: space-between; }
+  .left.this-week { background: linear-gradient(160deg, #DC2626 0%, #F59E0B 100%); }
+  .left.upcoming { background: linear-gradient(160deg, #14532D 0%, var(--green) 100%); }
+  .left.reserved { background: linear-gradient(160deg, #92400E 0%, #D97706 100%); }
+
+  .pill { display: inline-block; padding: 4px 10px; border-radius: 99px; font-size: 11px; font-weight: 800;
+          text-transform: uppercase; letter-spacing: .04em; background: rgba(255,255,255,.85); color: #1a1a16; }
+  .left h2 { font-size: 22px; margin: 12px 0 4px 0; line-height: 1.15; }
+  .left .where { font-size: 13px; opacity: .92; }
+  .left .when { font-size: 13px; opacity: .92; margin-top: 2px; }
+
+  .kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; margin-top: 18px; }
+  .kpi { }
+  .kpi .l { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; opacity: .85; font-weight: 700; }
+  .kpi .v { font-size: 22px; font-weight: 800; margin-top: 2px; }
+  .kpi.warn .v { color: #FEF3C7; }
+
+  .right { padding: 20px 22px; }
+  .right h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--mist); margin: 0 0 12px 0; font-weight: 800; }
+  .launchers { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .launch {
+    background: var(--cream); border: 1px solid var(--pearl); border-radius: 9px; padding: 12px 14px;
+    cursor: pointer; font-family: inherit; text-align: left; transition: all .15s ease;
+  }
+  .launch:hover { background: var(--green-pale); border-color: var(--green3); transform: translateY(-1px); }
+  .launch .ic { font-size: 20px; }
+  .launch .lb { font-weight: 800; font-size: 13px; margin-top: 4px; }
+  .launch .sb { font-size: 11px; color: var(--mist); margin-top: 2px; }
+  .launch.primary { background: var(--green); color: #fff; border-color: var(--green); }
+  .launch.primary .sb { color: rgba(255,255,255,.85); }
+  .launch.danger { color: #b22234; border-color: #fecdd3; background: #fff; }
+
+  .principle { margin-top: 24px; padding: 16px 20px; background: #fff; border: 1px solid var(--pearl); border-radius: 12px; font-size: 14px; color: var(--ash); line-height: 1.55; }
+  .principle b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="top-back"><a href="/mockups/buying-events/">← Back to all mockups</a></div>
+
+<div class="container">
+  <div class="header">
+    <h1>◆ Buying Events</h1>
+    <div class="actions">
+      <button class="btn">📌 Save the Date</button>
+      <button class="btn primary">+ New Event</button>
+    </div>
+  </div>
+
+  <div class="hub">
+    <div class="left this-week">
+      <div>
+        <span class="pill">This week · Day 3</span>
+        <h2>Kay Cameron Jewelers</h2>
+        <div class="where">📍 Sayville, NY</div>
+        <div class="when">📅 May 7–9, 2026</div>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><div class="l">Spent</div><div class="v">$311K</div></div>
+        <div class="kpi"><div class="l">Customers</div><div class="v">63</div></div>
+        <div class="kpi"><div class="l">Buyers</div><div class="v">3/3</div></div>
+        <div class="kpi"><div class="l">Close rate</div><div class="v">89%</div></div>
+      </div>
+    </div>
+    <div class="right">
+      <h3>Actions</h3>
+      <div class="launchers">
+        <button class="launch primary"><div class="ic">📊</div><div class="lb">Day Entry</div><div class="sb">Day 3 · update now</div></button>
+        <button class="launch"><div class="ic">👥</div><div class="lb">Buyers</div><div class="sb">Tom · Marv · Lori</div></button>
+        <button class="launch"><div class="ic">✈️</div><div class="lb">Travel</div><div class="sb">All booked</div></button>
+        <button class="launch"><div class="ic">📣</div><div class="lb">Marketing</div><div class="sb">Live · all sent</div></button>
+        <button class="launch"><div class="ic">📋</div><div class="lb">Checklist</div><div class="sb">8/8 complete</div></button>
+        <button class="launch"><div class="ic">📝</div><div class="lb">Notes</div><div class="sb">2 unread</div></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="hub">
+    <div class="left upcoming">
+      <div>
+        <span class="pill">In 8 days</span>
+        <h2>Pickens Jewelers</h2>
+        <div class="where">📍 Atlanta, GA</div>
+        <div class="when">📅 May 12–14, 2026</div>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><div class="l">Spent</div><div class="v">$148K</div></div>
+        <div class="kpi"><div class="l">Customers</div><div class="v">24</div></div>
+        <div class="kpi"><div class="l">Buyers</div><div class="v">3/3</div></div>
+        <div class="kpi warn"><div class="l">⚠ Open gates</div><div class="v">3</div></div>
+      </div>
+    </div>
+    <div class="right">
+      <h3>Actions</h3>
+      <div class="launchers">
+        <button class="launch"><div class="ic">👥</div><div class="lb">Buyers</div><div class="sb">3/3 confirmed</div></button>
+        <button class="launch"><div class="ic">✈️</div><div class="lb">Travel</div><div class="sb">2 of 3 booked</div></button>
+        <button class="launch"><div class="ic">📣</div><div class="lb">Marketing</div><div class="sb">Confirmation due</div></button>
+        <button class="launch"><div class="ic">📦</div><div class="lb">Assets</div><div class="sb">Signage, flyers</div></button>
+        <button class="launch"><div class="ic">🎓</div><div class="lb">Brief Staff</div><div class="sb">2 buyers pending</div></button>
+        <button class="launch"><div class="ic">📋</div><div class="lb">Checklist</div><div class="sb">3 open · 5 done</div></button>
+        <button class="launch"><div class="ic">💰</div><div class="lb">Ad Spend</div><div class="sb">$0 / $2.5k</div></button>
+        <button class="launch danger"><div class="ic">🚫</div><div class="lb">Cancel</div><div class="sb">Soft cancel</div></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="hub">
+    <div class="left reserved">
+      <div>
+        <span class="pill">Save the Date</span>
+        <h2>📌 Burkes Jewelers</h2>
+        <div class="where">📍 Tampa, FL</div>
+        <div class="when">📅 May 21–23, 2026</div>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><div class="l">Buyers</div><div class="v">2/3</div></div>
+        <div class="kpi warn"><div class="l">Open gates</div><div class="v">5</div></div>
+      </div>
+    </div>
+    <div class="right">
+      <h3>Actions</h3>
+      <div class="launchers">
+        <button class="launch primary"><div class="ic">✅</div><div class="lb">Promote to Booked</div><div class="sb">Set date · open marketing</div></button>
+        <button class="launch"><div class="ic">👥</div><div class="lb">Buyers</div><div class="sb">2/3 confirmed</div></button>
+        <button class="launch"><div class="ic">📣</div><div class="lb">Marketing</div><div class="sb">Locked until promote</div></button>
+        <button class="launch"><div class="ic">📋</div><div class="lb">Checklist</div><div class="sb">5 to start</div></button>
+        <button class="launch danger"><div class="ic">🚫</div><div class="lb">Cancel</div><div class="sb">Release reservation</div></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="principle">
+    <b>5c · Side-by-side split.</b> Identity + KPIs sit on the colored left panel; launcher grid lives in
+    a clean white right panel. Faster to scan because the visual story (colored phase block) and the
+    work surface (action buttons) don't compete vertically. Best on desktop; collapses to stacked on mobile.
+  </div>
+</div>
+</body>
+</html>

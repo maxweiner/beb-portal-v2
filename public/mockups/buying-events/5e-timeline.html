@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>5e · Phase timeline</title>
+<style>
+  :root {
+    --ink: #1a1a16; --ash: #4A4A42; --mist: #A8A89A;
+    --cream: #FAF8F4; --cream2: #EDE7DA; --pearl: #D9D2C0;
+    --green: #1D6B44; --green-dark: #14532D; --green3: #7EC8A0; --green-pale: #E6F4EC;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+         margin: 0; background: var(--cream2); color: var(--ink); }
+  a { color: var(--green-dark); }
+  .top-back { padding: 14px 20px; background: #fff; border-bottom: 1px solid var(--pearl); }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
+  .header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
+  h1 { font-size: 24px; margin: 0; }
+  .actions { display: flex; gap: 8px; }
+  .btn { padding: 8px 14px; border-radius: 7px; border: 1px solid var(--pearl); background: #fff; cursor: pointer; font-weight: 700; font-size: 13px; }
+  .btn.primary { background: var(--green); color: #fff; border-color: var(--green); }
+
+  .hub {
+    background: #fff; border: 1px solid var(--pearl); border-radius: 14px;
+    margin-bottom: 14px; overflow: hidden;
+  }
+
+  .top {
+    padding: 18px 22px 0 22px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  }
+  .top h2 { font-size: 22px; margin: 0; }
+  .top .meta { font-size: 13px; color: var(--mist); margin-top: 4px; }
+  .pill { display: inline-block; padding: 4px 10px; border-radius: 99px; font-size: 11px; font-weight: 800;
+          text-transform: uppercase; letter-spacing: .04em; }
+  .pill.this-week { background: #fee2e2; color: #991b1b; }
+  .pill.upcoming { background: var(--green-pale); color: var(--green-dark); }
+  .pill.reserved { background: #fef3c7; color: #92400e; }
+
+  /* Phase timeline strip */
+  .timeline {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 0;
+    margin: 16px 22px 0 22px;
+    border: 1px solid var(--cream2); border-radius: 8px; overflow: hidden;
+  }
+  .phase {
+    padding: 8px 10px; text-align: center; font-size: 11px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .04em; color: var(--mist);
+    border-right: 1px solid var(--cream2); background: var(--cream);
+    position: relative;
+  }
+  .phase:last-child { border-right: none; }
+  .phase.done { background: #E6F4EC; color: var(--green-dark); }
+  .phase.current.this-week { background: linear-gradient(135deg, #DC2626 0%, #F59E0B 100%); color: #fff; }
+  .phase.current.upcoming { background: linear-gradient(135deg, #14532D 0%, var(--green) 100%); color: #fff; }
+  .phase.current.reserved { background: linear-gradient(135deg, #92400E 0%, #D97706 100%); color: #fff; }
+  .phase .step { font-size: 10px; opacity: .8; }
+  .phase .name { font-size: 12px; margin-top: 2px; }
+
+  .stats {
+    display: flex; gap: 24px; padding: 16px 22px;
+    border-top: 1px solid var(--cream2); border-bottom: 1px solid var(--cream2);
+    margin-top: 16px; background: var(--cream);
+  }
+  .stat .l { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--mist); font-weight: 700; }
+  .stat .v { font-size: 22px; font-weight: 800; }
+  .stat.warn .v { color: #92400E; }
+
+  .actions-strip { padding: 14px 22px; }
+  .actions-strip .label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--mist); font-weight: 800; margin-bottom: 10px;
+  }
+  .launchers { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .launch {
+    background: var(--cream); border: 1px solid var(--pearl); border-radius: 9px; padding: 10px 12px;
+    cursor: pointer; font-family: inherit; text-align: left; transition: all .15s ease;
+  }
+  .launch:hover { background: var(--green-pale); border-color: var(--green3); transform: translateY(-1px); }
+  .launch .ic { font-size: 18px; }
+  .launch .lb { font-weight: 800; font-size: 13px; margin-top: 4px; }
+  .launch .sb { font-size: 11px; color: var(--mist); margin-top: 2px; }
+  .launch.primary { background: var(--green); color: #fff; border-color: var(--green); }
+  .launch.primary .sb { color: rgba(255,255,255,.85); }
+  .launch.danger { color: #b22234; border-color: #fecdd3; background: #fff; }
+
+  .principle { margin-top: 24px; padding: 16px 20px; background: #fff; border: 1px solid var(--pearl); border-radius: 12px; font-size: 14px; color: var(--ash); line-height: 1.55; }
+  .principle b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="top-back"><a href="/mockups/buying-events/">← Back to all mockups</a></div>
+
+<div class="container">
+  <div class="header">
+    <h1>◆ Buying Events</h1>
+    <div class="actions">
+      <button class="btn">📌 Save the Date</button>
+      <button class="btn primary">+ New Event</button>
+    </div>
+  </div>
+
+  <div class="hub">
+    <div class="top">
+      <div>
+        <h2>Kay Cameron Jewelers</h2>
+        <div class="meta">📍 Sayville, NY · 📅 May 7–9, 2026</div>
+      </div>
+      <span class="pill this-week">Day 3 of 3</span>
+    </div>
+    <div class="timeline">
+      <div class="phase done"><div class="step">1</div><div class="name">Reserved</div></div>
+      <div class="phase done"><div class="step">2</div><div class="name">Booked</div></div>
+      <div class="phase done"><div class="step">3</div><div class="name">Marketing</div></div>
+      <div class="phase current this-week"><div class="step">4 · LIVE</div><div class="name">In Event</div></div>
+      <div class="phase"><div class="step">5</div><div class="name">Wrap up</div></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="l">Spent</div><div class="v">$311K</div></div>
+      <div class="stat"><div class="l">Customers</div><div class="v">63</div></div>
+      <div class="stat"><div class="l">Buyers</div><div class="v">3/3</div></div>
+      <div class="stat"><div class="l">Close rate</div><div class="v">89%</div></div>
+    </div>
+    <div class="actions-strip">
+      <div class="label">Actions for "In Event" phase</div>
+      <div class="launchers">
+        <button class="launch primary"><div class="ic">📊</div><div class="lb">Day Entry</div><div class="sb">Day 3 · update now</div></button>
+        <button class="launch"><div class="ic">👥</div><div class="lb">Buyers Onsite</div><div class="sb">Tom · Marv · Lori</div></button>
+        <button class="launch"><div class="ic">📝</div><div class="lb">Notes</div><div class="sb">2 unread</div></button>
+        <button class="launch"><div class="ic">📋</div><div class="lb">Checklist</div><div class="sb">8/8 complete</div></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="hub">
+    <div class="top">
+      <div>
+        <h2>Pickens Jewelers</h2>
+        <div class="meta">📍 Atlanta, GA · 📅 May 12–14, 2026</div>
+      </div>
+      <span class="pill upcoming">In 8 days</span>
+    </div>
+    <div class="timeline">
+      <div class="phase done"><div class="step">1</div><div class="name">Reserved</div></div>
+      <div class="phase done"><div class="step">2</div><div class="name">Booked</div></div>
+      <div class="phase current upcoming"><div class="step">3 · NOW</div><div class="name">Marketing</div></div>
+      <div class="phase"><div class="step">4</div><div class="name">In Event</div></div>
+      <div class="phase"><div class="step">5</div><div class="name">Wrap up</div></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="l">Spent</div><div class="v">$148K</div></div>
+      <div class="stat"><div class="l">Customers</div><div class="v">24</div></div>
+      <div class="stat"><div class="l">Buyers</div><div class="v">3/3</div></div>
+      <div class="stat warn"><div class="l">⚠ Open gates</div><div class="v">3</div></div>
+    </div>
+    <div class="actions-strip">
+      <div class="label">Actions for "Marketing" phase</div>
+      <div class="launchers">
+        <button class="launch primary"><div class="ic">📣</div><div class="lb">Marketing</div><div class="sb">Confirmation due</div></button>
+        <button class="launch"><div class="ic">✈️</div><div class="lb">Travel</div><div class="sb">2 of 3 booked</div></button>
+        <button class="launch"><div class="ic">📦</div><div class="lb">Assets</div><div class="sb">Signage, flyers</div></button>
+        <button class="launch"><div class="ic">🎓</div><div class="lb">Brief Staff</div><div class="sb">2 buyers pending</div></button>
+        <button class="launch"><div class="ic">💰</div><div class="lb">Ad Spend</div><div class="sb">$0 / $2.5k</div></button>
+        <button class="launch danger"><div class="ic">🚫</div><div class="lb">Cancel Event</div><div class="sb">Soft cancel</div></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="hub">
+    <div class="top">
+      <div>
+        <h2>📌 Burkes Jewelers</h2>
+        <div class="meta">📍 Tampa, FL · 📅 May 21–23, 2026</div>
+      </div>
+      <span class="pill reserved">Save the Date</span>
+    </div>
+    <div class="timeline">
+      <div class="phase current reserved"><div class="step">1 · NOW</div><div class="name">Reserved</div></div>
+      <div class="phase"><div class="step">2</div><div class="name">Booked</div></div>
+      <div class="phase"><div class="step">3</div><div class="name">Marketing</div></div>
+      <div class="phase"><div class="step">4</div><div class="name">In Event</div></div>
+      <div class="phase"><div class="step">5</div><div class="name">Wrap up</div></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="l">Buyers</div><div class="v">2/3</div></div>
+      <div class="stat warn"><div class="l">Open gates</div><div class="v">5</div></div>
+    </div>
+    <div class="actions-strip">
+      <div class="label">Actions for "Reserved" phase</div>
+      <div class="launchers">
+        <button class="launch primary"><div class="ic">✅</div><div class="lb">Promote to Booked</div><div class="sb">Set date · open marketing</div></button>
+        <button class="launch"><div class="ic">👥</div><div class="lb">Buyers</div><div class="sb">2/3 confirmed</div></button>
+        <button class="launch"><div class="ic">📋</div><div class="lb">Checklist</div><div class="sb">5 to start</div></button>
+        <button class="launch danger"><div class="ic">🚫</div><div class="lb">Cancel</div><div class="sb">Release reservation</div></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="principle">
+    <b>5e · Phase timeline.</b> The card now shows where this event sits in the lifecycle (Reserved →
+    Booked → Marketing → In Event → Wrap up). Action launchers shrink to only what's relevant in the
+    current phase. New operators learn the workflow from the timeline itself; experienced ones see only
+    the next thing to do. Click any earlier phase to revisit completed work.
+  </div>
+</div>
+</body>
+</html>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Buying Events — 5 Design Mockups</title>
+<title>Buying Events — Design Mockups</title>
 <style>
   :root {
     --ink: #1a1a16; --ash: #4A4A42; --mist: #A8A89A; --fog: #6B6B5F;
@@ -39,14 +39,27 @@
   .name { font-weight: 800; font-size: 17px; margin-bottom: 4px; }
   .desc { font-size: 13px; color: var(--ash); line-height: 1.5; }
   .strengths { font-size: 12px; color: var(--green-dark); margin-top: 10px; font-weight: 700; }
+  .section-h { font-size: 18px; font-weight: 800; margin: 36px 0 6px; }
+  .section-sub { color: var(--mist); font-size: 13px; margin: 0 0 16px; }
+  .num.win { background: linear-gradient(135deg, #DC2626 0%, #F59E0B 100%); color: #fff; }
+  .num.var { background: var(--cream2); color: var(--ash); font-size: 13px; }
+  .winner-badge {
+    display: inline-block; background: var(--green); color: #fff;
+    font-size: 10px; font-weight: 800; padding: 2px 7px;
+    border-radius: 99px; text-transform: uppercase; letter-spacing: .04em;
+    margin-left: 6px; vertical-align: middle;
+  }
 </style>
 </head>
 <body>
 <div class="container">
-  <h1>◆ Buying Events — 5 design directions</h1>
+  <h1>◆ Buying Events — design directions</h1>
   <p class="lede">
     Each mockup keeps every legacy function — they just organize it differently. Click in to see how drill-down works.
   </p>
+
+  <div class="section-h">Original 5 directions</div>
+  <p class="section-sub">The first round. #5 was picked as the clear winner.</p>
 
   <div class="grid">
     <a class="card" href="/mockups/buying-events/01-cards-expand.html">
@@ -78,10 +91,57 @@
     </a>
 
     <a class="card" href="/mockups/buying-events/05-hub.html">
-      <div class="num">5</div>
-      <div class="name">Hub + action launchers</div>
+      <div class="num win">5</div>
+      <div class="name">Hub + action launchers <span class="winner-badge">Winner</span></div>
       <div class="desc">Each event card shows KPIs (buyers, $, days). Action launchers (Travel, Marketing, etc) open in modals — keeps the page tidy.</div>
       <div class="strengths">✓ Cleanest top-level · ✓ Modal-first</div>
+    </a>
+  </div>
+
+  <div class="section-h">6 variations on the winner (#5)</div>
+  <p class="section-sub">Same Hub + Launchers idea, six different visual treatments.</p>
+
+  <div class="grid">
+    <a class="card" href="/mockups/buying-events/5a-compact.html">
+      <div class="num var">5a</div>
+      <div class="name">Compact density</div>
+      <div class="desc">Same hub idea but stripped tight — thin colored bar, smaller stats, smaller chips. 3–4 events fit on screen at once.</div>
+      <div class="strengths">✓ Most events visible · ✓ Power-user view</div>
+    </a>
+
+    <a class="card" href="/mockups/buying-events/5b-hero-image.html">
+      <div class="num var">5b</div>
+      <div class="name">Hero image</div>
+      <div class="desc">Tall hero header with logo circle and big white event name. More photographic and emotionally distinct. Each card feels like its own page.</div>
+      <div class="strengths">✓ Strongest identity · ✓ Recognize by feel</div>
+    </a>
+
+    <a class="card" href="/mockups/buying-events/5c-split.html">
+      <div class="num var">5c</div>
+      <div class="name">Side-by-side split</div>
+      <div class="desc">Identity + KPIs on the colored left panel; launcher grid on a clean white right panel. Visual story and action surface don't compete.</div>
+      <div class="strengths">✓ Fast scanning · ✓ Wide-screen friendly</div>
+    </a>
+
+    <a class="card" href="/mockups/buying-events/5d-pill-chips.html">
+      <div class="num var">5d</div>
+      <div class="name">Pill chips</div>
+      <div class="desc">Action launchers shrink to single-line rounded chips with optional count badges. Quietest variant — looks like a row of tags.</div>
+      <div class="strengths">✓ Quietest · ✓ 8+ actions fit</div>
+    </a>
+
+    <a class="card" href="/mockups/buying-events/5e-timeline.html">
+      <div class="num var">5e</div>
+      <div class="name">Phase timeline</div>
+      <div class="desc">5-step lifecycle bar across the top (Reserved → Booked → Marketing → In Event → Wrap up). Launchers shrink to only what's relevant in the current phase.</div>
+      <div class="strengths">✓ Teaches the workflow · ✓ Phase-contextual actions</div>
+    </a>
+
+    <a class="card" href="/mockups/buying-events/5f-sidebar-launchers.html">
+      <div class="num var">5f</div>
+      <div class="name">Sidebar launchers</div>
+      <div class="desc">Actions move out of the body and stack as a vertical icon rail on the right edge. The body can show a "what's happening today" sentence instead.</div>
+      <div class="strengths">✓ App-like · ✓ Body left for narrative</div>
     </a>
   </div>
 </div>
