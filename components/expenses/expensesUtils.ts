@@ -33,6 +33,7 @@ export const STATUS_LABEL: Record<ExpenseReportStatus, string> = {
   submitted_pending_review: 'Pending review',
   approved: 'Approved',
   paid: 'Paid',
+  no_expenses: 'Already expensed',
 }
 
 export const STATUS_COLOR: Record<ExpenseReportStatus, { bg: string; fg: string }> = {
@@ -40,6 +41,7 @@ export const STATUS_COLOR: Record<ExpenseReportStatus, { bg: string; fg: string 
   submitted_pending_review: { bg: '#FEF3C7', fg: '#92400E' },
   approved:                 { bg: '#D1FAE5', fg: '#065F46' },
   paid:                     { bg: '#DBEAFE', fg: '#1E40AF' },
+  no_expenses:              { bg: '#F5F5F4', fg: '#78716C' },
 }
 
 const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
