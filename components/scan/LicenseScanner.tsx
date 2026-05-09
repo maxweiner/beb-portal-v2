@@ -524,6 +524,7 @@ export default function LicenseScanner({ eventId, onClose, onComplete }: License
                       alignSelf: 'flex-start',
                     }}>
                       {cameraRes.w}×{cameraRes.h} · frames: {diag.attempts}
+                      {diag.lastEngine ? ` · ${diag.lastEngine}` : ''}
                       {diag.lastFormatSeen ? ` · saw: ${diag.lastFormatSeen}` : ''}
                     </div>
                   )}
