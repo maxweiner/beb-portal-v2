@@ -34,7 +34,7 @@ export default function GlobalSearch({ onJump }: { onJump: (t: Tab) => void }) {
       try {
         const [items, customers, vendors, memos, invoices] = await Promise.all([
           supabase.from('inventory_items')
-            .select('id, item_number, public_notes, watch_brand, watch_model, watch_serial_number, diamond_report_number, jewelry_designer')
+            .select('id, item_number, public_notes, watch_brand, watch_model, watch_serial_number, diamond_report_number, jewelry_designer, vendor_stock_number')
             .eq('brand', brand).is('archived_at', null)
             .or([
               `item_number.ilike.${like}`,
@@ -44,6 +44,7 @@ export default function GlobalSearch({ onJump }: { onJump: (t: Tab) => void }) {
               `watch_serial_number.ilike.${like}`,
               `diamond_report_number.ilike.${like}`,
               `jewelry_designer.ilike.${like}`,
+              `vendor_stock_number.ilike.${like}`,
             ].join(','))
             .limit(8),
           supabase.from('wholesale_customers').select('id, company_name, contact_name')
