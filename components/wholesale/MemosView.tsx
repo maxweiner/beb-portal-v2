@@ -10,6 +10,8 @@ import { fmtDate, fmtMoneyCents, dollarsToCents, centsToDollarsString } from '@/
 import { nextWholesaleNumber } from '@/lib/wholesale/numbers'
 import { logAudit } from '@/lib/wholesale/audit'
 import { Modal, Section, Row, Field, Select } from './InventoryView'
+import Checkbox from '@/components/ui/Checkbox'
+import { openWholesalePdf } from '@/lib/wholesale/openPdf'
 
 const STATUS_LABEL: Record<MemoStatus, string> = {
   open: 'Open', closed_sold: 'Sold', closed_returned: 'Returned', closed_partial: 'Partial', overdue: 'Overdue',
@@ -333,25 +335,31 @@ function MemoDetailModal({
         <div><b>Total:</b> {fmtMoneyCents(totalCents)} ({lines.length} lines)</div>
       </div>
 
-      {selected.size > 0 && (
-        <div className="card" style={{ padding: 8, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, background: 'var(--cream2)' }}>
-          <span style={{ fontSize: 12, fontWeight: 700 }}>{selected.size} selected</span>
-          <div style={{ flex: 1 }} />
-          <button onClick={bulkConvertToInvoice} disabled={busy} className="btn-primary btn-xs">→ Convert to invoice</button>
-          <button onClick={bulkReturn} disabled={busy} className="btn-outline btn-xs">Mark returned</button>
-          <button onClick={() => setSelected(new Set())} disabled={busy} className="btn-outline btn-xs">Cancel</button>
-        </div>
-      )}
+      {/* Always-visible bulk action bar — keeps the page from jumping
+          when the user toggles checkboxes. Buttons disable until at
+          least one line is selected. */}
+      <div className="card" style={{ padding: 8, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, background: 'var(--cream2)' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: selected.size > 0 ? 'var(--ink)' : 'var(--mist)' }}>
+          {selected.size > 0 ? `${selected.size} selected` : 'Select lines to act on'}
+        </span>
+        <div style={{ flex: 1 }} />
+        <button onClick={bulkConvertToInvoice} disabled={busy || selected.size === 0} className="btn-primary btn-xs">→ Convert to invoice</button>
+        <button onClick={bulkReturn} disabled={busy || selected.size === 0} className="btn-outline btn-xs">Mark returned</button>
+        <button onClick={() => setSelected(new Set())} disabled={busy || selected.size === 0} className="btn-outline btn-xs">Cancel</button>
+      </div>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 10 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead><tr style={{ background: 'var(--cream2)' }}>
             <th style={{ padding: '6px 8px', width: 28 }}>
-              <input type="checkbox" checked={outLines.length > 0 && outLines.every(l => selected.has(l.id))}
+              <Checkbox
+                checked={outLines.length > 0 && outLines.every(l => selected.has(l.id))}
                 onChange={() => {
                   const all = outLines.every(l => selected.has(l.id))
                   setSelected(all ? new Set() : new Set(outLines.map(l => l.id)))
-                }} />
+                }}
+                size={16}
+              />
             </th>
             {['Item #','Description','Memo price','Status',''].map(h => <th key={h} style={{ padding: '6px 8px', textAlign: 'left', fontSize: 10, color: 'var(--mist)', textTransform: 'uppercase' }}>{h}</th>)}
           </tr></thead>
@@ -365,7 +373,7 @@ function MemoDetailModal({
                 <tr key={l.id} style={{ borderTop: '1px solid var(--pearl)', background: isSelected ? 'var(--cream2)' : undefined }}>
                   <td style={{ padding: '6px 8px' }}>
                     {canSelect && (
-                      <input type="checkbox" checked={isSelected} onChange={() => {
+                      <Checkbox checked={isSelected} size={16} onChange={() => {
                         const next = new Set(selected)
                         if (next.has(l.id)) next.delete(l.id); else next.add(l.id)
                         setSelected(next)
@@ -381,7 +389,7 @@ function MemoDetailModal({
                       style={{ width: 90, padding: '4px 6px', fontSize: 12 }} />
                   </td>
                   <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
-                    {l.line_status === 'out' ? '📦 Out' : l.line_status === 'sold' ? '✓ Sold' : '↩ Returned'}
+                    {l.line_status === 'out' ? '📋 On Memo' : l.line_status === 'sold' ? '✓ Sold' : '↩ Returned'}
                   </td>
                   <td style={{ padding: '6px 8px', textAlign: 'right' }}>
                     {l.line_status === 'out' && (
@@ -404,7 +412,7 @@ function MemoDetailModal({
       )}
 
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 10 }}>
-        <a href={`/api/wholesale/memo/${memo.id}/pdf`} target="_blank" rel="noreferrer" className="btn-outline btn-sm">⇣ Memo PDF</a>
+        <button onClick={() => openWholesalePdf(`/api/wholesale/memo/${memo.id}/pdf`)} className="btn-outline btn-sm">⇣ Memo PDF</button>
         <button onClick={onClose} className="btn-outline btn-sm">Close</button>
       </div>
     </Modal>

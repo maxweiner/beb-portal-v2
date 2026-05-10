@@ -23,7 +23,7 @@ export interface AppraisalPdfData {
     jewelry_metal_type?: string | null
     jewelry_metal_color?: string | null
     jewelry_metal_karat?: string | null
-    jewelry_metal_grams?: number | null
+    jewelry_metal_dwt?: number | null
     jewelry_diamond_count?: number | null
     jewelry_diamond_total_ct?: number | null
     jewelry_diamond_shape?: string | null
@@ -108,7 +108,7 @@ export function AppraisalPdfDoc({ data }: { data: AppraisalPdfData }) {
   if (item.category === 'jewelry') {
     if (item.jewelry_type) specs.push(['Type', item.jewelry_type])
     if (item.jewelry_metal_type)  specs.push(['Metal', `${item.jewelry_metal_color || ''} ${item.jewelry_metal_karat || ''} ${item.jewelry_metal_type}`.trim()])
-    if (item.jewelry_metal_grams) specs.push(['Metal weight', `${item.jewelry_metal_grams} g`])
+    if (item.jewelry_metal_dwt) specs.push(['Metal weight', `${item.jewelry_metal_dwt} dwt`])
     if (item.jewelry_diamond_count) specs.push(['Diamond count', String(item.jewelry_diamond_count)])
     if (item.jewelry_diamond_total_ct) specs.push(['Diamond total weight', `${item.jewelry_diamond_total_ct} ct`])
     if (item.jewelry_diamond_shape) specs.push(['Diamond shape', item.jewelry_diamond_shape])

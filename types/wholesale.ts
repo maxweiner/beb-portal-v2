@@ -80,7 +80,7 @@ export interface InventoryItem {
   jewelry_metal_type: string | null
   jewelry_metal_color: string | null
   jewelry_metal_karat: string | null
-  jewelry_metal_grams: number | null
+  jewelry_metal_dwt: number | null
   jewelry_diamond_count: number | null
   jewelry_diamond_total_ct: number | null
   jewelry_diamond_shape: string | null

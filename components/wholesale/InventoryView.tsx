@@ -468,7 +468,10 @@ function ItemForm({
   // Prefill from existing if editing.
   const [vendor_id, setVendor]    = useState(existing?.vendor_id || '')
   const [location_id, setLocation] = useState(existing?.location_id || '')
-  const [date_acquired, setDateAcquired] = useState(existing?.date_acquired || '')
+  // "Date stocked" is auto-set to today on creation; not user-editable.
+  // Existing items keep whatever's in the column (could be backfilled
+  // from a trade-in's invoice date or imported data).
+  const date_stocked = existing?.date_acquired || new Date().toISOString().slice(0, 10)
   const [cost, setCost]           = useState(centsToDollarsString(existing?.cost_cents ?? null))
   const [wholesale, setWholesale] = useState(centsToDollarsString(existing?.wholesale_price_cents ?? null))
   const [retail, setRetail]       = useState(centsToDollarsString(existing?.retail_price_cents ?? null))
@@ -482,7 +485,7 @@ function ItemForm({
   const [metal_type, setMetalType]       = useState(existing?.jewelry_metal_type || '')
   const [metal_color, setMetalColor]     = useState(existing?.jewelry_metal_color || '')
   const [metal_karat, setKarat]          = useState(existing?.jewelry_metal_karat || '')
-  const [metal_grams, setGrams]          = useState(existing?.jewelry_metal_grams != null ? String(existing.jewelry_metal_grams) : '')
+  const [metal_dwt, setDwt]              = useState(existing?.jewelry_metal_dwt != null ? String(existing.jewelry_metal_dwt) : '')
   const [d_count, setDCount]             = useState(existing?.jewelry_diamond_count != null ? String(existing.jewelry_diamond_count) : '')
   const [d_total, setDTotal]             = useState(existing?.jewelry_diamond_total_ct != null ? String(existing.jewelry_diamond_total_ct) : '')
   const [d_shape_jew, setDShapeJew]      = useState(existing?.jewelry_diamond_shape || '')
@@ -584,7 +587,7 @@ function ItemForm({
         internal_notes: internal_notes.trim() || null,
         vendor_id: vendor_id || null,
         location_id: location_id || null,
-        date_acquired: date_acquired || null,
+        date_acquired: date_stocked,
       }
       if (category === 'jewelry') {
         Object.assign(payload, {
@@ -592,7 +595,7 @@ function ItemForm({
           jewelry_metal_type: metal_type || null,
           jewelry_metal_color: metal_color || null,
           jewelry_metal_karat: metal_karat || null,
-          jewelry_metal_grams: metal_grams ? Number(metal_grams) : null,
+          jewelry_metal_dwt: metal_dwt ? Number(metal_dwt) : null,
           jewelry_diamond_count: d_count ? Number(d_count) : null,
           jewelry_diamond_total_ct: d_total ? Number(d_total) : null,
           jewelry_diamond_shape: d_shape_jew || null,
@@ -697,9 +700,6 @@ function ItemForm({
               }}
             />
           </Field>
-          <Field label="Date acquired">
-            <input type="date" value={date_acquired} onChange={e => setDateAcquired(e.target.value)} />
-          </Field>
           <Field label="Status"><Select value={status} onChange={(v) => setStatus(v as InventoryStatus)}>
             <option value="in_stock">In Stock</option>
             <option value="on_hold">On Hold</option>
@@ -735,7 +735,7 @@ function ItemForm({
             <Field label="Metal type"><DropdownSelect value={metal_type} options={lists.metal_type || []} onChange={setMetalType} /></Field>
             <Field label="Metal color"><DropdownSelect value={metal_color} options={lists.metal_color || []} onChange={setMetalColor} /></Field>
             <Field label="Karat"><DropdownSelect value={metal_karat} options={lists.metal_karat || []} onChange={setKarat} /></Field>
-            <Field label="Grams"><input type="number" step="0.01" value={metal_grams} onChange={e => setGrams(e.target.value)} /></Field>
+            <Field label="DWT"><input type="number" step="0.01" value={metal_dwt} onChange={e => setDwt(e.target.value)} /></Field>
           </Row>
           <Row>
             <Field label="Diamond count"><input type="number" value={d_count} onChange={e => setDCount(e.target.value)} /></Field>
@@ -1058,17 +1058,112 @@ function AuditTimeline({ entries }: { entries: WholesaleAuditLogEntry[] }) {
         <div key={e.id} style={{ display: 'flex', gap: 8, padding: 8, borderTop: '1px solid var(--pearl)' }}>
           <div style={{ minWidth: 110, color: 'var(--mist)', fontSize: 11, whiteSpace: 'nowrap' }}>{fmtDate(e.created_at)}</div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 700 }}>{e.action.replace(/_/g, ' ')}</div>
+            <div style={{ fontWeight: 700 }}>{prettyAction(e.action)}</div>
             {e.actor_email && <div style={{ fontSize: 11, color: 'var(--mist)' }}>by {e.actor_email}</div>}
-            {(e.before || e.after) && (
-              <pre style={{ fontSize: 11, background: 'var(--cream2)', padding: 6, borderRadius: 4, overflow: 'auto', margin: '4px 0 0' }}>
-{JSON.stringify({ before: e.before, after: e.after }, null, 2)}
-              </pre>
-            )}
+            {renderDiff(e.before, e.after)}
           </div>
         </div>
       ))}
     </div>
+  )
+}
+
+function prettyAction(action: string): string {
+  const map: Record<string, string> = {
+    created: 'Created',
+    updated: 'Updated',
+    deleted: 'Deleted',
+    archived: 'Archived',
+    unarchived: 'Unarchived',
+    status_changed: 'Status changed',
+    cost_edited: 'Cost edited',
+    memo_converted: 'Converted to invoice',
+    document_uploaded: 'Document uploaded',
+    document_deleted: 'Document deleted',
+    photo_uploaded: 'Photo uploaded',
+    photo_deleted: 'Photo deleted',
+    photo_set_primary: 'Primary photo set',
+    payment_added: 'Payment added',
+    tradein_created: 'Trade-in added',
+  }
+  return map[action] || action.replace(/_/g, ' ')
+}
+
+const FIELD_LABELS: Record<string, string> = {
+  status: 'Status',
+  cost_cents: 'Cost',
+  wholesale_price_cents: 'Wholesale',
+  retail_price_cents: 'Retail',
+  insurance_value_cents: 'Insurance value',
+  public_notes: 'Public notes',
+  internal_notes: 'Internal notes',
+  vendor_id: 'Vendor',
+  location_id: 'Location',
+  date_acquired: 'Date stocked',
+  hold_for_customer_id: 'Held for',
+  hold_expires_at: 'Hold expires',
+  memo_id: 'Memo',
+  invoice_id: 'Invoice',
+  item_id: 'Item',
+  customer_id: 'Customer',
+  amount: 'Amount',
+  count: 'Count',
+  doc_type: 'Document type',
+  line_count: 'Lines',
+  invoice_number: 'Invoice #',
+  memo_number: 'Memo #',
+  item_number: 'Item #',
+  category: 'Category',
+  description: 'Description',
+  method: 'Method',
+  paid_on: 'Paid on',
+  list_key: 'List',
+  value: 'Value',
+}
+
+function fieldLabel(key: string): string {
+  return FIELD_LABELS[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
+function fmtFieldValue(key: string, value: any): string {
+  if (value == null || value === '') return '—'
+  if (typeof value === 'string' && /_cents$/.test(key)) return value
+  if (typeof value === 'number' && key.endsWith('_cents')) {
+    return '$' + (value / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  }
+  if (typeof value === 'boolean') return value ? 'yes' : 'no'
+  if (Array.isArray(value)) return value.join(', ')
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
+function renderDiff(before: any, after: any): React.ReactNode {
+  if (!before && !after) return null
+  // status_changed and similar with before+after for the same fields → "X → Y"
+  if (before && after) {
+    const keys = Array.from(new Set([...Object.keys(before || {}), ...Object.keys(after || {})]))
+    const lines = keys.map(k => {
+      const b = fmtFieldValue(k, before?.[k])
+      const a = fmtFieldValue(k, after?.[k])
+      if (b === a) return null
+      return `${fieldLabel(k)}: ${b} → ${a}`
+    }).filter(Boolean) as string[]
+    if (lines.length === 0) return null
+    return (
+      <ul style={{ fontSize: 11, color: 'var(--ash)', margin: '4px 0 0', paddingLeft: 16 }}>
+        {lines.map((l, i) => <li key={i}>{l}</li>)}
+      </ul>
+    )
+  }
+  // Only one side present (created / deleted style entries).
+  const obj = after || before
+  const isAfter = !!after
+  const lines = Object.keys(obj || {}).map(k => `${fieldLabel(k)}: ${fmtFieldValue(k, obj[k])}`)
+  if (lines.length === 0) return null
+  return (
+    <ul style={{ fontSize: 11, color: 'var(--ash)', margin: '4px 0 0', paddingLeft: 16 }}>
+      {lines.map((l, i) => <li key={i}>{isAfter ? l : `(was) ${l}`}</li>)}
+    </ul>
   )
 }
 
