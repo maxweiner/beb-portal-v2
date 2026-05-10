@@ -466,17 +466,17 @@ export function autoJewelryDescription(f: {
     .filter(Boolean).join(' ')
   if (head) parts.push(head)
 
-  // Diamonds clause: "{N} diamonds {X} ct" — each piece optional
+  // Diamonds clause: "{N} Diamonds ~ {X} ct tw" — each piece optional
   const dPieces: string[] = []
-  if (trim(f.diamond_count)) dPieces.push(`${trim(f.diamond_count)} diamonds`)
-  if (trim(f.total_ct))      dPieces.push(`${trim(f.total_ct)} ct`)
-  if (dPieces.length > 0) parts.push(dPieces.join(' '))
+  if (trim(f.diamond_count)) dPieces.push(`${trim(f.diamond_count)} Diamonds`)
+  if (trim(f.total_ct))      dPieces.push(`${trim(f.total_ct)} ct tw`)
+  if (dPieces.length > 0) parts.push(dPieces.join(' ~ '))
 
   if (trim(f.dwt))       parts.push(`${trim(f.dwt)} dwt`)
   if (trim(f.designer))  parts.push(trim(f.designer))
   if (trim(f.length))    parts.push(trim(f.length))
   if (trim(f.size))      parts.push(`size ${trim(f.size)}`)
-  if (trim(f.hallmarks)) parts.push(trim(f.hallmarks))
+  if (trim(f.hallmarks)) parts.push(`"${trim(f.hallmarks)}"`)
 
   return parts.join(', ')
 }
