@@ -67,6 +67,7 @@ export interface InventoryItem {
   wholesale_price_cents: number | null
   retail_price_cents: number | null
   insurance_value_cents: number | null
+  gender: 'Female' | 'Male' | 'Unisex' | null
   internal_notes: string | null
   public_notes: string | null
   vendor_id: string | null

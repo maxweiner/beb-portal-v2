@@ -479,6 +479,7 @@ function ItemForm({
   const [public_notes, setPublic] = useState(existing?.public_notes || '')
   const [internal_notes, setInternal] = useState(existing?.internal_notes || '')
   const [status, setStatus]       = useState<InventoryStatus>(existing?.status || 'in_stock')
+  const [gender, setGender]       = useState<'' | 'Female' | 'Male' | 'Unisex'>(existing?.gender || '')
 
   // jewelry
   const [jewelry_type, setJewType]       = useState(existing?.jewelry_type || '')
@@ -588,6 +589,7 @@ function ItemForm({
         vendor_id: vendor_id || null,
         location_id: location_id || null,
         date_acquired: date_stocked,
+        gender: gender || null,
       }
       if (category === 'jewelry') {
         Object.assign(payload, {
@@ -656,7 +658,7 @@ function ItemForm({
         const { error } = await supabase.from('inventory_items').update(payload).eq('id', existing!.id)
         if (error) throw new Error(error.message)
         const tracked = [
-          'status','cost_cents','wholesale_price_cents','retail_price_cents','insurance_value_cents',
+          'status','gender','cost_cents','wholesale_price_cents','retail_price_cents','insurance_value_cents',
           'public_notes','internal_notes','vendor_id','location_id','date_acquired',
         ]
         const diff = diffFields(existing as any, payload, tracked)
@@ -705,6 +707,12 @@ function ItemForm({
             <option value="on_hold">On Hold</option>
             <option value="in_repair">In Repair</option>
             <option value="consigned_out">Consigned Out</option>
+          </Select></Field>
+          <Field label="Gender"><Select value={gender} onChange={(v) => setGender(v as any)}>
+            <option value="">—</option>
+            <option value="Female">Female</option>
+            <option value="Male">Male</option>
+            <option value="Unisex">Unisex</option>
           </Select></Field>
         </Row>
       </Section>
@@ -1091,6 +1099,7 @@ function prettyAction(action: string): string {
 
 const FIELD_LABELS: Record<string, string> = {
   status: 'Status',
+  gender: 'Gender',
   cost_cents: 'Cost',
   wholesale_price_cents: 'Wholesale',
   retail_price_cents: 'Retail',
