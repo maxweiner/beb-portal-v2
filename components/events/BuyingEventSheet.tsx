@@ -25,7 +25,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { Event, EventStatus, Store, User } from '@/types'
-import { eventSpend } from '@/lib/eventSpend'
+import { eventSpend, eventCommission } from '@/lib/eventSpend'
 import { fmtMoney } from '@/lib/format'
 import { formatEventRange, eventEndIso } from '@/lib/eventDates'
 import Checkbox from '@/components/ui/Checkbox'
@@ -38,22 +38,40 @@ type SortDir = 'asc' | 'desc'
 
 // Column registry — drives the "⚙ Edit columns" picker. Item-style
 // identity column (Dates) is locked so the row always shows a date.
+// Columns NOT in DEFAULT_COL_IDS are off by default — users opt them in.
 const COLUMNS: SheetColumnDef[] = [
-  { id: 'date',               label: 'Dates',         group: 'event',     locked: true },
-  { id: 'store',              label: 'Store',         group: 'event' },
-  { id: 'status',             label: 'Status',        group: 'event' },
-  { id: 'buyers_needed',      label: 'Buyers',        group: 'event' },
-  { id: 'workers',            label: 'Workers',       group: 'event' },
-  { id: 'staff_briefed',      label: 'Staff Briefed', group: 'readiness' },
-  { id: 'travel_override',    label: 'Travel',        group: 'readiness' },
-  { id: 'marketing_override', label: 'Marketing',     group: 'readiness' },
-  { id: 'assets_override',    label: 'Assets',        group: 'readiness' },
-  { id: 'spend',              label: 'Spend',         group: 'event' },
+  { id: 'date',               label: 'Dates',                group: 'event',     locked: true },
+  { id: 'end_date',           label: 'End Date',             group: 'event' },
+  { id: 'store',              label: 'Store',                group: 'event' },
+  { id: 'store_city',         label: 'City',                 group: 'event' },
+  { id: 'store_state',        label: 'State',                group: 'event' },
+  { id: 'status',             label: 'Status',               group: 'event' },
+  { id: 'buyers_needed',      label: 'Buyers',               group: 'event' },
+  { id: 'workers',            label: 'Workers',              group: 'event' },
+  { id: 'days_count',         label: 'Days Entered',         group: 'event' },
+  { id: 'created_by',         label: 'Created By',           group: 'event' },
+  { id: 'staff_briefed',      label: 'Staff Briefed',        group: 'readiness' },
+  { id: 'travel_override',    label: 'Travel',               group: 'readiness' },
+  { id: 'marketing_override', label: 'Marketing',            group: 'readiness' },
+  { id: 'assets_override',    label: 'Assets',               group: 'readiness' },
+  { id: 'spend',              label: 'Purchases',            group: 'money' },
+  { id: 'commission',         label: 'Commission',           group: 'money' },
+  { id: 'spend_vdp',          label: 'VDP $',                group: 'money' },
+  { id: 'spend_newspaper',    label: 'Newspaper $',          group: 'money' },
+  { id: 'spend_postcard',     label: 'Postcard $',           group: 'money' },
+  { id: 'spend_spiffs',       label: 'Spiffs $',             group: 'money' },
+  { id: 'spiff_per_show',     label: 'Spiff / Show',         group: 'money' },
 ]
-const DEFAULT_COL_IDS = COLUMNS.map(c => c.id)  // all on by default
+// Defaults preserve the pre-expansion view exactly.
+const DEFAULT_COL_IDS: string[] = [
+  'date', 'store', 'status', 'buyers_needed', 'workers',
+  'staff_briefed', 'travel_override', 'marketing_override', 'assets_override',
+  'spend',
+]
 const COLUMN_GROUPS = [
   { id: 'event',     label: 'Event' },
   { id: 'readiness', label: 'Readiness' },
+  { id: 'money',     label: 'Money' },
 ]
 const STORAGE_KEY = (brand: string) => `beb.buying_event_sheet.cols.${brand}`
 
@@ -249,14 +267,25 @@ export default function BuyingEventSheet({ events }: SheetProps) {
           <thead>
             <tr>
               {colOn('date')          && <th style={{ ...HEADER_STYLE, cursor: 'pointer' }} onClick={() => toggleSort('date')}>Dates{arrow('date')}</th>}
+              {colOn('end_date')      && <th style={HEADER_STYLE}>End Date</th>}
               {colOn('store')         && <th style={{ ...HEADER_STYLE, cursor: 'pointer' }} onClick={() => toggleSort('store')}>Store{arrow('store')}</th>}
+              {colOn('store_city')    && <th style={HEADER_STYLE}>City</th>}
+              {colOn('store_state')   && <th style={HEADER_STYLE}>State</th>}
               {colOn('status')        && <th style={HEADER_STYLE}>Status</th>}
               {colOn('buyers_needed') && <th style={{ ...HEADER_STYLE, textAlign: 'center' }}>Buyers</th>}
               {colOn('workers')       && <th style={{ ...HEADER_STYLE, textAlign: 'center' }}>Workers</th>}
+              {colOn('days_count')    && <th style={{ ...HEADER_STYLE, textAlign: 'center' }}>Days</th>}
+              {colOn('created_by')    && <th style={HEADER_STYLE}>Created By</th>}
               {READINESS.filter(r => colOn(r.key)).map(r => (
                 <th key={r.key} style={{ ...HEADER_STYLE, textAlign: 'center' }}>{r.label}</th>
               ))}
-              {colOn('spend')         && <th style={{ ...HEADER_STYLE, textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('spend')}>Spend{arrow('spend')}</th>}
+              {colOn('spend')          && <th style={{ ...HEADER_STYLE, textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('spend')}>Purchases{arrow('spend')}</th>}
+              {colOn('commission')     && <th style={{ ...HEADER_STYLE, textAlign: 'right' }}>Commission</th>}
+              {colOn('spend_vdp')      && <th style={{ ...HEADER_STYLE, textAlign: 'right' }}>VDP $</th>}
+              {colOn('spend_newspaper')&& <th style={{ ...HEADER_STYLE, textAlign: 'right' }}>Newspaper $</th>}
+              {colOn('spend_postcard') && <th style={{ ...HEADER_STYLE, textAlign: 'right' }}>Postcard $</th>}
+              {colOn('spend_spiffs')   && <th style={{ ...HEADER_STYLE, textAlign: 'right' }}>Spiffs $</th>}
+              {colOn('spiff_per_show') && <th style={{ ...HEADER_STYLE, textAlign: 'right' }}>Spiff/Show</th>}
               <th style={{ ...HEADER_STYLE, width: 40 }}></th>
             </tr>
           </thead>
@@ -373,6 +402,14 @@ function SheetRow({
         </td>
       )}
 
+      {colOn('end_date') && (
+        <td style={{ ...CELL_STYLE, whiteSpace: 'nowrap' }}>
+          <span style={{ color: 'var(--mist)' }}>
+            {ev.start_date ? fmtShortDate(eventEndIso(ev.start_date)) : '—'}
+          </span>
+        </td>
+      )}
+
       {colOn('store') && (
         <td style={{ ...CELL_STYLE, minWidth: 180 }}>
           {isAdmin && !isCancelled ? (
@@ -394,6 +431,22 @@ function SheetRow({
           ) : (
             <span style={{ fontWeight: 700 }}>{ev.store_name}</span>
           )}
+        </td>
+      )}
+
+      {colOn('store_city') && (
+        <td style={{ ...CELL_STYLE, whiteSpace: 'nowrap' }}>
+          <span style={{ color: 'var(--mist)' }}>
+            {stores.find(s => s.id === ev.store_id)?.city || '—'}
+          </span>
+        </td>
+      )}
+
+      {colOn('store_state') && (
+        <td style={{ ...CELL_STYLE, whiteSpace: 'nowrap' }}>
+          <span style={{ color: 'var(--mist)' }}>
+            {stores.find(s => s.id === ev.store_id)?.state || '—'}
+          </span>
         </td>
       )}
 
@@ -454,6 +507,24 @@ function SheetRow({
         </td>
       )}
 
+      {colOn('days_count') && (
+        <td style={{ ...CELL_STYLE, textAlign: 'center' }}>
+          <span style={{ color: 'var(--mist)', fontVariantNumeric: 'tabular-nums' }}>
+            {(ev.days || []).length}
+          </span>
+        </td>
+      )}
+
+      {colOn('created_by') && (
+        <td style={{ ...CELL_STYLE, whiteSpace: 'nowrap' }}>
+          <span style={{ color: 'var(--mist)' }}>
+            {ev.created_by
+              ? (users.find(u => u.id === ev.created_by)?.name || '—')
+              : '—'}
+          </span>
+        </td>
+      )}
+
       {READINESS.filter(r => colOn(r.key)).map(r => {
         const atKey = `${r.key}_at` as keyof Event
         const checked = !!(ev as any)[atKey]
@@ -480,6 +551,51 @@ function SheetRow({
         <td style={{ ...CELL_STYLE, textAlign: 'right', whiteSpace: 'nowrap' }}>
           <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(totalSpend)}</span>
         </td>
+      )}
+
+      {colOn('commission') && (
+        <td style={{ ...CELL_STYLE, textAlign: 'right', whiteSpace: 'nowrap' }}>
+          <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--mist)' }}>
+            {fmtMoney(eventCommission(ev))}
+          </span>
+        </td>
+      )}
+
+      {colOn('spend_vdp') && (
+        <MoneyCell
+          value={ev.spend_vdp ?? null}
+          onSave={v => save({ spend_vdp: v } as any)}
+          editable={isAdmin && !isCancelled}
+        />
+      )}
+      {colOn('spend_newspaper') && (
+        <MoneyCell
+          value={ev.spend_newspaper ?? null}
+          onSave={v => save({ spend_newspaper: v } as any)}
+          editable={isAdmin && !isCancelled}
+        />
+      )}
+      {colOn('spend_postcard') && (
+        <MoneyCell
+          value={ev.spend_postcard ?? null}
+          onSave={v => save({ spend_postcard: v } as any)}
+          editable={isAdmin && !isCancelled}
+        />
+      )}
+      {colOn('spend_spiffs') && (
+        <MoneyCell
+          value={ev.spend_spiffs ?? null}
+          onSave={v => save({ spend_spiffs: v } as any)}
+          editable={isAdmin && !isCancelled}
+        />
+      )}
+      {colOn('spiff_per_show') && (
+        <MoneyCell
+          value={ev.spiff_amount_per_show ?? null}
+          onSave={v => save({ spiff_amount_per_show: v } as Partial<Event>)}
+          editable={isAdmin && !isCancelled}
+          placeholder="$10"
+        />
       )}
 
       {/* Save indicator */}
@@ -537,6 +653,7 @@ function AddRow({
           <DatePicker value={startDate} onChange={setStartDate} />
         </td>
       )}
+      {colOn('end_date') && <td style={CELL_STYLE} />}
       {colOn('store') && (
         <td style={{ ...CELL_STYLE, minWidth: 180 }}>
           <select value={storeId} onChange={e => setStoreId(e.target.value)} style={cellSelectStyle}>
@@ -545,6 +662,8 @@ function AddRow({
           </select>
         </td>
       )}
+      {colOn('store_city') && <td style={CELL_STYLE} />}
+      {colOn('store_state') && <td style={CELL_STYLE} />}
       {colOn('status') && <td style={CELL_STYLE} />}
       {colOn('buyers_needed') && (
         <td style={{ ...CELL_STYLE, textAlign: 'center' }}>
@@ -556,8 +675,16 @@ function AddRow({
         </td>
       )}
       {colOn('workers') && <td style={CELL_STYLE} />}
+      {colOn('days_count') && <td style={CELL_STYLE} />}
+      {colOn('created_by') && <td style={CELL_STYLE} />}
       {READINESS.filter(r => colOn(r.key)).map(r => <td key={r.key} style={CELL_STYLE} />)}
       {colOn('spend') && <td style={CELL_STYLE} />}
+      {colOn('commission') && <td style={CELL_STYLE} />}
+      {colOn('spend_vdp') && <td style={CELL_STYLE} />}
+      {colOn('spend_newspaper') && <td style={CELL_STYLE} />}
+      {colOn('spend_postcard') && <td style={CELL_STYLE} />}
+      {colOn('spend_spiffs') && <td style={CELL_STYLE} />}
+      {colOn('spiff_per_show') && <td style={CELL_STYLE} />}
       <td style={{ ...CELL_STYLE, textAlign: 'right', whiteSpace: 'nowrap' }}>
         <button
           onClick={submit}
@@ -572,6 +699,48 @@ function AddRow({
         )}
       </td>
     </tr>
+  )
+}
+
+function MoneyCell({ value, onSave, editable, placeholder }: {
+  value: number | null
+  onSave: (v: number | null) => void
+  editable: boolean
+  placeholder?: string
+}) {
+  const [draft, setDraft] = useState<string>(value == null ? '' : String(value))
+  useEffect(() => { setDraft(value == null ? '' : String(value)) }, [value])
+  if (!editable) {
+    return (
+      <td style={{ ...CELL_STYLE, textAlign: 'right', whiteSpace: 'nowrap' }}>
+        <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--mist)' }}>
+          {value == null ? '—' : fmtMoney(value)}
+        </span>
+      </td>
+    )
+  }
+  return (
+    <td style={{ ...CELL_STYLE, textAlign: 'right', whiteSpace: 'nowrap' }}>
+      <input
+        type="number"
+        inputMode="decimal"
+        min={0}
+        value={draft}
+        placeholder={placeholder || '—'}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={() => {
+          const next = draft === '' ? null : Number(draft)
+          const prev = value
+          if (next !== prev && !(next != null && Number.isNaN(next))) onSave(next)
+        }}
+        style={{
+          width: 80, fontSize: 12, padding: '4px 6px',
+          border: '1px solid var(--pearl)', borderRadius: 4,
+          background: '#fff', textAlign: 'right',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      />
+    </td>
   )
 }
 

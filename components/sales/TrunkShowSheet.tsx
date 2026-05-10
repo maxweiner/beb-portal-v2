@@ -70,6 +70,20 @@ function fmtShortDate(iso: string | null | undefined): string {
   return d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })
 }
 
+function fmtTimestamp(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' })
+}
+
+function dayCount(start: string | null | undefined, end: string | null | undefined): number | string {
+  if (!start || !end) return '—'
+  const a = new Date(start + 'T12:00:00').getTime()
+  const b = new Date(end + 'T12:00:00').getTime()
+  if (Number.isNaN(a) || Number.isNaN(b) || b < a) return '—'
+  return Math.round((b - a) / 86400000) + 1
+}
+
 interface SheetProps {
   shows: TrunkShow[]
   onChanged: () => void
@@ -77,24 +91,41 @@ interface SheetProps {
 }
 
 // Column registry for the "⚙ Edit columns" picker.
+// Columns not in DEFAULT_COL_IDS are off by default — users opt in.
 const COLUMNS: SheetColumnDef[] = [
-  { id: 'store',    label: 'Store',  group: 'show', locked: true },
-  { id: 'start',    label: 'Start',  group: 'show' },
-  { id: 'end',      label: 'End',    group: 'show' },
-  { id: 'rep',      label: 'Rep',    group: 'show' },
-  { id: 'vip',      label: 'VIP',    group: 'show' },
-  { id: 'confirmation_letter_sent', label: 'Confirmation Letter', group: 'milestones' },
-  { id: 'postcards_email_sent',     label: 'Postcards Email',     group: 'milestones' },
-  { id: 'postcards_ordered',        label: 'Postcards Ordered',   group: 'milestones' },
-  { id: 'proofed',                  label: 'Proofed',             group: 'milestones' },
-  { id: 'final_files_sent',         label: 'Final Files',         group: 'milestones' },
-  { id: 'notes',    label: 'Notes',  group: 'show' },
-  { id: 'status',   label: 'Status', group: 'show' },
+  { id: 'store',                          label: 'Store',                  group: 'show', locked: true },
+  { id: 'store_city',                     label: 'City',                   group: 'show' },
+  { id: 'store_state',                    label: 'State',                  group: 'show' },
+  { id: 'primary_contact',                label: 'Primary Contact',        group: 'show' },
+  { id: 'primary_email',                  label: 'Primary Email',          group: 'show' },
+  { id: 'start',                          label: 'Start',                  group: 'show' },
+  { id: 'end',                            label: 'End',                    group: 'show' },
+  { id: 'days_count',                     label: 'Days',                   group: 'show' },
+  { id: 'rep',                            label: 'Rep',                    group: 'show' },
+  { id: 'vip',                            label: 'VIP',                    group: 'show' },
+  { id: 'confirmation_letter_sent',       label: 'Confirmation Letter',    group: 'milestones' },
+  { id: 'postcards_email_sent',           label: 'Postcards Email',        group: 'milestones' },
+  { id: 'postcards_ordered',              label: 'Postcards Ordered',      group: 'milestones' },
+  { id: 'proofed',                        label: 'Proofed',                group: 'milestones' },
+  { id: 'final_files_sent',               label: 'Final Files',            group: 'milestones' },
+  { id: 'post_event_questionnaire_sent',  label: 'Post-Event Questionnaire', group: 'milestones' },
+  { id: 'notes',                          label: 'Notes',                  group: 'show' },
+  { id: 'status',                         label: 'Status',                 group: 'show' },
+  { id: 'created_at',                     label: 'Created',                group: 'meta' },
+  { id: 'updated_at',                     label: 'Updated',                group: 'meta' },
 ]
-const DEFAULT_COL_IDS = COLUMNS.map(c => c.id)
+// Defaults preserve the original column set (post_event_questionnaire,
+// city/state/contact/email/days_count, created/updated are opt-in).
+const DEFAULT_COL_IDS: string[] = [
+  'store', 'start', 'end', 'rep', 'vip',
+  'confirmation_letter_sent', 'postcards_email_sent', 'postcards_ordered',
+  'proofed', 'final_files_sent',
+  'notes', 'status',
+]
 const COLUMN_GROUPS = [
   { id: 'show',       label: 'Show' },
   { id: 'milestones', label: 'Milestones' },
+  { id: 'meta',       label: 'Meta' },
 ]
 const STORAGE_KEY = (brand: string) => `beb.trunk_show_sheet.cols.${brand}`
 
@@ -153,16 +184,23 @@ export default function TrunkShowSheet({ shows, onChanged, onOpen }: SheetProps)
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
             <tr>
-              {colOn('store') && <th style={HEADER_STYLE}>Store</th>}
-              {colOn('start') && <th style={HEADER_STYLE}>Start</th>}
-              {colOn('end')   && <th style={HEADER_STYLE}>End</th>}
-              {colOn('rep')   && <th style={HEADER_STYLE}>Rep</th>}
-              {colOn('vip')   && <th style={{ ...HEADER_STYLE, textAlign: 'center' }}>VIP</th>}
+              {colOn('store')           && <th style={HEADER_STYLE}>Store</th>}
+              {colOn('store_city')      && <th style={HEADER_STYLE}>City</th>}
+              {colOn('store_state')     && <th style={HEADER_STYLE}>State</th>}
+              {colOn('primary_contact') && <th style={HEADER_STYLE}>Primary Contact</th>}
+              {colOn('primary_email')   && <th style={HEADER_STYLE}>Primary Email</th>}
+              {colOn('start')           && <th style={HEADER_STYLE}>Start</th>}
+              {colOn('end')             && <th style={HEADER_STYLE}>End</th>}
+              {colOn('days_count')      && <th style={{ ...HEADER_STYLE, textAlign: 'center' }}>Days</th>}
+              {colOn('rep')             && <th style={HEADER_STYLE}>Rep</th>}
+              {colOn('vip')             && <th style={{ ...HEADER_STYLE, textAlign: 'center' }}>VIP</th>}
               {TRUNK_SHOW_MILESTONES.filter(m => colOn(m.key)).map(m => (
                 <th key={m.key} style={{ ...HEADER_STYLE, textAlign: 'center' }}>{m.label}</th>
               ))}
-              {colOn('notes')  && <th style={HEADER_STYLE}>Notes</th>}
-              {colOn('status') && <th style={HEADER_STYLE}>Status</th>}
+              {colOn('notes')      && <th style={HEADER_STYLE}>Notes</th>}
+              {colOn('status')     && <th style={HEADER_STYLE}>Status</th>}
+              {colOn('created_at') && <th style={HEADER_STYLE}>Created</th>}
+              {colOn('updated_at') && <th style={HEADER_STYLE}>Updated</th>}
               <th style={{ ...HEADER_STYLE, width: 80 }}></th>
             </tr>
           </thead>
@@ -262,6 +300,7 @@ function SheetRow({
   const repName = local.assigned_rep_id
     ? users.find(u => u.id === local.assigned_rep_id)?.name || '—'
     : '—'
+  const storeRow = stores.find(s => s.id === local.store_id)
 
   return (
     <tr style={{
@@ -290,6 +329,38 @@ function SheetRow({
         </td>
       )}
 
+      {colOn('store_city') && (
+        <td style={{ ...CELL_STYLE, whiteSpace: 'nowrap' }}>
+          <span style={{ color: 'var(--mist)' }}>
+            {storeRow?.city || '—'}
+          </span>
+        </td>
+      )}
+
+      {colOn('store_state') && (
+        <td style={{ ...CELL_STYLE, whiteSpace: 'nowrap' }}>
+          <span style={{ color: 'var(--mist)' }}>
+            {storeRow?.state || '—'}
+          </span>
+        </td>
+      )}
+
+      {colOn('primary_contact') && (
+        <td style={{ ...CELL_STYLE, whiteSpace: 'nowrap' }}>
+          <span style={{ color: 'var(--mist)' }}>
+            {storeRow?.primary_contact_name || '—'}
+          </span>
+        </td>
+      )}
+
+      {colOn('primary_email') && (
+        <td style={{ ...CELL_STYLE, whiteSpace: 'nowrap' }}>
+          <span style={{ color: 'var(--mist)' }}>
+            {storeRow?.primary_contact_email || '—'}
+          </span>
+        </td>
+      )}
+
       {colOn('start') && (
         <td style={{ ...CELL_STYLE, minWidth: 120 }}>
           {isAdmin ? (
@@ -309,6 +380,14 @@ function SheetRow({
               onChange={v => v && save({ end_date: v })}
             />
           ) : <span>{local.end_date}</span>}
+        </td>
+      )}
+
+      {colOn('days_count') && (
+        <td style={{ ...CELL_STYLE, textAlign: 'center' }}>
+          <span style={{ color: 'var(--mist)', fontVariantNumeric: 'tabular-nums' }}>
+            {dayCount(local.start_date, local.end_date)}
+          </span>
         </td>
       )}
 
@@ -388,6 +467,18 @@ function SheetRow({
         </td>
       )}
 
+      {colOn('created_at') && (
+        <td style={{ ...CELL_STYLE, whiteSpace: 'nowrap' }}>
+          <span style={{ color: 'var(--mist)' }}>{fmtTimestamp(local.created_at)}</span>
+        </td>
+      )}
+
+      {colOn('updated_at') && (
+        <td style={{ ...CELL_STYLE, whiteSpace: 'nowrap' }}>
+          <span style={{ color: 'var(--mist)' }}>{fmtTimestamp(local.updated_at)}</span>
+        </td>
+      )}
+
       {/* Save indicator + open detail */}
       <td style={{ ...CELL_STYLE, textAlign: 'right', whiteSpace: 'nowrap' }}>
         <SaveIndicator status={status} error={error} />
@@ -454,6 +545,10 @@ function AddRow({
           </select>
         </td>
       )}
+      {colOn('store_city')      && <td style={CELL_STYLE} />}
+      {colOn('store_state')     && <td style={CELL_STYLE} />}
+      {colOn('primary_contact') && <td style={CELL_STYLE} />}
+      {colOn('primary_email')   && <td style={CELL_STYLE} />}
       {colOn('start') && (
         <td style={{ ...CELL_STYLE, minWidth: 120 }}>
           <DatePicker value={startDate} onChange={v => {
@@ -467,6 +562,7 @@ function AddRow({
           <DatePicker value={endDate} onChange={setEndDate} />
         </td>
       )}
+      {colOn('days_count') && <td style={CELL_STYLE} />}
       {colOn('rep') && (
         <td style={{ ...CELL_STYLE, minWidth: 140 }}>
           <select
@@ -481,8 +577,10 @@ function AddRow({
       )}
       {colOn('vip') && <td style={CELL_STYLE} />}
       {TRUNK_SHOW_MILESTONES.filter(m => colOn(m.key)).map(m => <td key={m.key} style={CELL_STYLE} />)}
-      {colOn('notes')  && <td style={CELL_STYLE} />}
-      {colOn('status') && <td style={CELL_STYLE} />}
+      {colOn('notes')      && <td style={CELL_STYLE} />}
+      {colOn('status')     && <td style={CELL_STYLE} />}
+      {colOn('created_at') && <td style={CELL_STYLE} />}
+      {colOn('updated_at') && <td style={CELL_STYLE} />}
       <td style={{ ...CELL_STYLE, textAlign: 'right', whiteSpace: 'nowrap' }}>
         <button
           onClick={submit}
