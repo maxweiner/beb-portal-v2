@@ -16,6 +16,7 @@ export interface AppraisalPdfData {
   item: {
     item_number: string
     category: 'jewelry' | 'watch' | 'diamond'
+    gender?: 'Female' | 'Male' | 'Unisex' | null
     public_notes?: string | null
     insurance_value_cents?: number | null
     // jewelry
@@ -105,6 +106,7 @@ export function AppraisalPdfDoc({ data }: { data: AppraisalPdfData }) {
   const specs: Array<[string, string]> = []
   specs.push(['Item #', item.item_number])
   specs.push(['Category', item.category])
+  if (item.gender) specs.push(['Gender', item.gender])
   if (item.category === 'jewelry') {
     if (item.jewelry_type) specs.push(['Type', item.jewelry_type])
     if (item.jewelry_metal_type)  specs.push(['Metal', `${item.jewelry_metal_color || ''} ${item.jewelry_metal_karat || ''} ${item.jewelry_metal_type}`.trim()])

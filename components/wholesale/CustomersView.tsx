@@ -9,6 +9,7 @@ import { logAudit, diffFields } from '@/lib/wholesale/audit'
 import { loadAdminList } from '@/lib/wholesale/lists'
 import { Modal, Section, Row, Field, Select } from './InventoryView'
 import AddressAutocompleteInput from '@/components/ui/AddressAutocompleteInput'
+import PhoneInput from '@/components/ui/PhoneInput'
 
 export default function CustomersView() {
   const { user, brand } = useApp()
@@ -100,10 +101,13 @@ function CustomerModal({
   const [company_name, setCompanyName] = useState('')
   const [contact_name, setContactName] = useState('')
   const [phone, setPhone] = useState('')
+  const [mobile_phone, setMobilePhone] = useState('')
   const [email, setEmail] = useState('')
   const [address, setAddress] = useState('')
   const [resale_cert, setResaleCert] = useState('')
-  const [default_terms, setDefaultTerms] = useState('')
+  // New customers default to Net 30 if no payment_terms list pick;
+  // edit modal preserves whatever the customer already has.
+  const [default_terms, setDefaultTerms] = useState(mode === 'new' ? 'Net 30' : '')
   const [notes, setNotes] = useState('')
   const [credit, setCredit] = useState('')
 
@@ -120,7 +124,8 @@ function CustomerModal({
       const c = data as WholesaleCustomer | null
       setCustomer(c); if (c) {
         setCompanyName(c.company_name); setContactName(c.contact_name || '')
-        setPhone(c.phone || ''); setEmail(c.email || ''); setAddress(c.address || '')
+        setPhone(c.phone || ''); setMobilePhone(c.mobile_phone || '')
+        setEmail(c.email || ''); setAddress(c.address || '')
         setResaleCert(c.resale_certificate_number || ''); setDefaultTerms(c.default_payment_terms || '')
         setNotes(c.notes || '')
         setCredit(centsToDollarsString(c.credit_balance_cents))
@@ -144,10 +149,12 @@ function CustomerModal({
       const creditCents = dollarsToCents(credit) ?? 0
       const payload = {
         brand, company_name: company_name.trim(),
-        contact_name: contact_name.trim() || null, phone: phone.trim() || null,
+        contact_name: contact_name.trim() || null,
+        phone: phone.trim() || null,
+        mobile_phone: mobile_phone.trim() || null,
         email: email.trim() || null, address: address.trim() || null,
         resale_certificate_number: resale_cert.trim() || null,
-        default_payment_terms: default_terms || null,
+        default_payment_terms: default_terms || 'Net 30',
         credit_balance_cents: creditCents,
         notes: notes.trim() || null,
       }
@@ -159,8 +166,11 @@ function CustomerModal({
         const { error } = await supabase.from('wholesale_customers').update({ ...payload, updated_by: actorId }).eq('id', id!)
         if (error) throw new Error(error.message)
         if (customer) {
-          const diff = diffFields(customer as any, payload, ['company_name','contact_name','phone','email','address','resale_certificate_number','default_payment_terms','credit_balance_cents','notes'])
-          if (diff) await logAudit({ brand, entity_type: 'wholesale_customer', entity_id: id!, action: 'updated', before: diff.before, after: diff.after, actor_id: actorId, actor_email: actorEmail })
+          const diff = diffFields(customer as any, payload, ['company_name','contact_name','phone','mobile_phone','email','address','resale_certificate_number','default_payment_terms','credit_balance_cents','notes'])
+          if (diff) await logAudit({
+            brand, entity_type: 'wholesale_customer', entity_id: id!, action: 'updated',
+            before: diff.before, after: diff.after, actor_id: actorId, actor_email: actorEmail,
+          })
         }
       }
       onSaved()
@@ -185,7 +195,8 @@ function CustomerModal({
         <Row>
           <Field label="Company name *"><input type="text" value={company_name} onChange={e => setCompanyName(e.target.value)} /></Field>
           <Field label="Contact name"><input type="text" value={contact_name} onChange={e => setContactName(e.target.value)} /></Field>
-          <Field label="Phone"><input type="text" value={phone} onChange={e => setPhone(e.target.value)} /></Field>
+          <Field label="Phone"><PhoneInput value={phone} onChange={setPhone} /></Field>
+          <Field label="Mobile"><PhoneInput value={mobile_phone} onChange={setMobilePhone} /></Field>
           <Field label="Email"><input type="email" value={email} onChange={e => setEmail(e.target.value)} /></Field>
         </Row>
         <Field label="Address">
@@ -200,7 +211,21 @@ function CustomerModal({
             </Select>
           </Field>
           <Field label="Credit balance ($)">
-            <input type="number" step="0.01" value={credit} onChange={e => setCredit(e.target.value)} placeholder="0.00" />
+            <input
+              type="text"
+              inputMode="decimal"
+              value={credit}
+              onChange={e => setCredit(e.target.value)}
+              onBlur={e => {
+                // Format to "1,234.56" on blur. dollarsToCents already strips
+                // commas / $ on save so this is a display-only refinement.
+                const n = Number.parseFloat(e.target.value.replace(/[$,\s]/g, ''))
+                if (Number.isFinite(n)) {
+                  setCredit(n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+                }
+              }}
+              placeholder="0.00"
+            />
           </Field>
         </Row>
         <Field label="Notes"><textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} style={{ width: '100%' }} /></Field>

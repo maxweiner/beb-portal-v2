@@ -8,6 +8,7 @@ import { fmtDate, fmtMoneyCents } from '@/lib/wholesale/format'
 import { logAudit, diffFields } from '@/lib/wholesale/audit'
 import { Modal, Section, Row, Field, Select } from './InventoryView'
 import AddressAutocompleteInput from '@/components/ui/AddressAutocompleteInput'
+import PhoneInput from '@/components/ui/PhoneInput'
 
 export default function VendorsView() {
   const { user, brand } = useApp()
@@ -96,6 +97,7 @@ function VendorModal({
   const [company_name, setCompanyName] = useState('')
   const [contact_name, setContactName] = useState('')
   const [phone, setPhone] = useState('')
+  const [mobile_phone, setMobilePhone] = useState('')
   const [email, setEmail] = useState('')
   const [address, setAddress] = useState('')
   const [notes, setNotes] = useState('')
@@ -109,7 +111,8 @@ function VendorModal({
       const v = data as WholesaleVendor | null
       setVendor(v); if (v) {
         setCompanyName(v.company_name); setContactName(v.contact_name || '')
-        setPhone(v.phone || ''); setEmail(v.email || ''); setAddress(v.address || '')
+        setPhone(v.phone || ''); setMobilePhone(v.mobile_phone || '')
+        setEmail(v.email || ''); setAddress(v.address || '')
         setNotes(v.notes || '')
       }
       const { data: itemsRes } = await supabase.from('inventory_items').select('*')
@@ -125,7 +128,9 @@ function VendorModal({
     try {
       const payload = {
         brand, company_name: company_name.trim(),
-        contact_name: contact_name.trim() || null, phone: phone.trim() || null,
+        contact_name: contact_name.trim() || null,
+        phone: phone.trim() || null,
+        mobile_phone: mobile_phone.trim() || null,
         email: email.trim() || null, address: address.trim() || null, notes: notes.trim() || null,
       }
       if (mode === 'new') {
@@ -136,8 +141,11 @@ function VendorModal({
         const { error } = await supabase.from('wholesale_vendors').update({ ...payload, updated_by: actorId }).eq('id', id!)
         if (error) throw new Error(error.message)
         if (vendor) {
-          const diff = diffFields(vendor as any, payload, ['company_name','contact_name','phone','email','address','notes'])
-          if (diff) await logAudit({ brand, entity_type: 'wholesale_vendor', entity_id: id!, action: 'updated', before: diff.before, after: diff.after, actor_id: actorId, actor_email: actorEmail })
+          const diff = diffFields(vendor as any, payload, ['company_name','contact_name','phone','mobile_phone','email','address','notes'])
+          if (diff) await logAudit({
+            brand, entity_type: 'wholesale_vendor', entity_id: id!, action: 'updated',
+            before: diff.before, after: diff.after, actor_id: actorId, actor_email: actorEmail,
+          })
         }
       }
       onSaved()
@@ -162,7 +170,8 @@ function VendorModal({
         <Row>
           <Field label="Company name *"><input type="text" value={company_name} onChange={e => setCompanyName(e.target.value)} /></Field>
           <Field label="Contact name"><input type="text" value={contact_name} onChange={e => setContactName(e.target.value)} /></Field>
-          <Field label="Phone"><input type="text" value={phone} onChange={e => setPhone(e.target.value)} /></Field>
+          <Field label="Phone"><PhoneInput value={phone} onChange={setPhone} /></Field>
+          <Field label="Mobile"><PhoneInput value={mobile_phone} onChange={setMobilePhone} /></Field>
           <Field label="Email"><input type="email" value={email} onChange={e => setEmail(e.target.value)} /></Field>
         </Row>
         <Field label="Address">
