@@ -654,7 +654,11 @@ function ItemDetailModal({
         ))}
       </div>
       {err && <div style={{ padding: 8, background: '#FEE2E2', color: '#991B1B', borderRadius: 6, fontSize: 12, marginBottom: 8 }}>{err}</div>}
-      {tab === 'edit' && (
+      {/* All four panels stay mounted; we toggle visibility with display:
+          none so switching tabs preserves form state + scroll position
+          (was remounting on every click — typed-but-unsaved edits and
+          scroll position vanished). */}
+      <div style={{ display: tab === 'edit' ? 'block' : 'none' }}>
         <ItemForm
           mode="edit"
           existing={item}
@@ -668,22 +672,22 @@ function ItemDetailModal({
           onSaved={() => { void reload(); onChanged() }}
           onCancel={onClose}
         />
-      )}
-      {tab === 'photos' && (
+      </div>
+      <div style={{ display: tab === 'photos' ? 'block' : 'none' }}>
         <PhotosPanel
           itemId={item.id} brand={brand} photos={photos} actorId={actorId}
           actorEmail={actorEmail} onChanged={() => { void reload(); onChanged() }}
         />
-      )}
-      {tab === 'docs' && (
+      </div>
+      <div style={{ display: tab === 'docs' ? 'block' : 'none' }}>
         <DocsPanel
           itemId={item.id} brand={brand} docs={docs} actorId={actorId}
           actorEmail={actorEmail} onChanged={() => { void reload(); onChanged() }}
         />
-      )}
-      {tab === 'history' && (
+      </div>
+      <div style={{ display: tab === 'history' ? 'block' : 'none' }}>
         <AuditTimeline entries={audit} />
-      )}
+      </div>
     </Modal>
   )
 }
