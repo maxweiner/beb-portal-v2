@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import { renderToBuffer } from '@react-pdf/renderer'
 import { getAuthedUser } from '@/lib/expenses/serverAuth'
 import { InvoicePdfDoc, type InvoicePdfData } from '@/lib/wholesale/invoicePdf'
-import { pdfAdmin, loadBrandDisplay, loadPrimaryPhotoDataUrls } from '@/lib/wholesale/pdfHelpers'
+import { pdfAdmin, loadBrandDisplay, loadPrimaryPhotoDataUrls, loadBrandLogoDataUrl } from '@/lib/wholesale/pdfHelpers'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,13 +32,17 @@ export async function GET(req: Request, ctx: { params: { id: string } }) {
   if (error || !data) return NextResponse.json({ error: error?.message || 'Invoice not found' }, { status: 404 })
 
   const inv = data as any
-  const brandDisplay = await loadBrandDisplay(inv.brand)
+  const [brandDisplay, brandLogoDataUrl] = await Promise.all([
+    loadBrandDisplay(inv.brand),
+    loadBrandLogoDataUrl(inv.brand),
+  ])
   const itemIds: string[] = (inv.lines || []).map((l: any) => l.item_id)
   const photoUrls = await loadPrimaryPhotoDataUrls(itemIds)
 
   const payload: InvoicePdfData = {
     brand: inv.brand,
     brandFullName: brandDisplay.brandFullName,
+    brandLogoDataUrl,
     brandAddress:  brandDisplay.brandAddress,
     brandPhone:    brandDisplay.brandPhone,
     brandEmail:    brandDisplay.brandEmail,

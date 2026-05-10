@@ -7,6 +7,7 @@ import { Document, Page, View, Text, Image, StyleSheet } from '@react-pdf/render
 export interface InvoicePdfData {
   brand: string
   brandFullName: string
+  brandLogoDataUrl?: string | null
   brandAddress?: string | null
   brandPhone?: string | null
   brandEmail?: string | null
@@ -85,6 +86,9 @@ export function InvoicePdfDoc({ data }: { data: InvoicePdfData }) {
       <Page size="LETTER" style={styles.page}>
         <View style={styles.hdrRow}>
           <View style={styles.brandBlock}>
+            {data.brandLogoDataUrl ? (
+              <Image src={data.brandLogoDataUrl} style={{ width: 160, height: 56, objectFit: 'contain', objectPosition: 'left center', marginBottom: 4 }} />
+            ) : null}
             <Text style={styles.brandName}>{data.brandFullName}</Text>
             {data.brandAddress ? <Text style={styles.brandLine}>{data.brandAddress}</Text> : null}
             {data.brandPhone   ? <Text style={styles.brandLine}>{data.brandPhone}</Text>   : null}

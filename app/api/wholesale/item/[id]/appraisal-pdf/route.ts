@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import { renderToBuffer } from '@react-pdf/renderer'
 import { getAuthedUser } from '@/lib/expenses/serverAuth'
 import { AppraisalPdfDoc, type AppraisalPdfData } from '@/lib/wholesale/appraisalPdf'
-import { pdfAdmin, loadBrandDisplay, loadAllPhotoDataUrls } from '@/lib/wholesale/pdfHelpers'
+import { pdfAdmin, loadBrandDisplay, loadAllPhotoDataUrls, loadBrandLogoDataUrl } from '@/lib/wholesale/pdfHelpers'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,12 +22,16 @@ export async function GET(req: Request, ctx: { params: { id: string } }) {
   const { data: item, error } = await sb.from('inventory_items').select('*').eq('id', ctx.params.id).maybeSingle()
   if (error || !item) return NextResponse.json({ error: error?.message || 'Item not found' }, { status: 404 })
 
-  const brandDisplay = await loadBrandDisplay((item as any).brand)
-  const photos = await loadAllPhotoDataUrls(ctx.params.id, 4)
+  const [brandDisplay, brandLogoDataUrl, photos] = await Promise.all([
+    loadBrandDisplay((item as any).brand),
+    loadBrandLogoDataUrl((item as any).brand),
+    loadAllPhotoDataUrls(ctx.params.id, 4),
+  ])
 
   const data: AppraisalPdfData = {
     brand:         (item as any).brand,
     brandFullName: brandDisplay.brandFullName,
+    brandLogoDataUrl,
     brandAddress:  brandDisplay.brandAddress,
     brandPhone:    brandDisplay.brandPhone,
     brandEmail:    brandDisplay.brandEmail,
