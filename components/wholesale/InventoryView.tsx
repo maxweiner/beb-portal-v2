@@ -829,7 +829,7 @@ function ItemForm({
         </Section>
       )}
 
-      <Section title="Notes">
+      <Section title="Item Description">
         <Field label="Public description (appears on memos/invoices/appraisals)">
           <textarea rows={2} value={public_notes} onChange={e => setPublic(e.target.value)} style={{ width: '100%' }} />
         </Field>
