@@ -48,14 +48,14 @@ export default function ReportsView() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
         {REPORTS.map(r => (
           <button key={r.id} onClick={() => setOpen(open === r.id ? null : r.id)}
-            className="card"
             style={{
               padding: 12, textAlign: 'left',
               border: open === r.id ? '2px solid var(--green)' : '1px solid var(--cream2)',
-              cursor: 'pointer', background: '#fff', fontFamily: 'inherit',
+              borderRadius: 8, cursor: 'pointer', background: '#fff', fontFamily: 'inherit',
+              display: 'flex', flexDirection: 'column', gap: 4,
             }}>
             <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink)' }}>{r.label}</div>
-            <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>{r.desc}</div>
+            <div style={{ fontSize: 11, color: 'var(--mist)' }}>{r.desc}</div>
           </button>
         ))}
       </div>

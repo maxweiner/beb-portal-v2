@@ -13,6 +13,7 @@ import { nextWholesaleNumber, prefixForCategory } from '@/lib/wholesale/numbers'
 import { logAudit } from '@/lib/wholesale/audit'
 import { loadAdminList } from '@/lib/wholesale/lists'
 import { Modal, Section, Row, Field, Select } from './InventoryView'
+import { openWholesalePdf } from '@/lib/wholesale/openPdf'
 
 const STATUS_LABEL: Record<InvoicePaymentStatus, string> = {
   unpaid: 'Unpaid', partial: 'Partial', paid: 'Paid',
@@ -429,7 +430,7 @@ function InvoiceDetailModal({
       {err && <div style={{ padding: 8, background: '#FEE2E2', color: '#991B1B', borderRadius: 6, fontSize: 12 }}>{err}</div>}
 
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-        <a href={`/api/wholesale/invoice/${invoice.id}/pdf`} target="_blank" rel="noreferrer" className="btn-outline btn-sm">⇣ Invoice PDF</a>
+        <button onClick={() => openWholesalePdf(`/api/wholesale/invoice/${invoice.id}/pdf`)} className="btn-outline btn-sm">⇣ Invoice PDF</button>
         <button onClick={onClose} className="btn-outline btn-sm">Close</button>
       </div>
 

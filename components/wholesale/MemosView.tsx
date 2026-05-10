@@ -11,6 +11,7 @@ import { nextWholesaleNumber } from '@/lib/wholesale/numbers'
 import { logAudit } from '@/lib/wholesale/audit'
 import { Modal, Section, Row, Field, Select } from './InventoryView'
 import Checkbox from '@/components/ui/Checkbox'
+import { openWholesalePdf } from '@/lib/wholesale/openPdf'
 
 const STATUS_LABEL: Record<MemoStatus, string> = {
   open: 'Open', closed_sold: 'Sold', closed_returned: 'Returned', closed_partial: 'Partial', overdue: 'Overdue',
@@ -334,15 +335,18 @@ function MemoDetailModal({
         <div><b>Total:</b> {fmtMoneyCents(totalCents)} ({lines.length} lines)</div>
       </div>
 
-      {selected.size > 0 && (
-        <div className="card" style={{ padding: 8, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, background: 'var(--cream2)' }}>
-          <span style={{ fontSize: 12, fontWeight: 700 }}>{selected.size} selected</span>
-          <div style={{ flex: 1 }} />
-          <button onClick={bulkConvertToInvoice} disabled={busy} className="btn-primary btn-xs">→ Convert to invoice</button>
-          <button onClick={bulkReturn} disabled={busy} className="btn-outline btn-xs">Mark returned</button>
-          <button onClick={() => setSelected(new Set())} disabled={busy} className="btn-outline btn-xs">Cancel</button>
-        </div>
-      )}
+      {/* Always-visible bulk action bar — keeps the page from jumping
+          when the user toggles checkboxes. Buttons disable until at
+          least one line is selected. */}
+      <div className="card" style={{ padding: 8, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, background: 'var(--cream2)' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: selected.size > 0 ? 'var(--ink)' : 'var(--mist)' }}>
+          {selected.size > 0 ? `${selected.size} selected` : 'Select lines to act on'}
+        </span>
+        <div style={{ flex: 1 }} />
+        <button onClick={bulkConvertToInvoice} disabled={busy || selected.size === 0} className="btn-primary btn-xs">→ Convert to invoice</button>
+        <button onClick={bulkReturn} disabled={busy || selected.size === 0} className="btn-outline btn-xs">Mark returned</button>
+        <button onClick={() => setSelected(new Set())} disabled={busy || selected.size === 0} className="btn-outline btn-xs">Cancel</button>
+      </div>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 10 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -408,7 +412,7 @@ function MemoDetailModal({
       )}
 
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 10 }}>
-        <a href={`/api/wholesale/memo/${memo.id}/pdf`} target="_blank" rel="noreferrer" className="btn-outline btn-sm">⇣ Memo PDF</a>
+        <button onClick={() => openWholesalePdf(`/api/wholesale/memo/${memo.id}/pdf`)} className="btn-outline btn-sm">⇣ Memo PDF</button>
         <button onClick={onClose} className="btn-outline btn-sm">Close</button>
       </div>
     </Modal>
