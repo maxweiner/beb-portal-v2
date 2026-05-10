@@ -16,11 +16,12 @@ const SHOW_COLS = `id, store_id, start_date, end_date, assigned_rep_id,
 /** Milestone column groups, used by the sheet UI to render five
  *  checkbox+date columns and to auto-stamp date+user on toggle. */
 export const TRUNK_SHOW_MILESTONES = [
-  { key: 'confirmation_letter_sent', label: 'Confirmation Letter' },
-  { key: 'postcards_email_sent',     label: 'Postcards Email' },
-  { key: 'postcards_ordered',        label: 'Postcards Ordered' },
-  { key: 'proofed',                  label: 'Proofed' },
-  { key: 'final_files_sent',         label: 'Final Files Sent' },
+  { key: 'confirmation_letter_sent',     label: 'Confirmation Letter' },
+  { key: 'postcards_email_sent',         label: 'Postcards Email' },
+  { key: 'postcards_ordered',            label: 'Postcards Ordered' },
+  { key: 'proofed',                      label: 'Proofed' },
+  { key: 'final_files_sent',             label: 'Final Files Sent' },
+  { key: 'post_event_questionnaire_sent', label: 'Post-Event Questionnaire' },
 ] as const
 export type TrunkShowMilestoneKey = typeof TRUNK_SHOW_MILESTONES[number]['key']
 
