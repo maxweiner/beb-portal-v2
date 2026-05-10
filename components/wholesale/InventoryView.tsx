@@ -445,6 +445,42 @@ function ItemDetailModal({
   )
 }
 
+/** Build the public description from the jewelry-form fields.
+ *  Order: karat color metal period type, {N} diamonds {ct} ct,
+ *  {dwt} dwt, designer, length, size {size}, hallmarks. Blank
+ *  fields (and their literal labels) are skipped entirely.
+ *  Designed to be re-runnable: clicking the button overwrites the
+ *  current public_notes field. */
+export function autoJewelryDescription(f: {
+  karat?: string; color?: string; metal?: string
+  period?: string; type?: string
+  diamond_count?: string; total_ct?: string
+  dwt?: string; designer?: string
+  length?: string; size?: string; hallmarks?: string
+}): string {
+  const trim = (s?: string) => (s || '').trim()
+  const parts: string[] = []
+
+  // First clause: karat / color / metal / period / type — space-joined
+  const head = [trim(f.karat), trim(f.color), trim(f.metal), trim(f.period), trim(f.type)]
+    .filter(Boolean).join(' ')
+  if (head) parts.push(head)
+
+  // Diamonds clause: "{N} diamonds {X} ct" — each piece optional
+  const dPieces: string[] = []
+  if (trim(f.diamond_count)) dPieces.push(`${trim(f.diamond_count)} diamonds`)
+  if (trim(f.total_ct))      dPieces.push(`${trim(f.total_ct)} ct`)
+  if (dPieces.length > 0) parts.push(dPieces.join(' '))
+
+  if (trim(f.dwt))       parts.push(`${trim(f.dwt)} dwt`)
+  if (trim(f.designer))  parts.push(trim(f.designer))
+  if (trim(f.length))    parts.push(trim(f.length))
+  if (trim(f.size))      parts.push(`size ${trim(f.size)}`)
+  if (trim(f.hallmarks)) parts.push(trim(f.hallmarks))
+
+  return parts.join(', ')
+}
+
 /* ─────────────────────── shared item form ─────────────────────── */
 
 interface ItemFormProps {
@@ -832,6 +868,18 @@ function ItemForm({
       <Section title="Item Description">
         <Field label="Public description (appears on memos/invoices/appraisals)">
           <textarea rows={2} value={public_notes} onChange={e => setPublic(e.target.value)} style={{ width: '100%' }} />
+          {category === 'jewelry' && (
+            <button type="button" onClick={() => setPublic(autoJewelryDescription({
+              karat: metal_karat, color: metal_color, metal: metal_type,
+              period: j_period, type: jewelry_type,
+              diamond_count: d_count, total_ct: d_total,
+              dwt: metal_dwt, designer: j_designer, length: j_length,
+              size: j_size, hallmarks: j_hallmarks,
+            }))}
+              className="btn-outline btn-xs" style={{ marginTop: 4 }}
+              title="Build the description from the fields above (karat, color, metal, period, type, diamonds, dwt, designer, length, size, hallmarks). Blank fields are skipped."
+            >✨ Auto-fill from fields</button>
+          )}
         </Field>
         <Field label="Internal notes (never on customer-facing docs)">
           <textarea rows={2} value={internal_notes} onChange={e => setInternal(e.target.value)} style={{ width: '100%' }} />
