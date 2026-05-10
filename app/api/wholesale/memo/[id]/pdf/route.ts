@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 import { renderToBuffer } from '@react-pdf/renderer'
 import { getAuthedUser } from '@/lib/expenses/serverAuth'
 import { MemoPdfDoc, type MemoPdfData } from '@/lib/wholesale/memoPdf'
-import { pdfAdmin, loadBrandDisplay, loadPrimaryPhotoDataUrls } from '@/lib/wholesale/pdfHelpers'
+import { pdfAdmin, loadBrandDisplay, loadPrimaryPhotoDataUrls, loadBrandLogoDataUrl } from '@/lib/wholesale/pdfHelpers'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,13 +27,17 @@ export async function GET(req: Request, ctx: { params: { id: string } }) {
   if (error || !memo) return NextResponse.json({ error: error?.message || 'Memo not found' }, { status: 404 })
 
   const m = memo as any
-  const brandDisplay = await loadBrandDisplay(m.brand)
+  const [brandDisplay, brandLogoDataUrl] = await Promise.all([
+    loadBrandDisplay(m.brand),
+    loadBrandLogoDataUrl(m.brand),
+  ])
   const itemIds: string[] = (m.lines || []).map((l: any) => l.item_id)
   const photoUrls = await loadPrimaryPhotoDataUrls(itemIds)
 
   const data: MemoPdfData = {
     brand: m.brand,
     brandFullName: brandDisplay.brandFullName,
+    brandLogoDataUrl,
     brandAddress:  brandDisplay.brandAddress,
     brandPhone:    brandDisplay.brandPhone,
     brandEmail:    brandDisplay.brandEmail,

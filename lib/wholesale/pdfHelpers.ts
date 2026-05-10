@@ -8,6 +8,7 @@
 import { createClient } from '@supabase/supabase-js'
 
 export const PHOTO_BUCKET = 'wholesale-photos'
+export const BRAND_LOGOS_BUCKET = 'brand-logos'
 
 export const BRAND_FULL_NAME: Record<string, string> = {
   beb:     'Beneficial Estate Buyers, LLC',
@@ -85,6 +86,17 @@ export async function loadPrimaryPhotoDataUrls(itemIds: string[]): Promise<Recor
     if (url) out[p.item_id] = url
   }))
   return out
+}
+
+/** Brand logo as a data URL for embedding in a PDF header.
+ *  Reads brand_logos table → storage path → file → base64.
+ *  Returns null if the brand has no configured logo. */
+export async function loadBrandLogoDataUrl(brand: string): Promise<string | null> {
+  const sb = pdfAdmin()
+  const { data } = await sb.from('brand_logos').select('logo_path').eq('brand', brand).maybeSingle()
+  const path = (data as any)?.logo_path
+  if (!path) return null
+  return storagePathToDataUrl(BRAND_LOGOS_BUCKET, path)
 }
 
 /** All photos (in sort order) for a single item, as data URLs. */

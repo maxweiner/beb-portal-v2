@@ -10,6 +10,7 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { InventoryItem, WholesaleInvoice, WholesaleInvoiceLine, WholesaleMemo } from '@/types/wholesale'
 import { fmtMoneyCents, fmtDate } from '@/lib/wholesale/format'
+import { Modal, Field, Row } from './InventoryView'
 
 type ReportId =
   | 'inventory_on_hand' | 'aging_inventory' | 'open_memos'
@@ -45,17 +46,20 @@ export default function ReportsView() {
         <span style={{ color: 'var(--mist)' }}>–</span>
         <input type="date" value={to} onChange={e => setTo(e.target.value)} />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
         {REPORTS.map(r => (
           <button key={r.id} onClick={() => setOpen(open === r.id ? null : r.id)}
             style={{
-              padding: 12, textAlign: 'left',
+              padding: '16px 18px', textAlign: 'left',
               border: open === r.id ? '2px solid var(--green)' : '1px solid var(--cream2)',
-              borderRadius: 8, cursor: 'pointer', background: '#fff', fontFamily: 'inherit',
-              display: 'flex', flexDirection: 'column', gap: 4,
-            }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink)' }}>{r.label}</div>
-            <div style={{ fontSize: 11, color: 'var(--mist)' }}>{r.desc}</div>
+              borderRadius: 10, cursor: 'pointer', background: '#fff', fontFamily: 'inherit',
+              display: 'flex', flexDirection: 'column', gap: 6,
+              minHeight: 96, transition: 'background .12s ease',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--cream)')}
+            onMouseLeave={e => (e.currentTarget.style.background = '#fff')}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)' }}>{r.label}</div>
+            <div style={{ fontSize: 12, color: 'var(--mist)', lineHeight: 1.4, whiteSpace: 'normal' }}>{r.desc}</div>
           </button>
         ))}
       </div>
@@ -74,10 +78,17 @@ function ReportPanel({ id, brand, from, to }: { id: ReportId; brand: string; fro
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [columns, setColumns] = useState<string[]>([])
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewBlob, setPreviewBlob] = useState<Blob | null>(null)
+  const [previewing, setPreviewing] = useState(false)
+  const [showEmail, setShowEmail] = useState(false)
+
+  const reportLabel = REPORTS.find(r => r.id === id)?.label || 'Report'
 
   useEffect(() => {
     let cancelled = false
     setLoading(true); setError(null)
+    setPreviewUrl(null); setPreviewBlob(null)
     void (async () => {
       try {
         const result = await runReport(id, brand, from, to)
@@ -89,6 +100,9 @@ function ReportPanel({ id, brand, from, to }: { id: ReportId; brand: string; fro
     })()
     return () => { cancelled = true }
   }, [id, brand, from, to])
+
+  // Revoke any blob URL when the panel re-renders for a different report.
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
 
   function exportCsv() {
     const lines = [columns.join(',')]
@@ -102,13 +116,61 @@ function ReportPanel({ id, brand, from, to }: { id: ReportId; brand: string; fro
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
   }
 
+  async function buildPdf(): Promise<Blob | null> {
+    setPreviewing(true); setError(null)
+    try {
+      const sess = await supabase.auth.getSession()
+      const token = sess.data.session?.access_token || ''
+      const res = await fetch('/api/wholesale/report/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          brand, reportLabel, columns, rows,
+          dateRange: { from, to },
+        }),
+      })
+      if (!res.ok) {
+        let msg = `PDF failed (${res.status})`
+        try { const j = await res.json(); msg = j?.error || msg } catch {}
+        setError(msg); setPreviewing(false); return null
+      }
+      const blob = await res.blob()
+      setPreviewing(false)
+      return blob
+    } catch (e: any) {
+      setError(e?.message || 'PDF failed'); setPreviewing(false); return null
+    }
+  }
+
+  async function previewPdf() {
+    const blob = await buildPdf()
+    if (!blob) return
+    setPreviewBlob(blob)
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    setPreviewUrl(URL.createObjectURL(blob))
+  }
+  function downloadPdf() {
+    if (!previewBlob) return
+    const a = document.createElement('a')
+    a.href = previewUrl!
+    a.download = `${id}-${brand}-${new Date().toISOString().slice(0, 10)}.pdf`
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+  }
+
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <h3 style={{ fontSize: 16, fontWeight: 800 }}>{REPORTS.find(r => r.id === id)?.label}</h3>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <span style={{ fontSize: 11, color: 'var(--mist)' }}>{rows.length} rows</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 800 }}>{reportLabel}</h3>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, color: 'var(--mist)' }}>{rows.filter(r => !r.__isTotal).length} rows</span>
           <button onClick={exportCsv} className="btn-outline btn-sm" disabled={rows.length === 0}>⬇ CSV</button>
+          <button onClick={previewPdf} disabled={rows.length === 0 || previewing} className="btn-outline btn-sm">
+            {previewing ? 'Building…' : '👁 Preview PDF'}
+          </button>
+          {previewBlob && (
+            <button onClick={downloadPdf} className="btn-outline btn-sm">⬇ Download PDF</button>
+          )}
+          <button onClick={() => setShowEmail(true)} disabled={rows.length === 0} className="btn-primary btn-sm">✉ Email PDF</button>
         </div>
       </div>
       {error && <div style={{ padding: 8, background: '#FEE2E2', color: '#991B1B', borderRadius: 6, fontSize: 12 }}>{error}</div>}
@@ -117,6 +179,12 @@ function ReportPanel({ id, brand, from, to }: { id: ReportId; brand: string; fro
       ) : rows.length === 0 ? (
         <div style={{ padding: 20, color: 'var(--mist)', textAlign: 'center' }}>No rows.</div>
       ) : (
+        <>
+        {previewUrl && (
+          <div style={{ marginBottom: 10, border: '1px solid var(--pearl)', borderRadius: 8, overflow: 'hidden' }}>
+            <iframe src={previewUrl} title="Report PDF preview" style={{ width: '100%', height: 560, border: 'none', display: 'block' }} />
+          </div>
+        )}
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
@@ -125,16 +193,89 @@ function ReportPanel({ id, brand, from, to }: { id: ReportId; brand: string; fro
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, i) => (
-                <tr key={i} style={{ borderTop: '1px solid var(--pearl)' }}>
-                  {columns.map(c => <td key={c} style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>{r[c]}</td>)}
-                </tr>
-              ))}
+              {rows.map((r, i) => {
+                const isTotal = r.__isTotal === true
+                return (
+                  <tr key={i} style={{
+                    borderTop: '1px solid var(--pearl)',
+                    background: isTotal ? 'var(--cream2)' : undefined,
+                    fontWeight: isTotal ? 800 : undefined,
+                  }}>
+                    {columns.map(c => <td key={c} style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>{r[c]}</td>)}
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
+        </>
+      )}
+      {showEmail && (
+        <EmailReportModal
+          brand={brand} reportLabel={reportLabel} columns={columns} rows={rows}
+          dateRange={{ from, to }}
+          onClose={() => setShowEmail(false)}
+        />
       )}
     </div>
+  )
+}
+
+function EmailReportModal({
+  brand, reportLabel, columns, rows, dateRange, onClose,
+}: {
+  brand: string
+  reportLabel: string
+  columns: string[]
+  rows: any[]
+  dateRange: { from: string; to: string }
+  onClose: () => void
+}) {
+  const [to, setTo] = useState('')
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const [sent, setSent] = useState(false)
+
+  async function send() {
+    if (!to.trim() || !to.includes('@')) { setErr('Enter a valid email'); return }
+    setBusy(true); setErr(null)
+    try {
+      const sess = await supabase.auth.getSession()
+      const token = sess.data.session?.access_token || ''
+      const res = await fetch('/api/wholesale/report/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          brand, reportLabel, columns, rows, dateRange,
+          to: to.trim(), message: message.trim(),
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json?.error || 'Email failed')
+      setSent(true)
+      setTimeout(onClose, 1200)
+    } catch (e: any) {
+      setErr(e?.message || 'Failed')
+    }
+    setBusy(false)
+  }
+
+  return (
+    <Modal onClose={onClose} title={`Email: ${reportLabel}`}>
+      <Field label="To (email)">
+        <input type="email" autoFocus value={to} onChange={e => setTo(e.target.value)} placeholder="someone@example.com" />
+      </Field>
+      <Field label="Message (optional)">
+        <textarea rows={3} value={message} onChange={e => setMessage(e.target.value)} style={{ width: '100%' }} />
+      </Field>
+      {err && <div style={{ padding: 8, background: '#FEE2E2', color: '#991B1B', borderRadius: 6, fontSize: 12, marginBottom: 8 }}>{err}</div>}
+      {sent && <div style={{ padding: 8, background: '#D1FAE5', color: '#065F46', borderRadius: 6, fontSize: 12, marginBottom: 8 }}>✓ Sent</div>}
+      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+        <button onClick={onClose} className="btn-outline btn-sm">Cancel</button>
+        <button onClick={send} disabled={busy} className="btn-primary btn-sm">{busy ? 'Sending…' : 'Send'}</button>
+      </div>
+    </Modal>
   )
 }
 
@@ -152,13 +293,28 @@ async function runReport(id: ReportId, brand: string, from: string, to: string):
     const { data } = await supabase.from('inventory_items')
       .select('item_number, category, public_notes, cost_cents, wholesale_price_cents, retail_price_cents, location:inventory_locations(name)')
       .eq('brand', brand).eq('status', 'in_stock').is('archived_at', null).order('category').order('item_number')
+    const rows = ((data || []) as any[])
+    const totalCost      = rows.reduce((s, r) => s + (r.cost_cents || 0), 0)
+    const totalWholesale = rows.reduce((s, r) => s + (r.wholesale_price_cents || 0), 0)
+    const totalRetail    = rows.reduce((s, r) => s + (r.retail_price_cents || 0), 0)
     return {
       columns: ['Item','Category','Description','Cost','Wholesale','Retail','Location'],
-      rows: ((data || []) as any[]).map(r => ({
-        Item: r.item_number, Category: r.category, Description: r.public_notes || '',
-        Cost: fmtMoneyCents(r.cost_cents), Wholesale: fmtMoneyCents(r.wholesale_price_cents), Retail: fmtMoneyCents(r.retail_price_cents),
-        Location: r.location?.name || '',
-      })),
+      rows: [
+        ...rows.map(r => ({
+          Item: r.item_number, Category: r.category, Description: r.public_notes || '',
+          Cost: fmtMoneyCents(r.cost_cents), Wholesale: fmtMoneyCents(r.wholesale_price_cents), Retail: fmtMoneyCents(r.retail_price_cents),
+          Location: r.location?.name || '',
+        })),
+        // Totals row — flagged so the table renders it bold.
+        {
+          __isTotal: true,
+          Item: '', Category: '', Description: `Total (${rows.length} items)`,
+          Cost: fmtMoneyCents(totalCost),
+          Wholesale: fmtMoneyCents(totalWholesale),
+          Retail: fmtMoneyCents(totalRetail),
+          Location: '',
+        },
+      ],
     }
   }
   if (id === 'aging_inventory') {
