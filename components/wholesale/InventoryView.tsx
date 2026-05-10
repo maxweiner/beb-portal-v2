@@ -655,38 +655,42 @@ function ItemDetailModal({
       </div>
       {err && <div style={{ padding: 8, background: '#FEE2E2', color: '#991B1B', borderRadius: 6, fontSize: 12, marginBottom: 8 }}>{err}</div>}
       {/* All four panels stay mounted; we toggle visibility with display:
-          none so switching tabs preserves form state + scroll position
-          (was remounting on every click — typed-but-unsaved edits and
-          scroll position vanished). */}
-      <div style={{ display: tab === 'edit' ? 'block' : 'none' }}>
-        <ItemForm
-          mode="edit"
-          existing={item}
-          category={item.category}
-          brand={brand}
-          vendors={vendors}
-          locations={locations}
-          lists={lists}
-          actorId={actorId}
-          actorEmail={actorEmail}
-          onSaved={() => { void reload(); onChanged() }}
-          onCancel={onClose}
-        />
-      </div>
-      <div style={{ display: tab === 'photos' ? 'block' : 'none' }}>
-        <PhotosPanel
-          itemId={item.id} brand={brand} photos={photos} actorId={actorId}
-          actorEmail={actorEmail} onChanged={() => { void reload(); onChanged() }}
-        />
-      </div>
-      <div style={{ display: tab === 'docs' ? 'block' : 'none' }}>
-        <DocsPanel
-          itemId={item.id} brand={brand} docs={docs} actorId={actorId}
-          actorEmail={actorEmail} onChanged={() => { void reload(); onChanged() }}
-        />
-      </div>
-      <div style={{ display: tab === 'history' ? 'block' : 'none' }}>
-        <AuditTimeline entries={audit} />
+          none so switching tabs preserves form state + scroll position.
+          The wrapper has a fixed height and each panel scrolls
+          internally — that way the modal is the SAME size regardless
+          of which tab is active, and each panel keeps its own scroll
+          position when you flip back and forth. */}
+      <div style={{ height: 'calc(92vh - 140px)' }}>
+        <div style={{ display: tab === 'edit' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+          <ItemForm
+            mode="edit"
+            existing={item}
+            category={item.category}
+            brand={brand}
+            vendors={vendors}
+            locations={locations}
+            lists={lists}
+            actorId={actorId}
+            actorEmail={actorEmail}
+            onSaved={() => { void reload(); onChanged() }}
+            onCancel={onClose}
+          />
+        </div>
+        <div style={{ display: tab === 'photos' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+          <PhotosPanel
+            itemId={item.id} brand={brand} photos={photos} actorId={actorId}
+            actorEmail={actorEmail} onChanged={() => { void reload(); onChanged() }}
+          />
+        </div>
+        <div style={{ display: tab === 'docs' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+          <DocsPanel
+            itemId={item.id} brand={brand} docs={docs} actorId={actorId}
+            actorEmail={actorEmail} onChanged={() => { void reload(); onChanged() }}
+          />
+        </div>
+        <div style={{ display: tab === 'history' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+          <AuditTimeline entries={audit} />
+        </div>
       </div>
     </Modal>
   )
