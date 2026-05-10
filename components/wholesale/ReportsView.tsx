@@ -171,10 +171,10 @@ async function runReport(id: ReportId, brand: string, from: string, to: string):
       const bucket = days <= 30 ? '0-30' : days <= 60 ? '31-60' : days <= 90 ? '61-90' : days <= 180 ? '91-180' : '180+'
       return {
         Item: r.item_number, Category: r.category, Description: r.public_notes || '',
-        Cost: fmtMoneyCents(r.cost_cents), Acquired: fmtDate(acq), Days: days, Bucket: bucket,
+        Cost: fmtMoneyCents(r.cost_cents), Stocked: fmtDate(acq), Days: days, Bucket: bucket,
       }
     }).sort((a, b) => b.Days - a.Days)
-    return { columns: ['Item','Category','Description','Cost','Acquired','Days','Bucket'], rows: out }
+    return { columns: ['Item','Category','Description','Cost','Stocked','Days','Bucket'], rows: out }
   }
   if (id === 'open_memos') {
     const { data } = await supabase.from('wholesale_memos')

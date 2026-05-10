@@ -10,6 +10,7 @@ import { fmtDate, fmtMoneyCents, dollarsToCents, centsToDollarsString } from '@/
 import { nextWholesaleNumber } from '@/lib/wholesale/numbers'
 import { logAudit } from '@/lib/wholesale/audit'
 import { Modal, Section, Row, Field, Select } from './InventoryView'
+import Checkbox from '@/components/ui/Checkbox'
 
 const STATUS_LABEL: Record<MemoStatus, string> = {
   open: 'Open', closed_sold: 'Sold', closed_returned: 'Returned', closed_partial: 'Partial', overdue: 'Overdue',
@@ -347,11 +348,14 @@ function MemoDetailModal({
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead><tr style={{ background: 'var(--cream2)' }}>
             <th style={{ padding: '6px 8px', width: 28 }}>
-              <input type="checkbox" checked={outLines.length > 0 && outLines.every(l => selected.has(l.id))}
+              <Checkbox
+                checked={outLines.length > 0 && outLines.every(l => selected.has(l.id))}
                 onChange={() => {
                   const all = outLines.every(l => selected.has(l.id))
                   setSelected(all ? new Set() : new Set(outLines.map(l => l.id)))
-                }} />
+                }}
+                size={16}
+              />
             </th>
             {['Item #','Description','Memo price','Status',''].map(h => <th key={h} style={{ padding: '6px 8px', textAlign: 'left', fontSize: 10, color: 'var(--mist)', textTransform: 'uppercase' }}>{h}</th>)}
           </tr></thead>
@@ -365,7 +369,7 @@ function MemoDetailModal({
                 <tr key={l.id} style={{ borderTop: '1px solid var(--pearl)', background: isSelected ? 'var(--cream2)' : undefined }}>
                   <td style={{ padding: '6px 8px' }}>
                     {canSelect && (
-                      <input type="checkbox" checked={isSelected} onChange={() => {
+                      <Checkbox checked={isSelected} size={16} onChange={() => {
                         const next = new Set(selected)
                         if (next.has(l.id)) next.delete(l.id); else next.add(l.id)
                         setSelected(next)
@@ -381,7 +385,7 @@ function MemoDetailModal({
                       style={{ width: 90, padding: '4px 6px', fontSize: 12 }} />
                   </td>
                   <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
-                    {l.line_status === 'out' ? '📦 Out' : l.line_status === 'sold' ? '✓ Sold' : '↩ Returned'}
+                    {l.line_status === 'out' ? '📋 On Memo' : l.line_status === 'sold' ? '✓ Sold' : '↩ Returned'}
                   </td>
                   <td style={{ padding: '6px 8px', textAlign: 'right' }}>
                     {l.line_status === 'out' && (
