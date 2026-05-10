@@ -8,6 +8,7 @@ import { fmtDate, fmtMoneyCents, dollarsToCents, centsToDollarsString } from '@/
 import { logAudit, diffFields } from '@/lib/wholesale/audit'
 import { loadAdminList } from '@/lib/wholesale/lists'
 import { Modal, Section, Row, Field, Select } from './InventoryView'
+import AddressAutocompleteInput from '@/components/ui/AddressAutocompleteInput'
 
 export default function CustomersView() {
   const { user, brand } = useApp()
@@ -187,7 +188,9 @@ function CustomerModal({
           <Field label="Phone"><input type="text" value={phone} onChange={e => setPhone(e.target.value)} /></Field>
           <Field label="Email"><input type="email" value={email} onChange={e => setEmail(e.target.value)} /></Field>
         </Row>
-        <Field label="Address"><input type="text" value={address} onChange={e => setAddress(e.target.value)} /></Field>
+        <Field label="Address">
+          <AddressAutocompleteInput value={address} onChange={setAddress} placeholder="Start typing an address…" />
+        </Field>
         <Row>
           <Field label="Resale cert #"><input type="text" value={resale_cert} onChange={e => setResaleCert(e.target.value)} /></Field>
           <Field label="Default payment terms">

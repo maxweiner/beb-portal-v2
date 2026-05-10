@@ -682,10 +682,21 @@ function ItemForm({
             <option value="">— none —</option>
             {vendors.map(v => <option key={v.id} value={v.id}>{v.company_name}</option>)}
           </Select></Field>
-          <Field label="Location"><Select value={location_id} onChange={setLocation}>
-            <option value="">— none —</option>
-            {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-          </Select></Field>
+          <Field label="Location">
+            <LocationPicker
+              value={location_id}
+              locations={locations}
+              brand={brand}
+              onChange={setLocation}
+              onAdded={(loc) => {
+                // Push the new location into the parent's list so it
+                // shows up immediately. Parent reloads in the background
+                // via reloadRef but this avoids the race.
+                ;(locations as InventoryLocation[]).push(loc)
+                setLocation(loc.id)
+              }}
+            />
+          </Field>
           <Field label="Date acquired">
             <input type="date" value={date_acquired} onChange={e => setDateAcquired(e.target.value)} />
           </Field>
@@ -1108,6 +1119,39 @@ export function Select({ value, onChange, children }: { value: string; onChange:
     <select value={value} onChange={e => onChange(e.target.value)} style={{ width: '100%', padding: '6px 8px', fontSize: 13, border: '1px solid var(--pearl)', borderRadius: 6, background: '#fff' }}>
       {children}
     </select>
+  )
+}
+
+/** Location dropdown with an inline "+ Add new…" option. Prompts for
+ *  a name, inserts into inventory_locations, then sets the new id as
+ *  the selected value. Avoids a context-switch to the Admin Lists tab
+ *  for the common case of adding a vault / safe / drawer on the fly. */
+export function LocationPicker({
+  value, locations, brand, onChange, onAdded,
+}: {
+  value: string
+  locations: InventoryLocation[]
+  brand: string
+  onChange: (v: string) => void
+  onAdded: (loc: InventoryLocation) => void
+}) {
+  async function handleSelect(v: string) {
+    if (v !== '__new__') { onChange(v); return }
+    const name = window.prompt('New location name (e.g., Vault A, Showcase 3)')
+    if (!name || !name.trim()) return
+    const sortOrder = (locations[locations.length - 1]?.sort_order ?? 0) + 1
+    const { data, error } = await supabase.from('inventory_locations')
+      .insert({ brand, name: name.trim(), sort_order: sortOrder, active: true })
+      .select('*').single()
+    if (error) { alert(`Could not add location: ${error.message}`); return }
+    onAdded(data as InventoryLocation)
+  }
+  return (
+    <Select value={value} onChange={handleSelect}>
+      <option value="">— none —</option>
+      {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+      <option value="__new__">+ Add new location…</option>
+    </Select>
   )
 }
 

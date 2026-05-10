@@ -7,6 +7,7 @@ import type { WholesaleVendor, InventoryItem } from '@/types/wholesale'
 import { fmtDate, fmtMoneyCents } from '@/lib/wholesale/format'
 import { logAudit, diffFields } from '@/lib/wholesale/audit'
 import { Modal, Section, Row, Field, Select } from './InventoryView'
+import AddressAutocompleteInput from '@/components/ui/AddressAutocompleteInput'
 
 export default function VendorsView() {
   const { user, brand } = useApp()
@@ -164,7 +165,9 @@ function VendorModal({
           <Field label="Phone"><input type="text" value={phone} onChange={e => setPhone(e.target.value)} /></Field>
           <Field label="Email"><input type="email" value={email} onChange={e => setEmail(e.target.value)} /></Field>
         </Row>
-        <Field label="Address"><input type="text" value={address} onChange={e => setAddress(e.target.value)} /></Field>
+        <Field label="Address">
+          <AddressAutocompleteInput value={address} onChange={setAddress} placeholder="Start typing an address…" />
+        </Field>
         <Field label="Notes"><textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} style={{ width: '100%' }} /></Field>
       </Section>
 
