@@ -13,8 +13,9 @@
 // at a time and we want quick feedback. Per-row status indicator is
 // shown at the far right of each row.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
+import SheetColumnPicker, { type SheetColumnDef } from '@/components/ui/SheetColumnPicker'
 import {
   updateTrunkShow, createTrunkShow, effectiveStatus,
   TRUNK_SHOW_MILESTONES, type TrunkShowMilestoneKey,
@@ -75,9 +76,58 @@ interface SheetProps {
   onOpen: (id: string) => void
 }
 
+// Column registry for the "⚙ Edit columns" picker.
+const COLUMNS: SheetColumnDef[] = [
+  { id: 'store',    label: 'Store',  group: 'show', locked: true },
+  { id: 'start',    label: 'Start',  group: 'show' },
+  { id: 'end',      label: 'End',    group: 'show' },
+  { id: 'rep',      label: 'Rep',    group: 'show' },
+  { id: 'vip',      label: 'VIP',    group: 'show' },
+  { id: 'confirmation_letter_sent', label: 'Confirmation Letter', group: 'milestones' },
+  { id: 'postcards_email_sent',     label: 'Postcards Email',     group: 'milestones' },
+  { id: 'postcards_ordered',        label: 'Postcards Ordered',   group: 'milestones' },
+  { id: 'proofed',                  label: 'Proofed',             group: 'milestones' },
+  { id: 'final_files_sent',         label: 'Final Files',         group: 'milestones' },
+  { id: 'notes',    label: 'Notes',  group: 'show' },
+  { id: 'status',   label: 'Status', group: 'show' },
+]
+const DEFAULT_COL_IDS = COLUMNS.map(c => c.id)
+const COLUMN_GROUPS = [
+  { id: 'show',       label: 'Show' },
+  { id: 'milestones', label: 'Milestones' },
+]
+const STORAGE_KEY = (brand: string) => `beb.trunk_show_sheet.cols.${brand}`
+
 export default function TrunkShowSheet({ shows, onChanged, onOpen }: SheetProps) {
-  const { user, users, trunkShowStores } = useApp()
+  const { user, users, trunkShowStores, brand } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || !!user?.is_partner
+
+  // Column picker state — per-brand localStorage.
+  const [activeCols, setActiveCols] = useState<Set<string>>(new Set(DEFAULT_COL_IDS))
+  const [showColumnPicker, setShowColumnPicker] = useState(false)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !brand) return
+    const saved = window.localStorage.getItem(STORAGE_KEY(brand))
+    if (saved) {
+      try {
+        const arr = JSON.parse(saved)
+        if (Array.isArray(arr)) {
+          const next = new Set<string>(arr.filter((x: any) => typeof x === 'string'))
+          next.add('store')  // locked
+          setActiveCols(next); return
+        }
+      } catch { /* ignore */ }
+    }
+    setActiveCols(new Set(DEFAULT_COL_IDS))
+  }, [brand])
+  function setColumnIds(ids: string[]) {
+    const next = new Set(ids); next.add('store')
+    setActiveCols(next)
+    if (typeof window !== 'undefined' && brand) {
+      window.localStorage.setItem(STORAGE_KEY(brand), JSON.stringify(Array.from(next)))
+    }
+  }
+  const colOn = (id: string) => activeCols.has(id)
 
   const repOptions = useMemo(
     () => users
@@ -95,52 +145,70 @@ export default function TrunkShowSheet({ shows, onChanged, onOpen }: SheetProps)
   )
 
   return (
-    <div style={{ background: '#fff', border: '1px solid var(--pearl)', borderRadius: 8, overflow: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-        <thead>
-          <tr>
-            <th style={HEADER_STYLE}>Store</th>
-            <th style={HEADER_STYLE}>Start</th>
-            <th style={HEADER_STYLE}>End</th>
-            <th style={HEADER_STYLE}>Rep</th>
-            <th style={{ ...HEADER_STYLE, textAlign: 'center' }}>VIP</th>
-            {TRUNK_SHOW_MILESTONES.map(m => (
-              <th key={m.key} style={{ ...HEADER_STYLE, textAlign: 'center' }}>{m.label}</th>
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+        <button onClick={() => setShowColumnPicker(true)} className="btn-outline btn-sm" title="Choose which columns appear">⚙ Edit columns</button>
+      </div>
+      <div style={{ background: '#fff', border: '1px solid var(--pearl)', borderRadius: 8, overflow: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>
+            <tr>
+              {colOn('store') && <th style={HEADER_STYLE}>Store</th>}
+              {colOn('start') && <th style={HEADER_STYLE}>Start</th>}
+              {colOn('end')   && <th style={HEADER_STYLE}>End</th>}
+              {colOn('rep')   && <th style={HEADER_STYLE}>Rep</th>}
+              {colOn('vip')   && <th style={{ ...HEADER_STYLE, textAlign: 'center' }}>VIP</th>}
+              {TRUNK_SHOW_MILESTONES.filter(m => colOn(m.key)).map(m => (
+                <th key={m.key} style={{ ...HEADER_STYLE, textAlign: 'center' }}>{m.label}</th>
+              ))}
+              {colOn('notes')  && <th style={HEADER_STYLE}>Notes</th>}
+              {colOn('status') && <th style={HEADER_STYLE}>Status</th>}
+              <th style={{ ...HEADER_STYLE, width: 80 }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {shows.map(s => (
+              <SheetRow
+                key={s.id}
+                colOn={colOn}
+                show={s}
+                users={users}
+                repOptions={repOptions}
+                stores={activeStores}
+                currentUserId={user?.id || null}
+                isAdmin={isAdmin}
+                onChanged={onChanged}
+                onOpen={onOpen}
+              />
             ))}
-            <th style={HEADER_STYLE}>Notes</th>
-            <th style={HEADER_STYLE}>Status</th>
-            <th style={{ ...HEADER_STYLE, width: 80 }}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {shows.map(s => (
-            <SheetRow
-              key={s.id}
-              show={s}
-              users={users}
-              repOptions={repOptions}
-              stores={activeStores}
-              currentUserId={user?.id || null}
-              isAdmin={isAdmin}
-              onChanged={onChanged}
-              onOpen={onOpen}
-            />
-          ))}
-          {isAdmin && (
-            <AddRow
-              repOptions={repOptions}
-              stores={activeStores}
-              onAdded={onChanged}
-            />
-          )}
-        </tbody>
-      </table>
+            {isAdmin && (
+              <AddRow
+                colOn={colOn}
+                repOptions={repOptions}
+                stores={activeStores}
+                onAdded={onChanged}
+              />
+            )}
+          </tbody>
+        </table>
+      </div>
+      {showColumnPicker && (
+        <SheetColumnPicker
+          columns={COLUMNS}
+          groups={COLUMN_GROUPS}
+          selected={Array.from(activeCols)}
+          defaults={DEFAULT_COL_IDS}
+          onChange={setColumnIds}
+          onClose={() => setShowColumnPicker(false)}
+          title="Trunk show sheet columns"
+        />
+      )}
     </div>
   )
 }
 
 function SheetRow({
-  show, users, repOptions, stores, currentUserId, isAdmin, onChanged, onOpen,
+  show, users, repOptions, stores, currentUserId, isAdmin, colOn, onChanged, onOpen,
 }: {
   show: TrunkShow
   users: User[]
@@ -148,6 +216,7 @@ function SheetRow({
   stores: TrunkShowStore[]
   currentUserId: string | null
   isAdmin: boolean
+  colOn: (id: string) => boolean
   onChanged: () => void
   onOpen: (id: string) => void
 }) {
@@ -199,74 +268,78 @@ function SheetRow({
       opacity: eff === 'cancelled' ? 0.55 : 1,
       background: eff === 'reserved' ? '#FFFBEB' : '#fff',
     }}>
-      {/* Store */}
-      <td style={{ ...CELL_STYLE, minWidth: 160 }}>
-        {isAdmin ? (
-          <select
-            value={local.store_id}
-            onChange={e => save({ store_id: e.target.value })}
+      {colOn('store') && (
+        <td style={{ ...CELL_STYLE, minWidth: 160 }}>
+          {isAdmin ? (
+            <select
+              value={local.store_id}
+              onChange={e => save({ store_id: e.target.value })}
+              disabled={!isAdmin}
+              style={cellSelectStyle}
+            >
+              {stores.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+              {!stores.find(s => s.id === local.store_id) && (
+                <option value={local.store_id}>(unknown / archived)</option>
+              )}
+            </select>
+          ) : (
+            <span>{stores.find(s => s.id === local.store_id)?.name || '—'}</span>
+          )}
+        </td>
+      )}
+
+      {colOn('start') && (
+        <td style={{ ...CELL_STYLE, minWidth: 120 }}>
+          {isAdmin ? (
+            <DatePicker
+              value={local.start_date}
+              onChange={v => v && save({ start_date: v })}
+            />
+          ) : <span>{local.start_date}</span>}
+        </td>
+      )}
+
+      {colOn('end') && (
+        <td style={{ ...CELL_STYLE, minWidth: 120 }}>
+          {isAdmin ? (
+            <DatePicker
+              value={local.end_date}
+              onChange={v => v && save({ end_date: v })}
+            />
+          ) : <span>{local.end_date}</span>}
+        </td>
+      )}
+
+      {colOn('rep') && (
+        <td style={{ ...CELL_STYLE, minWidth: 140 }}>
+          {isAdmin ? (
+            <select
+              value={local.assigned_rep_id || ''}
+              onChange={e => save({ assigned_rep_id: e.target.value || null })}
+              style={cellSelectStyle}
+            >
+              <option value="">— unassigned —</option>
+              {repOptions.map(u => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+          ) : <span>{repName}</span>}
+        </td>
+      )}
+
+      {colOn('vip') && (
+        <td style={{ ...CELL_STYLE, textAlign: 'center' }}>
+          <Checkbox
+            checked={!!local.vip_showing}
+            onChange={v => save({ vip_showing: v })}
             disabled={!isAdmin}
-            style={cellSelectStyle}
-          >
-            {stores.map(s => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-            {!stores.find(s => s.id === local.store_id) && (
-              <option value={local.store_id}>(unknown / archived)</option>
-            )}
-          </select>
-        ) : (
-          <span>{stores.find(s => s.id === local.store_id)?.name || '—'}</span>
-        )}
-      </td>
-
-      {/* Start date */}
-      <td style={{ ...CELL_STYLE, minWidth: 120 }}>
-        {isAdmin ? (
-          <DatePicker
-            value={local.start_date}
-            onChange={v => v && save({ start_date: v })}
           />
-        ) : <span>{local.start_date}</span>}
-      </td>
+        </td>
+      )}
 
-      {/* End date */}
-      <td style={{ ...CELL_STYLE, minWidth: 120 }}>
-        {isAdmin ? (
-          <DatePicker
-            value={local.end_date}
-            onChange={v => v && save({ end_date: v })}
-          />
-        ) : <span>{local.end_date}</span>}
-      </td>
-
-      {/* Rep */}
-      <td style={{ ...CELL_STYLE, minWidth: 140 }}>
-        {isAdmin ? (
-          <select
-            value={local.assigned_rep_id || ''}
-            onChange={e => save({ assigned_rep_id: e.target.value || null })}
-            style={cellSelectStyle}
-          >
-            <option value="">— unassigned —</option>
-            {repOptions.map(u => (
-              <option key={u.id} value={u.id}>{u.name}</option>
-            ))}
-          </select>
-        ) : <span>{repName}</span>}
-      </td>
-
-      {/* VIP */}
-      <td style={{ ...CELL_STYLE, textAlign: 'center' }}>
-        <Checkbox
-          checked={!!local.vip_showing}
-          onChange={v => save({ vip_showing: v })}
-          disabled={!isAdmin}
-        />
-      </td>
-
-      {/* Milestone columns */}
-      {TRUNK_SHOW_MILESTONES.map(m => {
+      {TRUNK_SHOW_MILESTONES.filter(m => colOn(m.key)).map(m => {
         const atKey = `${m.key}_at` as keyof TrunkShow
         const checked = !!(local as any)[atKey]
         return (
@@ -288,30 +361,32 @@ function SheetRow({
         )
       })}
 
-      {/* Notes */}
-      <td
-        style={{ ...CELL_STYLE, maxWidth: 220, cursor: 'pointer' }}
-        onClick={() => onOpen(show.id)}
-        title={local.notes || 'Open detail to edit notes'}
-      >
-        <span style={{
-          display: 'block', overflow: 'hidden', textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap', color: local.notes ? 'var(--ink)' : 'var(--mist)',
-          fontStyle: local.notes ? 'normal' : 'italic',
-        }}>
-          {local.notes || '—'}
-        </span>
-      </td>
+      {colOn('notes') && (
+        <td
+          style={{ ...CELL_STYLE, maxWidth: 220, cursor: 'pointer' }}
+          onClick={() => onOpen(show.id)}
+          title={local.notes || 'Open detail to edit notes'}
+        >
+          <span style={{
+            display: 'block', overflow: 'hidden', textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap', color: local.notes ? 'var(--ink)' : 'var(--mist)',
+            fontStyle: local.notes ? 'normal' : 'italic',
+          }}>
+            {local.notes || '—'}
+          </span>
+        </td>
+      )}
 
-      {/* Status */}
-      <td style={{ ...CELL_STYLE, whiteSpace: 'nowrap' }}>
-        <span style={{
-          background: sc.bg, color: sc.fg,
-          padding: '2px 8px', borderRadius: 999,
-          fontSize: 10, fontWeight: 800,
-          textTransform: 'uppercase', letterSpacing: '.04em',
-        }}>{STATUS_LABEL[eff]}</span>
-      </td>
+      {colOn('status') && (
+        <td style={{ ...CELL_STYLE, whiteSpace: 'nowrap' }}>
+          <span style={{
+            background: sc.bg, color: sc.fg,
+            padding: '2px 8px', borderRadius: 999,
+            fontSize: 10, fontWeight: 800,
+            textTransform: 'uppercase', letterSpacing: '.04em',
+          }}>{STATUS_LABEL[eff]}</span>
+        </td>
+      )}
 
       {/* Save indicator + open detail */}
       <td style={{ ...CELL_STYLE, textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -328,10 +403,11 @@ function SheetRow({
 }
 
 function AddRow({
-  repOptions, stores, onAdded,
+  repOptions, stores, colOn, onAdded,
 }: {
   repOptions: User[]
   stores: TrunkShowStore[]
+  colOn: (id: string) => boolean
   onAdded: () => void
 }) {
   const [storeId, setStoreId] = useState('')
@@ -366,40 +442,47 @@ function AddRow({
 
   return (
     <tr style={{ background: '#FAFAF7' }}>
-      <td style={{ ...CELL_STYLE, minWidth: 160 }}>
-        <select
-          value={storeId}
-          onChange={e => setStoreId(e.target.value)}
-          style={cellSelectStyle}
-        >
-          <option value="">+ Pick store…</option>
-          {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-      </td>
-      <td style={{ ...CELL_STYLE, minWidth: 120 }}>
-        <DatePicker value={startDate} onChange={v => {
-          setStartDate(v)
-          if (v && !endDate) setEndDate(v)
-        }} />
-      </td>
-      <td style={{ ...CELL_STYLE, minWidth: 120 }}>
-        <DatePicker value={endDate} onChange={setEndDate} />
-      </td>
-      <td style={{ ...CELL_STYLE, minWidth: 140 }}>
-        <select
-          value={repId}
-          onChange={e => setRepId(e.target.value)}
-          style={cellSelectStyle}
-        >
-          <option value="">— unassigned —</option>
-          {repOptions.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-        </select>
-      </td>
-      {/* VIP + 5 milestones empty for new row */}
-      <td style={CELL_STYLE} />
-      {TRUNK_SHOW_MILESTONES.map(m => <td key={m.key} style={CELL_STYLE} />)}
-      <td style={CELL_STYLE} />
-      <td style={CELL_STYLE} />
+      {colOn('store') && (
+        <td style={{ ...CELL_STYLE, minWidth: 160 }}>
+          <select
+            value={storeId}
+            onChange={e => setStoreId(e.target.value)}
+            style={cellSelectStyle}
+          >
+            <option value="">+ Pick store…</option>
+            {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </td>
+      )}
+      {colOn('start') && (
+        <td style={{ ...CELL_STYLE, minWidth: 120 }}>
+          <DatePicker value={startDate} onChange={v => {
+            setStartDate(v)
+            if (v && !endDate) setEndDate(v)
+          }} />
+        </td>
+      )}
+      {colOn('end') && (
+        <td style={{ ...CELL_STYLE, minWidth: 120 }}>
+          <DatePicker value={endDate} onChange={setEndDate} />
+        </td>
+      )}
+      {colOn('rep') && (
+        <td style={{ ...CELL_STYLE, minWidth: 140 }}>
+          <select
+            value={repId}
+            onChange={e => setRepId(e.target.value)}
+            style={cellSelectStyle}
+          >
+            <option value="">— unassigned —</option>
+            {repOptions.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+        </td>
+      )}
+      {colOn('vip') && <td style={CELL_STYLE} />}
+      {TRUNK_SHOW_MILESTONES.filter(m => colOn(m.key)).map(m => <td key={m.key} style={CELL_STYLE} />)}
+      {colOn('notes')  && <td style={CELL_STYLE} />}
+      {colOn('status') && <td style={CELL_STYLE} />}
       <td style={{ ...CELL_STYLE, textAlign: 'right', whiteSpace: 'nowrap' }}>
         <button
           onClick={submit}

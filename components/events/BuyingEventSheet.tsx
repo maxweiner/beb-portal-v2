@@ -21,7 +21,7 @@
 // keeping that flow consistent with how reserved events are usually
 // created.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { Event, EventStatus, Store, User } from '@/types'
@@ -30,10 +30,32 @@ import { fmtMoney } from '@/lib/format'
 import { formatEventRange, eventEndIso } from '@/lib/eventDates'
 import Checkbox from '@/components/ui/Checkbox'
 import DatePicker from '@/components/ui/DatePicker'
+import SheetColumnPicker, { type SheetColumnDef } from '@/components/ui/SheetColumnPicker'
 
 type RowSaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 type SortKey = 'date' | 'store' | 'spend'
 type SortDir = 'asc' | 'desc'
+
+// Column registry — drives the "⚙ Edit columns" picker. Item-style
+// identity column (Dates) is locked so the row always shows a date.
+const COLUMNS: SheetColumnDef[] = [
+  { id: 'date',               label: 'Dates',         group: 'event',     locked: true },
+  { id: 'store',              label: 'Store',         group: 'event' },
+  { id: 'status',             label: 'Status',        group: 'event' },
+  { id: 'buyers_needed',      label: 'Buyers',        group: 'event' },
+  { id: 'workers',            label: 'Workers',       group: 'event' },
+  { id: 'staff_briefed',      label: 'Staff Briefed', group: 'readiness' },
+  { id: 'travel_override',    label: 'Travel',        group: 'readiness' },
+  { id: 'marketing_override', label: 'Marketing',     group: 'readiness' },
+  { id: 'assets_override',    label: 'Assets',        group: 'readiness' },
+  { id: 'spend',              label: 'Spend',         group: 'event' },
+]
+const DEFAULT_COL_IDS = COLUMNS.map(c => c.id)  // all on by default
+const COLUMN_GROUPS = [
+  { id: 'event',     label: 'Event' },
+  { id: 'readiness', label: 'Readiness' },
+]
+const STORAGE_KEY = (brand: string) => `beb.buying_event_sheet.cols.${brand}`
 
 const READINESS = [
   { key: 'staff_briefed',     label: 'Staff Briefed' },
@@ -92,8 +114,38 @@ interface SheetProps {
 }
 
 export default function BuyingEventSheet({ events }: SheetProps) {
-  const { user, users, stores, setEvents, events: ctxEvents } = useApp()
+  const { user, users, stores, setEvents, events: ctxEvents, brand } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || !!user?.is_partner
+
+  // Column picker state — brand-scoped, persisted to localStorage.
+  const [activeCols, setActiveCols] = useState<Set<string>>(new Set(DEFAULT_COL_IDS))
+  const [showColumnPicker, setShowColumnPicker] = useState(false)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !brand) return
+    const saved = window.localStorage.getItem(STORAGE_KEY(brand))
+    if (saved) {
+      try {
+        const arr = JSON.parse(saved)
+        if (Array.isArray(arr)) {
+          // Force-include the locked 'date' column.
+          const next = new Set<string>(arr.filter((x: any) => typeof x === 'string'))
+          next.add('date')
+          setActiveCols(next)
+          return
+        }
+      } catch { /* ignore */ }
+    }
+    setActiveCols(new Set(DEFAULT_COL_IDS))
+  }, [brand])
+  function setColumnIds(ids: string[]) {
+    const next = new Set(ids)
+    next.add('date')
+    setActiveCols(next)
+    if (typeof window !== 'undefined' && brand) {
+      window.localStorage.setItem(STORAGE_KEY(brand), JSON.stringify(Array.from(next)))
+    }
+  }
+  const colOn = (id: string) => activeCols.has(id)
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | EventStatus>('all')
@@ -178,6 +230,11 @@ export default function BuyingEventSheet({ events }: SheetProps) {
         ))}
         <div style={{ flex: 1 }} />
         <button
+          onClick={() => setShowColumnPicker(true)}
+          className="btn-outline btn-xs"
+          title="Choose which columns appear"
+        >⚙ Edit columns</button>
+        <button
           onClick={() => setShowPast(p => !p)}
           className={showPast ? 'btn-primary btn-xs' : 'btn-outline btn-xs'}
           title={showPast ? 'Hide events older than 30 days' : 'Show all historical events'}
@@ -191,15 +248,15 @@ export default function BuyingEventSheet({ events }: SheetProps) {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
             <tr>
-              <th style={{ ...HEADER_STYLE, cursor: 'pointer' }} onClick={() => toggleSort('date')}>Dates{arrow('date')}</th>
-              <th style={{ ...HEADER_STYLE, cursor: 'pointer' }} onClick={() => toggleSort('store')}>Store{arrow('store')}</th>
-              <th style={HEADER_STYLE}>Status</th>
-              <th style={{ ...HEADER_STYLE, textAlign: 'center' }}>Buyers</th>
-              <th style={{ ...HEADER_STYLE, textAlign: 'center' }}>Workers</th>
-              {READINESS.map(r => (
+              {colOn('date')          && <th style={{ ...HEADER_STYLE, cursor: 'pointer' }} onClick={() => toggleSort('date')}>Dates{arrow('date')}</th>}
+              {colOn('store')         && <th style={{ ...HEADER_STYLE, cursor: 'pointer' }} onClick={() => toggleSort('store')}>Store{arrow('store')}</th>}
+              {colOn('status')        && <th style={HEADER_STYLE}>Status</th>}
+              {colOn('buyers_needed') && <th style={{ ...HEADER_STYLE, textAlign: 'center' }}>Buyers</th>}
+              {colOn('workers')       && <th style={{ ...HEADER_STYLE, textAlign: 'center' }}>Workers</th>}
+              {READINESS.filter(r => colOn(r.key)).map(r => (
                 <th key={r.key} style={{ ...HEADER_STYLE, textAlign: 'center' }}>{r.label}</th>
               ))}
-              <th style={{ ...HEADER_STYLE, textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('spend')}>Spend{arrow('spend')}</th>
+              {colOn('spend')         && <th style={{ ...HEADER_STYLE, textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('spend')}>Spend{arrow('spend')}</th>}
               <th style={{ ...HEADER_STYLE, width: 40 }}></th>
             </tr>
           </thead>
@@ -212,30 +269,44 @@ export default function BuyingEventSheet({ events }: SheetProps) {
                 stores={activeStores}
                 currentUserId={user?.id || null}
                 isAdmin={isAdmin}
+                colOn={colOn}
                 onLocalUpdate={(patch) => applyLocalUpdate(e.id, patch)}
               />
             ))}
             {isAdmin && (
               <AddRow
                 stores={activeStores}
+                colOn={colOn}
                 afterCreate={(ev) => setEvents([ev, ...ctxEvents])}
               />
             )}
           </tbody>
         </table>
       </div>
+      {showColumnPicker && (
+        <SheetColumnPicker
+          columns={COLUMNS}
+          groups={COLUMN_GROUPS}
+          selected={Array.from(activeCols)}
+          defaults={DEFAULT_COL_IDS}
+          onChange={setColumnIds}
+          onClose={() => setShowColumnPicker(false)}
+          title="Buying event sheet columns"
+        />
+      )}
     </div>
   )
 }
 
 function SheetRow({
-  ev, users, stores, currentUserId, isAdmin, onLocalUpdate,
+  ev, users, stores, currentUserId, isAdmin, colOn, onLocalUpdate,
 }: {
   ev: Event
   users: User[]
   stores: Store[]
   currentUserId: string | null
   isAdmin: boolean
+  colOn: (id: string) => boolean
   onLocalUpdate: (patch: Partial<Event>) => void
 }) {
   const [status, setStatus] = useState<RowSaveStatus>('idle')
@@ -287,99 +358,103 @@ function SheetRow({
       opacity: isCancelled ? 0.55 : 1,
       background: evStatus === 'reserved' ? '#FFFBEB' : '#fff',
     }}>
-      {/* Dates */}
-      <td style={{ ...CELL_STYLE, minWidth: 160 }}>
-        {isAdmin && !isCancelled ? (
-          <DatePicker
-            value={ev.start_date}
-            onChange={v => v && save({ start_date: v })}
-          />
-        ) : (
-          <span style={{ fontWeight: 600 }}>
-            {ev.start_date ? formatEventRange(ev.start_date) : '—'}
-          </span>
-        )}
-      </td>
+      {colOn('date') && (
+        <td style={{ ...CELL_STYLE, minWidth: 160 }}>
+          {isAdmin && !isCancelled ? (
+            <DatePicker
+              value={ev.start_date}
+              onChange={v => v && save({ start_date: v })}
+            />
+          ) : (
+            <span style={{ fontWeight: 600 }}>
+              {ev.start_date ? formatEventRange(ev.start_date) : '—'}
+            </span>
+          )}
+        </td>
+      )}
 
-      {/* Store */}
-      <td style={{ ...CELL_STYLE, minWidth: 180 }}>
-        {isAdmin && !isCancelled ? (
-          <select
-            value={ev.store_id}
-            onChange={e => {
-              const s = stores.find(x => x.id === e.target.value)
-              save({ store_id: e.target.value, store_name: s?.name || ev.store_name } as any)
-            }}
-            style={cellSelectStyle}
-          >
-            {stores.map(s => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-            {!stores.find(s => s.id === ev.store_id) && (
-              <option value={ev.store_id}>{ev.store_name || '(unknown)'}</option>
-            )}
-          </select>
-        ) : (
-          <span style={{ fontWeight: 700 }}>{ev.store_name}</span>
-        )}
-      </td>
+      {colOn('store') && (
+        <td style={{ ...CELL_STYLE, minWidth: 180 }}>
+          {isAdmin && !isCancelled ? (
+            <select
+              value={ev.store_id}
+              onChange={e => {
+                const s = stores.find(x => x.id === e.target.value)
+                save({ store_id: e.target.value, store_name: s?.name || ev.store_name } as any)
+              }}
+              style={cellSelectStyle}
+            >
+              {stores.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+              {!stores.find(s => s.id === ev.store_id) && (
+                <option value={ev.store_id}>{ev.store_name || '(unknown)'}</option>
+              )}
+            </select>
+          ) : (
+            <span style={{ fontWeight: 700 }}>{ev.store_name}</span>
+          )}
+        </td>
+      )}
 
-      {/* Status */}
-      <td style={{ ...CELL_STYLE, whiteSpace: 'nowrap' }}>
-        {isAdmin && !isCancelled ? (
-          <select
-            value={evStatus}
-            onChange={e => save({ status: e.target.value as EventStatus })}
-            style={cellSelectStyle}
-          >
-            <option value="scheduled">Scheduled</option>
-            <option value="reserved">📌 Reserved</option>
-            <option value="completed">Completed</option>
-          </select>
-        ) : (
+      {colOn('status') && (
+        <td style={{ ...CELL_STYLE, whiteSpace: 'nowrap' }}>
+          {isAdmin && !isCancelled ? (
+            <select
+              value={evStatus}
+              onChange={e => save({ status: e.target.value as EventStatus })}
+              style={cellSelectStyle}
+            >
+              <option value="scheduled">Scheduled</option>
+              <option value="reserved">📌 Reserved</option>
+              <option value="completed">Completed</option>
+            </select>
+          ) : (
+            <span style={{
+              background: sc.bg, color: sc.fg,
+              padding: '2px 8px', borderRadius: 999,
+              fontSize: 10, fontWeight: 800,
+              textTransform: 'uppercase', letterSpacing: '.04em',
+            }}>{STATUS_LABEL[evStatus]}</span>
+          )}
+        </td>
+      )}
+
+      {colOn('buyers_needed') && (
+        <td style={{ ...CELL_STYLE, textAlign: 'center' }}>
+          {isAdmin && !isCancelled ? (
+            <input
+              type="number"
+              min={0}
+              value={ev.buyers_needed ?? ''}
+              onChange={e => {
+                const v = e.target.value === '' ? null : Number(e.target.value)
+                save({ buyers_needed: v as any })
+              }}
+              style={{
+                width: 50, fontSize: 12, padding: '4px 6px',
+                border: '1px solid var(--pearl)', borderRadius: 4,
+                background: '#fff', textAlign: 'center',
+              }}
+            />
+          ) : (
+            <span>{ev.buyers_needed ?? '—'}</span>
+          )}
+        </td>
+      )}
+
+      {colOn('workers') && (
+        <td style={{ ...CELL_STYLE, textAlign: 'center', whiteSpace: 'nowrap' }}>
           <span style={{
-            background: sc.bg, color: sc.fg,
-            padding: '2px 8px', borderRadius: 999,
-            fontSize: 10, fontWeight: 800,
-            textTransform: 'uppercase', letterSpacing: '.04em',
-          }}>{STATUS_LABEL[evStatus]}</span>
-        )}
-      </td>
+            fontWeight: 600,
+            color: understaffed ? '#b45309' : 'var(--ink)',
+          }}>
+            {workerCount}{need != null ? ` / ${need}` : ''}
+          </span>
+        </td>
+      )}
 
-      {/* Buyers Needed */}
-      <td style={{ ...CELL_STYLE, textAlign: 'center' }}>
-        {isAdmin && !isCancelled ? (
-          <input
-            type="number"
-            min={0}
-            value={ev.buyers_needed ?? ''}
-            onChange={e => {
-              const v = e.target.value === '' ? null : Number(e.target.value)
-              save({ buyers_needed: v as any })
-            }}
-            style={{
-              width: 50, fontSize: 12, padding: '4px 6px',
-              border: '1px solid var(--pearl)', borderRadius: 4,
-              background: '#fff', textAlign: 'center',
-            }}
-          />
-        ) : (
-          <span>{ev.buyers_needed ?? '—'}</span>
-        )}
-      </td>
-
-      {/* Workers count */}
-      <td style={{ ...CELL_STYLE, textAlign: 'center', whiteSpace: 'nowrap' }}>
-        <span style={{
-          fontWeight: 600,
-          color: understaffed ? '#b45309' : 'var(--ink)',
-        }}>
-          {workerCount}{need != null ? ` / ${need}` : ''}
-        </span>
-      </td>
-
-      {/* Readiness checkboxes */}
-      {READINESS.map(r => {
+      {READINESS.filter(r => colOn(r.key)).map(r => {
         const atKey = `${r.key}_at` as keyof Event
         const checked = !!(ev as any)[atKey]
         return (
@@ -401,10 +476,11 @@ function SheetRow({
         )
       })}
 
-      {/* Spend total */}
-      <td style={{ ...CELL_STYLE, textAlign: 'right', whiteSpace: 'nowrap' }}>
-        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(totalSpend)}</span>
-      </td>
+      {colOn('spend') && (
+        <td style={{ ...CELL_STYLE, textAlign: 'right', whiteSpace: 'nowrap' }}>
+          <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(totalSpend)}</span>
+        </td>
+      )}
 
       {/* Save indicator */}
       <td style={{ ...CELL_STYLE, textAlign: 'right' }}>
@@ -415,9 +491,10 @@ function SheetRow({
 }
 
 function AddRow({
-  stores, afterCreate,
+  stores, colOn, afterCreate,
 }: {
   stores: Store[]
+  colOn: (id: string) => boolean
   afterCreate: (ev: Event) => void
 }) {
   const { user, brand } = useApp()
@@ -455,37 +532,32 @@ function AddRow({
 
   return (
     <tr style={{ background: '#FAFAF7' }}>
-      <td style={{ ...CELL_STYLE, minWidth: 160 }}>
-        <DatePicker value={startDate} onChange={setStartDate} />
-      </td>
-      <td style={{ ...CELL_STYLE, minWidth: 180 }}>
-        <select
-          value={storeId}
-          onChange={e => setStoreId(e.target.value)}
-          style={cellSelectStyle}
-        >
-          <option value="">+ Pick store…</option>
-          {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-      </td>
-      <td style={CELL_STYLE} />
-      <td style={{ ...CELL_STYLE, textAlign: 'center' }}>
-        <input
-          type="number"
-          min={0}
-          placeholder="—"
-          value={buyersNeeded}
-          onChange={e => setBuyersNeeded(e.target.value)}
-          style={{
-            width: 50, fontSize: 12, padding: '4px 6px',
-            border: '1px solid var(--pearl)', borderRadius: 4,
-            background: '#fff', textAlign: 'center',
-          }}
-        />
-      </td>
-      <td style={CELL_STYLE} />
-      {READINESS.map(r => <td key={r.key} style={CELL_STYLE} />)}
-      <td style={CELL_STYLE} />
+      {colOn('date') && (
+        <td style={{ ...CELL_STYLE, minWidth: 160 }}>
+          <DatePicker value={startDate} onChange={setStartDate} />
+        </td>
+      )}
+      {colOn('store') && (
+        <td style={{ ...CELL_STYLE, minWidth: 180 }}>
+          <select value={storeId} onChange={e => setStoreId(e.target.value)} style={cellSelectStyle}>
+            <option value="">+ Pick store…</option>
+            {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </td>
+      )}
+      {colOn('status') && <td style={CELL_STYLE} />}
+      {colOn('buyers_needed') && (
+        <td style={{ ...CELL_STYLE, textAlign: 'center' }}>
+          <input
+            type="number" min={0} placeholder="—"
+            value={buyersNeeded} onChange={e => setBuyersNeeded(e.target.value)}
+            style={{ width: 50, fontSize: 12, padding: '4px 6px', border: '1px solid var(--pearl)', borderRadius: 4, background: '#fff', textAlign: 'center' }}
+          />
+        </td>
+      )}
+      {colOn('workers') && <td style={CELL_STYLE} />}
+      {READINESS.filter(r => colOn(r.key)).map(r => <td key={r.key} style={CELL_STYLE} />)}
+      {colOn('spend') && <td style={CELL_STYLE} />}
       <td style={{ ...CELL_STYLE, textAlign: 'right', whiteSpace: 'nowrap' }}>
         <button
           onClick={submit}

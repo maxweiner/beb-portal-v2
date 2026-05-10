@@ -9,7 +9,7 @@
 // stubs. PRs 2/3/4 fill them in (readiness checklist, live ops,
 // post-event reconciliation).
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { NavPage } from '@/app/page'
 import { useApp } from '@/lib/context'
 import Events from './Events'
@@ -44,12 +44,21 @@ export default function BuyingEventsView({ setNav }: { setNav?: (n: NavPage) => 
   const [phase, setPhase] = useState<Phase>('pre')
   const [createMode, setCreateMode] = useState<'scheduled' | 'reserved' | null>(null)
 
-  // Sync from DB pref (cross-device source of truth). Skip 'sheet' here too —
-  // see changeView for why we don't persist it.
+  // Sync from DB pref (cross-device source of truth). Only fires when
+  // the user's preferences object itself changes — NOT when local view
+  // state flips, otherwise every click would snap back to the saved
+  // pref. A ref guards the very first apply so subsequent clicks don't
+  // get clobbered by stale pref reads.
+  const dbPrefAppliedRef = useRef(false)
   useEffect(() => {
+    if (dbPrefAppliedRef.current) return
     const dbPref = (user?.preferences as any)?.buying_events_view
-    if (isViewMode(dbPref) && dbPref !== 'sheet' && dbPref !== view) setView(dbPref)
-  }, [user?.preferences, view])
+    if (isViewMode(dbPref) && dbPref !== 'sheet') {
+      setView(dbPref)
+    }
+    dbPrefAppliedRef.current = true
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.preferences])
 
   function changeView(v: ViewMode) {
     setView(v)
