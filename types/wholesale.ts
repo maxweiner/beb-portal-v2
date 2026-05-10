@@ -71,6 +71,7 @@ export interface InventoryItem {
   internal_notes: string | null
   public_notes: string | null
   vendor_id: string | null
+  vendor_stock_number: string | null
   location_id: string | null
   date_acquired: string | null
   hold_for_customer_id: string | null

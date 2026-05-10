@@ -134,6 +134,7 @@ export default function InventoryView() {
           i.item_number, i.public_notes, i.internal_notes,
           i.watch_brand, i.watch_model, i.watch_serial_number,
           i.diamond_report_number, i.jewelry_designer, i.jewelry_hallmarks,
+          i.vendor_stock_number,
         ].filter(Boolean).join(' ').toLowerCase()
         if (!blob.includes(q)) return false
       }
@@ -503,6 +504,7 @@ function ItemForm({
 }: ItemFormProps) {
   // Prefill from existing if editing.
   const [vendor_id, setVendor]    = useState(existing?.vendor_id || '')
+  const [vendor_stock_number, setVendorStock] = useState(existing?.vendor_stock_number || '')
   const [location_id, setLocation] = useState(existing?.location_id || '')
   // "Date stocked" is auto-set to today on creation; not user-editable.
   // Existing items keep whatever's in the column (could be backfilled
@@ -623,6 +625,7 @@ function ItemForm({
         public_notes: public_notes.trim() || null,
         internal_notes: internal_notes.trim() || null,
         vendor_id: vendor_id || null,
+        vendor_stock_number: vendor_stock_number.trim() || null,
         location_id: location_id || null,
         date_acquired: date_stocked,
         gender: gender || null,
@@ -695,7 +698,7 @@ function ItemForm({
         if (error) throw new Error(error.message)
         const tracked = [
           'status','gender','cost_cents','wholesale_price_cents','retail_price_cents','insurance_value_cents',
-          'public_notes','internal_notes','vendor_id','location_id','date_acquired',
+          'public_notes','internal_notes','vendor_id','vendor_stock_number','location_id','date_acquired',
         ]
         const diff = diffFields(existing as any, payload, tracked)
         if (diff) {
@@ -723,6 +726,9 @@ function ItemForm({
             <option value="">— none —</option>
             {vendors.map(v => <option key={v.id} value={v.id}>{v.company_name}</option>)}
           </Select></Field>
+          <Field label="Vendor stock #">
+            <input type="text" value={vendor_stock_number} onChange={e => setVendorStock(e.target.value)} placeholder="Vendor's SKU" />
+          </Field>
           <Field label="Location">
             <LocationPicker
               value={location_id}
@@ -1155,6 +1161,7 @@ const FIELD_LABELS: Record<string, string> = {
   public_notes: 'Public notes',
   internal_notes: 'Internal notes',
   vendor_id: 'Vendor',
+  vendor_stock_number: 'Vendor stock #',
   location_id: 'Location',
   date_acquired: 'Date stocked',
   hold_for_customer_id: 'Held for',
@@ -1267,8 +1274,11 @@ export function Hint({ children }: { children: React.ReactNode }) {
 }
 
 export function Select({ value, onChange, children }: { value: string; onChange: (v: string) => void; children: React.ReactNode }) {
+  // Inherits globals.css default sizing so it lines up with sibling
+  // <input> elements in the same row (was overriding padding/border
+  // and rendering ~10px shorter).
   return (
-    <select value={value} onChange={e => onChange(e.target.value)} style={{ width: '100%', padding: '6px 8px', fontSize: 13, border: '1px solid var(--pearl)', borderRadius: 6, background: '#fff' }}>
+    <select value={value} onChange={e => onChange(e.target.value)}>
       {children}
     </select>
   )
