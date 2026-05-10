@@ -101,7 +101,7 @@ const LIBERTY_NAV: NavItem[] = [
   { id: 'reconciliation', label: 'Reconciliation', iconKey: 'financials' },
   { id: 'customers',    label: 'Customers',      iconKey: 'staff' },
   { label: 'Admin', section: true },
-  { id: 'wholesale',     label: '🛒 Wholesale',         iconKey: 'stores' },
+  { id: 'wholesale',     label: 'Inventory POS',        iconKey: 'stores' },
   { id: 'liberty-admin', label: 'Liberty Admin Panel', iconKey: 'admin' },
   { id: 'reports',       label: 'Reports',             iconKey: 'reports' },
   { id: 'staff',         label: 'Staff',               iconKey: 'staff' },
