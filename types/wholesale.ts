@@ -30,6 +30,7 @@ export interface WholesaleVendor {
   company_name: string
   contact_name: string | null
   phone: string | null
+  mobile_phone: string | null
   email: string | null
   address: string | null
   notes: string | null
@@ -44,6 +45,7 @@ export interface WholesaleCustomer {
   company_name: string
   contact_name: string | null
   phone: string | null
+  mobile_phone: string | null
   email: string | null
   address: string | null
   resale_certificate_number: string | null
