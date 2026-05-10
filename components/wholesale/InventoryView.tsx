@@ -65,6 +65,7 @@ export default function InventoryView() {
   const [statusFilter, setStatusFilter] = useState<'all' | InventoryStatus>('in_stock')
   const [openItemId, setOpenItemId] = useState<string | null>(null)
   const [showNewModal, setShowNewModal] = useState(false)
+  const [showBulkUpload, setShowBulkUpload] = useState(false)
   const [view, setView] = useState<'list' | 'sheet'>('list')
   const [lists, setLists] = useState<Record<string, string[]>>({})
 
@@ -169,6 +170,7 @@ export default function InventoryView() {
             style={{ background: view === 'sheet' ? '#fff' : 'transparent', border: 'none', borderRadius: 4, padding: '4px 10px', cursor: 'pointer', fontSize: 12 }}
             title="Sheet view (fast triage)">⊞ Sheet</button>
         </div>
+        <button onClick={() => setShowBulkUpload(true)} className="btn-outline btn-sm">📸 Bulk photos</button>
         <button onClick={() => setShowNewModal(true)} className="btn-primary btn-sm">+ New Item</button>
       </div>
 
@@ -257,6 +259,15 @@ export default function InventoryView() {
         </div>
       )}
 
+      {showBulkUpload && (
+        <BulkPhotoUploadModal
+          brand={brand!}
+          actorId={user?.id || null}
+          actorEmail={user?.email || null}
+          onClose={() => setShowBulkUpload(false)}
+          onChanged={() => void reloadRef.current()}
+        />
+      )}
       {showNewModal && (
         <NewItemModal
           brand={brand!}
@@ -299,6 +310,195 @@ function Tile({ label, value, active, onClick, bg, fg }: {
       <div style={{ fontSize: 9, fontWeight: 800, color: fg, textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</div>
       <div style={{ fontSize: 18, fontWeight: 900, color: fg }}>{value}</div>
     </button>
+  )
+}
+
+/* ─────────────────────── bulk photo upload ───────────────────── */
+
+/** Filename → item key parser. Accepts these (case-insensitive):
+ *    J-1002.jpg / W-1002.jpg / D-1002.jpg / I-1002.jpg
+ *    j1002.jpg, j1002b.jpg, j-1002-2.jpg, j 1002.jpg
+ *    1002.jpg                  (prefix-less; matched across all items
+ *                                with item_number ending in -1002)
+ *  Returns { prefix?, num } or null when the name has no digits. */
+function parsePhotoFilename(filename: string): { prefix: string | null; num: string } | null {
+  const base = filename.replace(/\.[^.]+$/, '').toLowerCase()  // drop extension
+  // Optional letter prefix, optional dash/space, then a run of digits.
+  // Anything after the digits (-2, -a, b, _01, …) is treated as a
+  // suffix and ignored.
+  const m = base.match(/^([a-z])?[\s\-_]*(\d+)/)
+  if (!m) return null
+  return { prefix: m[1] ? m[1].toUpperCase() : null, num: m[2] }
+}
+
+interface BulkRowResult {
+  file: File
+  status: 'pending' | 'ok' | 'no_match' | 'ambiguous' | 'error'
+  reason?: string
+  item_number?: string
+  is_primary?: boolean
+}
+
+function BulkPhotoUploadModal({
+  brand, actorId, actorEmail, onClose, onChanged,
+}: {
+  brand: string
+  actorId: string | null
+  actorEmail: string | null
+  onClose: () => void
+  onChanged: () => void
+}) {
+  const [results, setResults] = useState<BulkRowResult[]>([])
+  const [running, setRunning] = useState(false)
+
+  async function processFile(file: File): Promise<BulkRowResult> {
+    const parsed = parsePhotoFilename(file.name)
+    if (!parsed) return { file, status: 'no_match', reason: 'No digits in filename' }
+    const { prefix, num } = parsed
+
+    let q = supabase.from('inventory_items')
+      .select('id, item_number')
+      .eq('brand', brand).is('archived_at', null)
+    if (prefix) {
+      // Strict match like 'J-1002' (or however the prefix lands).
+      q = q.eq('item_number', `${prefix}-${num}`)
+    } else {
+      // Bare number → match any prefix, but only if exactly one item
+      // ends in -1002. ILIKE keeps it case-insensitive.
+      q = q.ilike('item_number', `%-${num}`)
+    }
+    const { data: items, error: qErr } = await q.limit(5)
+    if (qErr) return { file, status: 'error', reason: qErr.message }
+    if (!items || items.length === 0) {
+      const want = prefix ? `${prefix}-${num}` : `*-${num}`
+      return { file, status: 'no_match', reason: `No item ${want}` }
+    }
+    if (items.length > 1) {
+      return { file, status: 'ambiguous', reason: `Multiple matches: ${items.map((i: any) => i.item_number).join(', ')}` }
+    }
+
+    const item = items[0] as any
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+    const path = `${brand}/${item.id}/${crypto.randomUUID()}.${ext}`
+    const { error: upErr } = await supabase.storage.from('wholesale-photos').upload(path, file, {
+      cacheControl: '3600', upsert: false,
+    })
+    if (upErr) return { file, status: 'error', reason: upErr.message }
+
+    // Set primary only if the item has no primary photo yet.
+    const { data: existingPrimary } = await supabase.from('inventory_photos')
+      .select('id').eq('item_id', item.id).eq('is_primary', true).maybeSingle()
+    const isPrimary = !existingPrimary
+
+    const { error: insErr } = await supabase.from('inventory_photos').insert({
+      brand, item_id: item.id, storage_path: path, is_primary: isPrimary, uploaded_by: actorId,
+    })
+    if (insErr) {
+      // Roll back the storage object so we don't orphan it.
+      await supabase.storage.from('wholesale-photos').remove([path])
+      return { file, status: 'error', reason: insErr.message }
+    }
+
+    void logAudit({
+      brand, entity_type: 'inventory_item', entity_id: item.id,
+      action: 'photo_uploaded', after: { source: 'bulk_upload', filename: file.name },
+      actor_id: actorId, actor_email: actorEmail,
+    })
+
+    return { file, status: 'ok', item_number: item.item_number, is_primary: isPrimary }
+  }
+
+  async function onPick(files: FileList) {
+    const arr = Array.from(files)
+    setResults(arr.map(file => ({ file, status: 'pending' })))
+    setRunning(true)
+    // Process in chunks of 4 to avoid hammering Storage.
+    const CONC = 4
+    let next = 0
+    const work: BulkRowResult[] = arr.map(file => ({ file, status: 'pending' }))
+    async function runOne(idx: number) {
+      const r = await processFile(work[idx].file)
+      work[idx] = r
+      setResults([...work])
+    }
+    async function pump() {
+      while (next < work.length) {
+        const my = next++
+        await runOne(my)
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(CONC, work.length) }, () => pump()))
+    setRunning(false)
+    onChanged()
+  }
+
+  const counts = {
+    ok: results.filter(r => r.status === 'ok').length,
+    no_match: results.filter(r => r.status === 'no_match').length,
+    ambiguous: results.filter(r => r.status === 'ambiguous').length,
+    error: results.filter(r => r.status === 'error').length,
+    pending: results.filter(r => r.status === 'pending').length,
+  }
+
+  return (
+    <Modal onClose={onClose} title="Bulk upload photos" wide>
+      <div style={{ marginBottom: 10, fontSize: 12, color: 'var(--mist)' }}>
+        Filenames are matched to inventory by item number. Examples that all map to <strong>J-1002</strong>:
+        <code style={{ marginLeft: 6, padding: '0 4px', background: 'var(--cream2)' }}>J-1002.jpg</code>{' '}
+        <code style={{ padding: '0 4px', background: 'var(--cream2)' }}>j1002.jpg</code>{' '}
+        <code style={{ padding: '0 4px', background: 'var(--cream2)' }}>j-1002-2.jpg</code>{' '}
+        <code style={{ padding: '0 4px', background: 'var(--cream2)' }}>j1002b.jpg</code>{' '}
+        <code style={{ padding: '0 4px', background: 'var(--cream2)' }}>1002.jpg</code> (only if the number
+        ends in <code>-1002</code> on exactly one item). The first photo for an item is auto-flagged primary.
+      </div>
+
+      <label className="btn-primary btn-sm" style={{ cursor: running ? 'wait' : 'pointer', display: 'inline-block' }}>
+        {running ? 'Uploading…' : '+ Pick photos'}
+        <input type="file" accept="image/*" multiple disabled={running}
+          onChange={e => { const f = e.target.files; if (f && f.length > 0) void onPick(f); e.currentTarget.value = '' }}
+          style={{ display: 'none' }} />
+      </label>
+
+      {results.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 6 }}>
+            {counts.ok} matched · {counts.ambiguous} ambiguous · {counts.no_match} no match ·{' '}
+            {counts.error} errored{counts.pending > 0 ? ` · ${counts.pending} in flight` : ''}
+          </div>
+          <div style={{ maxHeight: 360, overflow: 'auto', border: '1px solid var(--pearl)', borderRadius: 6 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <tbody>
+                {results.map((r, i) => (
+                  <tr key={i} style={{ borderTop: i > 0 ? '1px solid var(--pearl)' : undefined }}>
+                    <td style={{ padding: 6, width: 22 }}>
+                      {r.status === 'ok' && '✓'}
+                      {r.status === 'pending' && '⟳'}
+                      {r.status === 'no_match' && '❓'}
+                      {r.status === 'ambiguous' && '⚠'}
+                      {r.status === 'error' && '✗'}
+                    </td>
+                    <td style={{ padding: 6, fontFamily: 'monospace', fontSize: 11 }}>{r.file.name}</td>
+                    <td style={{ padding: 6 }}>
+                      {r.status === 'ok' && (
+                        <>
+                          <strong>{r.item_number}</strong>
+                          {r.is_primary && <span style={{ marginLeft: 6, color: 'var(--green)', fontSize: 10 }}>★ PRIMARY</span>}
+                        </>
+                      )}
+                      {r.status !== 'ok' && r.reason && <span style={{ color: 'var(--mist)' }}>{r.reason}</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+        <button onClick={onClose} className="btn-outline btn-sm">Done</button>
+      </div>
+    </Modal>
   )
 }
 
