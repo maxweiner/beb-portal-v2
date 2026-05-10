@@ -352,32 +352,64 @@ function BulkPhotoUploadModal({
   const [running, setRunning] = useState(false)
 
   async function processFile(file: File): Promise<BulkRowResult> {
+    // Two-pass match: first try the canonical item_number (J-1002 etc.),
+    // then fall back to vendor_stock_number for legacy codes like
+    // "020-000028.jpg". Suffixes (-2, " (1)", trailing letter) are
+    // stripped on the vendor-stock pass so multi-photo names still
+    // match the same item.
+    let item: { id: string; item_number: string } | null = null
+    let lastReason = ''
+
     const parsed = parsePhotoFilename(file.name)
-    if (!parsed) return { file, status: 'no_match', reason: 'No digits in filename' }
-    const { prefix, num } = parsed
-
-    let q = supabase.from('inventory_items')
-      .select('id, item_number')
-      .eq('brand', brand).is('archived_at', null)
-    if (prefix) {
-      // Strict match like 'J-1002' (or however the prefix lands).
-      q = q.eq('item_number', `${prefix}-${num}`)
-    } else {
-      // Bare number → match any prefix, but only if exactly one item
-      // ends in -1002. ILIKE keeps it case-insensitive.
-      q = q.ilike('item_number', `%-${num}`)
-    }
-    const { data: items, error: qErr } = await q.limit(5)
-    if (qErr) return { file, status: 'error', reason: qErr.message }
-    if (!items || items.length === 0) {
-      const want = prefix ? `${prefix}-${num}` : `*-${num}`
-      return { file, status: 'no_match', reason: `No item ${want}` }
-    }
-    if (items.length > 1) {
-      return { file, status: 'ambiguous', reason: `Multiple matches: ${items.map((i: any) => i.item_number).join(', ')}` }
+    if (parsed) {
+      const { prefix, num } = parsed
+      let q = supabase.from('inventory_items')
+        .select('id, item_number')
+        .eq('brand', brand).is('archived_at', null)
+      if (prefix) q = q.eq('item_number', `${prefix}-${num}`)
+      else        q = q.ilike('item_number', `%-${num}`)
+      const { data, error: qErr } = await q.limit(5)
+      if (qErr) return { file, status: 'error', reason: qErr.message }
+      if (data && data.length === 1) item = data[0] as any
+      else if (data && data.length > 1) {
+        return { file, status: 'ambiguous', reason: `Multiple item_number matches: ${data.map((i: any) => i.item_number).join(', ')}` }
+      } else {
+        lastReason = `No item ${prefix ? `${prefix}-${num}` : `*-${num}`}`
+      }
     }
 
-    const item = items[0] as any
+    if (!item) {
+      // vendor_stock_number fallback: try the filename as-is, then
+      // try with disambiguator suffixes stripped.
+      const base = file.name.replace(/\.[^.]+$/, '').toLowerCase().trim()
+      const candidates: string[] = [base]
+      let cur = base
+      for (let i = 0; i < 4; i++) {
+        const next = cur
+          .replace(/\s*\(\d+\)$/, '')   // " (1)"
+          .replace(/[\-_]\d+$/, '')     // "-2", "_3"
+          .replace(/[a-z]$/, '')        // trailing letter "b"
+          .trim()
+        if (next === cur || next.length === 0) break
+        candidates.push(next)
+        cur = next
+      }
+      for (const c of candidates) {
+        const { data, error: qErr } = await supabase.from('inventory_items')
+          .select('id, item_number')
+          .eq('brand', brand).is('archived_at', null)
+          .ilike('vendor_stock_number', c).limit(5)
+        if (qErr) return { file, status: 'error', reason: qErr.message }
+        if (data && data.length === 1) { item = data[0] as any; break }
+        if (data && data.length > 1) {
+          return { file, status: 'ambiguous', reason: `Multiple vendor_stock_number matches for "${c}": ${data.map((i: any) => i.item_number).join(', ')}` }
+        }
+      }
+    }
+
+    if (!item) {
+      return { file, status: 'no_match', reason: lastReason || `No item or vendor_stock_number for ${file.name}` }
+    }
     const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
     const path = `${brand}/${item.id}/${crypto.randomUUID()}.${ext}`
     const { error: upErr } = await supabase.storage.from('wholesale-photos').upload(path, file, {
@@ -443,13 +475,11 @@ function BulkPhotoUploadModal({
   return (
     <Modal onClose={onClose} title="Bulk upload photos" wide>
       <div style={{ marginBottom: 10, fontSize: 12, color: 'var(--mist)' }}>
-        Filenames are matched to inventory by item number. Examples that all map to <strong>J-1002</strong>:
-        <code style={{ marginLeft: 6, padding: '0 4px', background: 'var(--cream2)' }}>J-1002.jpg</code>{' '}
-        <code style={{ padding: '0 4px', background: 'var(--cream2)' }}>j1002.jpg</code>{' '}
-        <code style={{ padding: '0 4px', background: 'var(--cream2)' }}>j-1002-2.jpg</code>{' '}
-        <code style={{ padding: '0 4px', background: 'var(--cream2)' }}>j1002b.jpg</code>{' '}
-        <code style={{ padding: '0 4px', background: 'var(--cream2)' }}>1002.jpg</code> (only if the number
-        ends in <code>-1002</code> on exactly one item). The first photo for an item is auto-flagged primary.
+        Filenames match inventory by either <strong>item number</strong> (J-1002, j-1002-2, j1002b, 1002) or, as a fallback,{' '}
+        <strong>vendor stock #</strong> (e.g. <code style={{ padding: '0 4px', background: 'var(--cream2)' }}>020-000028.jpg</code> matches the item with that vendor stock #).
+        Suffixes like <code style={{ padding: '0 4px', background: 'var(--cream2)' }}>-2</code>,{' '}
+        <code style={{ padding: '0 4px', background: 'var(--cream2)' }}>(1)</code>, or a trailing letter
+        are stripped so multiple photos per item all match. The first photo per item is auto-flagged primary.
       </div>
 
       <label className="btn-primary btn-sm" style={{ cursor: running ? 'wait' : 'pointer', display: 'inline-block' }}>
