@@ -19,6 +19,7 @@ import { fmtMoneyCents, dollarsToCents, centsToDollarsString, fmtDate, marginPct
 import { nextWholesaleNumber, prefixForCategory } from '@/lib/wholesale/numbers'
 import { logAudit, diffFields } from '@/lib/wholesale/audit'
 import { loadAdminLists } from '@/lib/wholesale/lists'
+import InventorySheet from './InventorySheet'
 
 const PHOTO_BUCKET = 'wholesale-photos'
 const DOC_BUCKET = 'wholesale-documents'
@@ -64,6 +65,7 @@ export default function InventoryView() {
   const [statusFilter, setStatusFilter] = useState<'all' | InventoryStatus>('in_stock')
   const [openItemId, setOpenItemId] = useState<string | null>(null)
   const [showNewModal, setShowNewModal] = useState(false)
+  const [view, setView] = useState<'list' | 'sheet'>('list')
   const [lists, setLists] = useState<Record<string, string[]>>({})
 
   const reloadRef = useRef<() => Promise<void>>(async () => {})
@@ -159,6 +161,14 @@ export default function InventoryView() {
           <button onClick={() => setStatusFilter('all')}
             className={statusFilter === 'all' ? 'btn-primary btn-xs' : 'btn-outline btn-xs'}>All</button>
         </div>
+        <div style={{ display: 'flex', gap: 4, background: 'var(--cream2)', padding: 2, borderRadius: 6 }}>
+          <button onClick={() => setView('list')}
+            style={{ background: view === 'list' ? '#fff' : 'transparent', border: 'none', borderRadius: 4, padding: '4px 10px', cursor: 'pointer', fontSize: 12 }}
+            title="List view">☰ List</button>
+          <button onClick={() => setView('sheet')}
+            style={{ background: view === 'sheet' ? '#fff' : 'transparent', border: 'none', borderRadius: 4, padding: '4px 10px', cursor: 'pointer', fontSize: 12 }}
+            title="Sheet view (fast triage)">⊞ Sheet</button>
+        </div>
         <button onClick={() => setShowNewModal(true)} className="btn-primary btn-sm">+ New Item</button>
       </div>
 
@@ -179,6 +189,8 @@ export default function InventoryView() {
 
       {items === null ? (
         <div className="card" style={{ padding: 30, textAlign: 'center', color: 'var(--mist)' }}>Loading…</div>
+      ) : view === 'sheet' ? (
+        <InventorySheet items={items} onChanged={() => void reloadRef.current()} />
       ) : filtered.length === 0 ? (
         <div className="card" style={{ padding: 30, textAlign: 'center', color: 'var(--mist)' }}>
           {(items.length === 0) ? 'No inventory yet — click "+ New Item".' : 'Nothing matches the current filters.'}
@@ -206,12 +218,12 @@ export default function InventoryView() {
                           <img src={photoUrl} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--pearl)' }} />
                         ) : (
                           <div style={{ width: 36, height: 36, borderRadius: 4, background: 'var(--cream2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
-                            {it.category === 'jewelry' ? '💍' : it.category === 'watch' ? '⌚' : '💎'}
+                            {it.category === 'jewelry' ? '💍' : it.category === 'watch' ? '⌚' : it.category === 'diamond' ? '💎' : '📦'}
                           </div>
                         )}
                       </td>
                       <td style={{ padding: '6px 10px', fontWeight: 700, whiteSpace: 'nowrap' }}>{it.item_number}</td>
-                      <td style={{ padding: '6px 10px', color: 'var(--mist)', whiteSpace: 'nowrap' }}>{CATEGORY_LABEL[it.category]}</td>
+                      <td style={{ padding: '6px 10px', color: 'var(--mist)', whiteSpace: 'nowrap' }}>{it.category ? CATEGORY_LABEL[it.category] : '—'}</td>
                       <td style={{ padding: '6px 10px' }}>
                         <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 360 }}>
                           {it.public_notes || (
@@ -396,7 +408,7 @@ function ItemDetailModal({
   }
 
   return (
-    <Modal onClose={onClose} title={`${item.item_number} — ${CATEGORY_LABEL[item.category]}`} wide>
+    <Modal onClose={onClose} title={`${item.item_number} — ${item.category ? CATEGORY_LABEL[item.category] : '(uncategorized)'}`} wide>
       <div style={{ display: 'flex', gap: 4, background: 'var(--cream2)', padding: 4, borderRadius: 8, width: 'fit-content', marginBottom: 12 }}>
         {(['edit','photos','docs','history'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
@@ -486,7 +498,7 @@ export function autoJewelryDescription(f: {
 
 interface ItemFormProps {
   mode: 'new' | 'edit'
-  category: InventoryCategory
+  category: InventoryCategory | null
   existing?: InventoryItem
   brand: string
   vendors: WholesaleVendor[]
@@ -499,9 +511,13 @@ interface ItemFormProps {
 }
 
 function ItemForm({
-  mode, category, existing, brand, vendors, locations, lists,
+  mode, category: initialCategory, existing, brand, vendors, locations, lists,
   actorId, actorEmail, onSaved, onCancel,
 }: ItemFormProps) {
+  // Category may be null on imported rows — let the user pick / change
+  // it inside the form. New-item flow already forces a category up
+  // front (NewItemModal); this tracks edits to it.
+  const [category, setCategoryState] = useState<InventoryCategory | null>(initialCategory)
   // Prefill from existing if editing.
   const [vendor_id, setVendor]    = useState(existing?.vendor_id || '')
   const [vendor_stock_number, setVendorStock] = useState(existing?.vendor_stock_number || '')
@@ -612,8 +628,11 @@ function ItemForm({
   async function save() {
     setBusy(true); setErr(null)
     try {
+      // New items always have a category (NewItemModal picks first).
+      // For edits, prefixForCategory is unused — keep the existing
+      // item_number as-is even if the user changes category later.
       const itemNumber = mode === 'new'
-        ? await nextWholesaleNumber(brand, prefixForCategory(category))
+        ? await nextWholesaleNumber(brand, prefixForCategory(category as InventoryCategory))
         : existing!.item_number
 
       const payload: any = {
@@ -750,6 +769,14 @@ function ItemForm({
             <option value="in_repair">In Repair</option>
             <option value="consigned_out">Consigned Out</option>
           </Select></Field>
+          <Field label="Category">
+            <Select value={category || ''} onChange={(v) => setCategoryState((v || null) as InventoryCategory | null)}>
+              <option value="">— uncategorized —</option>
+              <option value="jewelry">Jewelry</option>
+              <option value="watch">Watch</option>
+              <option value="diamond">Diamond</option>
+            </Select>
+          </Field>
           <Field label="Gender"><Select value={gender} onChange={(v) => setGender(v as any)}>
             <option value="">—</option>
             <option value="Female">Female</option>

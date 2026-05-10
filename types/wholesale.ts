@@ -3,6 +3,9 @@
 // of cents. Brand is enforced at the app layer per existing pattern.
 
 export type InventoryCategory = 'jewelry' | 'watch' | 'diamond'
+// Note: inventory_items.category is nullable per migration
+// supabase-migration-wholesale-import-prep.sql so freshly-imported
+// rows can sit uncategorized until triaged in the sheet view.
 export type InventoryStatus =
   | 'in_stock' | 'on_memo' | 'on_hold' | 'sold' | 'returned' | 'in_repair' | 'consigned_out'
 
@@ -60,7 +63,7 @@ export interface WholesaleCustomer {
 export interface InventoryItem {
   id: string
   brand: string
-  category: InventoryCategory
+  category: InventoryCategory | null
   item_number: string
   status: InventoryStatus
   cost_cents: number | null
@@ -72,6 +75,7 @@ export interface InventoryItem {
   public_notes: string | null
   vendor_id: string | null
   vendor_stock_number: string | null
+  alternate_item_number: string | null
   location_id: string | null
   date_acquired: string | null
   hold_for_customer_id: string | null
