@@ -128,8 +128,11 @@ function fmtTime(t: string): string {
 function fmtPhone(p: string | null | undefined): string {
   if (!p) return ''
   const digits = p.replace(/\D/g, '')
-  if (digits.length === 10) return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
-  if (digits.length === 11 && digits.startsWith('1')) return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`
+  // House style: XXX-XXX-XXXX (dashes, not parens) — matches
+  // formatPhoneDisplay in lib/phone.ts and fmtPhone in
+  // lib/customers/format.ts.
+  if (digits.length === 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`
+  if (digits.length === 11 && digits.startsWith('1')) return `${digits.slice(1, 4)}-${digits.slice(4, 7)}-${digits.slice(7)}`
   return p
 }
 

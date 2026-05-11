@@ -11,6 +11,7 @@ import { Modal, Section, Row, Field, Select } from './InventoryView'
 import AddressAutocompleteInput from '@/components/ui/AddressAutocompleteInput'
 import PhoneInput from '@/components/ui/PhoneInput'
 import Checkbox from '@/components/ui/Checkbox'
+import { formatPhoneDisplay } from '@/lib/phone'
 
 export default function CustomersView() {
   const { user, brand } = useApp()
@@ -62,7 +63,7 @@ export default function CustomersView() {
                   <tr key={c.id} onClick={() => setOpenId(c.id)} style={{ cursor: 'pointer', borderTop: '1px solid var(--pearl)' }}>
                     <td style={{ padding: '8px 10px', fontWeight: 700 }}>{c.company_name}</td>
                     <td style={{ padding: '8px 10px' }}>{c.contact_name || '—'}</td>
-                    <td style={{ padding: '8px 10px' }}>{c.phone || '—'}</td>
+                    <td style={{ padding: '8px 10px' }}>{c.phone ? formatPhoneDisplay(c.phone) : '—'}</td>
                     <td style={{ padding: '8px 10px' }}>{c.email || '—'}</td>
                     <td style={{ padding: '8px 10px' }}>{c.default_payment_terms || '—'}</td>
                     <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{c.credit_balance_cents > 0 ? fmtMoneyCents(c.credit_balance_cents) : '—'}</td>

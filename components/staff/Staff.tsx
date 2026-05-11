@@ -1,6 +1,7 @@
 'use client'
 
 import { useApp } from '@/lib/context'
+import { formatPhoneDisplay } from '@/lib/phone'
 
 // Display labels override the auto title-cased version. Keep this map
 // in sync with the labels stored in the `roles` table (Settings →
@@ -153,7 +154,7 @@ export default function Staff() {
                   </div>
 
                   <div style={{ fontSize: 12, color: 'var(--ash)' }}>
-                    {s.phone ? <a href={`tel:${s.phone}`} style={{ color: 'var(--ash)', textDecoration: 'none' }}>{s.phone}</a> : <span style={{ color: 'var(--fog)' }}>—</span>}
+                    {s.phone ? <a href={`tel:${s.phone}`} style={{ color: 'var(--ash)', textDecoration: 'none' }}>{formatPhoneDisplay(s.phone)}</a> : <span style={{ color: 'var(--fog)' }}>—</span>}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--green)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {s.email ? <a href={`mailto:${s.email}`} style={{ color: 'var(--green)', textDecoration: 'none' }}>{s.email}</a> : <span style={{ color: 'var(--fog)' }}>—</span>}

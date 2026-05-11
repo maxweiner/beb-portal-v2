@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
+import { formatPhoneDisplay } from '@/lib/phone'
 import type { Store, Event, Appointment } from '@/types'
 import {
   STATE_TZ, dateInTz, hmInTz, timeInTz,
@@ -770,7 +771,7 @@ function ApptDetail({ appt, tz, pos, onClose }: {
       <div className="space-y-1.5 text-sm" style={{ color: 'var(--ash)' }}>
         <div>🕐 <strong>{timeInTz(appt.start, tz)}</strong> – {timeInTz(appt.end, tz)}</div>
         {phone && (
-          <div>📞 <a href={`tel:${phone}`} className="font-bold" style={{ color: 'var(--green)' }}>{phone}</a></div>
+          <div>📞 <a href={`tel:${phone}`} className="font-bold" style={{ color: 'var(--green)' }}>{formatPhoneDisplay(phone)}</a></div>
         )}
         {email && (
           <div>✉ <a href={`mailto:${email}`} style={{ color: 'var(--green)', fontSize: 12 }}>{email}</a></div>
@@ -1052,7 +1053,7 @@ function MobileActiveAppointmentsView({
                               <div style={{ marginTop: 6, fontSize: 11, color: 'var(--ash)', lineHeight: 1.6 }}>
                                 <div>🕐 <strong>{timeInTz(appt.start, tz)}</strong> – {timeInTz(appt.end, tz)}</div>
                                 {detail.phone && (
-                                  <div>📞 <a href={`tel:${detail.phone}`} style={{ color: 'var(--green)', textDecoration: 'none', fontWeight: 700 }}>{detail.phone}</a></div>
+                                  <div>📞 <a href={`tel:${detail.phone}`} style={{ color: 'var(--green)', textDecoration: 'none', fontWeight: 700 }}>{formatPhoneDisplay(detail.phone)}</a></div>
                                 )}
                                 {detail.email && (
                                   <div>✉ <a href={`mailto:${detail.email}`} style={{ color: 'var(--green)', textDecoration: 'none' }}>{detail.email}</a></div>

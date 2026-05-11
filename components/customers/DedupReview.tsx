@@ -181,7 +181,7 @@ function Side({ title, data, side }: { title: string; data: RowData | null; side
           <Field label="Name"    value={data.name} />
           <Field label="Address" value={data.address} />
           <Field label="City"    value={data.city} />
-          <Field label="Phone"   value={data.phone} />
+          <Field label="Phone"   value={data.phone ? fmtPhone(data.phone) : ''} />
           <Field label="Email"   value={data.email} />
           {data.how_heard && <Field label="Source" value={data.how_heard} />}
           {data.notes && <Field label="Notes" value={data.notes} />}

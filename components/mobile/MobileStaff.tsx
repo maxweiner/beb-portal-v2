@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useApp } from '@/lib/context'
 import { Phone } from 'lucide-react'
+import { formatPhoneDisplay } from '@/lib/phone'
 import type { User } from '@/types'
 
 function telHref(raw: string | null | undefined): string | null {
@@ -129,7 +130,7 @@ export default function MobileStaff() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
                     {s.phone && (
                       <a href={`tel:${s.phone}`} style={{ color: 'var(--ash)', textDecoration: 'none' }}>
-                        📞 {s.phone}
+                        📞 {formatPhoneDisplay(s.phone)}
                       </a>
                     )}
                     {s.email && (

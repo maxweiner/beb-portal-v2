@@ -1,11 +1,14 @@
 // Display + normalization helpers for customer data.
 
-/** Format a 10-digit US phone for display. Falls back to raw on weird input. */
+/** Format a 10-digit US phone for display as XXX-XXX-XXXX. House
+ *  style is dashes (not parens) — matches what PhoneInput types as
+ *  the user enters a number and what formatPhoneDisplay in
+ *  lib/phone.ts renders. Falls back to raw on weird input. */
 export function fmtPhone(raw: string | null | undefined): string {
   if (!raw) return ''
   const d = raw.replace(/\D/g, '')
-  if (d.length === 10) return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`
-  if (d.length === 11 && d.startsWith('1')) return `(${d.slice(1, 4)}) ${d.slice(4, 7)}-${d.slice(7)}`
+  if (d.length === 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`
+  if (d.length === 11 && d.startsWith('1')) return `${d.slice(1, 4)}-${d.slice(4, 7)}-${d.slice(7)}`
   return raw
 }
 

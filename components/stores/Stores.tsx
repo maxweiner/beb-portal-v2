@@ -1039,7 +1039,7 @@ function ContactRow({ contact, onSave, onDelete }: {
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--cream2)' }}>
       <div style={{ flex: 1 }}>
         <div style={{ fontWeight: 700 }}>{contact.name} {contact.title && <span style={{ fontSize: 12, color: 'var(--mist)', fontWeight: 400 }}>· {contact.title}</span>}</div>
-        <div style={{ fontSize: 12, color: 'var(--mist)' }}>{contact.phone}{contact.phone && contact.email ? ' · ' : ''}{contact.email}</div>
+        <div style={{ fontSize: 12, color: 'var(--mist)' }}>{contact.phone ? formatPhoneDisplay(contact.phone) : ''}{contact.phone && contact.email ? ' · ' : ''}{contact.email}</div>
       </div>
       <button className="btn-outline btn-xs" onClick={() => setEditing(true)}>✎ Edit</button>
       <button className="btn-danger btn-xs" onClick={onDelete}>Remove</button>

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
+import { formatPhoneDisplay } from '@/lib/phone'
 import type { Theme, BuyerVacation } from '@/types'
 import AvatarPicker from './AvatarPicker'
 import BrandLogosPanel from './BrandLogosPanel'
@@ -327,7 +328,7 @@ export default function Settings() {
             <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--ink)' }}>Text Alerts</div>
             <div style={{ fontSize: 12, color: 'var(--mist)' }}>
               {profile.phone
-                ? <>Messages go to <strong>{profile.phone}</strong></>
+                ? <>Messages go to <strong>{formatPhoneDisplay(profile.phone)}</strong></>
                 : <>Add your phone number above to receive SMS notifications.</>}
             </div>
           </div>

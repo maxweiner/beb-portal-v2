@@ -10,6 +10,7 @@ import { Modal, Section, Row, Field, Select } from './InventoryView'
 import AddressAutocompleteInput from '@/components/ui/AddressAutocompleteInput'
 import PhoneInput from '@/components/ui/PhoneInput'
 import Checkbox from '@/components/ui/Checkbox'
+import { formatPhoneDisplay } from '@/lib/phone'
 
 export default function VendorsView() {
   const { user, brand } = useApp()
@@ -61,7 +62,7 @@ export default function VendorsView() {
                   <tr key={v.id} onClick={() => setOpenId(v.id)} style={{ cursor: 'pointer', borderTop: '1px solid var(--pearl)' }}>
                     <td style={{ padding: '8px 10px', fontWeight: 700 }}>{v.company_name}</td>
                     <td style={{ padding: '8px 10px' }}>{v.contact_name || '—'}</td>
-                    <td style={{ padding: '8px 10px' }}>{v.phone || '—'}</td>
+                    <td style={{ padding: '8px 10px' }}>{v.phone ? formatPhoneDisplay(v.phone) : '—'}</td>
                     <td style={{ padding: '8px 10px' }}>{v.email || '—'}</td>
                     <td style={{ padding: '8px 10px', color: 'var(--mist)' }}>{fmtDate(v.created_at)}</td>
                     <td style={{ padding: '8px 10px', textAlign: 'right' }}>→</td>
