@@ -93,14 +93,40 @@ export default function PrivacyPage() {
           access from your Google account&apos;s permissions page at any time.
         </p>
 
-        <h2 style={h2}>8. Changes to this policy</h2>
+        <h2 style={h2}>8. SMS messaging</h2>
+        <p style={p}>
+          When you provide your mobile phone number through one of
+          our public booking forms (per-store booking, waitlist, or
+          trade/trunk-show booking), you opt in to receive
+          operational SMS messages from Beneficial Estate Buyers
+          about the appointment you have booked. These messages may
+          include confirmations, reminders, and reschedule or
+          cancellation notifications. Message frequency varies.
+          Message and data rates may apply.
+        </p>
+        <p style={p}>
+          We do not share your mobile phone number or the contents
+          of your SMS messages with third parties for their
+          marketing purposes. The only third parties who handle
+          your number are the service providers we use to deliver
+          the messages (Twilio) and to store your booking record
+          (Supabase). You can opt out at any time by replying STOP
+          to any message; reply HELP for help. See our{' '}
+          <a href="/sms-terms" style={{ color: '#1D6B44', fontWeight: 700 }}>
+            SMS Terms &amp; Opt-In page
+          </a>{' '}
+          for the full program description, sample messages, and
+          opt-out instructions.
+        </p>
+
+        <h2 style={h2}>9. Changes to this policy</h2>
         <p style={p}>
           We may update this Privacy Policy from time to time. Material
           changes will be reflected by updating the &quot;Last updated&quot; date
           above.
         </p>
 
-        <h2 style={h2}>9. Contact us</h2>
+        <h2 style={h2}>10. Contact us</h2>
         <p style={p}>
           Questions about this policy? Email{' '}
           <a href="mailto:max@bebllp.com" style={{ color: '#1D6B44', fontWeight: 700 }}>

@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import SmsConsentNotice from '@/components/ui/SmsConsentNotice'
 
 interface ShowInfo {
   id: string
@@ -245,6 +246,8 @@ export default function TrunkShowBookPage() {
                   className="w-full px-4 py-3 rounded-lg border text-base"
                   style={{ borderColor: 'var(--pearl, #e2e8f0)' }} />
               </div>
+              {/* SMS opt-in disclosure (Twilio toll-free requirement). */}
+              <SmsConsentNotice />
               {tokenSalesperson ? (
                 <div className="rounded-lg px-4 py-3 text-sm"
                   style={{ background: secondary, border: `1px solid ${primary}`, color: primary, fontWeight: 600 }}>

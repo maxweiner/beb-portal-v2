@@ -8,6 +8,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
+import SmsConsentNotice from '@/components/ui/SmsConsentNotice'
 
 interface ShowInfo {
   id: string
@@ -240,6 +241,8 @@ export default function TradeShowBookPage() {
                       className="w-full px-4 py-3 rounded-lg border text-base"
                       style={{ borderColor: 'var(--pearl, #e2e8f0)' }} />
                   </div>
+                  {/* SMS opt-in disclosure (Twilio toll-free requirement). */}
+                  <SmsConsentNotice />
                   <input value={notes} onChange={e => setNotes(e.target.value)}
                     placeholder="Anything we should know?"
                     className="w-full px-4 py-3 rounded-lg border text-base"

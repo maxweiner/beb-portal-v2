@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import SmsConsentNotice from '@/components/ui/SmsConsentNotice'
 
 interface Props {
   eventId: string
@@ -89,6 +90,8 @@ export default function WaitlistJoinClient({ eventId, storeName, cityState, hear
             type="tel" autoComplete="tel" inputMode="tel"
             placeholder="(555) 123-4567"
             style={inp} />
+          {/* SMS opt-in disclosure (Twilio toll-free requirement). */}
+          <SmsConsentNotice />
         </Field>
         <Field label="How many items are you bringing?">
           <input value={itemCount} onChange={e => setItemCount(e.target.value)} required

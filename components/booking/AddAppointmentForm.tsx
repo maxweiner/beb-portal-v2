@@ -24,6 +24,7 @@
 import { useMemo, useState } from 'react'
 import PhoneInput from '@/components/ui/PhoneInput'
 import Checkbox from '@/components/ui/Checkbox'
+import SmsConsentNotice from '@/components/ui/SmsConsentNotice'
 import { buildSlotsForDay, hoursForEventDay } from '@/lib/appointments/slots'
 
 export interface AddAppointmentFormStore {
@@ -291,6 +292,11 @@ export default function AddAppointmentForm({
                 <PhoneInput required value={phone} onChange={v => setPhone(v)}
                   style={{ fontSize: inputSize }}
                   className="w-full rounded-lg border border-gray-300 p-2" />
+                {/* SMS opt-in disclosure — required for Twilio
+                    toll-free verification. Only shown to customers
+                    (staff bookings are entered by staff on behalf of
+                    a customer who consented elsewhere). */}
+                {mode === 'customer' && <SmsConsentNotice />}
               </div>
               <div>
                 <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Email</label>
