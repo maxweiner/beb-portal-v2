@@ -41,16 +41,20 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
 
   const yearEvents = events.filter(e => e.start_date?.startsWith(year))
 
-  // This week: Monday to Sunday
+  // This week: Monday to Sunday. Cancelled events are excluded
+  // everywhere on the dashboard — they're noise on a working
+  // operator's home page and we already hide them in the legacy
+  // Buying Events list (PR #556). Same treatment here for parity.
   const today = new Date()
   const { start: monday, end: sunday } = weekRange(today)
-  const weekEvents = events.filter(e => eventOverlapsWeek(e, monday, sunday))
+  const liveEvents = events.filter(e => e.status !== 'cancelled')
+  const weekEvents = liveEvents.filter(e => eventOverlapsWeek(e, monday, sunday))
 
   // Fallback: if nothing this week, peek at next week's window.
   const nextWeekStart = new Date(monday); nextWeekStart.setDate(monday.getDate() + 7)
   const nextWeekEnd = new Date(sunday); nextWeekEnd.setDate(sunday.getDate() + 7)
   const nextWeekFallback = weekEvents.length === 0
-    ? events.filter(e => eventOverlapsWeek(e, nextWeekStart, nextWeekEnd))
+    ? liveEvents.filter(e => eventOverlapsWeek(e, nextWeekStart, nextWeekEnd))
     : []
   const showingNextWeek = weekEvents.length === 0 && nextWeekFallback.length > 0
   const displayedEvents = weekEvents.length > 0 ? weekEvents : nextWeekFallback
@@ -181,7 +185,8 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
     ? weekEvents.filter(e => isWorkerAssigned(e, myId))
     : []
   const myLastWeek = (isBuyer && myId)
-    ? events.filter(e => isWorkerAssigned(e, myId) && eventOverlapsWeek(e, lastWeekStart, lastWeekEnd))
+    // liveEvents drops cancelled — same filter as the top tile.
+    ? liveEvents.filter(e => isWorkerAssigned(e, myId) && eventOverlapsWeek(e, lastWeekStart, lastWeekEnd))
     : []
   const fmtRange = (start: Date, end: Date) =>
     `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
