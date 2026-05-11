@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
+import { formatPhoneDisplay } from '@/lib/phone'
 import type { Event, EventWaitlistEntry, EventWaitlistNotifyPref } from '@/types'
 
 interface Props {
@@ -151,7 +152,7 @@ function WaitlistRow({
             {entry.notify_pref === 'sms' && <span style={{ marginLeft: 6, fontSize: 10, color: '#1e40af' }}>📱 Text</span>}
           </div>
           <div style={{ fontSize: 11, color: 'var(--mist)' }}>
-            <a href={`tel:${entry.phone}`} style={{ color: 'var(--mist)', textDecoration: 'none' }}>{entry.phone}</a>
+            <a href={`tel:${entry.phone}`} style={{ color: 'var(--mist)', textDecoration: 'none' }}>{formatPhoneDisplay(entry.phone)}</a>
             {' · '}{entry.item_count} item{entry.item_count === 1 ? '' : 's'}
             {entry.how_heard && <> · {entry.how_heard}</>}
           </div>
