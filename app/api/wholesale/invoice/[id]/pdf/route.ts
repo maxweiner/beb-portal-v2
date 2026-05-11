@@ -51,11 +51,15 @@ export async function GET(req: Request, ctx: { params: { id: string } }) {
     payment_terms:  inv.payment_terms,
     notes:          inv.notes,
     customer: {
-      company_name:  inv.customer?.company_name,
-      contact_name:  inv.customer?.contact_name,
-      address:       inv.customer?.address,
-      phone:         inv.customer?.phone,
-      email:         inv.customer?.email,
+      company_name:     inv.customer?.company_name,
+      contact_name:     inv.customer?.contact_name,
+      // Legacy `address` carried through so PDFs for old rows that
+      // pre-date the bill/ship split still render an address line.
+      address:          inv.customer?.address,
+      billing_address:  inv.customer?.billing_address,
+      shipping_address: inv.customer?.shipping_address,
+      phone:            inv.customer?.phone,
+      email:            inv.customer?.email,
       resale_certificate_number: inv.customer?.resale_certificate_number,
     },
     lines: ((inv.lines || []) as any[]).map(l => ({

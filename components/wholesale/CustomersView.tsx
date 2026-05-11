@@ -10,6 +10,7 @@ import { loadAdminList } from '@/lib/wholesale/lists'
 import { Modal, Section, Row, Field, Select } from './InventoryView'
 import AddressAutocompleteInput from '@/components/ui/AddressAutocompleteInput'
 import PhoneInput from '@/components/ui/PhoneInput'
+import Checkbox from '@/components/ui/Checkbox'
 
 export default function CustomersView() {
   const { user, brand } = useApp()
@@ -103,7 +104,13 @@ function CustomerModal({
   const [phone, setPhone] = useState('')
   const [mobile_phone, setMobilePhone] = useState('')
   const [email, setEmail] = useState('')
-  const [address, setAddress] = useState('')
+  // Address: bill-to and ship-to held separately. `sameAsBilling`
+  // hides the ship-to input + mirrors billing into shipping on save —
+  // most B2B customers really do share one address, so the default
+  // collapsed state keeps the form light.
+  const [billing_address, setBillingAddress] = useState('')
+  const [shipping_address, setShippingAddress] = useState('')
+  const [shippingSameAsBilling, setShippingSameAsBilling] = useState(true)
   const [resale_cert, setResaleCert] = useState('')
   // New customers default to Net 30 if no payment_terms list pick;
   // edit modal preserves whatever the customer already has.
@@ -125,7 +132,17 @@ function CustomerModal({
       setCustomer(c); if (c) {
         setCompanyName(c.company_name); setContactName(c.contact_name || '')
         setPhone(c.phone || ''); setMobilePhone(c.mobile_phone || '')
-        setEmail(c.email || ''); setAddress(c.address || '')
+        setEmail(c.email || '')
+        // Prefer the new columns; fall back to legacy `address` for
+        // rows the user hasn't re-saved since the split migration.
+        const billing  = c.billing_address  ?? c.address ?? ''
+        const shipping = c.shipping_address ?? c.address ?? ''
+        setBillingAddress(billing)
+        setShippingAddress(shipping)
+        // If shipping is empty or matches billing, default to the
+        // collapsed "same as billing" view. Anything else = explicit
+        // separate address, leave it expanded.
+        setShippingSameAsBilling(!shipping || shipping === billing)
         setResaleCert(c.resale_certificate_number || ''); setDefaultTerms(c.default_payment_terms || '')
         setNotes(c.notes || '')
         setCredit(centsToDollarsString(c.credit_balance_cents))
@@ -147,12 +164,19 @@ function CustomerModal({
     setBusy(true); setErr(null)
     try {
       const creditCents = dollarsToCents(credit) ?? 0
+      const billing  = billing_address.trim() || null
+      const shipping = shippingSameAsBilling ? billing : (shipping_address.trim() || null)
       const payload = {
         brand, company_name: company_name.trim(),
         contact_name: contact_name.trim() || null,
         phone: phone.trim() || null,
         mobile_phone: mobile_phone.trim() || null,
-        email: email.trim() || null, address: address.trim() || null,
+        email: email.trim() || null,
+        // Keep legacy `address` synced to billing so older PDF /
+        // auto-customer-spawn paths that still read it keep working.
+        address: billing,
+        billing_address: billing,
+        shipping_address: shipping,
         resale_certificate_number: resale_cert.trim() || null,
         default_payment_terms: default_terms || 'Net 30',
         credit_balance_cents: creditCents,
@@ -166,7 +190,7 @@ function CustomerModal({
         const { error } = await supabase.from('wholesale_customers').update({ ...payload, updated_by: actorId }).eq('id', id!)
         if (error) throw new Error(error.message)
         if (customer) {
-          const diff = diffFields(customer as any, payload, ['company_name','contact_name','phone','mobile_phone','email','address','resale_certificate_number','default_payment_terms','credit_balance_cents','notes'])
+          const diff = diffFields(customer as any, payload, ['company_name','contact_name','phone','mobile_phone','email','address','billing_address','shipping_address','resale_certificate_number','default_payment_terms','credit_balance_cents','notes'])
           if (diff) await logAudit({
             brand, entity_type: 'wholesale_customer', entity_id: id!, action: 'updated',
             before: diff.before, after: diff.after, actor_id: actorId, actor_email: actorEmail,
@@ -199,9 +223,28 @@ function CustomerModal({
           <Field label="Mobile"><PhoneInput value={mobile_phone} onChange={setMobilePhone} /></Field>
           <Field label="Email"><input type="email" value={email} onChange={e => setEmail(e.target.value)} /></Field>
         </Row>
-        <Field label="Address">
-          <AddressAutocompleteInput value={address} onChange={setAddress} placeholder="Start typing an address…" />
+        <Field label="Billing address">
+          <AddressAutocompleteInput value={billing_address} onChange={setBillingAddress} placeholder="Start typing the bill-to address…" />
         </Field>
+        <div style={{ marginTop: -2, marginBottom: 4 }}>
+          <Checkbox
+            checked={shippingSameAsBilling}
+            onChange={(next) => {
+              setShippingSameAsBilling(next)
+              // When the user collapses the ship-to field, mirror
+              // billing into the state so the value the form will
+              // save matches what's visible. Avoids a stale ship-to
+              // sticking around hidden.
+              if (next) setShippingAddress(billing_address)
+            }}
+            label="Shipping address same as billing"
+          />
+        </div>
+        {!shippingSameAsBilling && (
+          <Field label="Shipping address">
+            <AddressAutocompleteInput value={shipping_address} onChange={setShippingAddress} placeholder="Start typing the ship-to address…" />
+          </Field>
+        )}
         <Row>
           <Field label="Resale cert #"><input type="text" value={resale_cert} onChange={e => setResaleCert(e.target.value)} /></Field>
           <Field label="Default payment terms">

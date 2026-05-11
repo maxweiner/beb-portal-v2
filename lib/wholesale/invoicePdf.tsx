@@ -18,7 +18,10 @@ export interface InvoicePdfData {
   customer: {
     company_name: string
     contact_name?: string | null
+    /** @deprecated legacy single-field address; prefer billing_address. */
     address?: string | null
+    billing_address?: string | null
+    shipping_address?: string | null
     phone?: string | null
     email?: string | null
     resale_certificate_number?: string | null
@@ -102,17 +105,38 @@ export function InvoicePdfDoc({ data }: { data: InvoicePdfData }) {
           </View>
         </View>
 
-        <View style={styles.toBlock}>
-          <Text style={styles.toLabel}>Bill to</Text>
-          <Text style={styles.toName}>{data.customer.company_name}</Text>
-          {data.customer.contact_name ? <Text style={styles.brandLine}>{data.customer.contact_name}</Text> : null}
-          {data.customer.address      ? <Text style={styles.brandLine}>{data.customer.address}</Text>      : null}
-          {data.customer.phone        ? <Text style={styles.brandLine}>{data.customer.phone}</Text>        : null}
-          {data.customer.email        ? <Text style={styles.brandLine}>{data.customer.email}</Text>        : null}
-          {data.customer.resale_certificate_number
-            ? <Text style={[styles.brandLine, { marginTop: 2 }]}>Resale cert: {data.customer.resale_certificate_number}</Text>
-            : null}
-        </View>
+        {/* Bill-to / ship-to. Resale cert, phone, email live with the
+            billing entity (financial identifiers). Ship-to block is
+            rendered only when shipping_address differs from billing —
+            for most customers they're the same and we'd just be
+            duplicating lines. */}
+        {(() => {
+          const billing  = data.customer.billing_address  ?? data.customer.address ?? null
+          const shipping = data.customer.shipping_address ?? null
+          const showShip = !!shipping && shipping !== billing
+          return (
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, marginBottom: 12 }}>
+              <View style={[styles.toBlock, { flex: 1, marginTop: 0, marginBottom: 0 }]}>
+                <Text style={styles.toLabel}>{showShip ? 'Bill To' : 'Bill to'}</Text>
+                <Text style={styles.toName}>{data.customer.company_name}</Text>
+                {data.customer.contact_name ? <Text style={styles.brandLine}>{data.customer.contact_name}</Text> : null}
+                {billing             ? <Text style={styles.brandLine}>{billing}</Text>             : null}
+                {data.customer.phone ? <Text style={styles.brandLine}>{data.customer.phone}</Text> : null}
+                {data.customer.email ? <Text style={styles.brandLine}>{data.customer.email}</Text> : null}
+                {data.customer.resale_certificate_number
+                  ? <Text style={[styles.brandLine, { marginTop: 2 }]}>Resale cert: {data.customer.resale_certificate_number}</Text>
+                  : null}
+              </View>
+              {showShip ? (
+                <View style={[styles.toBlock, { flex: 1, marginTop: 0, marginBottom: 0 }]}>
+                  <Text style={styles.toLabel}>Ship To</Text>
+                  <Text style={styles.toName}>{data.customer.company_name}</Text>
+                  <Text style={styles.brandLine}>{shipping}</Text>
+                </View>
+              ) : null}
+            </View>
+          )
+        })()}
 
         <View style={styles.table}>
           <View style={styles.trh}>

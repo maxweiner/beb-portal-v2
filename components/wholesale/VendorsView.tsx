@@ -9,6 +9,7 @@ import { logAudit, diffFields } from '@/lib/wholesale/audit'
 import { Modal, Section, Row, Field, Select } from './InventoryView'
 import AddressAutocompleteInput from '@/components/ui/AddressAutocompleteInput'
 import PhoneInput from '@/components/ui/PhoneInput'
+import Checkbox from '@/components/ui/Checkbox'
 
 export default function VendorsView() {
   const { user, brand } = useApp()
@@ -99,7 +100,13 @@ function VendorModal({
   const [phone, setPhone] = useState('')
   const [mobile_phone, setMobilePhone] = useState('')
   const [email, setEmail] = useState('')
-  const [address, setAddress] = useState('')
+  // Address: bill-to and ship-to held separately. `sameAsBilling`
+  // hides the ship-to input + mirrors billing into shipping on save —
+  // most vendors really do share one address, so the default
+  // collapsed state keeps the form light.
+  const [billing_address, setBillingAddress] = useState('')
+  const [shipping_address, setShippingAddress] = useState('')
+  const [shippingSameAsBilling, setShippingSameAsBilling] = useState(true)
   const [notes, setNotes] = useState('')
 
   useEffect(() => {
@@ -112,7 +119,14 @@ function VendorModal({
       setVendor(v); if (v) {
         setCompanyName(v.company_name); setContactName(v.contact_name || '')
         setPhone(v.phone || ''); setMobilePhone(v.mobile_phone || '')
-        setEmail(v.email || ''); setAddress(v.address || '')
+        setEmail(v.email || '')
+        // Prefer the new columns; fall back to legacy `address` for
+        // rows the user hasn't re-saved since the split migration.
+        const billing  = v.billing_address  ?? v.address ?? ''
+        const shipping = v.shipping_address ?? v.address ?? ''
+        setBillingAddress(billing)
+        setShippingAddress(shipping)
+        setShippingSameAsBilling(!shipping || shipping === billing)
         setNotes(v.notes || '')
       }
       const { data: itemsRes } = await supabase.from('inventory_items').select('*')
@@ -126,12 +140,20 @@ function VendorModal({
     if (!company_name.trim()) { setErr('Company name is required'); return }
     setBusy(true); setErr(null)
     try {
+      const billing  = billing_address.trim() || null
+      const shipping = shippingSameAsBilling ? billing : (shipping_address.trim() || null)
       const payload = {
         brand, company_name: company_name.trim(),
         contact_name: contact_name.trim() || null,
         phone: phone.trim() || null,
         mobile_phone: mobile_phone.trim() || null,
-        email: email.trim() || null, address: address.trim() || null, notes: notes.trim() || null,
+        email: email.trim() || null,
+        // Keep legacy `address` synced to billing so older readers
+        // (auto-vendor spawn, etc.) keep working.
+        address: billing,
+        billing_address: billing,
+        shipping_address: shipping,
+        notes: notes.trim() || null,
       }
       if (mode === 'new') {
         const { data, error } = await supabase.from('wholesale_vendors').insert({ ...payload, created_by: actorId, updated_by: actorId }).select('*').single()
@@ -141,7 +163,7 @@ function VendorModal({
         const { error } = await supabase.from('wholesale_vendors').update({ ...payload, updated_by: actorId }).eq('id', id!)
         if (error) throw new Error(error.message)
         if (vendor) {
-          const diff = diffFields(vendor as any, payload, ['company_name','contact_name','phone','mobile_phone','email','address','notes'])
+          const diff = diffFields(vendor as any, payload, ['company_name','contact_name','phone','mobile_phone','email','address','billing_address','shipping_address','notes'])
           if (diff) await logAudit({
             brand, entity_type: 'wholesale_vendor', entity_id: id!, action: 'updated',
             before: diff.before, after: diff.after, actor_id: actorId, actor_email: actorEmail,
@@ -174,9 +196,24 @@ function VendorModal({
           <Field label="Mobile"><PhoneInput value={mobile_phone} onChange={setMobilePhone} /></Field>
           <Field label="Email"><input type="email" value={email} onChange={e => setEmail(e.target.value)} /></Field>
         </Row>
-        <Field label="Address">
-          <AddressAutocompleteInput value={address} onChange={setAddress} placeholder="Start typing an address…" />
+        <Field label="Billing address">
+          <AddressAutocompleteInput value={billing_address} onChange={setBillingAddress} placeholder="Start typing the bill-to address…" />
         </Field>
+        <div style={{ marginTop: -2, marginBottom: 4 }}>
+          <Checkbox
+            checked={shippingSameAsBilling}
+            onChange={(next) => {
+              setShippingSameAsBilling(next)
+              if (next) setShippingAddress(billing_address)
+            }}
+            label="Shipping address same as billing"
+          />
+        </div>
+        {!shippingSameAsBilling && (
+          <Field label="Shipping address">
+            <AddressAutocompleteInput value={shipping_address} onChange={setShippingAddress} placeholder="Start typing the ship-to address…" />
+          </Field>
+        )}
         <Field label="Notes"><textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} style={{ width: '100%' }} /></Field>
       </Section>
 
