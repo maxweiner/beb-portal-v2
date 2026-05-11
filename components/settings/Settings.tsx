@@ -938,6 +938,13 @@ function GCalSyncSettings({ brand }: { brand: 'beb' | 'liberty' }) {
   const [dedupePreview, setDedupePreview] = useState<any | null>(null)
   const [dedupeWorking, setDedupeWorking] = useState(false)
   const [dedupeError, setDedupeError] = useState<string | null>(null)
+  // Purge cancelled — sister to dedupe. Scans Google for events
+  // whose DB row is status='cancelled' (or doesn't exist anymore)
+  // and removes them. Catches the gap PR #552's SQL backfill left
+  // (events with status='cancelled' but no gcal_event_links row).
+  const [purgePreview, setPurgePreview] = useState<any | null>(null)
+  const [purgeWorking, setPurgeWorking] = useState(false)
+  const [purgeError, setPurgeError] = useState<string | null>(null)
   const [activity, setActivity] = useState<any[]>([])
   const [failedCount, setFailedCount] = useState(0)
   // Recent activity is long; collapsed by default. Per-brand persistence
@@ -1063,6 +1070,41 @@ function GCalSyncSettings({ brand }: { brand: 'beb' | 'liberty' }) {
     setDedupeWorking(false)
   }
 
+  // Purge cancelled — same two-step pattern.
+  const purgePreviewRun = async () => {
+    setPurgeWorking(true); setPurgeError(null); setPurgePreview(null)
+    try {
+      const res = await fetch('/api/gcal-sync/purge-cancelled', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brand, mode: 'preview' }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) setPurgeError(json.error || `Preview failed (${res.status})`)
+      else setPurgePreview(json)
+    } catch (e: any) {
+      setPurgeError('Network error: ' + (e?.message || 'unknown'))
+    }
+    setPurgeWorking(false)
+  }
+  const purgeApply = async () => {
+    if (!purgePreview) return
+    const n = purgePreview.to_delete || 0
+    if (!confirm(`Delete ${n} cancelled / orphan Google Calendar event${n === 1 ? '' : 's'} for ${brandLabel}? This cannot be undone.`)) return
+    setPurgeWorking(true); setPurgeError(null)
+    try {
+      const res = await fetch('/api/gcal-sync/purge-cancelled', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brand, mode: 'apply' }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) setPurgeError(json.error || `Apply failed (${res.status})`)
+      else setPurgePreview(json)
+    } catch (e: any) {
+      setPurgeError('Network error: ' + (e?.message || 'unknown'))
+    }
+    setPurgeWorking(false)
+  }
+
   if (!loaded) return null
 
   const accent = brand === 'liberty' ? '#3B82F6' : '#1D6B44'
@@ -1172,6 +1214,64 @@ function GCalSyncSettings({ brand }: { brand: 'beb' | 'liberty' }) {
                     <li key={i} style={{ marginBottom: 4 }}>
                       <code style={{ fontSize: 10 }}>{g.event_id.slice(0, 8)}…</code>
                       {' '}— keep <em>{g.keeping.summary || '(no title)'}</em> ({g.keeping.startDate}), delete {g.deleting.length}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Purge cancelled — companion to Dedupe. Removes Google
+          Calendar events whose DB row is status='cancelled' (or
+          gone entirely). Catches cancellations that the trigger
+          missed because they predate cancelled_at tracking, plus
+          orphans left behind by delete-forever. */}
+      <div style={{ borderTop: '1px solid var(--cream2)', paddingTop: 10, marginTop: 10, marginBottom: 4 }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
+          Purge cancelled from Google Calendar
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--mist)', marginBottom: 8, lineHeight: 1.45 }}>
+          Scans the {brandLabel} calendar and removes events whose portal record is cancelled (or deleted entirely). Use this after a bulk cancellation if anything stuck around.
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
+          <button onClick={purgePreviewRun} disabled={purgeWorking || !enabled} className="btn-outline btn-sm">
+            {purgeWorking && !purgePreview ? 'Scanning…' : 'Find cancelled'}
+          </button>
+          {purgePreview && purgePreview.mode === 'preview' && purgePreview.to_delete > 0 && (
+            <button onClick={purgeApply} disabled={purgeWorking} className="btn-primary btn-sm">
+              {purgeWorking ? 'Deleting…' : `Delete ${purgePreview.to_delete} cancelled / orphan`}
+            </button>
+          )}
+        </div>
+        {purgeError && (
+          <div style={{ fontSize: 12, color: '#991B1B', background: '#FEE2E2', padding: '6px 10px', borderRadius: 6, marginBottom: 6 }}>
+            {purgeError}
+          </div>
+        )}
+        {purgePreview && (
+          <div style={{ fontSize: 11, color: 'var(--ash)', background: 'var(--cream2)', padding: 8, borderRadius: 6, marginTop: 4 }}>
+            <div>
+              {purgePreview.mode === 'apply' ? (
+                <strong style={{ color: 'var(--green-dark)' }}>Done — deleted {purgePreview.deleted}{purgePreview.delete_errors?.length ? `, ${purgePreview.delete_errors.length} error${purgePreview.delete_errors.length === 1 ? '' : 's'}` : ''}.</strong>
+              ) : purgePreview.to_delete === 0 ? (
+                <strong>Nothing to purge — calendar is clean.</strong>
+              ) : (
+                <strong>{purgePreview.to_delete} event{purgePreview.to_delete === 1 ? '' : 's'} would be deleted ({purgePreview.cancelled_in_db} cancelled · {purgePreview.orphan_in_db} orphan).</strong>
+              )}
+            </div>
+            <div style={{ marginTop: 4 }}>
+              Scanned {purgePreview.calendar_total_events} calendar event{purgePreview.calendar_total_events === 1 ? '' : 's'} · {purgePreview.events_without_our_url} skipped (not portal-created) · {purgePreview.portal_event_groups} unique portal event{purgePreview.portal_event_groups === 1 ? '' : 's'} on calendar.
+            </div>
+            {purgePreview.sample && purgePreview.sample.length > 0 && (
+              <details style={{ marginTop: 6 }}>
+                <summary style={{ cursor: 'pointer', fontWeight: 700 }}>Sample (first {purgePreview.sample.length})</summary>
+                <ul style={{ paddingLeft: 18, marginTop: 4, marginBottom: 0 }}>
+                  {purgePreview.sample.map((t: any, i: number) => (
+                    <li key={i} style={{ marginBottom: 4 }}>
+                      <code style={{ fontSize: 10 }}>{t.event_id.slice(0, 8)}…</code>
+                      {' '}— <em>{t.google.summary || '(no title)'}</em> ({t.google.startDate}) — <strong>{t.reason}</strong>
                     </li>
                   ))}
                 </ul>
