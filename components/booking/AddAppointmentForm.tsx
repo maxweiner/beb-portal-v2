@@ -317,38 +317,22 @@ export default function AddAppointmentForm({
                     {config.hear_about_options.map(opt => {
                       const checked = howHeard.includes(opt)
                       return (
-                        <label
+                        <Checkbox
                           key={opt}
-                          className="flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors"
-                          style={{
+                          checked={checked}
+                          onChange={() => toggleHowHeard(opt)}
+                          size={20}
+                          color={primary}
+                          label={<span>{opt}</span>}
+                          className="rounded-lg border transition-colors"
+                          labelStyle={{
+                            padding: 8,
                             fontSize: checkboxLabelSize,
                             ...(checked
                               ? { borderColor: primary, background: primary + '14' }
                               : { borderColor: '#d1d5db' }),
                           }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleHowHeard(opt)}
-                            className="absolute opacity-0 w-0 h-0 pointer-events-none"
-                          />
-                          <span
-                            aria-hidden="true"
-                            className="flex items-center justify-center text-white font-black leading-none transition-colors shrink-0"
-                            style={{
-                              width: 20,
-                              height: 20,
-                              borderRadius: 5,
-                              border: `2px solid ${checked ? primary : '#d1d5db'}`,
-                              background: checked ? primary : '#FFFFFF',
-                              fontSize: 13,
-                            }}
-                          >
-                            {checked ? '✓' : ''}
-                          </span>
-                          <span>{opt}</span>
-                        </label>
+                        />
                       )
                     })}
                   </div>

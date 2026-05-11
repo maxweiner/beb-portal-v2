@@ -12,6 +12,10 @@ interface CheckboxProps {
   size?: number
   /** Box border-radius in px. Defaults to 5. */
   radius?: number
+  /** CSS color used for both the box border + fill when checked.
+   *  Defaults to var(--green). Use semantic colours (red for DNC,
+   *  gold for VIP, etc) where the meaning differs. */
+  color?: string
   className?: string
   labelStyle?: CSSProperties
 }
@@ -43,6 +47,7 @@ export default function Checkbox({
   disabled = false,
   size = 20,
   radius = 5,
+  color = 'var(--green)',
   className,
   labelStyle,
 }: CheckboxProps) {
@@ -74,8 +79,8 @@ export default function Checkbox({
           height: size,
           flexShrink: 0,
           borderRadius: radius,
-          border: `2px solid ${checked ? 'var(--green)' : 'var(--pearl)'}`,
-          background: checked ? 'var(--green)' : '#FFFFFF',
+          border: `2px solid ${checked ? color : 'var(--pearl)'}`,
+          background: checked ? color : '#FFFFFF',
           boxSizing: 'border-box',
           display: 'inline-flex',
           alignItems: 'center',

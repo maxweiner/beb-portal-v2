@@ -12,6 +12,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { User } from '@/types'
+import Checkbox from '@/components/ui/Checkbox'
 
 export default function MarketingAccessPanel() {
   const [users, setUsers] = useState<User[]>([])
@@ -82,32 +83,27 @@ export default function MarketingAccessPanel() {
         ) : filtered.map((u, i) => {
           const granted = !!u.marketing_access
           return (
-            <label key={u.id} style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              padding: '10px 14px',
-              borderBottom: i < filtered.length - 1 ? '1px solid var(--cream2)' : 'none',
-              cursor: busyId === u.id ? 'wait' : 'pointer',
-              background: granted ? 'var(--green-pale)' : '#fff',
-            }}>
-              <input type="checkbox" checked={granted}
-                disabled={busyId === u.id}
-                onChange={e => toggle(u.id, e.target.checked)}
-                style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
-              <span aria-hidden style={{
-                width: 20, height: 20, flexShrink: 0, borderRadius: 5,
-                border: `2px solid ${granted ? 'var(--green)' : 'var(--pearl)'}`,
-                background: granted ? 'var(--green)' : '#FFFFFF',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: '#FFFFFF', fontSize: 13, fontWeight: 900, lineHeight: 1,
-              }}>{granted ? '✓' : ''}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>
-                  {u.name || u.email}
-                  {u.role === 'superadmin' && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'var(--cream2)', color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.05em' }}>superadmin</span>}
+            <Checkbox
+              key={u.id}
+              checked={granted}
+              disabled={busyId === u.id}
+              onChange={(next) => toggle(u.id, next)}
+              size={20}
+              label={
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>
+                    {u.name || u.email}
+                    {u.role === 'superadmin' && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'var(--cream2)', color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.05em' }}>superadmin</span>}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--mist)' }}>{u.email}</div>
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--mist)' }}>{u.email}</div>
-              </div>
-            </label>
+              }
+              labelStyle={{
+                display: 'flex', width: '100%', gap: 12, padding: '10px 14px',
+                borderBottom: i < filtered.length - 1 ? '1px solid var(--cream2)' : 'none',
+                background: granted ? 'var(--green-pale)' : '#fff',
+              }}
+            />
           )
         })}
       </div>

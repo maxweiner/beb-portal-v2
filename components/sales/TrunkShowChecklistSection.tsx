@@ -21,6 +21,7 @@ import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import type { NavPage } from '@/app/page'
 import type { CommunicationAssignedRole, TrunkShowChecklistItem } from '@/types'
+import Checkbox from '@/components/ui/Checkbox'
 
 interface Props {
   trunkShowId: string
@@ -107,11 +108,13 @@ export default function TrunkShowChecklistSection({ trunkShowId, setNav }: Props
       {open && (
         <div style={{ marginTop: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--mist)' }}>
-              <input type="checkbox" checked={showCompleted} onChange={e => setShowCompleted(e.target.checked)}
-                style={{ width: 14, height: 14, padding: 0, margin: 0, appearance: 'auto', WebkitAppearance: 'checkbox' } as React.CSSProperties}
-              /> Show completed
-            </label>
+            <Checkbox
+              checked={showCompleted}
+              onChange={setShowCompleted}
+              size={14}
+              label="Show completed"
+              labelStyle={{ fontSize: 11, color: 'var(--mist)' }}
+            />
             <button onClick={() => setShowAdd(true)} className="btn-outline btn-xs">+ Ad-hoc item</button>
           </div>
 
@@ -172,16 +175,13 @@ function ChecklistRow({
       border: '1px solid var(--cream2)',
       opacity: item.is_completed ? 0.6 : 1,
     }}>
-      <input
-        type="checkbox"
-        checked={item.is_completed}
-        onChange={e => onToggle(e.target.checked)}
-        style={{
-          width: 18, height: 18, padding: 0, margin: '4px 0 0 0', flexShrink: 0,
-          appearance: 'auto', WebkitAppearance: 'checkbox', border: 'none',
-          background: 'transparent', borderRadius: 0,
-        } as React.CSSProperties}
-      />
+      <div style={{ marginTop: 4, flexShrink: 0 }}>
+        <Checkbox
+          checked={item.is_completed}
+          onChange={onToggle}
+          size={18}
+        />
+      </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         {titleClickable ? (
           <button onClick={onOpenAction}

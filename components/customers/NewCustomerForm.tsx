@@ -15,6 +15,7 @@ import type { HowDidYouHear } from '@/lib/customers/types'
 import { HOW_DID_YOU_HEAR_LABELS } from '@/lib/customers/types'
 import { logCustomerEvent } from '@/lib/customers/events'
 import DatePicker from '@/components/ui/DatePicker'
+import Checkbox from '@/components/ui/Checkbox'
 
 const HOW_DID_YOU_HEAR_OPTIONS: HowDidYouHear[] = [
   'large_postcard', 'small_postcard', 'newspaper',
@@ -179,18 +180,15 @@ export default function NewCustomerForm({ storeId, storeName, onClose, onCreated
             <textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} />
           </div>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--ink)', cursor: 'pointer' }}>
-            <input type="checkbox" checked={dnc} onChange={e => setDnc(e.target.checked)}
-              style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
-            <span aria-hidden style={{
-              width: 18, height: 18, flexShrink: 0, borderRadius: 4,
-              border: `2px solid ${dnc ? 'var(--red)' : 'var(--pearl)'}`,
-              background: dnc ? 'var(--red)' : '#fff',
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              color: '#fff', fontSize: 12, fontWeight: 900, lineHeight: 1,
-            }}>{dnc ? '✓' : ''}</span>
-            Do not contact (DNC) — this customer is excluded from every mailing
-          </label>
+          <Checkbox
+            checked={dnc}
+            onChange={setDnc}
+            size={18}
+            radius={4}
+            color="var(--red)"
+            label="Do not contact (DNC) — this customer is excluded from every mailing"
+            labelStyle={{ fontSize: 13, color: 'var(--ink)' }}
+          />
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button className="btn-outline btn-sm" onClick={onClose}>Cancel</button>

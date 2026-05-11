@@ -471,21 +471,13 @@ function ContactsList({
                 onChange={e => update(i, { email: e.target.value })}
                 placeholder="contact@example.com"
               />
-              <label style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                fontSize: 12, color: 'var(--ash)', fontWeight: 600,
-              }}>
-                <input
-                  type="checkbox"
+              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <Checkbox
                   checked={!!c.send_documents}
-                  onChange={e => update(i, { send_documents: e.target.checked })}
-                  style={{
-                    width: 18, height: 18, padding: 0, margin: 0,
-                    appearance: 'auto', WebkitAppearance: 'checkbox',
-                    border: 'none', background: 'transparent', borderRadius: 0,
-                  } as React.CSSProperties}
+                  onChange={(next) => update(i, { send_documents: next })}
+                  size={18}
                 />
-              </label>
+              </div>
               <button
                 type="button"
                 onClick={() => remove(i)}
