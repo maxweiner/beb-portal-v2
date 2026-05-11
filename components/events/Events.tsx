@@ -43,12 +43,20 @@ function eventDayKeys(ev: { start_date?: string | null }): string[] {
 }
 
 /** Other events where this buyer is already a worker AND the 3-day
- *  window overlaps `currentEv`. Empty array = no conflict. */
+ *  window overlaps `currentEv`. Empty array = no conflict.
+ *
+ *  Cancelled events are excluded — a buyer who was on a cancelled
+ *  event is released back to the pool, otherwise the cancelled
+ *  event would still block them from any overlapping new
+ *  assignment. The cancel route deliberately leaves `workers`
+ *  populated on the cancelled event row for audit history; this
+ *  filter just keeps the conflicts logic from treating them as live. */
 function findBuyerConflicts(buyerId: string, currentEv: Event, allEvents: Event[]): Event[] {
   const days = eventDayKeys(currentEv)
   if (days.length === 0) return []
   return allEvents.filter(other => {
     if (other.id === currentEv.id) return false
+    if (other.status === 'cancelled') return false
     if (!(other.workers || []).some(w => w.id === buyerId)) return false
     const otherDays = eventDayKeys(other)
     return days.some(d => otherDays.includes(d))
