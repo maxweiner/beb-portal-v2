@@ -9,6 +9,7 @@ import { isMobileDevice } from '@/lib/mobile'
 import { canEditEvent, isAdmin as roleIsAdmin, isWorkerAssigned, canCancelEvent } from '@/lib/permissions'
 import { fmtMoney } from '@/lib/format'
 import DatePicker from '@/components/ui/DatePicker'
+import Checkbox from '@/components/ui/Checkbox'
 import { eventSpend, eventCommission, daySpend, dayHasData } from '@/lib/eventSpend'
 import type { Event, BuyerVacation } from '@/types'
 import type { NavPage } from '@/app/page'
@@ -98,6 +99,13 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   const [eventsLoaded, setEventsLoaded] = useState(false)
 
   const [filter, setFilter] = useState<Filter>('thisweek')
+  // Cancelled events are hidden by default — the legacy list got
+  // noisy after partners started cancelling stale entries. The
+  // toggle stays in this view's local state (no localStorage) so
+  // it always defaults to OFF when the user navigates back; if they
+  // need to reach a cancelled event to "delete forever" they flip
+  // it on for that session.
+  const [showCancelled, setShowCancelled] = useState(false)
   const [sort, setSort] = useState<Sort>('date-asc')
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState<false | 'scheduled' | 'reserved'>(false)
@@ -267,9 +275,15 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
   const filtered = events.filter(ev => {
     if (!ev.start_date) return false
     // Calendar deep-link focus mode — show ONLY the matching event.
-    // Overrides everything (date filter, search). Cleared via the
-    // banner below the search row.
+    // Overrides everything (date filter, search, cancelled-hide).
+    // Cleared via the banner below the search row.
     if (focusEventId) return ev.id === focusEventId
+    // Cancelled events hidden by default. Toggle "Show cancelled" in
+    // the filter row to reveal them (e.g. to use Delete Forever).
+    // Just-created and search-hit cases still respect the toggle —
+    // a brand-new event isn't cancelled, and a search for a
+    // cancelled event without the toggle on shouldn't surface it.
+    if (!showCancelled && ev.status === 'cancelled') return false
     // Just-created event is always shown so the user can immediately
     // add buyers — even if the active filter would otherwise hide it.
     if (justCreatedEventId && ev.id === justCreatedEventId) return true
@@ -629,6 +643,20 @@ export default function Events({ setNav }: { setNav?: (n: NavPage) => void }) {
             <option value="days60">Next 60 Days</option>
             <option value="past">Past</option>
           </select>
+          {/* Cancelled events hidden by default; flip on when the user
+              needs to access a cancelled event (e.g. to delete forever).
+              Resets to OFF when the user navigates back — no
+              localStorage, since the most common case is "I never
+              want to see these." */}
+          <div style={{ alignSelf: 'center' }}>
+            <Checkbox
+              checked={showCancelled}
+              onChange={setShowCancelled}
+              size={16}
+              label="Show cancelled"
+              labelStyle={{ fontSize: 12, color: 'var(--mist)' }}
+            />
+          </div>
           <select value={sort} onChange={e => setSort(e.target.value as Sort)} style={{ width: 'auto' }}>
             <option value="date-desc">Furthest Away</option>
             <option value="date-asc">Soonest Event</option>
