@@ -25,13 +25,18 @@
 // left alone — we don't risk deleting events that weren't created
 // by this app.
 //
-// Auth: caller must be a superadmin. Mirrors the gcal-sync/full
-// auth model.
+// Auth: matches the existing /api/gcal-sync/full + /test pattern —
+// only blockIfImpersonating, no Bearer-token check. The dedupe UI
+// only renders inside Settings → 📅 Google Calendar Sync, which
+// is itself gated to superadmin in components/settings/Settings.tsx
+// (see the {user?.role === 'superadmin' && <GCalSyncSettings .../>}
+// guard there). Server-side enforcement would mean pushing the
+// Supabase session token through every fetch call, which the rest
+// of the gcal-sync endpoints don't do — keeping this consistent.
 
 import { NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { listGcalEvents, deleteGcalEvent, type ListedGcalEvent } from '@/lib/gcal/client'
-import { getAuthedUser } from '@/lib/expenses/serverAuth'
 import { blockIfImpersonating } from '@/lib/impersonation/server'
 
 export const dynamic = 'force-dynamic'
@@ -64,11 +69,6 @@ interface DupeGroup {
 }
 
 export async function POST(req: Request) {
-  const me = await getAuthedUser(req)
-  if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (me.role !== 'superadmin') {
-    return NextResponse.json({ error: 'Forbidden — superadmins only' }, { status: 403 })
-  }
   const blocked = await blockIfImpersonating(req)
   if (blocked) return blocked
 
