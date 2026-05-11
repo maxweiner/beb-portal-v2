@@ -11,6 +11,13 @@ import LeadProfileCard from '@/components/sales/LeadProfileCard'
 
 interface TrunkRep { id: string; name: string }
 
+interface TradeOrganization {
+  id: string
+  name: string
+  sort_order: number
+  archived_at: string | null
+}
+
 interface TrunkShowStoreContact {
   name: string
   /** Free-text role at the store. Common values via <datalist>: Owner,
@@ -84,6 +91,18 @@ export default function TrunkShowStores() {
   })
   const [placePicked, setPlacePicked] = useState(false)
   const [adding, setAdding] = useState(false)
+  // Trade organizations (RJO + future). orgs is the master list;
+  // membership is store_id → Set<org_id> built from the join table.
+  // selectedOrgIds drives the top-of-page filter (multi-select; any
+  // match wins). orgDropdownOpen/orgDropdownRef gate the checkbox
+  // popover. addOrgName lets the user create new orgs inline.
+  const [orgs, setOrgs] = useState<TradeOrganization[]>([])
+  const [membership, setMembership] = useState<Map<string, Set<string>>>(new Map())
+  const [selectedOrgIds, setSelectedOrgIds] = useState<Set<string>>(new Set())
+  const [orgDropdownOpen, setOrgDropdownOpen] = useState(false)
+  const [addOrgName, setAddOrgName] = useState('')
+  const [addingOrg, setAddingOrg] = useState(false)
+  const orgDropdownRef = useRef<HTMLDivElement>(null)
 
   const fetchStores = async () => {
     const { data, error } = await supabase
@@ -100,7 +119,54 @@ export default function TrunkShowStores() {
     setTrunkReps((data || []) as TrunkRep[])
   }
 
-  useEffect(() => { fetchStores(); fetchTrunkReps() }, [])
+  const fetchOrgs = async () => {
+    const { data, error } = await supabase
+      .from('trade_organizations')
+      .select('id, name, sort_order, archived_at')
+      .is('archived_at', null)
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true })
+    if (error) { console.error(error); return }
+    setOrgs((data || []) as TradeOrganization[])
+  }
+  const fetchMembership = async () => {
+    const { data, error } = await supabase
+      .from('store_trade_organization_members')
+      .select('store_id, org_id')
+    if (error) { console.error(error); return }
+    const m = new Map<string, Set<string>>()
+    for (const r of (data || []) as Array<{ store_id: string; org_id: string }>) {
+      let s = m.get(r.store_id)
+      if (!s) { s = new Set(); m.set(r.store_id, s) }
+      s.add(r.org_id)
+    }
+    setMembership(m)
+  }
+
+  useEffect(() => {
+    fetchStores(); fetchTrunkReps(); fetchOrgs(); fetchMembership()
+  }, [])
+
+  // Click-outside closes the org filter dropdown — anything inside
+  // the popover (incl. the inline "+ Add" input) keeps it open.
+  useEffect(() => {
+    if (!orgDropdownOpen) return
+    function onDocClick(e: MouseEvent) {
+      if (!orgDropdownRef.current) return
+      if (!orgDropdownRef.current.contains(e.target as Node)) {
+        setOrgDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [orgDropdownOpen])
+
+  // Lookup helpers for the chip column + modal.
+  const orgsById = useMemo(() => {
+    const m = new Map<string, TradeOrganization>()
+    for (const o of orgs) m.set(o.id, o)
+    return m
+  }, [orgs])
 
   const repNameById = useMemo(() => {
     const m = new Map<string, string>()
@@ -120,17 +186,81 @@ export default function TrunkShowStores() {
       if (stateFilter && s.state !== stateFilter) return false
       if (activeFilter === 'active' && s.trunk_shows !== true) return false
       if (activeFilter === 'inactive' && s.trunk_shows === true) return false
+      // Trade-organization filter: any-of match. A store has to be a
+      // member of at least one of the selected orgs to pass.
+      if (selectedOrgIds.size > 0) {
+        const myOrgs = membership.get(s.id)
+        if (!myOrgs || myOrgs.size === 0) return false
+        let any = false
+        for (const id of selectedOrgIds) {
+          if (myOrgs.has(id)) { any = true; break }
+        }
+        if (!any) return false
+      }
       if (!q) return true
       const repName = s.trunk_rep_user_id ? repNameById.get(s.trunk_rep_user_id) : null
+      // Include org names in the free-text search blob so typing
+      // "RJO" finds member stores too.
+      const myOrgs = membership.get(s.id)
+      const orgNames = myOrgs
+        ? Array.from(myOrgs).map(id => orgsById.get(id)?.name).filter(Boolean)
+        : []
       const hay = [
         s.name, s.city, s.state, repName, s.ts_reps, s.contact_1, s.contact_2, s.contact_3,
-        s.email_1, s.email_2, s.store_phone,
+        s.email_1, s.email_2, s.store_phone, ...orgNames,
       ].filter(Boolean).join(' ').toLowerCase()
       return hay.includes(q)
     })
-  }, [stores, search, stateFilter, activeFilter, showInactive, repNameById])
+  }, [stores, search, stateFilter, activeFilter, showInactive, repNameById, selectedOrgIds, membership, orgsById])
 
   const activeCount = useMemo(() => stores.filter(s => s.trunk_shows === true).length, [stores])
+
+  // Create a new trade organization. Inline in the dropdown so the
+  // user doesn't have to leave the filter context. Errors fall back
+  // to alert() since this is a low-frequency operation.
+  const createOrg = async () => {
+    const trimmed = addOrgName.trim()
+    if (!trimmed || addingOrg) return
+    setAddingOrg(true)
+    const { data, error } = await supabase
+      .from('trade_organizations')
+      .insert({ name: trimmed, sort_order: orgs.length })
+      .select('id, name, sort_order, archived_at')
+      .single()
+    setAddingOrg(false)
+    if (error) { alert('Add failed: ' + error.message); return }
+    const created = data as TradeOrganization
+    setOrgs(p => [...p, created].sort((a, b) => a.name.localeCompare(b.name)))
+    setAddOrgName('')
+  }
+
+  // Toggle a store's membership in an org. Optimistic update keeps
+  // the UI responsive; on failure we revert the local map.
+  const toggleStoreOrg = async (storeId: string, orgId: string, on: boolean) => {
+    setMembership(prev => {
+      const m = new Map(prev)
+      const s = new Set(m.get(storeId) || [])
+      if (on) s.add(orgId); else s.delete(orgId)
+      m.set(storeId, s)
+      return m
+    })
+    const { error } = on
+      ? await supabase.from('store_trade_organization_members')
+          .upsert({ store_id: storeId, org_id: orgId })
+      : await supabase.from('store_trade_organization_members')
+          .delete().eq('store_id', storeId).eq('org_id', orgId)
+    if (error) {
+      // Revert on failure.
+      setMembership(prev => {
+        const m = new Map(prev)
+        const s = new Set(m.get(storeId) || [])
+        if (on) s.delete(orgId); else s.add(orgId)
+        m.set(storeId, s)
+        return m
+      })
+      alert(`Org change failed: ${error.message}`)
+    }
+  }
 
   const handlePlaceSelect = (data: PlaceData) => {
     setNewStore({
@@ -207,6 +337,91 @@ export default function TrunkShowStores() {
           </select>
           <Checkbox checked={showInactive} onChange={setShowInactive}
             label={<span style={{ fontSize: 12, color: 'var(--mist)' }}>Show inactive</span>} />
+          {/* Trade organization filter — multi-select popover.
+              Button label summarises the current selection.
+              Dropdown body lists every active org as a checkbox,
+              with an inline "+ Add new…" composer at the bottom.
+              All actions stay inside orgDropdownRef so the click-
+              outside listener doesn't close the popover early. */}
+          <div ref={orgDropdownRef} style={{ position: 'relative' }}>
+            <button type="button"
+              onClick={() => setOrgDropdownOpen(o => !o)}
+              className="btn-outline btn-sm"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              {selectedOrgIds.size === 0
+                ? 'All orgs'
+                : (selectedOrgIds.size === 1
+                    ? (orgsById.get(Array.from(selectedOrgIds)[0])?.name || '1 org')
+                    : `${selectedOrgIds.size} orgs`)}
+              <span style={{ fontSize: 10, color: 'var(--mist)' }}>▾</span>
+            </button>
+            {orgDropdownOpen && (
+              <div style={{
+                position: 'absolute', top: '100%', right: 0, zIndex: 1100,
+                minWidth: 220, marginTop: 4,
+                background: '#fff', border: '1px solid var(--pearl)',
+                borderRadius: 8, padding: 8,
+                boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+              }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6, padding: '0 4px' }}>
+                  Filter by org
+                </div>
+                {orgs.length === 0 && (
+                  <div style={{ fontSize: 12, color: 'var(--mist)', padding: '4px 6px' }}>No orgs yet — add one below.</div>
+                )}
+                {orgs.map(o => {
+                  const checked = selectedOrgIds.has(o.id)
+                  return (
+                    <div key={o.id} style={{ padding: '4px 6px' }}>
+                      <Checkbox
+                        checked={checked}
+                        size={16}
+                        onChange={(next) => {
+                          setSelectedOrgIds(prev => {
+                            const s = new Set(prev)
+                            if (next) s.add(o.id); else s.delete(o.id)
+                            return s
+                          })
+                        }}
+                        label={<span style={{ fontSize: 13, color: 'var(--ink)' }}>{o.name}</span>}
+                      />
+                    </div>
+                  )
+                })}
+                {selectedOrgIds.size > 0 && (
+                  <button type="button"
+                    onClick={() => setSelectedOrgIds(new Set())}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left',
+                      padding: '4px 6px', marginTop: 4,
+                      background: 'transparent', border: 'none', cursor: 'pointer',
+                      fontFamily: 'inherit', fontSize: 11, color: 'var(--mist)',
+                    }}>
+                    Clear selection
+                  </button>
+                )}
+                <div style={{ borderTop: '1px solid var(--cream2)', marginTop: 6, paddingTop: 6 }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4, padding: '0 4px' }}>
+                    Add new
+                  </div>
+                  <div style={{ display: 'flex', gap: 4, padding: '0 4px' }}>
+                    <input value={addOrgName}
+                      onChange={e => setAddOrgName(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void createOrg() } }}
+                      placeholder="e.g. IJO"
+                      style={{ flex: 1, fontSize: 12, padding: '4px 8px' }} />
+                    <button type="button"
+                      onClick={() => void createOrg()}
+                      disabled={!addOrgName.trim() || addingOrg}
+                      className="btn-primary btn-xs">
+                      {addingOrg ? '…' : 'Add'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
           <button className="btn-primary" onClick={() => setShowAdd(true)}>+ Add Store</button>
         </div>
       </div>
@@ -260,15 +475,16 @@ export default function TrunkShowStores() {
                 <th>State</th>
                 <th>Active</th>
                 <th>Trunk Rep</th>
+                <th>Orgs</th>
                 <th>Phone</th>
               </tr>
             </thead>
             <tbody>
               {!loaded && (
-                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--fog)' }}>Loading…</td></tr>
+                <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40, color: 'var(--fog)' }}>Loading…</td></tr>
               )}
               {loaded && filtered.length === 0 && (
-                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--fog)' }}>No stores match your filters.</td></tr>
+                <tr><td colSpan={7} style={{ textAlign: 'center', padding: 40, color: 'var(--fog)' }}>No stores match your filters.</td></tr>
               )}
               {filtered.map(s => (
                 <tr key={s.id} onClick={() => setSelected(s)}
@@ -310,6 +526,27 @@ export default function TrunkShowStores() {
                     : (s.ts_reps
                         ? <span style={{ color: 'var(--silver)', fontStyle: 'italic' }} title="Legacy text — pick a Trunk Rep from the dropdown to convert">{s.ts_reps}</span>
                         : <span style={{ color: 'var(--silver)' }}>—</span>)}</td>
+                  <td>
+                    {(() => {
+                      const ids = Array.from(membership.get(s.id) || [])
+                      if (ids.length === 0) return <span style={{ color: 'var(--silver)' }}>—</span>
+                      return (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                          {ids.map(id => {
+                            const o = orgsById.get(id)
+                            if (!o) return null
+                            return (
+                              <span key={id} style={{
+                                padding: '1px 6px', borderRadius: 4,
+                                background: 'var(--cream2)', color: 'var(--ink)',
+                                fontSize: 10, fontWeight: 800, letterSpacing: '.03em',
+                              }}>{o.name}</span>
+                            )
+                          })}
+                        </div>
+                      )
+                    })()}
+                  </td>
                   <td>{s.store_phone || <span style={{ color: 'var(--silver)' }}>—</span>}</td>
                 </tr>
               ))}
@@ -324,6 +561,9 @@ export default function TrunkShowStores() {
 
       {selected && <Modal store={selected}
         trunkReps={trunkReps}
+        orgs={orgs}
+        memberOrgIds={membership.get(selected.id) || new Set()}
+        onToggleOrg={(orgId, on) => toggleStoreOrg(selected.id, orgId, on)}
         onClose={() => setSelected(null)}
         onSaved={(updated) => {
           setStores(p => p.map(x => x.id === updated.id ? updated : x))
@@ -506,9 +746,12 @@ function ContactsList({
 }
 
 /* ── DETAIL MODAL ─────────────────────────────────────── */
-function Modal({ store, trunkReps, onClose, onSaved, onDelete }: {
+function Modal({ store, trunkReps, orgs, memberOrgIds, onToggleOrg, onClose, onSaved, onDelete }: {
   store: TrunkShowStore
   trunkReps: TrunkRep[]
+  orgs: TradeOrganization[]
+  memberOrgIds: Set<string>
+  onToggleOrg: (orgId: string, on: boolean) => void
   onClose: () => void
   onSaved: (s: TrunkShowStore) => void
   onDelete: () => void | Promise<void>
@@ -685,6 +928,29 @@ function Modal({ store, trunkReps, onClose, onSaved, onDelete }: {
                   size={18}
                   label={<span style={{ fontSize: 13 }}>Yes — actively running trunk shows here</span>}
                 />
+              </div>
+              {/* Trade organization memberships. Toggles persist
+                  immediately (separate join table — bypasses the
+                  modal's main autosave hook). New orgs get created
+                  via the top-of-page filter dropdown. */}
+              <div className="field" style={{ gridColumn: 'span 2' }}>
+                <label className="fl">Trade Organizations</label>
+                {orgs.length === 0 ? (
+                  <div style={{ fontSize: 12, color: 'var(--mist)', fontStyle: 'italic' }}>
+                    No organizations defined yet. Add one from the org dropdown above the list.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                    {orgs.map(o => (
+                      <Checkbox key={o.id}
+                        checked={memberOrgIds.has(o.id)}
+                        onChange={(next) => onToggleOrg(o.id, next)}
+                        size={18}
+                        label={<span style={{ fontSize: 13 }}>{o.name}</span>}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
               <F label="Street Address" value={details.address_1}  onChange={v => set('address_1', v)} />
               <F label="Unit"           value={details.address_2}  onChange={v => set('address_2', v)} />
