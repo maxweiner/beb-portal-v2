@@ -35,7 +35,12 @@ export interface WholesaleVendor {
   phone: string | null
   mobile_phone: string | null
   email: string | null
+  /** @deprecated legacy single-field address. New code writes both
+   *  billing_address and shipping_address and keeps this synced to
+   *  billing_address for backward compat with older readers. */
   address: string | null
+  billing_address: string | null
+  shipping_address: string | null
   notes: string | null
   archived_at: string | null
   created_at: string
@@ -50,7 +55,12 @@ export interface WholesaleCustomer {
   phone: string | null
   mobile_phone: string | null
   email: string | null
+  /** @deprecated legacy single-field address. New code writes both
+   *  billing_address and shipping_address and keeps this synced to
+   *  billing_address for backward compat with older readers. */
   address: string | null
+  billing_address: string | null
+  shipping_address: string | null
   resale_certificate_number: string | null
   default_payment_terms: string | null
   notes: string | null

@@ -309,10 +309,18 @@ function InvoiceDetailModal({
       if (existingVendor) {
         vendorId = (existingVendor as any).id
       } else {
+        // Carry both addresses across when spawning the vendor from a
+        // trade-in customer. Falls back to legacy `address` for old
+        // customer rows that pre-date the bill/ship split.
+        const billing  = (customer as any).billing_address  ?? customer.address ?? null
+        const shipping = (customer as any).shipping_address ?? customer.address ?? null
         const { data: newVendor, error: vErr } = await supabase.from('wholesale_vendors').insert({
           brand, company_name: customer.company_name,
           contact_name: customer.contact_name, phone: customer.phone, email: customer.email,
-          address: customer.address, notes: 'Auto-created from trade-in',
+          address: billing,
+          billing_address: billing,
+          shipping_address: shipping,
+          notes: 'Auto-created from trade-in',
           created_by: actorId, updated_by: actorId,
         }).select('id').single()
         if (vErr) throw new Error(vErr.message)
