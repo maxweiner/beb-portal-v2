@@ -68,6 +68,33 @@ const ALL_COLUMNS: ColumnDef[] = [
     ),
   },
   {
+    id: 'vendor_invoice_number', label: 'Vendor invoice #', group: 'core', defaultOn: false, width: 140,
+    render: ({ item, save }) => (
+      <input type="text" defaultValue={item.vendor_invoice_number || ''}
+        onBlur={e => {
+          const v = e.target.value.trim() || null
+          if (v !== (item.vendor_invoice_number || null)) save({ vendor_invoice_number: v as any })
+        }}
+        style={cellInput(130)} />
+    ),
+  },
+  {
+    // Memo-IN: item loaned to us by a vendor. Off by default; users
+    // can flip it on from the column picker when reviewing consigned
+    // stock. Uses the shared Checkbox component (raw inputs would
+    // stretch full-width via globals.css and look broken in the cell).
+    id: 'memo_in', label: 'Memo In', group: 'core', defaultOn: false, width: 80,
+    render: ({ item, save }) => (
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <Checkbox
+          checked={!!item.memo_in}
+          size={16}
+          onChange={(next) => save({ memo_in: next as any })}
+        />
+      </div>
+    ),
+  },
+  {
     id: 'alternate_item_number', label: 'Alt #', group: 'core', defaultOn: false, width: 110,
     render: ({ item, save }) => (
       <input type="text" defaultValue={item.alternate_item_number || ''}
@@ -328,7 +355,8 @@ export default function InventorySheet({ items, onChanged }: SheetProps) {
       if (filter !== 'all' && filter !== 'uncategorized' && i.category !== filter) return false
       if (q) {
         const blob = [
-          i.item_number, i.public_notes, i.vendor_stock_number, i.alternate_item_number,
+          i.item_number, i.public_notes, i.vendor_stock_number, i.vendor_invoice_number,
+          i.alternate_item_number,
         ].filter(Boolean).join(' ').toLowerCase()
         if (!blob.includes(q)) return false
       }

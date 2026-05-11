@@ -75,6 +75,11 @@ export interface InventoryItem {
   public_notes: string | null
   vendor_id: string | null
   vendor_stock_number: string | null
+  vendor_invoice_number: string | null
+  /** True when this item is on memo *into* the company (loaned to us
+   *  by a vendor) — distinct from status='on_memo' which means it's
+   *  out on memo to a customer. */
+  memo_in: boolean
   alternate_item_number: string | null
   location_id: string | null
   date_acquired: string | null

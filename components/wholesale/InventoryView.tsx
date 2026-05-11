@@ -19,6 +19,7 @@ import { fmtMoneyCents, dollarsToCents, centsToDollarsString, fmtDate, fmtDateTi
 import { nextWholesaleNumber, prefixForCategory } from '@/lib/wholesale/numbers'
 import { logAudit, diffFields, fetchItemHistory } from '@/lib/wholesale/audit'
 import { loadAdminLists } from '@/lib/wholesale/lists'
+import Checkbox from '@/components/ui/Checkbox'
 import InventorySheet from './InventorySheet'
 
 const PHOTO_BUCKET = 'wholesale-photos'
@@ -639,7 +640,7 @@ function ItemDetailModal({
   }
 
   return (
-    <Modal onClose={onClose} title={`${item.item_number} — ${item.category ? CATEGORY_LABEL[item.category] : '(uncategorized)'}`} wide>
+    <Modal onClose={onClose} title={`Inventory Card · ${item.item_number} — ${item.category ? CATEGORY_LABEL[item.category] : '(uncategorized)'}`} wide>
       <div style={{ display: 'flex', gap: 4, background: 'var(--cream2)', padding: 4, borderRadius: 8, width: 'fit-content', marginBottom: 12 }}>
         {(['edit','photos','docs','history'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
@@ -760,6 +761,11 @@ function ItemForm({
   // Prefill from existing if editing.
   const [vendor_id, setVendor]    = useState(existing?.vendor_id || '')
   const [vendor_stock_number, setVendorStock] = useState(existing?.vendor_stock_number || '')
+  const [vendor_invoice_number, setVendorInvoice] = useState(existing?.vendor_invoice_number || '')
+  // Items loaned INTO the company by a vendor — opposite of memo-out.
+  // Independent of status: a memo-in item can still be on_hold or sold
+  // (where 'sold' triggers the upstream payable to the vendor).
+  const [memo_in, setMemoIn] = useState<boolean>(existing?.memo_in ?? false)
   const [location_id, setLocation] = useState(existing?.location_id || '')
   // "Date stocked" is auto-set to today on creation; not user-editable.
   // Existing items keep whatever's in the column (could be backfilled
@@ -884,6 +890,8 @@ function ItemForm({
         internal_notes: internal_notes.trim() || null,
         vendor_id: vendor_id || null,
         vendor_stock_number: vendor_stock_number.trim() || null,
+        vendor_invoice_number: vendor_invoice_number.trim() || null,
+        memo_in,
         location_id: location_id || null,
         date_acquired: date_stocked,
         gender: gender || null,
@@ -956,7 +964,8 @@ function ItemForm({
         if (error) throw new Error(error.message)
         const tracked = [
           'status','gender','cost_cents','wholesale_price_cents','retail_price_cents','insurance_value_cents',
-          'public_notes','internal_notes','vendor_id','vendor_stock_number','location_id','date_acquired',
+          'public_notes','internal_notes','vendor_id','vendor_stock_number','vendor_invoice_number','memo_in',
+          'location_id','date_acquired',
         ]
         const diff = diffFields(existing as any, payload, tracked)
         if (diff) {
@@ -986,6 +995,17 @@ function ItemForm({
           </Select></Field>
           <Field label="Vendor stock #">
             <input type="text" value={vendor_stock_number} onChange={e => setVendorStock(e.target.value)} placeholder="Vendor's SKU" />
+          </Field>
+          <Field label="Vendor invoice #">
+            <input type="text" value={vendor_invoice_number} onChange={e => setVendorInvoice(e.target.value)} placeholder="From vendor's invoice" />
+          </Field>
+          <Field label="Memo In">
+            {/* True ⇒ item is on memo *into* the company (loaned by a
+                vendor). Visually offset so it doesn't try to fill the
+                whole grid cell as a text input would. */}
+            <div style={{ display: 'flex', alignItems: 'center', height: '100%', paddingTop: 4 }}>
+              <Checkbox checked={memo_in} onChange={setMemoIn} label="Loaned to us by vendor" />
+            </div>
           </Field>
           <Field label="Location">
             <LocationPicker
@@ -1458,6 +1478,8 @@ const FIELD_LABELS: Record<string, string> = {
   internal_notes: 'Internal notes',
   vendor_id: 'Vendor',
   vendor_stock_number: 'Vendor stock #',
+  vendor_invoice_number: 'Vendor invoice #',
+  memo_in: 'Memo In',
   location_id: 'Location',
   date_acquired: 'Date stocked',
   hold_for_customer_id: 'Held for',
