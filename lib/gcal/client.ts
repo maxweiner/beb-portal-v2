@@ -140,6 +140,66 @@ export async function deleteGcalEvent(calendarId: string, eventId: string): Prom
   }
 }
 
+export interface ListedGcalEvent {
+  id: string
+  summary?: string
+  /** Google's `created` is ISO 8601 timestamp string. */
+  created?: string
+  /** The source.url field we set on every event we create —
+   *  shape: `${portalUrl()}/?event=${event_id}`. Absent on events
+   *  not created by us. */
+  sourceUrl?: string
+  /** All-day events report start/end as date strings (YYYY-MM-DD) on
+   *  start.date / end.date; timed events use start.dateTime. We only
+   *  need the day for human-readable dedupe output. */
+  startDate?: string
+  status?: string  // 'confirmed' | 'tentative' | 'cancelled'
+}
+
+/**
+ * List every event on a calendar. Paginates through nextPageToken so
+ * large calendars (hundreds of events) come back complete. Includes
+ * cancelled events so the dedupe can also tidy those up.
+ *
+ * Defaults `singleEvents=true` so recurring events come back as their
+ * individual instances — we don't use recurring events in this app
+ * but the flag keeps the behaviour predictable.
+ */
+export async function listGcalEvents(
+  calendarId: string,
+  opts: { maxPages?: number } = {},
+): Promise<ListedGcalEvent[]> {
+  const out: ListedGcalEvent[] = []
+  let pageToken: string | undefined = undefined
+  let pages = 0
+  const cap = opts.maxPages ?? 40   // 40 pages × 250 per page = 10k events
+  do {
+    const params = new URLSearchParams({
+      maxResults: '250',
+      singleEvents: 'true',
+      showDeleted: 'true',
+    })
+    if (pageToken) params.set('pageToken', pageToken)
+    const json: any = await api(
+      'GET',
+      `/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`,
+    )
+    for (const ev of (json.items || []) as any[]) {
+      out.push({
+        id: ev.id,
+        summary: ev.summary,
+        created: ev.created,
+        sourceUrl: ev.source?.url,
+        startDate: ev.start?.date || ev.start?.dateTime,
+        status: ev.status,
+      })
+    }
+    pageToken = json.nextPageToken
+    pages++
+  } while (pageToken && pages < cap)
+  return out
+}
+
 /**
  * Create a brand new calendar owned by the service account. Returned
  * id can be used immediately with the rest of the helpers.
