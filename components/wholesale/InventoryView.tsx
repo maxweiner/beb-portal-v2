@@ -65,6 +65,20 @@ export default function InventoryView() {
   const [categoryFilter, setCategoryFilter] = useState<'all' | InventoryCategory>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | InventoryStatus>('in_stock')
   const [openItemId, setOpenItemId] = useState<string | null>(null)
+  // Per-session sort. null = natural order (DB returned order). Click
+  // a sortable header to cycle: none → asc → desc → none. Only four
+  // columns are sortable; others stay unsortable (description, status,
+  // etc. don't have a useful canonical order).
+  const [sort, setSort] = useState<
+    { field: 'item_number' | 'cost_cents' | 'wholesale_price_cents' | 'retail_price_cents'; dir: 'asc' | 'desc' } | null
+  >(null)
+  const cycleSort = (field: NonNullable<typeof sort>['field']) => {
+    setSort(prev => {
+      if (!prev || prev.field !== field) return { field, dir: 'asc' }
+      if (prev.dir === 'asc') return { field, dir: 'desc' }
+      return null
+    })
+  }
   const [showNewModal, setShowNewModal] = useState(false)
   const [showBulkUpload, setShowBulkUpload] = useState(false)
   const [view, setView] = useState<'list' | 'sheet'>('list')
@@ -130,7 +144,7 @@ export default function InventoryView() {
   const filtered = useMemo(() => {
     if (!items) return []
     const q = search.trim().toLowerCase()
-    return items.filter(i => {
+    const rows = items.filter(i => {
       if (categoryFilter !== 'all' && i.category !== categoryFilter) return false
       if (statusFilter !== 'all' && i.status !== statusFilter) return false
       if (q) {
@@ -144,7 +158,28 @@ export default function InventoryView() {
       }
       return true
     })
-  }, [items, search, categoryFilter, statusFilter])
+    if (!sort) return rows
+    // Sort copy — never mutate the source items array (React relies on
+    // reference equality elsewhere). Nulls go to END regardless of dir
+    // so empty-cost rows don't trip the operator scanning by price.
+    const sorted = rows.slice()
+    const { field, dir } = sort
+    const sign = dir === 'asc' ? 1 : -1
+    sorted.sort((a, b) => {
+      const av = (a as any)[field]
+      const bv = (b as any)[field]
+      const aMissing = av == null || av === ''
+      const bMissing = bv == null || bv === ''
+      if (aMissing && bMissing) return 0
+      if (aMissing) return 1
+      if (bMissing) return -1
+      if (field === 'item_number') {
+        return String(av).localeCompare(String(bv), 'en', { numeric: true, sensitivity: 'base' }) * sign
+      }
+      return (Number(av) - Number(bv)) * sign
+    })
+    return sorted
+  }, [items, search, categoryFilter, statusFilter, sort])
 
   const counts = useMemo(() => {
     const by = { in_stock: 0, on_memo: 0, on_hold: 0, sold: 0 } as Record<string, number>
@@ -204,9 +239,19 @@ export default function InventoryView() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
                 <tr style={{ background: 'var(--cream2)' }}>
-                  {['', 'Item #', 'Cat', 'Description', 'Cost', 'Wholesale', 'Retail', 'Status', ''].map((h, i) => (
-                    <th key={i} style={{ padding: '8px 10px', textAlign: 'left', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--mist)' }}>{h}</th>
-                  ))}
+                  {/* Item #, Cost, Wholesale, Retail are sortable —
+                      click to cycle asc → desc → off. Other columns
+                      have no useful canonical order so they render
+                      as plain headers. */}
+                  <SortableTh label="" />
+                  <SortableTh label="Item #"    field="item_number"           sort={sort} onClick={cycleSort} />
+                  <SortableTh label="Cat" />
+                  <SortableTh label="Description" />
+                  <SortableTh label="Cost"      field="cost_cents"            sort={sort} onClick={cycleSort} />
+                  <SortableTh label="Wholesale" field="wholesale_price_cents" sort={sort} onClick={cycleSort} />
+                  <SortableTh label="Retail"    field="retail_price_cents"    sort={sort} onClick={cycleSort} />
+                  <SortableTh label="Status" />
+                  <SortableTh label="" />
                 </tr>
               </thead>
               <tbody>
@@ -1549,6 +1594,40 @@ function renderDiff(before: any, after: any): React.ReactNode {
     <ul style={{ fontSize: 11, color: 'var(--ash)', margin: '4px 0 0', paddingLeft: 16 }}>
       {lines.map((l, i) => <li key={i}>{isAfter ? l : `(was) ${l}`}</li>)}
     </ul>
+  )
+}
+
+/* ─────────────────────── sortable table header ─────────────────────── */
+// Renders one <th>. If `field` is omitted, it's a plain non-clickable
+// header (used for image / category / description / status / action
+// columns where no canonical sort order makes sense). If `field` is
+// given, the header becomes a button that calls onClick(field) and
+// shows ▴ / ▾ when its field is the active sort.
+type SortField = 'item_number' | 'cost_cents' | 'wholesale_price_cents' | 'retail_price_cents'
+function SortableTh({
+  label, field, sort, onClick, align,
+}: {
+  label: string
+  field?: SortField
+  sort?: { field: SortField; dir: 'asc' | 'desc' } | null
+  onClick?: (f: SortField) => void
+  align?: 'left' | 'right'
+}) {
+  const base: React.CSSProperties = {
+    padding: '8px 10px',
+    textAlign: align === 'right' ? 'right' : 'left',
+    fontSize: 10, fontWeight: 800, textTransform: 'uppercase',
+    letterSpacing: '.04em', color: 'var(--mist)',
+  }
+  if (!field) return <th style={base}>{label}</th>
+  const active = sort && sort.field === field
+  const arrow = active ? (sort!.dir === 'asc' ? ' ▴' : ' ▾') : ''
+  return (
+    <th style={{ ...base, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', color: active ? 'var(--ink)' : 'var(--mist)' }}
+      onClick={() => onClick?.(field)}
+      title="Click to sort">
+      {label}{arrow}
+    </th>
   )
 }
 
