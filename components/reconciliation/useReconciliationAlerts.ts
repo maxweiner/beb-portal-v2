@@ -1,8 +1,11 @@
 'use client'
 
-// Sidebar badge feeder. Counts OPEN mismatches + duplicates +
-// orphans for the active brand, so accounting sees a red dot
-// without having to remember to check /reconciliation.
+// Sidebar badge feeder. Counts OPEN mismatches + duplicate
+// clearings for the active brand — the two finding types that are
+// genuine accounting errors needing operator attention. Orphan
+// cleared rows are routine (a bank-side clearing that doesn't yet
+// match a portal record) and were drowning the badge in the
+// thousands, so they're excluded from the badge.
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -24,7 +27,7 @@ export function useReconciliationAlerts(): { count: number; loaded: boolean } {
         .select('id', { count: 'exact', head: true })
         .eq('brand', brand)
         .eq('status', 'open')
-        .in('finding_type', ['amount_mismatch', 'duplicate_clearing', 'orphan_cleared'])
+        .in('finding_type', ['amount_mismatch', 'duplicate_clearing'])
       if (cancelled) return
       setCount(c ?? 0)
       setLoaded(true)
