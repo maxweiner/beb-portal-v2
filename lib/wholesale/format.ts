@@ -25,6 +25,19 @@ export function fmtDate(iso: string | null | undefined): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+/** Date + time formatter for audit timeline rows. We want to know not
+ *  just the day something happened on a busy item but the order /
+ *  exact minute — e.g. "memo line created at 2:14 PM, sold at 2:31 PM".
+ *  Bare YYYY-MM-DD strings get noon UTC so the local day doesn't drift. */
+export function fmtDateTime(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const d = new Date(iso.length <= 10 ? iso + 'T12:00:00' : iso)
+  return d.toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit',
+  })
+}
+
 /** Margin percent given cost & sale (in cents). Null if either missing or cost is 0. */
 export function marginPct(costCents: number | null | undefined, salePriceCents: number | null | undefined): number | null {
   if (!costCents || costCents <= 0 || !salePriceCents) return null

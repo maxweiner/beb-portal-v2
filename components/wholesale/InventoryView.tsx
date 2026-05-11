@@ -15,9 +15,9 @@ import type {
   WholesaleVendor, WholesaleCustomer, InventoryLocation, InventoryPhoto, InventoryDocument,
   WholesaleAuditLogEntry,
 } from '@/types/wholesale'
-import { fmtMoneyCents, dollarsToCents, centsToDollarsString, fmtDate, marginPct } from '@/lib/wholesale/format'
+import { fmtMoneyCents, dollarsToCents, centsToDollarsString, fmtDate, fmtDateTime, marginPct } from '@/lib/wholesale/format'
 import { nextWholesaleNumber, prefixForCategory } from '@/lib/wholesale/numbers'
-import { logAudit, diffFields } from '@/lib/wholesale/audit'
+import { logAudit, diffFields, fetchItemHistory } from '@/lib/wholesale/audit'
 import { loadAdminLists } from '@/lib/wholesale/lists'
 import InventorySheet from './InventorySheet'
 
@@ -605,13 +605,14 @@ function ItemDetailModal({
 
   async function reload() {
     try {
-      const [itemRes, photosRes, docsRes, auditRes] = await Promise.all([
+      // History pulls from related entities too (memos, invoices, photos,
+      // docs, payments) so the timeline tells the whole lifecycle of the
+      // item — not just its own row edits. See fetchItemHistory().
+      const [itemRes, photosRes, docsRes, auditRows] = await Promise.all([
         supabase.from('inventory_items').select('*').eq('id', itemId).maybeSingle(),
         supabase.from('inventory_photos').select('*').eq('item_id', itemId).order('sort_order'),
         supabase.from('inventory_documents').select('*').eq('item_id', itemId).order('created_at', { ascending: false }),
-        supabase.from('wholesale_audit_log').select('*')
-          .eq('entity_type', 'inventory_item').eq('entity_id', itemId)
-          .order('created_at', { ascending: false }).limit(50),
+        fetchItemHistory(itemId),
       ])
       const i = itemRes.data as InventoryItem | null
       setItem(i || null)
@@ -628,7 +629,7 @@ function ItemDetailModal({
       const docUrlByPath   = new Map(((signedDocs.data || []) as any[]).map(s => [s.path, s.signedUrl]))
       setPhotos(photoRows.map(p => ({ ...p, url: photoUrlByPath.get(p.storage_path) })))
       setDocs(docRows.map(d => ({ ...d, url: docUrlByPath.get(d.storage_path) })))
-      setAudit((auditRes.data || []) as WholesaleAuditLogEntry[])
+      setAudit(auditRows)
     } catch (e: any) { setErr(e?.message || 'Load failed') }
   }
   useEffect(() => { void reload() }, [itemId])
@@ -1383,9 +1384,12 @@ function AuditTimeline({ entries }: { entries: WholesaleAuditLogEntry[] }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {entries.map(e => (
         <div key={e.id} style={{ display: 'flex', gap: 8, padding: 8, borderTop: '1px solid var(--pearl)' }}>
-          <div style={{ minWidth: 110, color: 'var(--mist)', fontSize: 11, whiteSpace: 'nowrap' }}>{fmtDate(e.created_at)}</div>
+          <div style={{ minWidth: 150, color: 'var(--mist)', fontSize: 11, whiteSpace: 'nowrap' }}>{fmtDateTime(e.created_at)}</div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 700 }}>{prettyAction(e.action)}</div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              <EntityBadge entityType={e.entity_type} />
+              <div style={{ fontWeight: 700 }}>{prettyAction(e.action)}</div>
+            </div>
             {e.actor_email && <div style={{ fontSize: 11, color: 'var(--mist)' }}>by {e.actor_email}</div>}
             {renderDiff(e.before, e.after)}
           </div>
@@ -1393,6 +1397,32 @@ function AuditTimeline({ entries }: { entries: WholesaleAuditLogEntry[] }) {
       ))}
     </div>
   )
+}
+
+/** Small pill that tells you which entity this audit row came from. We
+ *  surface this because the timeline is now cross-entity — without the
+ *  badge a generic "Created" or "Status changed" row is ambiguous
+ *  (which memo? which invoice? a photo upload?). Colour-coded loosely
+ *  by domain so the eye can scan a busy item. */
+function EntityBadge({ entityType }: { entityType: string }) {
+  const { label, bg, fg } = ENTITY_BADGE[entityType] || { label: entityType, bg: '#E5E7EB', fg: '#374151' }
+  return (
+    <span style={{
+      fontSize: 10, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase',
+      padding: '2px 6px', borderRadius: 4, background: bg, color: fg, whiteSpace: 'nowrap',
+    }}>{label}</span>
+  )
+}
+
+const ENTITY_BADGE: Record<string, { label: string; bg: string; fg: string }> = {
+  inventory_item:            { label: 'Item',         bg: '#E0F2FE', fg: '#075985' },
+  inventory_photo:           { label: 'Photo',        bg: '#FEF3C7', fg: '#92400E' },
+  inventory_document:        { label: 'Document',     bg: '#FEF3C7', fg: '#92400E' },
+  wholesale_memo:            { label: 'Memo',         bg: '#EDE9FE', fg: '#5B21B6' },
+  wholesale_memo_line:       { label: 'Memo line',    bg: '#EDE9FE', fg: '#5B21B6' },
+  wholesale_invoice:         { label: 'Invoice',      bg: '#DCFCE7', fg: '#166534' },
+  wholesale_invoice_line:    { label: 'Invoice line', bg: '#DCFCE7', fg: '#166534' },
+  wholesale_invoice_payment: { label: 'Payment',      bg: '#DCFCE7', fg: '#166534' },
 }
 
 function prettyAction(action: string): string {
@@ -1411,6 +1441,7 @@ function prettyAction(action: string): string {
     photo_deleted: 'Photo deleted',
     photo_set_primary: 'Primary photo set',
     payment_added: 'Payment added',
+    payment_voided: 'Payment voided',
     tradein_created: 'Trade-in added',
   }
   return map[action] || action.replace(/_/g, ' ')
