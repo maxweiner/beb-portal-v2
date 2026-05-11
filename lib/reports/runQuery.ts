@@ -9,9 +9,10 @@
 import { supabase } from '@/lib/supabase'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
-  SOURCES, aggregateKey,
+  SOURCES, aggregateKey, computedKey, allColumns, aggregateLabel,
   type ReportConfig, type ReportFilter, type AggregateColumn,
 } from './schema'
+import { compile as compileFormula } from './formula'
 
 const HARD_LIMIT = 10000
 const TIMEOUT_MS = 30_000
@@ -52,6 +53,47 @@ function presetRange(preset: string): { start: string; end: string } | null {
     }
     default: return null
   }
+}
+
+/** Translate a filter to a PostgREST `.or()`-eligible predicate string.
+ *  Returns null when the filter can't be expressed in that syntax
+ *  (joined columns, unsupported ops, empty value lists). For date_preset
+ *  the two date bounds get wrapped in an inner `and(...)` group so the
+ *  preset still matches as a single predicate inside the outer OR. */
+function filterToOrPredicate(f: ReportFilter): string | null {
+  if (f.field.includes('(')) return null
+  const v = f.value
+  switch (f.op) {
+    case 'eq':       return `${f.field}.eq.${encodeOrValue(v)}`
+    case 'neq':      return `${f.field}.neq.${encodeOrValue(v)}`
+    case 'gt':       return `${f.field}.gt.${encodeOrValue(v)}`
+    case 'gte':      return `${f.field}.gte.${encodeOrValue(v)}`
+    case 'lt':       return `${f.field}.lt.${encodeOrValue(v)}`
+    case 'lte':      return `${f.field}.lte.${encodeOrValue(v)}`
+    case 'contains':    return `${f.field}.ilike.*${encodeOrValue(v)}*`
+    case 'starts_with': return `${f.field}.ilike.${encodeOrValue(v)}*`
+    case 'in': {
+      const list = String(v).split(',').map(s => s.trim()).filter(Boolean)
+      if (list.length === 0) return null
+      return `${f.field}.in.(${list.map(encodeOrValue).join(',')})`
+    }
+    case 'is_null':  return `${f.field}.is.null`
+    case 'not_null': return `${f.field}.not.is.null`
+    case 'date_preset': {
+      const r = f.preset ? presetRange(f.preset) : null
+      if (!r) return null
+      return `and(${f.field}.gte.${r.start},${f.field}.lte.${r.end})`
+    }
+    default: return null
+  }
+}
+
+/** Quote values that contain PostgREST-meaningful chars so they don't
+ *  break the .or() parser. Doubles internal quotes (the escape rule). */
+function encodeOrValue(v: any): string {
+  const s = String(v ?? '')
+  if (/[,()"\s]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+  return s
 }
 
 function applyFilter(query: any, f: ReportFilter): any {
@@ -148,9 +190,22 @@ export async function runReport(
     query = query.eq('brand', brand)
   }
 
-  // Filters
-  for (const f of config.filters || []) {
-    query = applyFilter(query, f)
+  // Filters. AND mode chains .eq()/.gt()/etc per filter. OR mode builds a
+  // single PostgREST .or() string from those predicates the operator
+  // supports; joined-column filters and any unsupported op are silently
+  // skipped (same as the AND path treats joined columns).
+  const allFilters = config.filters || []
+  if (config.filterCombinator === 'or' && allFilters.length > 0) {
+    const parts: string[] = []
+    for (const f of allFilters) {
+      const part = filterToOrPredicate(f)
+      if (part) parts.push(part)
+    }
+    if (parts.length > 0) query = query.or(parts.join(','))
+  } else {
+    for (const f of allFilters) {
+      query = applyFilter(query, f)
+    }
   }
 
   // Sort — joined columns can't be sorted server-side; defer to client.
@@ -188,15 +243,29 @@ export async function runReport(
     rows = aggregateRows(rows, config.groupBy ?? [], config.aggregates ?? [])
   }
 
+  // Computed columns evaluate AFTER aggregation. The label→value resolver
+  // checks aggregate labels + groupBy column labels (when grouped) or the
+  // source column labels (when ungrouped). Each formula gets compiled once
+  // up front so the per-row loop stays a tight inner loop.
+  if ((config.computed?.length ?? 0) > 0) {
+    rows = applyComputed(source, config, rows, isGrouped)
+  }
+
   // Client-side sort fallback for joined-column sorts (server skipped them).
   // In grouped mode, the server-side sort was for ungrouped rows and is
   // moot — re-sort everything client-side using the configured sort, which
-  // can now reference groupBy columns or aggregate keys (__agg_N).
-  const sortRules = isGrouped ? (config.sort || []) : (config.sort || []).filter(s => s.field.includes('('))
+  // can now reference groupBy columns, aggregate keys (__agg_N), or
+  // computed-column keys (__calc_N). Computed keys are own properties on
+  // the row in either grouped or ungrouped mode, so they read directly.
+  const isSyntheticKey = (k: string) => k.startsWith('__agg_') || k.startsWith('__calc_')
+  const sortRules = isGrouped
+    ? (config.sort || [])
+    : (config.sort || []).filter(s => s.field.includes('(') || isSyntheticKey(s.field))
   for (const s of sortRules.slice().reverse()) {
     rows = [...rows].sort((a, b) => {
-      const av = isGrouped ? a[s.field] : getValue(a, s.field)
-      const bv = isGrouped ? b[s.field] : getValue(b, s.field)
+      const useDirectKey = isGrouped || isSyntheticKey(s.field)
+      const av = useDirectKey ? a[s.field] : getValue(a, s.field)
+      const bv = useDirectKey ? b[s.field] : getValue(b, s.field)
       if (av == null && bv == null) return 0
       if (av == null) return 1
       if (bv == null) return -1
@@ -240,6 +309,61 @@ function aggregateRows(
     out.push(o)
   }
   return out
+}
+
+/** Build a label-keyed value resolver per row, then evaluate each
+ *  computed formula. Mutates rows in place by attaching `__calc_N`
+ *  values; safe because rows is already a fresh array at this point. */
+function applyComputed(
+  source: string,
+  config: ReportConfig,
+  rows: any[],
+  isGrouped: boolean,
+): any[] {
+  const computed = config.computed ?? []
+  if (computed.length === 0) return rows
+
+  // Compile all formulas up front. Bad formulas just produce NaN at
+  // runtime (compile failure is reported in the builder before save).
+  const evaluators = computed.map(c => {
+    try { return compileFormula(c.formula) }
+    catch { return () => NaN }
+  })
+
+  // Build a label→key resolver tailored to grouped vs ungrouped output.
+  // Grouped output rows have own keys for groupBy cols and __agg_N for
+  // aggregates; ungrouped rows are raw fetch rows accessed via getValue.
+  const catalog = allColumns(source)
+  const labelToKey = new Map<string, string>()
+  const aggLabelByIndex: { label: string; key: string }[] = []
+
+  if (isGrouped) {
+    for (const gk of config.groupBy ?? []) {
+      const cd = catalog.find(c => c.column.key === gk)?.column
+      labelToKey.set((cd?.label || gk).toLowerCase(), gk)
+    }
+    ;(config.aggregates ?? []).forEach((a, i) => {
+      const fl = a.field ? catalog.find(c => c.column.key === a.field)?.column.label : undefined
+      const label = aggregateLabel(a, fl).toLowerCase()
+      labelToKey.set(label, aggregateKey(i))
+      aggLabelByIndex.push({ label, key: aggregateKey(i) })
+    })
+  } else {
+    for (const c of catalog) labelToKey.set(c.column.label.toLowerCase(), c.column.key)
+  }
+
+  for (const row of rows) {
+    const resolve = (label: string) => {
+      const k = labelToKey.get(label.toLowerCase())
+      if (!k) return NaN
+      return isGrouped ? row[k] : getValue(row, k)
+    }
+    evaluators.forEach((ev, i) => {
+      const v = ev(resolve)
+      row[computedKey(i)] = Number.isFinite(v) ? v : null
+    })
+  }
+  return rows
 }
 
 /** null/undefined collapse to a single bucket so groups don't fragment. */
