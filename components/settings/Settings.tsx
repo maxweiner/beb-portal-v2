@@ -930,6 +930,13 @@ function GCalSyncSettings({ brand }: { brand: 'beb' | 'liberty' }) {
   const [testResult, setTestResult] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<string | null>(null)
+  // Dedupe (one-shot cleanup of duplicates that already exist on
+  // the Google Calendar but no longer have a DB link row).
+  // dedupePreview holds the most-recent /api/gcal-sync/dedupe
+  // response in preview mode; null until the user clicks "Find".
+  const [dedupePreview, setDedupePreview] = useState<any | null>(null)
+  const [dedupeWorking, setDedupeWorking] = useState(false)
+  const [dedupeError, setDedupeError] = useState<string | null>(null)
   const [activity, setActivity] = useState<any[]>([])
   const [failedCount, setFailedCount] = useState(0)
   // Recent activity is long; collapsed by default. Per-brand persistence
@@ -1018,6 +1025,43 @@ function GCalSyncSettings({ brand }: { brand: 'beb' | 'liberty' }) {
     reload()
   }
 
+  // Dedupe — preview shows what would be deleted; apply runs the
+  // deletion. Always start with preview so the operator can sanity-
+  // check before touching the live calendar.
+  const dedupePreviewRun = async () => {
+    setDedupeWorking(true); setDedupeError(null); setDedupePreview(null)
+    try {
+      const res = await fetch('/api/gcal-sync/dedupe', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brand, mode: 'preview' }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) setDedupeError(json.error || `Preview failed (${res.status})`)
+      else setDedupePreview(json)
+    } catch (e: any) {
+      setDedupeError('Network error: ' + (e?.message || 'unknown'))
+    }
+    setDedupeWorking(false)
+  }
+  const dedupeApply = async () => {
+    if (!dedupePreview) return
+    const n = dedupePreview.losers_to_delete || 0
+    if (!confirm(`Delete ${n} duplicate Google Calendar event${n === 1 ? '' : 's'} for ${brandLabel}? This cannot be undone.`)) return
+    setDedupeWorking(true); setDedupeError(null)
+    try {
+      const res = await fetch('/api/gcal-sync/dedupe', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brand, mode: 'apply' }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) setDedupeError(json.error || `Apply failed (${res.status})`)
+      else setDedupePreview(json)
+    } catch (e: any) {
+      setDedupeError('Network error: ' + (e?.message || 'unknown'))
+    }
+    setDedupeWorking(false)
+  }
+
   if (!loaded) return null
 
   const accent = brand === 'liberty' ? '#3B82F6' : '#1D6B44'
@@ -1078,6 +1122,62 @@ function GCalSyncSettings({ brand }: { brand: 'beb' | 'liberty' }) {
 
       <div style={{ fontSize: 11, color: 'var(--mist)', marginBottom: 6 }}>
         Last full sync: {fmtRel(lastSync)} · Failed in queue: <strong style={{ color: failedCount > 0 ? '#991B1B' : 'var(--mist)' }}>{failedCount}</strong>
+      </div>
+
+      {/* Dedupe — one-shot cleanup of duplicates that already
+          exist on the calendar but no longer have a DB link row.
+          Always preview first; apply requires explicit confirm. */}
+      <div style={{ borderTop: '1px solid var(--cream2)', paddingTop: 10, marginTop: 10, marginBottom: 4 }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
+          Dedupe Google Calendar
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--mist)', marginBottom: 8, lineHeight: 1.45 }}>
+          Scans the {brandLabel} calendar, groups by portal event ID, keeps the canonical event per group, and deletes the rest. Click <strong>Find</strong> first to see what would be removed.
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
+          <button onClick={dedupePreviewRun} disabled={dedupeWorking || !enabled} className="btn-outline btn-sm">
+            {dedupeWorking && !dedupePreview ? 'Scanning…' : 'Find duplicates'}
+          </button>
+          {dedupePreview && dedupePreview.mode === 'preview' && (dedupePreview.losers_to_delete > 0 || dedupePreview.link_fix_only_count > 0) && (
+            <button onClick={dedupeApply} disabled={dedupeWorking} className="btn-primary btn-sm">
+              {dedupeWorking ? 'Deleting…' : `Delete ${dedupePreview.losers_to_delete} duplicate${dedupePreview.losers_to_delete === 1 ? '' : 's'}`}
+            </button>
+          )}
+        </div>
+        {dedupeError && (
+          <div style={{ fontSize: 12, color: '#991B1B', background: '#FEE2E2', padding: '6px 10px', borderRadius: 6, marginBottom: 6 }}>
+            {dedupeError}
+          </div>
+        )}
+        {dedupePreview && (
+          <div style={{ fontSize: 11, color: 'var(--ash)', background: 'var(--cream2)', padding: 8, borderRadius: 6, marginTop: 4 }}>
+            <div>
+              {dedupePreview.mode === 'apply' ? (
+                <strong style={{ color: 'var(--green-dark)' }}>Done — deleted {dedupePreview.deleted}{dedupePreview.delete_errors?.length ? `, ${dedupePreview.delete_errors.length} error${dedupePreview.delete_errors.length === 1 ? '' : 's'}` : ''}.</strong>
+              ) : dedupePreview.losers_to_delete === 0 && dedupePreview.link_fix_only_count === 0 ? (
+                <strong>No duplicates found.</strong>
+              ) : (
+                <strong>{dedupePreview.dupe_groups} group{dedupePreview.dupe_groups === 1 ? '' : 's'} of duplicates · {dedupePreview.losers_to_delete} event{dedupePreview.losers_to_delete === 1 ? '' : 's'} would be deleted{dedupePreview.link_fix_only_count > 0 ? ` · ${dedupePreview.link_fix_only_count} link${dedupePreview.link_fix_only_count === 1 ? '' : 's'} would be repaired` : ''}.</strong>
+              )}
+            </div>
+            <div style={{ marginTop: 4 }}>
+              Scanned {dedupePreview.calendar_total_events} calendar event{dedupePreview.calendar_total_events === 1 ? '' : 's'} · {dedupePreview.events_without_our_url} skipped (not portal-created) · {dedupePreview.portal_event_groups} unique portal event{dedupePreview.portal_event_groups === 1 ? '' : 's'} on calendar.
+            </div>
+            {dedupePreview.sample && dedupePreview.sample.length > 0 && (
+              <details style={{ marginTop: 6 }}>
+                <summary style={{ cursor: 'pointer', fontWeight: 700 }}>Sample (first {dedupePreview.sample.length})</summary>
+                <ul style={{ paddingLeft: 18, marginTop: 4, marginBottom: 0 }}>
+                  {dedupePreview.sample.map((g: any, i: number) => (
+                    <li key={i} style={{ marginBottom: 4 }}>
+                      <code style={{ fontSize: 10 }}>{g.event_id.slice(0, 8)}…</code>
+                      {' '}— keep <em>{g.keeping.summary || '(no title)'}</em> ({g.keeping.startDate}), delete {g.deleting.length}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        )}
       </div>
 
       <div style={{ borderTop: '1px solid var(--cream2)', paddingTop: 10, marginTop: 10 }}>
