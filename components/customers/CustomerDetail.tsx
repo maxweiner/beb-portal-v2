@@ -14,6 +14,7 @@ import { fmtPhone, fmtDateLong } from '@/lib/customers/format'
 import { logCustomerEvent } from '@/lib/customers/events'
 import CustomerTimeline from './CustomerTimeline'
 import DatePicker from '@/components/ui/DatePicker'
+import Checkbox from '@/components/ui/Checkbox'
 
 const HOW_DID_YOU_HEAR_OPTIONS: HowDidYouHear[] = [
   'large_postcard', 'small_postcard', 'newspaper',
@@ -232,31 +233,28 @@ export default function CustomerDetail({ customer, tagDefs, storeName, onClose, 
               <Field label="Notes"><textarea rows={3} value={draft.notes || ''} onChange={e => patch('notes', e.target.value)} /></Field>
             </div>
 
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 13, color: 'var(--ink)', cursor: 'pointer' }}>
-              <input type="checkbox" checked={draft.do_not_contact} onChange={e => patch('do_not_contact', e.target.checked)}
-                style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
-              <span aria-hidden style={{
-                width: 18, height: 18, flexShrink: 0, borderRadius: 4,
-                border: `2px solid ${draft.do_not_contact ? 'var(--red)' : 'var(--pearl)'}`,
-                background: draft.do_not_contact ? 'var(--red)' : '#fff',
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                color: '#fff', fontSize: 12, fontWeight: 900, lineHeight: 1,
-              }}>{draft.do_not_contact ? '✓' : ''}</span>
-              Do not contact (DNC)
-            </label>
-
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 13, color: 'var(--ink)', cursor: 'pointer' }}>
-              <input type="checkbox" checked={draft.vip_override} onChange={e => patch('vip_override', e.target.checked)}
-                style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
-              <span aria-hidden style={{
-                width: 18, height: 18, flexShrink: 0, borderRadius: 4,
-                border: `2px solid ${draft.vip_override ? '#C9A84C' : 'var(--pearl)'}`,
-                background: draft.vip_override ? '#C9A84C' : '#fff',
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                color: '#fff', fontSize: 12, fontWeight: 900, lineHeight: 1,
-              }}>{draft.vip_override ? '✓' : ''}</span>
-              VIP — overrides the engagement tier
-            </label>
+            <div style={{ marginTop: 12 }}>
+              <Checkbox
+                checked={!!draft.do_not_contact}
+                onChange={(next) => patch('do_not_contact', next)}
+                size={18}
+                radius={4}
+                color="var(--red)"
+                label="Do not contact (DNC)"
+                labelStyle={{ fontSize: 13, color: 'var(--ink)' }}
+              />
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <Checkbox
+                checked={!!draft.vip_override}
+                onChange={(next) => patch('vip_override', next)}
+                size={18}
+                radius={4}
+                color="#C9A84C"
+                label="VIP — overrides the engagement tier"
+                labelStyle={{ fontSize: 13, color: 'var(--ink)' }}
+              />
+            </div>
           </div>
 
           {/* Tags */}

@@ -15,6 +15,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import Checkbox from '@/components/ui/Checkbox'
 import type {
   CommunicationAssignedRole, CommunicationLinkedAction,
   CommunicationTemplate, TrunkShowChecklistMasterItem,
@@ -92,11 +93,13 @@ export default function MasterChecklist({ canEdit, onClose }: Props) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--mist)' }}>
-          <input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)}
-            style={{ width: 16, height: 16, padding: 0, margin: 0, appearance: 'auto', WebkitAppearance: 'checkbox' } as React.CSSProperties}
-          /> Show archived
-        </label>
+        <Checkbox
+          checked={showArchived}
+          onChange={setShowArchived}
+          size={16}
+          label="Show archived"
+          labelStyle={{ fontSize: 12, color: 'var(--mist)' }}
+        />
         <span style={{ fontSize: 12, color: 'var(--mist)' }}>{visible.length} item{visible.length === 1 ? '' : 's'}</span>
       </div>
 

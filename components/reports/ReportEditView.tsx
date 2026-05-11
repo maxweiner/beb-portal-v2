@@ -599,26 +599,23 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
               ) : users.map(u => {
                 const checked = selected.has(u.id)
                 return (
-                  <label key={u.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '8px 12px', borderBottom: '1px solid var(--pearl)',
-                    cursor: 'pointer', background: checked ? 'var(--green-pale)' : 'transparent',
-                    position: 'relative',
-                  }}>
-                    <input type="checkbox" checked={checked} onChange={() => toggleUser(u.id)}
-                      style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
-                    <span aria-hidden="true" style={{
-                      width: 20, height: 20, flexShrink: 0, borderRadius: 5,
-                      border: `2px solid ${checked ? 'var(--green)' : 'var(--pearl)'}`,
-                      background: checked ? 'var(--green)' : '#FFFFFF',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: '#FFFFFF', fontSize: 13, fontWeight: 900, lineHeight: 1,
-                    }}>{checked ? '✓' : ''}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{u.name || u.email}</div>
-                      <div style={{ fontSize: 11, color: 'var(--mist)' }}>{u.email}</div>
-                    </div>
-                  </label>
+                  <Checkbox
+                    key={u.id}
+                    checked={checked}
+                    onChange={() => toggleUser(u.id)}
+                    size={20}
+                    labelStyle={{
+                      display: 'flex', width: '100%', gap: 10,
+                      padding: '8px 12px', borderBottom: '1px solid var(--pearl)',
+                      background: checked ? 'var(--green-pale)' : 'transparent',
+                    }}
+                    label={
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{u.name || u.email}</div>
+                        <div style={{ fontSize: 11, color: 'var(--mist)' }}>{u.email}</div>
+                      </div>
+                    }
+                  />
                 )
               })}
             </div>

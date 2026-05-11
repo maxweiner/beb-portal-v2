@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
 import { fileSlug, qrShortUrl, bookingBaseUrl } from '@/lib/qr/code'
 import { makeSquareLogoDataUrl } from '@/lib/qr/squareLogo'
+import Checkbox from '@/components/ui/Checkbox'
 
 interface QrRow {
   id: string
@@ -300,28 +301,23 @@ export default function QrCodesSection({
             const exists = existingChannelSources.has(src)
             const checked = selectedChannels.has(src)
             return (
-              <label key={src} style={{
-                display: 'flex', alignItems: 'center', gap: 8, fontSize: 13,
-                padding: '4px 0',
-                cursor: exists ? 'not-allowed' : 'pointer',
-                opacity: exists ? 0.55 : 1,
-              }}>
-                <input type="checkbox"
-                  checked={checked}
-                  disabled={exists}
-                  onChange={() => toggle(selectedChannels, src, setSelectedChannels)}
-                  style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
-                <span aria-hidden="true" style={{
-                  width: 20, height: 20, flexShrink: 0, borderRadius: 5,
-                  border: `2px solid ${checked ? 'var(--green)' : 'var(--pearl)'}`,
-                  background: checked ? 'var(--green)' : '#FFFFFF',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#FFFFFF', fontSize: 13, fontWeight: 900, lineHeight: 1,
-                  transition: 'all .15s ease',
-                }}>{checked ? '✓' : ''}</span>
-                <span style={{ flex: 1, color: exists ? 'var(--mist)' : 'var(--ink)' }}>{src}</span>
-                {exists && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--mist)' }}>EXISTS</span>}
-              </label>
+              <Checkbox
+                key={src}
+                checked={checked}
+                disabled={exists}
+                onChange={() => toggle(selectedChannels, src, setSelectedChannels)}
+                size={20}
+                label={
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+                    <span style={{ flex: 1, color: exists ? 'var(--mist)' : 'var(--ink)' }}>{src}</span>
+                    {exists && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--mist)' }}>EXISTS</span>}
+                  </span>
+                }
+                labelStyle={{
+                  display: 'flex', width: '100%', padding: '4px 0', fontSize: 13,
+                  opacity: exists ? 0.55 : 1,
+                }}
+              />
             )
           })}
         </div>
@@ -377,28 +373,23 @@ export default function QrCodesSection({
               const exists = existingEmployeeIds.has(emp.id)
               const checked = selectedEmpIds.has(emp.id)
               return (
-                <label key={emp.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 8, fontSize: 13,
-                  padding: '4px 0',
-                  cursor: exists ? 'not-allowed' : 'pointer',
-                  opacity: exists ? 0.55 : 1,
-                }}>
-                  <input type="checkbox"
-                    checked={checked}
-                    disabled={exists}
-                    onChange={() => toggle(selectedEmpIds, emp.id, setSelectedEmpIds)}
-                    style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
-                  <span aria-hidden="true" style={{
-                    width: 20, height: 20, flexShrink: 0, borderRadius: 5,
-                    border: `2px solid ${checked ? 'var(--green)' : 'var(--pearl)'}`,
-                    background: checked ? 'var(--green)' : '#FFFFFF',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: '#FFFFFF', fontSize: 13, fontWeight: 900, lineHeight: 1,
-                    transition: 'all .15s ease',
-                  }}>{checked ? '✓' : ''}</span>
-                  <span style={{ flex: 1, color: exists ? 'var(--mist)' : 'var(--ink)' }}>{emp.name}</span>
-                  {exists && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--mist)' }}>EXISTS</span>}
-                </label>
+                <Checkbox
+                  key={emp.id}
+                  checked={checked}
+                  disabled={exists}
+                  onChange={() => toggle(selectedEmpIds, emp.id, setSelectedEmpIds)}
+                  size={20}
+                  label={
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+                      <span style={{ flex: 1, color: exists ? 'var(--mist)' : 'var(--ink)' }}>{emp.name}</span>
+                      {exists && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--mist)' }}>EXISTS</span>}
+                    </span>
+                  }
+                  labelStyle={{
+                    display: 'flex', width: '100%', padding: '4px 0', fontSize: 13,
+                    opacity: exists ? 0.55 : 1,
+                  }}
+                />
               )
             })}
           </div>

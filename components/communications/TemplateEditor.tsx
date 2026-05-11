@@ -10,6 +10,7 @@ import {
   findUnknownMergeFields,
 } from '@/lib/communications/mergeFields'
 import type { CommunicationTemplate } from '@/types'
+import Checkbox from '@/components/ui/Checkbox'
 
 interface Props {
   template: CommunicationTemplate | null
@@ -127,12 +128,13 @@ export default function TemplateEditor({ template, canEdit, onClose }: Props) {
         </div>
         {canEdit && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ash)' }}>
-              <input
-                type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)}
-                style={{ width: 16, height: 16, padding: 0, margin: 0, appearance: 'auto', WebkitAppearance: 'checkbox' } as React.CSSProperties}
-              /> Active
-            </label>
+            <Checkbox
+              checked={isActive}
+              onChange={setIsActive}
+              size={16}
+              label="Active"
+              labelStyle={{ fontSize: 12, color: 'var(--ash)' }}
+            />
             <button onClick={save} disabled={saving} className="btn-primary btn-sm">
               {saving ? 'Saving…' : 'Save'}
             </button>

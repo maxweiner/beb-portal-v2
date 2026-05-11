@@ -10,6 +10,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import Checkbox from '@/components/ui/Checkbox'
 
 type ModuleId =
   | 'dashboard' | 'appointments' | 'buying-events' | 'calendar' | 'travel'
@@ -276,50 +277,29 @@ export default function RoleManagerPanel() {
                               cursor: busy ? 'wait' : 'default',
                             }}>
                             {/* Granted toggle */}
-                            <label style={{
-                              display: 'flex', alignItems: 'center', gap: 8,
-                              cursor: busy ? 'wait' : 'pointer', position: 'relative',
-                            }}>
-                              <input type="checkbox" checked={granted}
-                                disabled={busy}
-                                onChange={e => toggleModule(r.id, m.id, e.target.checked)}
-                                style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
-                              <span aria-hidden style={{
-                                width: 16, height: 16, flexShrink: 0, borderRadius: 4,
-                                border: `2px solid ${granted ? 'var(--green)' : 'var(--pearl)'}`,
-                                background: granted ? 'var(--green)' : '#fff',
-                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                color: '#fff', fontSize: 11, fontWeight: 900, lineHeight: 1,
-                              }}>{granted ? '✓' : ''}</span>
-                              <span style={{
-                                fontSize: 12, fontWeight: 600,
-                                color: granted ? 'var(--green-dark)' : 'var(--ink)',
-                              }}>{m.label}</span>
-                            </label>
+                            <Checkbox
+                              checked={granted}
+                              disabled={busy}
+                              onChange={(next) => toggleModule(r.id, m.id, next)}
+                              size={16}
+                              radius={4}
+                              label={<span style={{ fontSize: 12, fontWeight: 600, color: granted ? 'var(--green-dark)' : 'var(--ink)' }}>{m.label}</span>}
+                              labelStyle={{ cursor: busy ? 'wait' : 'pointer' }}
+                            />
                             {/* Read-only toggle — only when granted */}
                             {granted && (
-                              <label style={{
-                                display: 'flex', alignItems: 'center', gap: 6,
-                                marginLeft: 24,
-                                cursor: busy ? 'wait' : 'pointer', position: 'relative',
-                              }}>
-                                <input type="checkbox" checked={readOnly}
+                              <div style={{ marginLeft: 24 }}>
+                                <Checkbox
+                                  checked={readOnly}
                                   disabled={busy}
-                                  onChange={e => toggleReadOnly(r.id, m.id, e.target.checked)}
-                                  style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
-                                <span aria-hidden style={{
-                                  width: 12, height: 12, flexShrink: 0, borderRadius: 3,
-                                  border: `1.5px solid ${readOnly ? 'var(--ash)' : 'var(--pearl)'}`,
-                                  background: readOnly ? 'var(--ash)' : '#fff',
-                                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                  color: '#fff', fontSize: 9, fontWeight: 900, lineHeight: 1,
-                                }}>{readOnly ? '✓' : ''}</span>
-                                <span style={{
-                                  fontSize: 10, fontWeight: 700, letterSpacing: '.04em',
-                                  textTransform: 'uppercase',
-                                  color: readOnly ? 'var(--ash)' : 'var(--mist)',
-                                }}>Read-only</span>
-                              </label>
+                                  onChange={(next) => toggleReadOnly(r.id, m.id, next)}
+                                  size={12}
+                                  radius={3}
+                                  color="var(--ash)"
+                                  label={<span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: readOnly ? 'var(--ash)' : 'var(--mist)' }}>Read-only</span>}
+                                  labelStyle={{ gap: 6, cursor: busy ? 'wait' : 'pointer' }}
+                                />
+                              </div>
                             )}
                           </div>
                         )

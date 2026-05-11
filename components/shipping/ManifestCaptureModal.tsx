@@ -18,6 +18,7 @@ import { processImageForUpload } from '@/lib/imageUtils'
 import { uploadManifest } from '@/lib/shipping/manifests'
 import type { ShippingManifest } from '@/lib/shipping/manifests'
 import { useIsNarrow } from '@/components/expenses/useIsNarrow'
+import Checkbox from '@/components/ui/Checkbox'
 
 interface Props {
   /** The event to attach the manifest to. Named `boxId` for source-
@@ -484,16 +485,17 @@ function ItemRow({
 
           {/* Replace warning */}
           {collides && (
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#92400E', fontWeight: 700, marginBottom: 6 }}>
-              <input
-                type="checkbox"
-                checked={item.replaceAcked}
-                onChange={e => onAckReplace(e.target.checked)}
+            <div style={{ marginBottom: 6 }}>
+              <Checkbox
+                checked={!!item.replaceAcked}
+                onChange={onAckReplace}
                 disabled={disabled}
-                style={{ width: 'auto' }}
+                size={16}
+                color="#92400E"
+                label={<span>{trimmed} already has a manifest — keep both (this adds a new one)</span>}
+                labelStyle={{ fontSize: 11, color: '#92400E', fontWeight: 700 }}
               />
-              <span>{trimmed} already has a manifest — keep both (this adds a new one)</span>
-            </label>
+            </div>
           )}
 
           {/* Scan-style toggle (image only) */}
