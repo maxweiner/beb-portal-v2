@@ -81,6 +81,7 @@ export function useRoleModules(): RoleModulesState {
       })
       if (user?.is_partner) { modules.add('financials'); readOnly.delete('financials') }
       if (user?.marketing_access) { modules.add('marketing'); readOnly.delete('marketing') }
+      if (user?.inventory_access) { modules.add('wholesale'); readOnly.delete('wholesale') }
       setState({
         modules, readOnly, loaded: true,
         canWrite: (id) => modules.has(id) && !readOnly.has(id),
@@ -88,7 +89,7 @@ export function useRoleModules(): RoleModulesState {
     })()
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, rolesKey, user?.is_partner, user?.marketing_access])
+  }, [user?.id, rolesKey, user?.is_partner, user?.marketing_access, user?.inventory_access])
 
   return state
 }

@@ -29,7 +29,12 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
 
 export default function WholesalePage() {
   const { user, brand } = useApp()
-  const isAllowed = user?.role === 'superadmin' || user?.role === 'admin' || user?.is_partner === true
+  // Superadmin / admin / partner get access by default. The per-user
+  // `inventory_access` flag (toggled by superadmin in Admin Panel →
+  // Inventory Access) opens the module for anyone else regardless of
+  // role — mirrors how `marketing_access` works for the marketing
+  // surface.
+  const isAllowed = user?.role === 'superadmin' || user?.role === 'admin' || user?.is_partner === true || user?.inventory_access === true
   const [tab, setTab] = useState<Tab>('inventory')
 
   if (!isAllowed) {

@@ -6,9 +6,11 @@ import { supabase } from '@/lib/supabase'
 import type { User, Role } from '@/types'
 import DatePicker from '@/components/ui/DatePicker'
 import { eventDisplayName } from '@/lib/eventName'
+import InventoryAccessPanel from './InventoryAccessPanel'
 
 type Tab =
   | 'users' | 'invite' | 'merge'
+  | 'inventory-access'
   | 'email' | 'sms'
   | 'add-event' | 'delete-event'
 
@@ -29,6 +31,12 @@ const NAV_GROUPS: NavGroup[] = [
       { id: 'users',  label: 'Users',        icon: '👥' },
       { id: 'invite', label: 'Invite User',  icon: '✉️' },
       { id: 'merge',  label: 'Merge Users',  icon: '🔀' },
+    ],
+  },
+  {
+    label: 'Access',
+    items: [
+      { id: 'inventory-access', label: 'Inventory Access', icon: '💎' },
     ],
   },
   {
@@ -103,13 +111,14 @@ export default function AdminPanel() {
             padding: isNarrow ? '14px 14px' : '24px',
             minWidth: 0,
           }}>
-            {tab === 'users'        && <UsersTab />}
-            {tab === 'invite'       && <InviteTab />}
-            {tab === 'merge'        && <MergeTab />}
-            {tab === 'email'        && <EmailTab />}
-            {tab === 'sms'          && <SmsTab />}
-            {tab === 'add-event'    && <EditEventSection />}
-            {tab === 'delete-event' && <DeleteEventSection />}
+            {tab === 'users'            && <UsersTab />}
+            {tab === 'invite'           && <InviteTab />}
+            {tab === 'merge'            && <MergeTab />}
+            {tab === 'inventory-access' && <InventoryAccessPanel />}
+            {tab === 'email'            && <EmailTab />}
+            {tab === 'sms'              && <SmsTab />}
+            {tab === 'add-event'        && <EditEventSection />}
+            {tab === 'delete-event'     && <DeleteEventSection />}
           </div>
         </div>
       </div>
