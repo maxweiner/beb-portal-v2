@@ -138,8 +138,21 @@ export async function dispatchOneSync(row: QueueRow): Promise<DispatchResult> {
       }
     } else {
       const body = await buildInput(row, settings)
+      // Defensive re-check at process time. The trigger captures
+      // gcal_event_links state at INSERT time; if two queue rows for
+      // the same event were enqueued before the cron processed the
+      // first, both stamp action='create' with a NULL link → we'd
+      // produce two Google Calendar events. By re-reading the link
+      // here we collapse the second into an update, killing the dup.
       let gcalId = row.google_calendar_event_id
-      if (row.action === 'update' && gcalId) {
+      if (!gcalId && row.event_id) {
+        const { data: link } = await sb.from('gcal_event_links')
+          .select('google_calendar_event_id')
+          .eq('event_id', row.event_id)
+          .maybeSingle()
+        if (link) gcalId = (link as any).google_calendar_event_id || null
+      }
+      if (gcalId) {
         await patchGcalEvent(settings.calendar_id, gcalId, body)
       } else {
         const created = await createGcalEvent(settings.calendar_id, body)
