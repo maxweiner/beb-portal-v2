@@ -11,6 +11,7 @@ import BrandLogosPanel from './BrandLogosPanel'
 import RoleManagerPanel from './RoleManagerPanel'
 import DatePicker from '@/components/ui/DatePicker'
 import ImpersonationLogPanel from '@/components/impersonation/ImpersonationLogPanel'
+import AdHocGCalEvents from './AdHocGCalEvents'
 import BoothCostCategoriesPanel from '@/components/sales/BoothCostCategoriesPanel'
 import SalesRepTerritoriesPanel from '@/components/sales/SalesRepTerritoriesPanel'
 import OfficeStaffRecipientsPanel from '@/components/sales/OfficeStaffRecipientsPanel'
@@ -451,6 +452,12 @@ export default function Settings() {
       )}
       {user?.role === 'superadmin' && (
         <GCalSyncSettings brand="liberty" />
+      )}
+      {/* Ad-hoc Google Calendar events (superadmin only) — one-off
+          entries pushed directly into either a brand buying-events
+          calendar or a trunk-rep's personal calendar. */}
+      {user?.role === 'superadmin' && (
+        <AdHocGCalEvents />
       )}
 
       {/* Travel Email Integration */}
