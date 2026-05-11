@@ -46,7 +46,7 @@ export default function WholesalePage() {
     <div className="p-6" style={{ maxWidth: 1400, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
         <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)' }}>
-          🛒 Wholesale <span style={{ fontSize: 13, color: 'var(--mist)', fontWeight: 700 }}>· {brand?.toUpperCase()}</span>
+          🛒 Inventory Management <span style={{ fontSize: 13, color: 'var(--mist)', fontWeight: 700 }}>· {brand?.toUpperCase()}</span>
         </h1>
         <div style={{ flex: '1 1 280px', maxWidth: 460 }}>
           <GlobalSearch onJump={(t) => setTab(t)} />
