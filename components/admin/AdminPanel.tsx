@@ -339,18 +339,29 @@ function UsersTab() {
     reload()
   }
 
-  // Per-rep trunk-show calendar setup — POSTs to the create endpoint
-  // which provisions a Google Calendar owned by our service account
-  // and grants public-read so the rep can subscribe without auth.
-  const [creatingCalFor, setCreatingCalFor] = useState<string | null>(null)
-  const createTrunkCal = async (u: any) => {
-    if (!confirm(`Create a personal trunk-show Google Calendar for ${u.name}?\n\nIt will be owned by the BEB Portal service account and publicly subscribable via a read-only URL.`)) return
-    setCreatingCalFor(u.id)
+  // Per-rep trunk-show calendar setup. Operator-owned model: Max
+  // creates the calendar in his own Google account, shares it with
+  // our service account ("Make changes to events"), then pastes the
+  // "Secret address in iCal format" URL here. The API parses the
+  // calendar ID out, validates write access, and saves both fields.
+  const [setCalFor, setSetCalFor] = useState<string | null>(null)   // which user row has the form open
+  const [pasteUrl, setPasteUrl] = useState('')
+  const [savingCalFor, setSavingCalFor] = useState<string | null>(null)
+  const [calError, setCalError] = useState<string | null>(null)
+
+  const openSetCal = (u: any) => {
+    setSetCalFor(u.id)
+    setPasteUrl('')
+    setCalError(null)
+  }
+  const closeSetCal = () => {
+    setSetCalFor(null)
+    setPasteUrl('')
+    setCalError(null)
+  }
+  const saveTrunkCal = async (u: any, url: string) => {
+    setSavingCalFor(u.id); setCalError(null)
     try {
-      // /api/admin/trunk-show-calendars/create uses getAuthedUser(req)
-      // and rejects calls without an Authorization header. Mirror the
-      // same Bearer-token pattern the other admin endpoints in this
-      // panel already use (e.g. createTeam / inviteUser above).
       const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch('/api/admin/trunk-show-calendars/create', {
         method: 'POST',
@@ -358,13 +369,34 @@ function UsersTab() {
           'Content-Type': 'application/json',
           ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
         },
-        body: JSON.stringify({ user_id: u.id }),
+        body: JSON.stringify({ user_id: u.id, ical_url: url }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) { setCalError(json.error || `Failed (${res.status})`); return }
+      closeSetCal()
+      reload()
+    } finally {
+      setSavingCalFor(null)
+    }
+  }
+  const clearTrunkCal = async (u: any) => {
+    if (!confirm(`Clear the trunk-show calendar for ${u.name}? Future sync will pause until you set a new one.`)) return
+    setSavingCalFor(u.id); setCalError(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/admin/trunk-show-calendars/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ user_id: u.id, ical_url: '' }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) { alert(`Failed: ${json.error || res.status}`); return }
       reload()
     } finally {
-      setCreatingCalFor(null)
+      setSavingCalFor(null)
     }
   }
   const copySubscribeUrl = async (url: string) => {
@@ -664,6 +696,52 @@ function UsersTab() {
             </button>
           </div>
 
+          {/* ── Trunk-show calendar paste form ── shown when the
+              operator clicked "Set trunk-show calendar" on this
+              row. Validates writes by creating + deleting a tiny
+              test event in the calendar before saving. */}
+          {setCalFor === u.id && (
+            <div style={{ padding: '12px 14px', borderTop: '1px solid var(--cream2)', background: 'var(--cream2)' }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--ash)', marginBottom: 6 }}>
+                Set trunk-show calendar for {u.name}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--mist)', marginBottom: 8, lineHeight: 1.45 }}>
+                1. Create the calendar in your Google account.<br />
+                2. Share it with our service account (role: <strong>Make changes to events</strong>).<br />
+                3. Open <em>Settings → Integrate calendar</em>, copy <strong>Secret address in iCal format</strong>, and paste it below.
+              </div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  value={pasteUrl}
+                  onChange={e => setPasteUrl(e.target.value)}
+                  placeholder="https://calendar.google.com/calendar/ical/.../private-.../basic.ics"
+                  style={{ flex: '1 1 320px', minWidth: 240, fontFamily: 'ui-monospace, monospace', fontSize: 11, padding: '5px 8px' }}
+                  autoFocus
+                />
+                <button
+                  onClick={() => void saveTrunkCal(u, pasteUrl)}
+                  disabled={savingCalFor === u.id || !pasteUrl.trim()}
+                  className="btn-primary btn-xs">
+                  {savingCalFor === u.id ? 'Validating…' : 'Save'}
+                </button>
+                <button
+                  onClick={closeSetCal}
+                  disabled={savingCalFor === u.id}
+                  className="btn-outline btn-xs">
+                  Cancel
+                </button>
+              </div>
+              {calError && (
+                <div style={{
+                  marginTop: 8, padding: '8px 10px', borderRadius: 6, fontSize: 11,
+                  background: 'var(--red-pale)', color: '#7f1d1d', border: '1px solid #fecaca',
+                }}>
+                  {calError}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ── Expandable details — only when isOpen ── */}
           {isOpen && (
           <div style={{ padding: '12px 14px', borderTop: '1px solid var(--cream2)', background: '#fff' }}>
@@ -821,31 +899,45 @@ function UsersTab() {
 
               {canEditTrunkRep && getTrunkRep(u) && (
                 u.trunk_show_calendar_subscribe_url ? (
-                  <button
-                    onClick={e => { e.stopPropagation(); copySubscribeUrl(u.trunk_show_calendar_subscribe_url!) }}
-                    title={u.trunk_show_calendar_subscribe_url}
-                    style={{
-                      fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
-                      padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
-                      background: 'rgba(234,88,12,.10)', color: '#C2410C',
-                      border: '1px solid rgba(234,88,12,.3)',
-                    }}
-                  >
-                    📅 Copy Subscribe URL
-                  </button>
+                  <span style={{ display: 'inline-flex', gap: 6 }}>
+                    <button
+                      onClick={e => { e.stopPropagation(); copySubscribeUrl(u.trunk_show_calendar_subscribe_url!) }}
+                      title={u.trunk_show_calendar_subscribe_url}
+                      style={{
+                        fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
+                        padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
+                        background: 'rgba(234,88,12,.10)', color: '#C2410C',
+                        border: '1px solid rgba(234,88,12,.3)',
+                      }}
+                    >
+                      📅 Copy iCal URL
+                    </button>
+                    <button
+                      onClick={e => { e.stopPropagation(); clearTrunkCal(u) }}
+                      disabled={savingCalFor === u.id}
+                      title="Unlink this calendar (you can paste a new one)"
+                      style={{
+                        fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
+                        padding: '4px 8px', borderRadius: 6, cursor: 'pointer',
+                        background: 'transparent', color: 'var(--mist)',
+                        border: '1px solid var(--pearl)',
+                        opacity: savingCalFor === u.id ? .6 : 1,
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </span>
                 ) : (
                   <button
-                    onClick={e => { e.stopPropagation(); createTrunkCal(u) }}
-                    disabled={creatingCalFor === u.id}
+                    onClick={e => { e.stopPropagation(); openSetCal(u) }}
                     style={{
                       fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
                       padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
                       background: 'transparent', color: 'var(--ash)',
                       border: '1px dashed var(--pearl)',
-                      opacity: creatingCalFor === u.id ? .6 : 1,
                     }}
                   >
-                    {creatingCalFor === u.id ? '⏳ Creating…' : '📅 Set up trunk-show calendar'}
+                    📅 Set trunk-show calendar
                   </button>
                 )
               )}
