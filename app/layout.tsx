@@ -28,6 +28,14 @@ export const metadata: Metadata = {
     statusBarStyle: 'black-translucent',
     title: 'BEB Portal',
   },
+  // Next.js auto-emits <meta name="apple-mobile-web-app-capable"
+  // content="yes"> from appleWebApp.capable, but Chrome now warns
+  // that tag is deprecated unless the cross-platform equivalent is
+  // also present. Adding both keeps iOS happy AND silences the
+  // Chrome DevTools deprecation warning.
+  other: {
+    'mobile-web-app-capable': 'yes',
+  },
 }
 
 // Inline script that sets the theme class on <html> *before* React
