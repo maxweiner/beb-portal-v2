@@ -35,6 +35,7 @@ import ManifestCaptureModal from '@/components/shipping/ManifestCaptureModal'
 import { fetchManifestsForEvents } from '@/lib/shipping/manifests'
 import IntakeCaptureFlow from '@/components/intake/IntakeCaptureFlow'
 import IntakeWorksheet from '@/components/intake/IntakeWorksheet'
+import WaitlistPanel from './WaitlistPanel'
 import Checkbox from '@/components/ui/Checkbox'
 import { CALENDAR_COLORS } from '@/lib/calendarColors'
 
@@ -45,8 +46,8 @@ import { CALENDAR_COLORS } from '@/lib/calendarColors'
 // only on reserved). `adminOnly` hides for non-admins.
 type LauncherKey =
   | 'day_entry' | 'buyers' | 'intake' | 'worksheet' | 'travel' | 'shipping'
-  | 'manifest' | 'marketing' | 'appointments' | 'expenses' | 'brief' | 'notes'
-  | 'assets' | 'checklist' | 'ad_spend' | 'promote' | 'cancel'
+  | 'manifest' | 'marketing' | 'appointments' | 'waitlist' | 'expenses'
+  | 'brief' | 'notes' | 'assets' | 'checklist' | 'ad_spend' | 'promote' | 'cancel'
 
 interface LauncherDef {
   key: LauncherKey
@@ -84,6 +85,8 @@ const LAUNCHERS: LauncherDef[] = [
     sub: 'VDP, postcards, comms' },
   { key: 'appointments', icon: '📅', label: 'Appointments',
     sub: 'Booked + waitlist' },
+  { key: 'waitlist',  icon: '🕒', label: 'Waitlist',
+    sub: 'Manage waitlist signups' },
   { key: 'expenses',  icon: '🧾', label: 'Expenses',
     sub: 'Submit / approve' },
   { key: 'assets',    icon: '🪧', label: 'Assets',
@@ -138,6 +141,11 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
   const [intakeEventId, setIntakeEventId] = useState<string | null>(null)
   const [worksheetEventId, setWorksheetEventId] = useState<string | null>(null)
   const [manifestEventId, setManifestEventId] = useState<string | null>(null)
+  // Per-event waitlist modal. Tapping the new "Waitlist" launcher
+  // opens a slim wrapper around <WaitlistPanel /> — saves the user
+  // from having to drill into the event-detail During tab where it
+  // historically lived.
+  const [waitlistEventId, setWaitlistEventId] = useState<string | null>(null)
   /** Existing box labels for the event whose manifest modal is currently open.
    *  Lazily fetched so we can drive the "replace?" warning + preset pills. */
   const [manifestExistingLabels, setManifestExistingLabels] = useState<string[]>([])
@@ -378,6 +386,7 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
                 }
                 case 'marketing': setNav?.('marketing'); break
                 case 'appointments': setNav?.('appointments'); break
+                case 'waitlist':  setWaitlistEventId(ev.id); break
                 case 'expenses':  setNav?.('expenses'); break
                 case 'brief':     void toggleBriefed(ev); break
                 case 'notes':     setNotesEventId(ev.id); break
@@ -478,6 +487,42 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
             onClose={() => { setManifestEventId(null); setManifestExistingLabels([]) }}
             onUploaded={() => { setManifestEventId(null); setManifestExistingLabels([]) }}
           />
+        )
+      })()}
+
+      {/* Waitlist quick-access modal. Just wraps <WaitlistPanel />
+          in a sized dialog so the launcher one-clicks straight to
+          the per-event waitlist; the panel itself is identical to
+          what renders inside the During Event tab. */}
+      {waitlistEventId && (() => {
+        const ev = events.find(e => e.id === waitlistEventId)
+        if (!ev) return null
+        return (
+          <div
+            onClick={() => setWaitlistEventId(null)}
+            style={{
+              position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+            }}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                background: '#fff', borderRadius: 12,
+                maxWidth: 720, width: '100%',
+                maxHeight: '92vh', overflow: 'auto', padding: 20,
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
+                <h2 style={{ fontSize: 18, fontWeight: 900 }}>
+                  🕒 Waitlist <span style={{ fontSize: 13, color: 'var(--mist)', fontWeight: 700 }}>· {eventDisplayName(ev, stores)}</span>
+                </h2>
+                <button onClick={() => setWaitlistEventId(null)}
+                  style={{ background: 'transparent', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--mist)' }}>×</button>
+              </div>
+              <WaitlistPanel ev={ev} />
+            </div>
+          </div>
         )
       })()}
 
