@@ -347,9 +347,17 @@ function UsersTab() {
     if (!confirm(`Create a personal trunk-show Google Calendar for ${u.name}?\n\nIt will be owned by the BEB Portal service account and publicly subscribable via a read-only URL.`)) return
     setCreatingCalFor(u.id)
     try {
+      // /api/admin/trunk-show-calendars/create uses getAuthedUser(req)
+      // and rejects calls without an Authorization header. Mirror the
+      // same Bearer-token pattern the other admin endpoints in this
+      // panel already use (e.g. createTeam / inviteUser above).
+      const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch('/api/admin/trunk-show-calendars/create', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
         body: JSON.stringify({ user_id: u.id }),
       })
       const json = await res.json().catch(() => ({}))
