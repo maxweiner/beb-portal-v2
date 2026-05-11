@@ -13,6 +13,7 @@ import {
   enumerateShowDates, fmtDayHeader,
   type TradeShowStaffer,
 } from '@/lib/sales/tradeShowStaff'
+import Checkbox from '@/components/ui/Checkbox'
 import type { User } from '@/types'
 
 interface Props {
@@ -169,13 +170,19 @@ export default function TradeShowStaffPanel({ tradeShowId, startDate, endDate, c
                       const checked = r.assigned_dates.includes(iso)
                       return (
                         <td key={iso} style={{ textAlign: 'center', padding: '4px' }}>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            disabled={!canWrite}
-                            onChange={() => toggleDate(r, iso)}
-                            style={{ width: 18, height: 18, cursor: canWrite ? 'pointer' : 'default' }}
-                          />
+                          {/* Shared Checkbox component — a raw
+                              <input type="checkbox"> here was being
+                              stretched to width:100% by globals.css,
+                              which left the actual click target as a
+                              very thin horizontal strip. */}
+                          <div style={{ display: 'inline-flex' }}>
+                            <Checkbox
+                              checked={checked}
+                              disabled={!canWrite}
+                              size={18}
+                              onChange={() => toggleDate(r, iso)}
+                            />
+                          </div>
                         </td>
                       )
                     })}
