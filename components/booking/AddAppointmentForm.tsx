@@ -292,11 +292,6 @@ export default function AddAppointmentForm({
                 <PhoneInput required value={phone} onChange={v => setPhone(v)}
                   style={{ fontSize: inputSize }}
                   className="w-full rounded-lg border border-gray-300 p-2" />
-                {/* SMS opt-in disclosure — required for Twilio
-                    toll-free verification. Only shown to customers
-                    (staff bookings are entered by staff on behalf of
-                    a customer who consented elsewhere). */}
-                {mode === 'customer' && <SmsConsentNotice />}
               </div>
               <div>
                 <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Email</label>
@@ -306,6 +301,12 @@ export default function AddAppointmentForm({
                   className="w-full rounded-lg border border-gray-300 p-2" />
               </div>
             </div>
+            {/* SMS opt-in disclosure — required for Twilio toll-free
+                verification. Rendered full-width below Phone+Email so the
+                paragraph doesn't get squeezed into a tall narrow column.
+                Only shown to customers (staff bookings are entered by
+                staff on behalf of a customer who consented elsewhere). */}
+            {mode === 'customer' && <SmsConsentNotice />}
             <div>
               <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Bringing</label>
               <input type="text" value={items} onChange={e => setItems(e.target.value)}
