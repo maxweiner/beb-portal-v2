@@ -9,6 +9,7 @@ import { logAudit, diffFields } from '@/lib/wholesale/audit'
 import { loadAdminList } from '@/lib/wholesale/lists'
 import { Modal, Section, Row, Field, Select } from './InventoryView'
 import AddressAutocompleteInput from '@/components/ui/AddressAutocompleteInput'
+import BusinessAutocompleteInput, { type BusinessPickResult } from '@/components/ui/BusinessAutocompleteInput'
 import PhoneInput from '@/components/ui/PhoneInput'
 import Checkbox from '@/components/ui/Checkbox'
 import { formatPhoneDisplay } from '@/lib/phone'
@@ -218,7 +219,23 @@ function CustomerModal({
     <Modal onClose={onClose} title={mode === 'new' ? 'New Customer' : (customer?.company_name || 'Customer')} wide>
       <Section title="Customer info">
         <Row>
-          <Field label="Company name *"><input type="text" value={company_name} onChange={e => setCompanyName(e.target.value)} /></Field>
+          <Field label="Company name *">
+            <BusinessAutocompleteInput
+              value={company_name}
+              onChange={setCompanyName}
+              onPick={(pick: BusinessPickResult) => {
+                // Fill-if-empty: never overwrite manually-typed data.
+                // Picking the same business twice on a partially-filled
+                // form leaves the user's edits alone.
+                if (pick.phone && !phone.trim()) setPhone(pick.phone)
+                if (pick.address && !billing_address.trim()) {
+                  setBillingAddress(pick.address)
+                  if (shippingSameAsBilling) setShippingAddress(pick.address)
+                }
+              }}
+              placeholder="Search Google for the business name…"
+            />
+          </Field>
           <Field label="Contact name"><input type="text" value={contact_name} onChange={e => setContactName(e.target.value)} /></Field>
           <Field label="Phone"><PhoneInput value={phone} onChange={setPhone} /></Field>
           <Field label="Mobile"><PhoneInput value={mobile_phone} onChange={setMobilePhone} /></Field>

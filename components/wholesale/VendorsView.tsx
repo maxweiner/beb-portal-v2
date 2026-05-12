@@ -8,6 +8,7 @@ import { fmtDate, fmtMoneyCents } from '@/lib/wholesale/format'
 import { logAudit, diffFields } from '@/lib/wholesale/audit'
 import { Modal, Section, Row, Field, Select } from './InventoryView'
 import AddressAutocompleteInput from '@/components/ui/AddressAutocompleteInput'
+import BusinessAutocompleteInput, { type BusinessPickResult } from '@/components/ui/BusinessAutocompleteInput'
 import PhoneInput from '@/components/ui/PhoneInput'
 import Checkbox from '@/components/ui/Checkbox'
 import { formatPhoneDisplay } from '@/lib/phone'
@@ -191,7 +192,24 @@ function VendorModal({
     <Modal onClose={onClose} title={mode === 'new' ? 'New Vendor' : (vendor?.company_name || 'Vendor')}>
       <Section title="Vendor info">
         <Row>
-          <Field label="Company name *"><input type="text" value={company_name} onChange={e => setCompanyName(e.target.value)} /></Field>
+          <Field label="Company name *">
+            <BusinessAutocompleteInput
+              value={company_name}
+              onChange={setCompanyName}
+              onPick={(pick: BusinessPickResult) => {
+                // "Fill if empty" — never overwrite something the user
+                // already typed. Picking the same business twice on a
+                // pre-filled form just reaffirms the name, doesn't blow
+                // away their manually-corrected phone/address.
+                if (pick.phone && !phone.trim()) setPhone(pick.phone)
+                if (pick.address && !billing_address.trim()) {
+                  setBillingAddress(pick.address)
+                  if (shippingSameAsBilling) setShippingAddress(pick.address)
+                }
+              }}
+              placeholder="Search Google for the business name…"
+            />
+          </Field>
           <Field label="Contact name"><input type="text" value={contact_name} onChange={e => setContactName(e.target.value)} /></Field>
           <Field label="Phone"><PhoneInput value={phone} onChange={setPhone} /></Field>
           <Field label="Mobile"><PhoneInput value={mobile_phone} onChange={setMobilePhone} /></Field>
