@@ -166,11 +166,14 @@ export interface Store {
    *  which is the owner's personal contact). Used on marketing
    *  materials. Stored raw 10-digit; UI formats with dashes. */
   store_phone?: string
-  /** QUO tracking number for marketing materials (postcards, ads).
-   *  Surfaces under the store name on the marketing campaign detail
-   *  page so the marketer can read it off without context-switching.
-   *  Stored raw 10-digit; UI formats with dashes. */
-  quo_phone_number?: string
+  /** BEB scheduling phone — the number printed on this store's
+   *  marketing materials (postcards, ads) that routes calls to the
+   *  BEB scheduling line. Surfaces under the store name on the
+   *  marketing campaign detail page so the marketer can read it off
+   *  without context-switching. Stored raw 10-digit; UI formats with
+   *  dashes. (Previously named `quo_phone_number` — renamed via
+   *  supabase-migration-rename-quo-to-beb-scheduling.sql.) */
+  beb_scheduling_phone?: string
   calendar_feed_url?: string
   calendar_offset_hours?: number
   store_image_url?: string
