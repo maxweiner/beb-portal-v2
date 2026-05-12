@@ -60,7 +60,9 @@ function pctBg(pct: number | null, totalSent: number): string {
 }
 
 export default function DataResearch() {
-  const { user, stores, events, brand } = useApp()
+  // Research tooling must include cancelled events — auditing why a
+  // cancellation happened or running historical comps requires them.
+  const { user, stores, allEvents: events, brand } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
 
   const brandStores = useMemo(() => stores.filter((s: any) => s.brand === brand), [stores, brand])

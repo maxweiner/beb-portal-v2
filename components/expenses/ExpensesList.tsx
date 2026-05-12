@@ -52,7 +52,9 @@ const STATUS_FILTERS: { id: 'all' | ExpenseReportStatus; label: string }[] = [
 const STATUS_FILTERS_ACCOUNTING = STATUS_FILTERS.filter(s => s.id !== 'active')
 
 export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) => void }) {
-  const { user, events, stores } = useApp()
+  // Expense rows can point at cancelled events; use allEvents so the
+  // "Event" column resolves names instead of falling back to "—".
+  const { user, allEvents: events, stores } = useApp()
   // Regular admins still see only their own reports. Superadmins and
   // accounting users get the cross-user view + "User" dropdown filter
   // — accounting needs all reports for AP processing, RLS now permits it.

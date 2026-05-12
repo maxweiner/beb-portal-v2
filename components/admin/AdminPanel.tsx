@@ -1467,7 +1467,9 @@ function SmsTab() {
 
 /* ── EVENTS TAB ── superadmin tools to edit/delete an event */
 function EditEventSection() {
-  const { user: me, events, stores, reload } = useApp()
+  // Admin needs to be able to edit cancelled events too (fix a typo'd
+  // cancellation reason, restore data, etc.), so reach for allEvents.
+  const { user: me, allEvents: events, stores, reload } = useApp()
   const isSuperAdmin = me?.role === 'superadmin'
   const [selectedId, setSelectedId] = useState('')
   const [startDate, setStartDate] = useState('')
@@ -1582,7 +1584,9 @@ function EditEventSection() {
 }
 
 function DeleteEventSection() {
-  const { user: me, events, stores, reload } = useApp()
+  // Delete-forever path needs cancelled events visible — that's the
+  // category most commonly deleted-for-good. Use allEvents.
+  const { user: me, allEvents: events, stores, reload } = useApp()
   const isSuperAdmin = me?.role === 'superadmin'
   const [selectedId, setSelectedId] = useState('')
   const [confirmText, setConfirmText] = useState('')

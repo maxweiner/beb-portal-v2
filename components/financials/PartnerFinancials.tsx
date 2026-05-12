@@ -52,7 +52,9 @@ function quarter(iso: string | null | undefined): 1 | 2 | 3 | 4 | null {
 }
 
 export default function PartnerFinancials({ onOpenReport }: { onOpenReport: (reportId: string) => void }) {
-  const { user, events } = useApp()
+  // Cancelled events can still have outstanding expenses that need
+  // partner-level approval / closeout — use allEvents so they show up.
+  const { user, allEvents: events } = useApp()
   const isPartner = !!user?.is_partner
 
   const [rows, setRows] = useState<DecoratedReport[]>([])

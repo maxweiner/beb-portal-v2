@@ -456,6 +456,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const setStores = useCallback((s: Store[]) => setStoresState(s), [])
   const setEvents = useCallback((e: Event[]) => setEventsState(e), [])
 
+  // Hide cancelled events from the default `events` array exposed by
+  // the context. PR #402 introduced soft-cancellation (status='cancelled'
+  // + cancelled_at timestamp); most "current operations" surfaces — day
+  // entry, dashboards, marketing planning, intake, travel — should not
+  // show cancelled events. Admin / reports / financials / event-detail
+  // views read `allEvents` instead. Both arrays come from the same
+  // underlying state, so a single `setEvents` call keeps them in sync.
+  const nonCancelledEvents = useMemo<Event[]>(
+    () => events.filter(e => e.status !== 'cancelled' && (e as any).cancelled_at == null),
+    [events],
+  )
+
   // Brand wins over theme: a stale `liberty-*` theme paired with brand=beb
   // would render Liberty colors against a BEB session. The boot script in
   // app/layout.tsx must mirror this exactly.
@@ -477,7 +489,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [themeClass])
 
   const ctxValue = useMemo<AppContextType>(() => ({
-    user, users, stores, trunkShowStores, events, shipments,
+    user, users, stores, trunkShowStores,
+    events: nonCancelledEvents,
+    allEvents: events,
+    shipments,
     theme, year, loading, brand, connectionError,
     isSwitching, pendingBrand,
     setTheme, setYear, setBrand, reload, setUser,
@@ -489,7 +504,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     commsSendIntent, setCommsSendIntent,
     impersonationActor,
   }), [
-    user, users, stores, trunkShowStores, events, shipments,
+    user, users, stores, trunkShowStores,
+    nonCancelledEvents, events, shipments,
     theme, year, loading, brand, connectionError,
     isSwitching, pendingBrand,
     reload, dayEntryIntent, travelIntent,

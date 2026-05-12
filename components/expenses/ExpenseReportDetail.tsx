@@ -34,7 +34,10 @@ export default function ExpenseReportDetail({
   reportId: string
   onBack: () => void
 }) {
-  const { user, users, events } = useApp()
+  // An expense report can be attached to a cancelled event (the report
+  // existed before the cancel). Use allEvents so the event lookup still
+  // resolves and we don't render "Unknown event".
+  const { user, users, allEvents: events } = useApp()
   const [report, setReport] = useState<ExpenseReport | null>(null)
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [ownerName, setOwnerName] = useState<string>('')

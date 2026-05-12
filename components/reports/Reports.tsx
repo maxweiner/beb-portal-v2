@@ -115,7 +115,10 @@ const REPORTS: (ReportDef & { Icon: React.FC<{ size?: number; color?: string }>;
 ]
 
 export default function Reports() {
-  const { user, events, stores } = useApp()
+  // Reports are historical / analytical — cancelled events still count
+  // toward "events you scheduled in Q1" and similar. Use allEvents so
+  // pivots and date-range filters don't silently exclude them.
+  const { user, allEvents: events, stores } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
   const isSuperAdmin = user?.role === 'superadmin'
   const [activeId, setActiveId] = useState<string | null>(null)
