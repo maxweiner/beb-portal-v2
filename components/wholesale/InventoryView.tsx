@@ -1221,10 +1221,12 @@ function ItemForm({
           </Field>
           <Field label="Memo In">
             {/* True ⇒ item is on memo *into* the company (loaned by a
-                vendor). Visually offset so it doesn't try to fill the
-                whole grid cell as a text input would. */}
+                vendor). Label trimmed so the checkbox fits on one line
+                inside the standard 4-col Row grid — the field label
+                already says MEMO IN so the inline copy doesn't need
+                to re-explain. */}
             <div style={{ display: 'flex', alignItems: 'center', height: '100%', paddingTop: 4 }}>
-              <Checkbox checked={memo_in} onChange={setMemoIn} label="Loaned to us by vendor" />
+              <Checkbox checked={memo_in} onChange={setMemoIn} label="On memo from vendor" />
             </div>
           </Field>
           <Field label="Location">
