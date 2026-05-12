@@ -227,9 +227,9 @@ const ALL_COLUMNS: ColumnDef[] = [
   ...textCol('jewelry_metal_type',      'Metal',         'jewelry', 90),
   ...textCol('jewelry_metal_color',     'Metal color',   'jewelry', 110),
   ...numCol ('jewelry_metal_dwt',       'DWT',           'jewelry', 80),
-  ...numCol ('jewelry_diamond_count',   'Dia count',     'jewelry', 80),
-  ...numCol ('jewelry_diamond_total_ct','Dia ct tw',     'jewelry', 90),
-  ...textCol('jewelry_diamond_shape',   'Dia shape',     'jewelry', 110),
+  // Note: stones for jewelry items now live in the inventory_item_stones
+  // child table and can't be edited inline in this spreadsheet view.
+  // Open the item's detail modal → Jewelry specifics → Stones section.
   ...textCol('jewelry_period',          'Period / era',  'jewelry', 120),
   ...textCol('jewelry_designer',        'Designer',      'jewelry', 130),
   ...textCol('jewelry_size',            'Size',          'jewelry', 80),
