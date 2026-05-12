@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Metadata } from 'next'
+import { headers } from 'next/headers'
+import { QRCodeSVG } from 'qrcode.react'
 import EventShareUrlPanel from '@/components/events/EventShareUrlPanel'
 
 export const dynamic = 'force-dynamic'
@@ -52,6 +54,24 @@ export default async function EventSummaryPage({
     .eq('event_id', ev.id)
     .is('revoked_at', null)
     .maybeSingle()
+
+  // Active store-portal token (used for the "flash this at the
+  // counter" QR card below). Same shape as the public /e/[token]
+  // page so the two surfaces stay in sync.
+  const { data: portalRow } = ev.store_id ? await sb
+    .from('store_portal_tokens')
+    .select('token')
+    .eq('store_id', ev.store_id)
+    .eq('active', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle() : { data: null as any }
+  const bookingPath: string | null = portalRow?.token ? `/store-portal/${portalRow.token}` : null
+  const h = headers()
+  const reqHost = h.get('host') || ''
+  const reqProto = h.get('x-forwarded-proto') || (reqHost.startsWith('localhost') ? 'http' : 'https')
+  const reqOrigin = reqHost ? `${reqProto}://${reqHost}` : ''
+  const bookingUrlAbs: string | null = bookingPath ? `${reqOrigin}${bookingPath}` : null
 
   const allDays = (ev.days || []).sort((a: any, b: any) => a.day_number - b.day_number)
 
@@ -136,6 +156,42 @@ export default async function EventSummaryPage({
           initialToken={shareTokenRow as any || null}
           ownerEmail={store?.owner_email || null}
         />
+
+        {/* Booking-page QR — flash at the counter for customers /
+            staff to scan and load the booking surface. Same QR as
+            the top-right of the public /e/[token] hero, so both
+            audiences see the same destination. */}
+        {bookingUrlAbs && (
+          <div style={{
+            background: '#fff', borderRadius: 12, padding: 14,
+            border: '1px solid #E5E7EB', boxShadow: '0 1px 3px rgba(0,0,0,.04)',
+            marginBottom: 16,
+            display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+          }}>
+            <div style={{
+              background: '#fff', padding: 8, borderRadius: 10,
+              border: '1px solid #E5E7EB', flexShrink: 0,
+            }}>
+              <QRCodeSVG value={bookingUrlAbs} size={104} level="M" />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 800, fontSize: 14, color: '#0f172a', marginBottom: 4 }}>
+                📲 Scan to book an appointment
+              </div>
+              <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, lineHeight: 1.4 }}>
+                Flash this at the counter — customers scan it on their phone and land on the store&apos;s booking page. Same QR appears on the public store-owner dashboard.
+              </div>
+              <a href={bookingPath!} target="_blank" rel="noopener noreferrer"
+                style={{
+                  display: 'inline-block',
+                  fontSize: 12, fontWeight: 700,
+                  color: '#1D6B44', textDecoration: 'none',
+                }}>
+                Open booking page ↗
+              </a>
+            </div>
+          </div>
+        )}
 
         {/* Running totals — green header card */}
         <div style={{ background: '#1D6B44', borderRadius: 16, padding: '18px 20px', marginBottom: 16 }}>
