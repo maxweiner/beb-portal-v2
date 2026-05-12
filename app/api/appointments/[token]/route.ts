@@ -26,7 +26,7 @@ async function loadAppt(sb: ReturnType<typeof admin>, token: string) {
 
   const { data: store } = await sb
     .from('stores')
-    .select('name, slug, owner_phone, owner_email, color_primary, color_secondary, store_image_url')
+    .select('name, slug, owner_mobile_phone, owner_email, color_primary, color_secondary, store_image_url')
     .eq('id', appt.store_id)
     .maybeSingle()
 
@@ -164,7 +164,7 @@ export async function PUT(req: Request, { params }: { params: { token: string } 
 
   const { data: store } = await sb
     .from('stores')
-    .select('name, slug, owner_phone, owner_email')
+    .select('name, slug, owner_mobile_phone, owner_email')
     .eq('id', appt.store_id)
     .maybeSingle()
 
@@ -187,7 +187,7 @@ export async function PUT(req: Request, { params }: { params: { token: string } 
       },
       store: {
         name: store.name, slug: store.slug,
-        owner_phone: store.owner_phone, owner_email: store.owner_email,
+        owner_mobile_phone: store.owner_mobile_phone, owner_email: store.owner_email,
       },
     }).catch(err => console.error('reschedule confirmation failed', err))
   } else if (store && (phoneChanged || emailChanged)) {
@@ -251,7 +251,7 @@ export async function DELETE(_req: Request, { params }: { params: { token: strin
       store: {
         name: store.name,
         slug: store.slug,
-        owner_phone: store.owner_phone,
+        owner_mobile_phone: store.owner_mobile_phone,
         owner_email: store.owner_email,
       },
     }).catch(err => console.error('sendCancellation failed', err))

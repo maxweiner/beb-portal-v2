@@ -98,7 +98,7 @@ export async function POST(req: Request) {
 
   // Send cancellation EMAIL (skip SMS — the TwiML reply below is the SMS confirmation).
   const { data: store } = await sb.from('stores')
-    .select('name, slug, owner_phone, owner_email')
+    .select('name, slug, owner_mobile_phone, owner_email')
     .eq('id', match.store_id).maybeSingle()
   if (store) {
     sendCancellation({
@@ -112,7 +112,7 @@ export async function POST(req: Request) {
       },
       store: {
         name: store.name, slug: store.slug,
-        owner_phone: store.owner_phone, owner_email: store.owner_email,
+        owner_mobile_phone: store.owner_mobile_phone, owner_email: store.owner_email,
       },
       skipSms: true,
     }).catch(err => console.error('inbound cancellation notify failed', err))

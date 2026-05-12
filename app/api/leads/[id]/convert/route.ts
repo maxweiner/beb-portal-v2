@@ -130,7 +130,7 @@ async function convertBuyingEvent(
         state: (lead.state || '').toUpperCase(),
         zip: lead.zip || '',
         website: lead.website || '',
-        owner_phone: lead.store_phone || lead.phone || '',
+        owner_mobile_phone: lead.store_phone || lead.phone || '',
       })
       .select('id')
       .single()

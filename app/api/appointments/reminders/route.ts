@@ -78,7 +78,7 @@ async function run(req: Request) {
   const storeIds = [...new Set(appts.map(a => a.store_id))]
   const { data: stores } = await sb
     .from('stores')
-    .select('id, name, slug, owner_phone, owner_email, timezone')
+    .select('id, name, slug, owner_mobile_phone, owner_email, timezone')
     .in('id', storeIds)
   const storeMap = new Map((stores ?? []).map(s => [s.id, s]))
 
@@ -109,7 +109,7 @@ async function run(req: Request) {
         },
         store: {
           name: store.name, slug: store.slug,
-          owner_phone: store.owner_phone, owner_email: store.owner_email,
+          owner_mobile_phone: store.owner_mobile_phone, owner_email: store.owner_email,
         },
         hours: 24,
       })
@@ -126,7 +126,7 @@ async function run(req: Request) {
         },
         store: {
           name: store.name, slug: store.slug,
-          owner_phone: store.owner_phone, owner_email: store.owner_email,
+          owner_mobile_phone: store.owner_mobile_phone, owner_email: store.owner_email,
         },
         hours: 2,
       })

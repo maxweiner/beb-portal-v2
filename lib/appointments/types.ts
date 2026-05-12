@@ -35,7 +35,7 @@ export interface BookingStore {
   store_image_url: string | null
   color_primary: string | null
   color_secondary: string | null
-  owner_phone: string | null
+  owner_mobile_phone: string | null
   owner_email: string | null
   city: string | null
   state: string | null

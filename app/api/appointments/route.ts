@@ -78,7 +78,7 @@ export async function POST(req: Request) {
   // Resolve store + brand from slug
   const { data: store, error: storeErr } = await sb
     .from('stores')
-    .select('id, name, slug, brand, owner_phone, owner_email')
+    .select('id, name, slug, brand, owner_mobile_phone, owner_email')
     .eq('slug', slug)
     .maybeSingle()
   if (storeErr || !store) return bad('Unknown store', 404)
@@ -248,7 +248,7 @@ export async function POST(req: Request) {
     store: {
       name: store.name,
       slug: store.slug,
-      owner_phone: store.owner_phone,
+      owner_mobile_phone: store.owner_mobile_phone,
       owner_email: store.owner_email,
     },
   }).catch(err => console.error('sendConfirmation failed', err))

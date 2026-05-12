@@ -28,21 +28,21 @@ type StoreInsert = {
   city: string
   state: string
   zip: string
-  owner_phone: string
+  store_phone: string
   brand: string
   active: boolean
 }
 
 const STORES: StoreInsert[] = [
-  { name: "Blocher Jewelers",        address: "283 PA Route 288",          city: "Ellwood City", state: "PA", zip: "16117", owner_phone: "7247583248", brand: "beb", active: true },
-  { name: "Dem's Fine Jewelers",     address: "1068 Lake Murray Blvd",     city: "Irmo",         state: "SC", zip: "29063", owner_phone: "8034075290", brand: "beb", active: true },
-  { name: "Godwin - Bainbridge",     address: "400 East Shotwell St",      city: "Bainbridge",   state: "GA", zip: "39819", owner_phone: "2292467900", brand: "beb", active: true },
-  { name: "Godwin - Thomasville",    address: "202 S Broad St",            city: "Thomasville",  state: "GA", zip: "31792", owner_phone: "2292338536", brand: "beb", active: true },
-  { name: "Gray's Jewelers Bespoke", address: "429 N County Rd",           city: "St James",     state: "NY", zip: "11780", owner_phone: "6312509489", brand: "beb", active: true },
-  { name: "Gwen's Fine Jewelers",    address: "841 B Eastern Bypass",      city: "Richmond",     state: "KY", zip: "40475", owner_phone: "8596249600", brand: "beb", active: true },
-  { name: "Marc Robinson Jewelers",  address: "4401 N Interstate Hwy 35, Suite 824", city: "Round Rock", state: "TX", zip: "78664", owner_phone: "5128680300", brand: "beb", active: true },
-  { name: "Thigpen Jewelers",        address: "442 N Wilmot Rd",           city: "Tucson",       state: "AZ", zip: "85711", owner_phone: "5208865557", brand: "beb", active: true },
-  { name: "Vaughan's Jewelry",       address: "311 Broad Street",          city: "Edenton",      state: "NC", zip: "27932", owner_phone: "2524823525", brand: "beb", active: true },
+  { name: "Blocher Jewelers",        address: "283 PA Route 288",          city: "Ellwood City", state: "PA", zip: "16117", store_phone: "7247583248", brand: "beb", active: true },
+  { name: "Dem's Fine Jewelers",     address: "1068 Lake Murray Blvd",     city: "Irmo",         state: "SC", zip: "29063", store_phone: "8034075290", brand: "beb", active: true },
+  { name: "Godwin - Bainbridge",     address: "400 East Shotwell St",      city: "Bainbridge",   state: "GA", zip: "39819", store_phone: "2292467900", brand: "beb", active: true },
+  { name: "Godwin - Thomasville",    address: "202 S Broad St",            city: "Thomasville",  state: "GA", zip: "31792", store_phone: "2292338536", brand: "beb", active: true },
+  { name: "Gray's Jewelers Bespoke", address: "429 N County Rd",           city: "St James",     state: "NY", zip: "11780", store_phone: "6312509489", brand: "beb", active: true },
+  { name: "Gwen's Fine Jewelers",    address: "841 B Eastern Bypass",      city: "Richmond",     state: "KY", zip: "40475", store_phone: "8596249600", brand: "beb", active: true },
+  { name: "Marc Robinson Jewelers",  address: "4401 N Interstate Hwy 35, Suite 824", city: "Round Rock", state: "TX", zip: "78664", store_phone: "5128680300", brand: "beb", active: true },
+  { name: "Thigpen Jewelers",        address: "442 N Wilmot Rd",           city: "Tucson",       state: "AZ", zip: "85711", store_phone: "5208865557", brand: "beb", active: true },
+  { name: "Vaughan's Jewelry",       address: "311 Broad Street",          city: "Edenton",      state: "NC", zip: "27932", store_phone: "2524823525", brand: "beb", active: true },
 ]
 
 ;(async () => {
