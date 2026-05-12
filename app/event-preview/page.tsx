@@ -172,35 +172,11 @@ export default function EventPreviewPage() {
           display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12,
           marginBottom: 18,
         }}>
-          <LauncherTile href="#buyers"       icon="👥" label="Buyers"        sub={`${BUYERS.length} on-site`}    />
           <LauncherTile href="#appointments" icon="📅" label="Appointments"  sub={`${apptCount(APPTS, 'upcoming')} upcoming · ${apptCount(APPTS, 'served')} served`} />
+          <LauncherTile href="#buyers"       icon="👥" label="Buyers"        sub={`${BUYERS.length} on-site`}    />
           <LauncherTile href="#buys"         icon="💰" label="Today's buys"  sub={`${BUYS.length} buys · ${fmt(BUYS.reduce((s, b) => s + b.amountCents, 0))}`} />
           <LauncherTile href="#waitlist"     icon="🕒" label="Waitlist"      sub={`${WAITLIST.length} waiting`}  />
         </div>
-
-        {/* ───── Buyers section ───── */}
-        <Section id="buyers" title="👥 Buyers on-site">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
-            {BUYERS.map(b => (
-              <div key={b.initials} style={{
-                background: '#fff', borderRadius: 10, padding: 12,
-                display: 'flex', alignItems: 'center', gap: 12,
-                boxShadow: '0 1px 3px rgba(0,0,0,.04)',
-              }}>
-                <div style={{
-                  width: 44, height: 44, borderRadius: '50%',
-                  background: b.color, color: '#fff',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontWeight: 800, fontSize: 15, letterSpacing: '.04em',
-                }}>{b.initials}</div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700 }}>{b.name}</div>
-                  <div style={{ fontSize: 12, color: '#6b7280' }}>{b.role}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Section>
 
         {/* ───── Appointments section ───── */}
         <Section id="appointments" title="📅 Today's appointments">
@@ -224,6 +200,30 @@ export default function EventPreviewPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </Section>
+
+        {/* ───── Buyers section ───── */}
+        <Section id="buyers" title="👥 Buyers on-site">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+            {BUYERS.map(b => (
+              <div key={b.initials} style={{
+                background: '#fff', borderRadius: 10, padding: 12,
+                display: 'flex', alignItems: 'center', gap: 12,
+                boxShadow: '0 1px 3px rgba(0,0,0,.04)',
+              }}>
+                <div style={{
+                  width: 44, height: 44, borderRadius: '50%',
+                  background: b.color, color: '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontWeight: 800, fontSize: 15, letterSpacing: '.04em',
+                }}>{b.initials}</div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>{b.name}</div>
+                  <div style={{ fontSize: 12, color: '#6b7280' }}>{b.role}</div>
+                </div>
+              </div>
+            ))}
           </div>
         </Section>
 
