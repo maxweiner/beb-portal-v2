@@ -211,6 +211,31 @@ const ALL_COLUMNS: ColumnDef[] = [
     ),
   },
   {
+    // The Edge ask price — Liberty-only feature. Setting a value here
+    // marks the item as ready to send via the Send-to-Edge view. NULL
+    // means "not ready". Background tint flags items that would lose
+    // money (Edge < cost) so the buyer catches accidental underprices.
+    id: 'edge_price_cents', label: 'Edge', group: 'pricing', defaultOn: true, width: 100,
+    render: ({ item, save }) => {
+      const cost = item.cost_cents ?? null
+      const edge = item.edge_price_cents ?? null
+      const tint =
+        edge == null ? undefined
+        : (cost != null && edge < cost) ? '#fee2e2'        // under cost — red
+        : (cost != null && edge < cost * 1.1) ? '#fef3c7'  // thin margin — amber
+        : '#dcfce7'                                         // healthy — green
+      return (
+        <input type="text" inputMode="decimal" defaultValue={centsToDollarsString(item.edge_price_cents)}
+          placeholder="—"
+          onBlur={e => {
+            const cents = e.target.value.trim() === '' ? null : dollarsToCents(e.target.value)
+            if (cents !== (item.edge_price_cents ?? null)) save({ edge_price_cents: cents as any })
+          }}
+          style={{ ...cellInput(90), textAlign: 'right', background: tint }} />
+      )
+    },
+  },
+  {
     id: 'insurance_value_cents', label: 'Insurance', group: 'pricing', defaultOn: false, width: 100,
     render: ({ item, save }) => (
       <input type="text" inputMode="decimal" defaultValue={centsToDollarsString(item.insurance_value_cents)}

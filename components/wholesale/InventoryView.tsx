@@ -882,6 +882,9 @@ function ItemForm({
   const [wholesale, setWholesale] = useState(centsToDollarsString(existing?.wholesale_price_cents ?? null))
   const [retail, setRetail]       = useState(centsToDollarsString(existing?.retail_price_cents ?? null))
   const [insurance, setInsurance] = useState(centsToDollarsString(existing?.insurance_value_cents ?? null))
+  // The Edge ask price — Liberty's send-to-The-Edge dedicated price.
+  // Empty = not ready to send (the Send-to-Edge view filters on this).
+  const [edge, setEdge]           = useState(centsToDollarsString(existing?.edge_price_cents ?? null))
   const [public_notes, setPublic] = useState(existing?.public_notes || '')
   const [internal_notes, setInternal] = useState(existing?.internal_notes || '')
   const [status, setStatus]       = useState<InventoryStatus>(existing?.status || 'in_stock')
@@ -988,10 +991,13 @@ function ItemForm({
   const costCents = dollarsToCents(cost)
   const wholesaleCents = dollarsToCents(wholesale)
   const retailCents = dollarsToCents(retail)
+  const edgeCents = dollarsToCents(edge)
   const wholesaleMargin = marginPct(costCents, wholesaleCents)
   const retailMargin    = marginPct(costCents, retailCents)
+  const edgeMargin      = marginPct(costCents, edgeCents)
   const wholesaleBelowCost = costCents != null && wholesaleCents != null && wholesaleCents < costCents
   const retailBelowCost    = costCents != null && retailCents != null && retailCents < costCents
+  const edgeBelowCost      = costCents != null && edgeCents != null && edgeCents < costCents
 
   async function rapnetLookup() {
     if (!d_report) { setErr('Enter a report number first'); return }
@@ -1043,6 +1049,7 @@ function ItemForm({
         wholesale_price_cents: dollarsToCents(wholesale),
         retail_price_cents: dollarsToCents(retail),
         insurance_value_cents: dollarsToCents(insurance),
+        edge_price_cents: dollarsToCents(edge),
         public_notes: public_notes.trim() || null,
         internal_notes: internal_notes.trim() || null,
         vendor_id: vendor_id || null,
@@ -1126,6 +1133,7 @@ function ItemForm({
         savedItemId = existing!.id
         const tracked = [
           'status','gender','cost_cents','wholesale_price_cents','retail_price_cents','insurance_value_cents',
+          'edge_price_cents',
           'public_notes','internal_notes','vendor_id','vendor_stock_number','vendor_invoice_number','memo_in',
           'location_id','date_acquired',
         ]
@@ -1269,6 +1277,14 @@ function ItemForm({
           <Field label={`Retail ($)${retailMargin != null ? ` · ${retailMargin.toFixed(0)}% margin` : ''}`} warn={retailBelowCost}>
             <input type="number" step="0.01" value={retail} onChange={e => setRetail(e.target.value)} />
             {retailBelowCost && <Hint>⚠ Below cost</Hint>}
+          </Field>
+          <Field label={`Edge ($)${edgeMargin != null ? ` · ${edgeMargin.toFixed(0)}% margin` : ''}`} warn={edgeBelowCost}>
+            <input type="number" step="0.01" value={edge} onChange={e => setEdge(e.target.value)}
+              placeholder="(blank = not for Edge)" />
+            {edgeBelowCost && <Hint>⚠ Below cost</Hint>}
+            {!edgeBelowCost && edge.trim() !== '' && (
+              <div style={{ fontSize: 11, color: '#1D6B44', marginTop: 4 }}>Ready to send to The Edge</div>
+            )}
           </Field>
           <Field label="Insurance value ($)">
             <input type="number" step="0.01" value={insurance} onChange={e => setInsurance(e.target.value)} />
@@ -1695,6 +1711,7 @@ const FIELD_LABELS: Record<string, string> = {
   cost_cents: 'Cost',
   wholesale_price_cents: 'Wholesale',
   retail_price_cents: 'Retail',
+  edge_price_cents: 'Edge price',
   insurance_value_cents: 'Insurance value',
   public_notes: 'Public notes',
   internal_notes: 'Internal notes',
