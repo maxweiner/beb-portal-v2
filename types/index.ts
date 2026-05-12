@@ -646,3 +646,29 @@ export interface Lead {
   updated_at: string
   deleted_at: string | null
 }
+
+// ───────────────────────────────────────────────────────────────
+// Event share tokens — public per-event store-owner dashboard at
+// /e/[token]. Schema in supabase-migration-event-share-tokens.sql.
+// ───────────────────────────────────────────────────────────────
+
+/** One row per share-URL minted for an event. Rotation creates a new
+ *  row and revokes the previous one (revoked_at IS NOT NULL). The
+ *  partial unique index in the migration enforces "one active token
+ *  per event." */
+export interface EventShareToken {
+  id: string
+  event_id: string
+  token: string
+  created_by: string | null
+  created_by_email: string | null
+  revoked_at: string | null
+  revoked_reason: string | null
+  first_viewed_at: string | null
+  last_viewed_at: string | null
+  view_count: number
+  last_sent_at: string | null
+  last_sent_to: string | null
+  created_at: string
+  updated_at: string
+}
