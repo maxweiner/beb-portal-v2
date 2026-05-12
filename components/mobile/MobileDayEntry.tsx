@@ -27,10 +27,12 @@ interface CheckRow {
   buy_form_number: string
   amount: string
   payment_type: string
-  commission_rate: number // 10 (default) or 5
+  commission_rate: number // 10 (default), 5, or 0
+  /** Required when commission_rate is 5 or 0. */
+  commission_note?: string
 }
 function emptyCheck(): CheckRow {
-  return { check_number: '', buy_form_number: '', amount: '', payment_type: 'check', commission_rate: 10 }
+  return { check_number: '', buy_form_number: '', amount: '', payment_type: 'check', commission_rate: 10, commission_note: '' }
 }
 // When the user taps "+ Add Check" we pre-fill the next sequential number.
 // Only auto-fills when the last row's number is a clean integer — otherwise
@@ -343,6 +345,7 @@ export default function MobileDayEntry() {
       amount: c.amount != null ? String(c.amount) : '',
       payment_type: c.payment_type || 'check',
       commission_rate: c.commission_rate === 5 ? 5 : c.commission_rate === 0 ? 0 : 10,
+      commission_note: c.commission_note || '',
     })) : [emptyCheck()])
     setLoadingEntry(false)
     loadedKeyRef.current = fetchKey
@@ -459,6 +462,10 @@ export default function MobileDayEntry() {
           check_number: c.check_number, buy_form_number: c.buy_form_number,
           amount: parseFloat(c.amount) || 0, payment_type: c.payment_type,
           commission_rate: c.commission_rate === 5 ? 5 : c.commission_rate === 0 ? 0 : 10,
+          commission_note:
+            (c.commission_rate === 5 || c.commission_rate === 0)
+              ? (c.commission_note?.trim() || null)
+              : null,
         })))
         if (error) throw error
       }
@@ -925,6 +932,36 @@ export default function MobileDayEntry() {
                     )}
                     <label style={{ ...miniLabelStyle, gridRow: 2, gridColumn: amountCol }}>Amount</label>
                   </div>
+
+                  {/* Commission-override note: required when 5% or 0% is on.
+                      Visible below the row in amber so the buyer sees it
+                      while their eyes are still on the rate pills. */}
+                  {(c.commission_rate === 5 || c.commission_rate === 0) && (
+                    <div style={{
+                      marginTop: 6,
+                      padding: '6px 8px',
+                      background: '#FFFBEB',
+                      borderRadius: 6,
+                      display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
+                    }}>
+                      <span style={{ fontSize: 10, fontWeight: 800, color: '#92400E', whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                        📝 {c.commission_rate}% reason
+                      </span>
+                      <input
+                        type="text"
+                        value={c.commission_note || ''}
+                        onChange={e => setField('commission_note', e.target.value)}
+                        placeholder={c.commission_rate === 0
+                          ? 'e.g. Charity — no commission'
+                          : 'e.g. Bulk volume offset'}
+                        style={{
+                          flex: 1, minWidth: 140,
+                          fontSize: 12, padding: '4px 8px',
+                          borderColor: !(c.commission_note || '').trim() ? '#D97706' : undefined,
+                        }}
+                      />
+                    </div>
+                  )}
 
                   {overflowOpenIdx === i && (
                     <div onClick={e => e.stopPropagation()}
