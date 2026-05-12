@@ -98,11 +98,16 @@ export default async function Page({ params }: { params: { token: string } }) {
   //    against today's ISO.
   const todayDate = today
   const [apptsRes, waitlistRes, buysRes, intakesCountRes] = await Promise.all([
+    // ALL non-cancelled appointments for the event, across every
+    // day. Previously this was filtered to `appointment_date = today`,
+    // which made the section look empty whenever the dashboard was
+    // opened on a day without scheduled appointments (e.g. evening
+    // of Day 1 when Day 2's bookings exist but Day 1 is done).
     sb.from('appointments')
       .select('id, appointment_date, appointment_time, customer_name, items_bringing, status, is_walkin')
       .eq('event_id', ev.id)
-      .eq('appointment_date', todayDate)
       .neq('status', 'cancelled')
+      .order('appointment_date', { ascending: true })
       .order('appointment_time', { ascending: true }),
     sb.from('event_waitlist')
       .select('id, name, party_size:item_count, notify_pref, created_at, expires_at, status')
@@ -274,7 +279,7 @@ export default async function Page({ params }: { params: { token: string } }) {
           display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12,
           marginBottom: 18,
         }}>
-          <LauncherTile href="#appointments" icon="📅" label="Appointments"  sub={`${appts.filter(a => a.status !== 'completed' && a.status !== 'no_show').length} upcoming · ${appts.filter(a => a.status === 'completed').length} served`} />
+          <LauncherTile href="#appointments" icon="📅" label="Appointments"  sub={apptLauncherSub(appts, today)} />
           <LauncherTile href="#buyers"       icon="👥" label="Buyers"        sub={`${workers.length} on-site`} />
           <LauncherTile href="#buys"         icon="💰" label="Today's buys"  sub={`${buys.length} buys · ${fmt(spendCents)}`} />
           <LauncherTile href="#waitlist"     icon="🕒" label="Waitlist"      sub={`${waitlist.length} waiting`} />
@@ -308,34 +313,52 @@ export default async function Page({ params }: { params: { token: string } }) {
           </div>
         )}
 
-        {/* Appointments */}
-        <Section id="appointments" title="📅 Today's appointments">
+        {/* Appointments — grouped by date so all 3 days of the
+            event are visible at once. */}
+        <Section id="appointments" title="📅 Appointments">
           {appts.length === 0 ? (
-            <Empty>No appointments today.</Empty>
+            <Empty>No appointments scheduled yet.</Empty>
           ) : (
-            <Card>
-              <table style={tableStyle}>
-                <tbody>
-                  {appts.map((a, i) => (
-                    <tr key={a.id} style={{ borderTop: i === 0 ? 'none' : '1px solid #F3F4F6' }}>
-                      <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', fontWeight: 700, color: '#374151', width: 100 }}>
-                        {formatTime(a.appointment_time)}
-                      </td>
-                      <td style={{ padding: '10px 6px', fontWeight: 600 }}>
-                        {a.customer_name}
-                        {a.is_walkin && <span style={{ marginLeft: 6, fontSize: 10, color: '#1e40af', fontWeight: 700 }}>WALK-IN</span>}
-                      </td>
-                      <td style={{ padding: '10px 6px', color: '#6b7280', fontSize: 12 }}>
-                        {(a.items_bringing || []).join(', ')}
-                      </td>
-                      <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <ApptStatusPill status={a.status} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </Card>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {groupApptsByDate(appts).map(group => (
+                <Card key={group.date}>
+                  <div style={{
+                    padding: '8px 14px', background: '#F9FAFB',
+                    fontSize: 11, fontWeight: 800, color: '#374151',
+                    textTransform: 'uppercase', letterSpacing: '.05em',
+                    borderBottom: '1px solid #F3F4F6',
+                    display: 'flex', alignItems: 'center', gap: 8,
+                  }}>
+                    <span>{dateGroupLabel(group.date, today)}</span>
+                    <span style={{ color: '#9CA3AF', fontWeight: 600 }}>·</span>
+                    <span style={{ color: '#9CA3AF', fontWeight: 600 }}>
+                      {group.rows.length} appointment{group.rows.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                  <table style={tableStyle}>
+                    <tbody>
+                      {group.rows.map((a, i) => (
+                        <tr key={a.id} style={{ borderTop: i === 0 ? 'none' : '1px solid #F3F4F6' }}>
+                          <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', fontWeight: 700, color: '#374151', width: 100 }}>
+                            {formatTime(a.appointment_time)}
+                          </td>
+                          <td style={{ padding: '10px 6px', fontWeight: 600 }}>
+                            {a.customer_name}
+                            {a.is_walkin && <span style={{ marginLeft: 6, fontSize: 10, color: '#1e40af', fontWeight: 700 }}>WALK-IN</span>}
+                          </td>
+                          <td style={{ padding: '10px 6px', color: '#6b7280', fontSize: 12 }}>
+                            {(a.items_bringing || []).join(', ')}
+                          </td>
+                          <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <ApptStatusPill status={a.status} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </Card>
+              ))}
+            </div>
           )}
         </Section>
 
@@ -549,6 +572,49 @@ function formatShortTime(iso: string | null | undefined): string {
     return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
   } catch { return '—' }
 }
+/** Sub-text for the Appointments launcher tile. If anything is on today,
+ *  highlight today's counts; otherwise summarize the whole event. */
+function apptLauncherSub(
+  rows: { appointment_date: string; status: string }[],
+  today: string,
+): string {
+  const todays = rows.filter(r => r.appointment_date === today)
+  if (todays.length > 0) {
+    const upcoming = todays.filter(r => r.status !== 'completed' && r.status !== 'no_show').length
+    const served = todays.filter(r => r.status === 'completed').length
+    return `today: ${upcoming} upcoming · ${served} served`
+  }
+  return `${rows.length} total this event`
+}
+
+/** Group appointment rows by appointment_date and return one entry
+ *  per date in chronological order. */
+function groupApptsByDate<T extends { appointment_date: string }>(rows: T[]): { date: string; rows: T[] }[] {
+  const map = new Map<string, T[]>()
+  for (const r of rows) {
+    const arr = map.get(r.appointment_date) || []
+    arr.push(r)
+    map.set(r.appointment_date, arr)
+  }
+  return Array.from(map.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, rs]) => ({ date, rows: rs }))
+}
+
+/** Human-friendly day header: "Today · Mon May 12", "Tomorrow · Tue May 13",
+ *  or just the weekday + date for further-out days. */
+function dateGroupLabel(iso: string, today: string): string {
+  const d = new Date(iso + 'T12:00:00')
+  const weekday = d.toLocaleDateString('en-US', { weekday: 'short' })
+  const monthDay = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  if (iso === today) return `Today · ${weekday} ${monthDay}`
+  const tMs = new Date(today + 'T12:00:00').getTime()
+  const dMs = d.getTime()
+  if (dMs - tMs === 86_400_000) return `Tomorrow · ${weekday} ${monthDay}`
+  if (tMs - dMs === 86_400_000) return `Yesterday · ${weekday} ${monthDay}`
+  return `${weekday} ${monthDay}`
+}
+
 function formatDateRange(startIso: string, endIso: string): string {
   try {
     const s = new Date(startIso + 'T12:00:00')
