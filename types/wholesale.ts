@@ -8,6 +8,10 @@ export type InventoryCategory = 'jewelry' | 'watch' | 'diamond'
 // rows can sit uncategorized until triaged in the sheet view.
 export type InventoryStatus =
   | 'in_stock' | 'on_memo' | 'on_hold' | 'sold' | 'returned' | 'in_repair' | 'consigned_out'
+  // Item was physically destroyed / written off / lost. Excluded from
+  // in-stock counts and sellable filters but stays visible in lists.
+  // See supabase-migration-inventory-scrap.sql.
+  | 'scrapped'
 
 export type MemoStatus = 'open' | 'closed_sold' | 'closed_returned' | 'closed_partial' | 'overdue'
 export type MemoLineStatus = 'out' | 'returned' | 'sold'
@@ -150,6 +154,11 @@ export interface InventoryItem {
   diamond_depth_pct: number | null
   diamond_table_pct: number | null
   diamond_data_source: DiamondDataSource | null
+
+  // Scrap metadata (populated when status flips to 'scrapped').
+  scrap_reason: string | null
+  scrapped_at: string | null
+  scrapped_by_user_id: string | null
 
   archived_at: string | null
   created_at: string

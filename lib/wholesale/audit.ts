@@ -24,6 +24,7 @@ export type AuditEntityType =
 export type AuditAction =
   | 'created' | 'updated' | 'archived' | 'unarchived' | 'deleted'
   | 'status_changed' | 'cost_edited' | 'memo_converted'
+  | 'scrapped'
   | 'document_uploaded' | 'document_deleted'
   | 'photo_uploaded' | 'photo_deleted' | 'photo_set_primary'
   | 'payment_added' | 'payment_voided'

@@ -27,6 +27,7 @@ const STATUS_OPTIONS: { value: InventoryStatus; label: string }[] = [
   { value: 'returned',     label: 'Returned' },
   { value: 'in_repair',    label: 'In Repair' },
   { value: 'consigned_out',label: 'Consigned' },
+  { value: 'scrapped',     label: 'Scrapped' },
 ]
 
 // Column registry. Each entry knows how to render a cell + how to
