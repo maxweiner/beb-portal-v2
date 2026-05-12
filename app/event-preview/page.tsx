@@ -330,7 +330,9 @@ export default function EventPreviewPage() {
             </div>
           </div>
           <Link
-            href="#"
+            href="/store-portal/example-token"
+            target="_blank"
+            rel="noopener noreferrer"
             style={{
               background: '#1D6B44', color: '#fff',
               padding: '10px 18px', borderRadius: 8,
