@@ -13,18 +13,22 @@ import CustomersView from './CustomersView'
 import VendorsView from './VendorsView'
 import ReportsView from './ReportsView'
 import AdminListsView from './AdminListsView'
+import EdgeSendView from './EdgeSendView'
 import GlobalSearch from './GlobalSearch'
 
-type Tab = 'inventory' | 'memos' | 'invoices' | 'customers' | 'vendors' | 'reports' | 'admin'
+type Tab = 'inventory' | 'memos' | 'invoices' | 'customers' | 'vendors' | 'reports' | 'admin' | 'send-to-edge'
 
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: 'inventory', label: 'Inventory', icon: '💎' },
-  { id: 'memos',     label: 'Memos',     icon: '📋' },
-  { id: 'invoices',  label: 'Invoices',  icon: '💵' },
-  { id: 'customers', label: 'Customers', icon: '🏢' },
-  { id: 'vendors',   label: 'Vendors',   icon: '🤝' },
-  { id: 'reports',   label: 'Reports',   icon: '📊' },
-  { id: 'admin',     label: 'Lists',     icon: '⚙️' },
+// "Send to Edge" is Liberty-only — filtered into the visible tabs at
+// render time by `brand === 'liberty'`.
+const TABS: { id: Tab; label: string; icon: string; libertyOnly?: boolean }[] = [
+  { id: 'inventory',    label: 'Inventory',    icon: '💎' },
+  { id: 'memos',        label: 'Memos',        icon: '📋' },
+  { id: 'invoices',     label: 'Invoices',     icon: '💵' },
+  { id: 'customers',    label: 'Customers',    icon: '🏢' },
+  { id: 'vendors',      label: 'Vendors',      icon: '🤝' },
+  { id: 'send-to-edge', label: 'Send to Edge', icon: '🚀', libertyOnly: true },
+  { id: 'reports',      label: 'Reports',      icon: '📊' },
+  { id: 'admin',        label: 'Lists',        icon: '⚙️' },
 ]
 
 export default function WholesalePage() {
@@ -59,7 +63,7 @@ export default function WholesalePage() {
       </div>
 
       <div style={{ display: 'flex', gap: 4, background: 'var(--cream2)', padding: 4, borderRadius: 10, width: 'fit-content', marginBottom: 14, flexWrap: 'wrap' }}>
-        {TABS.map(t => {
+        {TABS.filter(t => !t.libertyOnly || brand === 'liberty').map(t => {
           const sel = tab === t.id
           return (
             <button key={t.id} onClick={() => setTab(t.id)}
@@ -77,13 +81,14 @@ export default function WholesalePage() {
         })}
       </div>
 
-      {tab === 'inventory' && <InventoryView />}
-      {tab === 'memos'     && <MemosView />}
-      {tab === 'invoices'  && <InvoicesView />}
-      {tab === 'customers' && <CustomersView />}
-      {tab === 'vendors'   && <VendorsView />}
-      {tab === 'reports'   && <ReportsView />}
-      {tab === 'admin'     && <AdminListsView />}
+      {tab === 'inventory'    && <InventoryView />}
+      {tab === 'memos'        && <MemosView />}
+      {tab === 'invoices'     && <InvoicesView />}
+      {tab === 'customers'    && <CustomersView />}
+      {tab === 'vendors'      && <VendorsView />}
+      {tab === 'send-to-edge' && brand === 'liberty' && <EdgeSendView />}
+      {tab === 'reports'      && <ReportsView />}
+      {tab === 'admin'        && <AdminListsView />}
     </div>
   )
 }
