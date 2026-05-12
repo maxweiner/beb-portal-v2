@@ -29,6 +29,7 @@ const SIGNED_URL_TTL = 60 * 60 // 1h
 const STATUS_LABEL: Record<InventoryStatus, string> = {
   in_stock: 'In Stock', on_memo: 'On Memo', on_hold: 'On Hold',
   sold: 'Sold', returned: 'Returned', in_repair: 'In Repair', consigned_out: 'Consigned',
+  scrapped: 'Scrapped',
 }
 const STATUS_COLOR: Record<InventoryStatus, { bg: string; fg: string }> = {
   in_stock:      { bg: '#D1FAE5', fg: '#065F46' },
@@ -38,6 +39,7 @@ const STATUS_COLOR: Record<InventoryStatus, { bg: string; fg: string }> = {
   returned:      { bg: '#F3F4F6', fg: '#374151' },
   in_repair:     { bg: '#FEE2E2', fg: '#991B1B' },
   consigned_out: { bg: '#FEF3C7', fg: '#78716C' },
+  scrapped:      { bg: '#F3F4F6', fg: '#6B7280' },
 }
 const CATEGORY_LABEL: Record<InventoryCategory, string> = {
   jewelry: 'Jewelry', watch: 'Watch', diamond: 'Diamond',
@@ -948,6 +950,10 @@ function ItemForm({
   const [err, setErr] = useState<string | null>(null)
   const [rapnetLoading, setRapnetLoading] = useState(false)
 
+  // Danger zone state — null when no confirm is open. Edit-only.
+  const [dangerAction, setDangerAction] = useState<null | 'scrap' | 'delete'>(null)
+  const [scrapReason, setScrapReason] = useState('')
+
   // Load existing stones for jewelry items being edited. New-item flow
   // starts with an empty array. Skipped quietly for non-jewelry items
   // since they don't render the stones section.
@@ -1205,6 +1211,70 @@ function ItemForm({
     setBusy(false)
   }
 
+  /** Mark the item scrapped — status flip + reason note. Visible in
+   *  lists with a scrapped pill; excluded from in-stock counts and
+   *  sellable filters automatically (status !== 'in_stock'). */
+  async function handleScrap() {
+    if (mode !== 'edit' || !existing) return
+    const reason = scrapReason.trim()
+    if (!reason) { setErr('A reason note is required when scrapping.'); return }
+    setBusy(true); setErr(null)
+    try {
+      const patch = {
+        status: 'scrapped' as any,
+        scrap_reason: reason,
+        scrapped_at: new Date().toISOString(),
+        scrapped_by_user_id: actorId || null,
+        updated_by: actorId,
+      }
+      const { error } = await supabase.from('inventory_items')
+        .update(patch).eq('id', existing.id)
+      if (error) throw new Error(error.message)
+      await logAudit({
+        brand: existing.brand,
+        entity_type: 'inventory_item',
+        entity_id: existing.id,
+        action: 'scrapped',
+        before: { status: existing.status, scrap_reason: null },
+        after:  { status: 'scrapped',      scrap_reason: reason },
+        actor_id: actorId, actor_email: actorEmail,
+      })
+      setDangerAction(null)
+      onSaved()
+    } catch (e: any) {
+      setErr(e?.message || 'Scrap failed')
+    }
+    setBusy(false)
+  }
+
+  /** Soft-delete via archived_at. Item disappears from default lists
+   *  but the row stays in the DB so an admin can recover by clearing
+   *  archived_at via SQL. No hard DELETE. */
+  async function handleDelete() {
+    if (mode !== 'edit' || !existing) return
+    setBusy(true); setErr(null)
+    try {
+      const { error } = await supabase.from('inventory_items')
+        .update({ archived_at: new Date().toISOString(), updated_by: actorId })
+        .eq('id', existing.id)
+      if (error) throw new Error(error.message)
+      await logAudit({
+        brand: existing.brand,
+        entity_type: 'inventory_item',
+        entity_id: existing.id,
+        action: 'archived',
+        before: { archived_at: null },
+        after:  { archived_at: 'now' },
+        actor_id: actorId, actor_email: actorEmail,
+      })
+      setDangerAction(null)
+      onSaved()
+    } catch (e: any) {
+      setErr(e?.message || 'Delete failed')
+    }
+    setBusy(false)
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <Section title="Acquisition + status">
@@ -1419,6 +1489,84 @@ function ItemForm({
       </Section>
 
       {err && <div style={{ padding: 8, background: '#FEE2E2', color: '#991B1B', borderRadius: 6, fontSize: 12 }}>{err}</div>}
+
+      {/* Danger zone — edit-only. Two destructive actions, both
+          gated behind a confirm panel that opens inline above the
+          save/cancel buttons. */}
+      {mode === 'edit' && existing && (
+        <div style={{
+          marginTop: 8, padding: 12,
+          border: '1px dashed #FCA5A5',
+          background: '#FEF2F2',
+          borderRadius: 8,
+        }}>
+          {dangerAction === null && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 13, color: '#991B1B' }}>Danger zone</div>
+                <div style={{ fontSize: 11, color: '#7F1D1D', marginTop: 2 }}>
+                  Scrap = item destroyed / written-off (kept in lists with a tag).
+                  Delete = removed from views (recoverable by admin).
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={() => { setScrapReason(''); setErr(null); setDangerAction('scrap') }}
+                  className="btn-outline btn-sm" style={{ color: '#92400E', borderColor: '#FCD34D' }}>
+                  Mark as scrapped
+                </button>
+                <button onClick={() => { setErr(null); setDangerAction('delete') }}
+                  className="btn-outline btn-sm" style={{ color: '#991B1B', borderColor: '#FCA5A5' }}>
+                  Delete item
+                </button>
+              </div>
+            </div>
+          )}
+
+          {dangerAction === 'scrap' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ fontWeight: 800, fontSize: 13, color: '#92400E' }}>Mark this item as scrapped?</div>
+              <div style={{ fontSize: 11, color: '#7F1D1D' }}>
+                The item stays visible with a scrapped pill. Cost is preserved for accounting.
+                It&apos;s excluded from in-stock counts and sellable filters (Edge, memos, invoices) automatically.
+                A reason note is required.
+              </div>
+              <textarea
+                rows={2}
+                value={scrapReason}
+                onChange={e => setScrapReason(e.target.value)}
+                placeholder="e.g. Stone fell out during cleaning; ring destroyed."
+                style={{ width: '100%', fontSize: 13, padding: 6 }}
+              />
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                <button onClick={() => setDangerAction(null)} className="btn-outline btn-sm" disabled={busy}>Cancel</button>
+                <button onClick={handleScrap} disabled={busy || !scrapReason.trim()} className="btn-primary btn-sm"
+                  style={{ background: '#92400E' }}>
+                  {busy ? 'Saving…' : 'Confirm scrap'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {dangerAction === 'delete' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ fontWeight: 800, fontSize: 13, color: '#991B1B' }}>Delete this item?</div>
+              <div style={{ fontSize: 11, color: '#7F1D1D' }}>
+                The item disappears from every default view. It&apos;s not hard-deleted —
+                an admin can clear <code>archived_at</code> via SQL if you change your mind.
+                If the item is real but destroyed, use <strong>Scrap</strong> instead so the
+                accounting history stays attached.
+              </div>
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                <button onClick={() => setDangerAction(null)} className="btn-outline btn-sm" disabled={busy}>Cancel</button>
+                <button onClick={handleDelete} disabled={busy} className="btn-primary btn-sm"
+                  style={{ background: '#991B1B' }}>
+                  {busy ? 'Deleting…' : 'Confirm delete'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
         <button onClick={onCancel} className="btn-outline btn-sm">Cancel</button>
@@ -1695,6 +1843,7 @@ function prettyAction(action: string): string {
     status_changed: 'Status changed',
     cost_edited: 'Cost edited',
     memo_converted: 'Converted to invoice',
+    scrapped: 'Scrapped',
     document_uploaded: 'Document uploaded',
     document_deleted: 'Document deleted',
     photo_uploaded: 'Photo uploaded',
