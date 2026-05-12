@@ -11,7 +11,11 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { MarketingCampaign, MarketingFlowType, MarketingStatus, Event } from '@/types'
 import CampaignDetail from './CampaignDetail'
+import CampaignsSheet from './CampaignsSheet'
 import NewCampaignModal from './NewCampaignModal'
+
+type CampaignsView = 'list' | 'sheet'
+const VIEW_STORAGE_KEY = 'beb.marketing_campaigns.view'
 
 const FLOW_LABELS: Record<MarketingFlowType, string> = {
   vdp:       'VDP',
@@ -51,6 +55,18 @@ export default function CampaignsList() {
   const [openId, setOpenId] = useState<string | null>(null)
   const [showNewModal, setShowNewModal] = useState(false)
   const [quickStartFlow, setQuickStartFlow] = useState<MarketingFlowType | null>(null)
+  // View toggle: List (default cards) vs. Sheet (table). Persisted per-browser.
+  const [view, setView] = useState<CampaignsView>('list')
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(VIEW_STORAGE_KEY)
+      if (raw === 'list' || raw === 'sheet') setView(raw)
+    } catch {}
+  }, [])
+  function selectView(v: CampaignsView) {
+    setView(v)
+    try { localStorage.setItem(VIEW_STORAGE_KEY, v) } catch {}
+  }
 
   async function load() {
     setLoading(true)
@@ -104,8 +120,32 @@ export default function CampaignsList() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 10, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 13, color: 'var(--mist)' }}>
-          {sorted.length === 0 ? 'No campaigns' : `${sorted.length} campaign${sorted.length === 1 ? '' : 's'}`}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ fontSize: 13, color: 'var(--mist)' }}>
+            {sorted.length === 0 ? 'No campaigns' : `${sorted.length} campaign${sorted.length === 1 ? '' : 's'}`}
+          </div>
+          {/* View toggle */}
+          <div style={{ display: 'inline-flex', gap: 0, border: '1px solid var(--pearl)', borderRadius: 8, overflow: 'hidden' }}>
+            {([
+              { id: 'list',  label: '📋 List' },
+              { id: 'sheet', label: '📊 Sheet' },
+            ] as Array<{ id: CampaignsView; label: string }>).map((opt, i) => {
+              const sel = view === opt.id
+              return (
+                <button key={opt.id} onClick={() => selectView(opt.id)} style={{
+                  fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
+                  padding: '5px 12px',
+                  border: 'none',
+                  borderLeft: i > 0 ? '1px solid var(--pearl)' : 'none',
+                  background: sel ? 'var(--green-pale)' : '#fff',
+                  color: sel ? 'var(--green-dark)' : 'var(--ash)',
+                  cursor: 'pointer',
+                }}>
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
         </div>
         <button className="btn-primary btn-sm" onClick={() => { setQuickStartFlow(null); setShowNewModal(true) }}>
           + New Campaign
@@ -114,6 +154,12 @@ export default function CampaignsList() {
 
       {loading ? (
         <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--mist)' }}>Loading…</div>
+      ) : view === 'sheet' ? (
+        <CampaignsSheet
+          campaigns={sorted}
+          onChanged={load}
+          onOpenCampaign={(id) => setOpenId(id)}
+        />
       ) : sorted.length === 0 ? (
         <EmptyState upcomingEvent={upcomingEvent}
           eventLabelFn={(ev) => {
