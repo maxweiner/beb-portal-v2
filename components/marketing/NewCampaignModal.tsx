@@ -19,12 +19,13 @@ const FLOW_OPTIONS: { value: MarketingFlowType; label: string; emoji: string; de
   { value: 'newspaper', label: 'Newspaper', emoji: '📰', description: 'Print ad in a publication' },
 ]
 
-type TimeFilter = 'all' | '0-60' | '60-90' | '91+'
+type TimeFilter = 'all' | '0-60' | '60-90' | '91+' | 'ignored'
 const TIME_FILTER_OPTIONS: { value: TimeFilter; label: string }[] = [
-  { value: 'all',   label: 'All' },
-  { value: '0-60',  label: '0-60 days' },
-  { value: '60-90', label: '60-90 days' },
-  { value: '91+',   label: '91+ days' },
+  { value: 'all',     label: 'All' },
+  { value: '0-60',    label: '0-60 days' },
+  { value: '60-90',   label: '60-90 days' },
+  { value: '91+',     label: '91+ days' },
+  { value: 'ignored', label: 'Show ignored' },
 ]
 // Note: newspaper campaigns reach Proofing / Payment / Done normally,
 // but the Planning section currently shows a "Newspaper flow is out of
@@ -55,6 +56,12 @@ export default function NewCampaignModal({
   // button to "Open existing →" so the user goes straight to the campaign
   // instead of the create → server-bounce → "open existing" round-trip.
   const [existingByKey, setExistingByKey] = useState<Map<string, string>>(new Map())
+  // Local overrides for marketing_ignored_at — toggled in this modal
+  // session. Keyed by event id → true/false. Overrides the value from
+  // AppContext until the modal is reopened (which resets and re-reads
+  // from context, which by then includes the fresh DB state).
+  const [localIgnoreOverrides, setLocalIgnoreOverrides] = useState<Map<string, boolean>>(new Map())
+  const [savingIgnoreId, setSavingIgnoreId] = useState<string | null>(null)
 
   useEffect(() => {
     if (open) {
@@ -62,9 +69,47 @@ export default function NewCampaignModal({
       setFlow(lockedFlow || 'vdp')
       setEventSearch('')
       setTimeFilter('all')
+      setLocalIgnoreOverrides(new Map())
       setError(null); setExistingId(null); setBusy(false)
     }
   }, [open, lockedEvent?.id, lockedFlow])
+
+  // True if the event is currently marked marketing-ignored. Consults
+  // local override first (so toggling reflects instantly), else the
+  // server-side marketing_ignored_at column.
+  const isIgnored = (ev: Event): boolean => {
+    if (localIgnoreOverrides.has(ev.id)) return !!localIgnoreOverrides.get(ev.id)
+    return ev.marketing_ignored_at != null
+  }
+
+  // Toggle marketing_ignored_at for an event. Posts to the admin
+  // endpoint, then updates the local override so the row vanishes
+  // (or reappears in the "Show ignored" view) immediately.
+  async function toggleIgnore(ev: Event, nextIgnored: boolean) {
+    setSavingIgnoreId(ev.id)
+    try {
+      const { data: sess } = await supabase.auth.getSession()
+      const token = sess.session?.access_token
+      const res = await fetch(`/api/marketing/events/${ev.id}/ignore`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ ignored: nextIgnored }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        alert(json.error || `Failed (${res.status})`)
+        return
+      }
+      setLocalIgnoreOverrides(prev => new Map(prev).set(ev.id, nextIgnored))
+      // If the user just ignored the currently-selected event, deselect.
+      if (nextIgnored && eventId === ev.id) setEventId('')
+    } finally {
+      setSavingIgnoreId(null)
+    }
+  }
 
   // Fetch all existing campaigns whenever the modal opens. The set is
   // small (hundreds at most), so one shot beats per-row lookups.
@@ -98,15 +143,16 @@ export default function NewCampaignModal({
   // narrows the dropdown by store name; when empty, cap to 50 so
   // the dropdown stays usable. Optional time-bucket filter (0-60 /
   // 60-90 / 91+ days out) trims to the relevant planning window
-  // before sort + search. Filter excludes past events (only 'all'
-  // shows them).
+  // before sort + search. Day-bucket filters exclude past events
+  // (only 'all' shows them). Marketing-ignored events are hidden
+  // from every filter except 'ignored', which shows ONLY them.
   const eventOptions = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10)
     const todayMs = new Date(today + 'T00:00:00Z').getTime()
     const daysOut = (d: string) =>
       Math.round((new Date(d + 'T00:00:00Z').getTime() - todayMs) / 86400000)
     const inTimeRange = (d: string): boolean => {
-      if (timeFilter === 'all') return true
+      if (timeFilter === 'all' || timeFilter === 'ignored') return true
       const days = daysOut(d)
       if (timeFilter === '0-60')  return days >= 0  && days <= 60
       if (timeFilter === '60-90') return days >= 61 && days <= 90
@@ -114,7 +160,12 @@ export default function NewCampaignModal({
       return true
     }
     const sorted = events
-      .filter(e => !!e.start_date && inTimeRange(e.start_date))
+      .filter(e => {
+        if (!e.start_date) return false
+        if (!inTimeRange(e.start_date)) return false
+        const ignored = isIgnored(e)
+        return timeFilter === 'ignored' ? ignored : !ignored
+      })
       .sort((a, b) => {
         const aFuture = a.start_date >= today
         const bFuture = b.start_date >= today
@@ -131,7 +182,7 @@ export default function NewCampaignModal({
       const name = (store?.name || ev.store_name || '').toLowerCase()
       return name.includes(q)
     }).slice(0, 100)
-  }, [events, stores, eventSearch, timeFilter])
+  }, [events, stores, eventSearch, timeFilter, localIgnoreOverrides])
 
   if (!open) return null
 
@@ -216,35 +267,71 @@ export default function NewCampaignModal({
               ) : eventOptions.map((ev, i) => {
                 const sel = eventId === ev.id
                 const hasExisting = existingByKey.has(`${ev.id}::${flow}`)
+                const viewingIgnored = timeFilter === 'ignored'
+                const saving = savingIgnoreId === ev.id
                 return (
-                  <button key={ev.id} type="button" onClick={() => setEventId(ev.id)} style={{
-                    display: 'flex', width: '100%', textAlign: 'left',
-                    alignItems: 'center', justifyContent: 'space-between', gap: 8,
-                    whiteSpace: 'normal',
-                    padding: '8px 12px',
-                    border: 'none',
+                  <div key={ev.id} style={{
+                    display: 'flex', alignItems: 'stretch', width: '100%',
                     borderBottom: i < eventOptions.length - 1 ? '1px solid var(--cream2)' : 'none',
-                    borderRadius: 0,
                     background: sel ? 'var(--green-pale)' : '#fff',
-                    color: sel ? 'var(--green-dark)' : (hasExisting ? 'var(--mist)' : 'var(--ink)'),
-                    fontWeight: sel ? 800 : 500,
-                    cursor: 'pointer', fontFamily: 'inherit', fontSize: 13,
                   }}>
-                    <span>
-                      {sel && <span style={{ marginRight: 6 }}>✓</span>}
-                      {eventLabel(ev)}
-                    </span>
-                    {hasExisting && (
-                      <span title={`A ${flow} campaign already exists for this event`} style={{
-                        flexShrink: 0, fontSize: 10, fontWeight: 700,
-                        padding: '2px 8px', borderRadius: 10,
-                        background: 'var(--cream2)', color: 'var(--ash)',
-                        letterSpacing: '.03em',
+                    <button type="button" onClick={() => !viewingIgnored && setEventId(ev.id)}
+                      disabled={viewingIgnored}
+                      style={{
+                        flex: 1, display: 'flex', textAlign: 'left',
+                        alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                        whiteSpace: 'normal',
+                        padding: '8px 12px',
+                        border: 'none', borderRadius: 0,
+                        background: 'transparent',
+                        color: sel ? 'var(--green-dark)' : (hasExisting || viewingIgnored ? 'var(--mist)' : 'var(--ink)'),
+                        fontWeight: sel ? 800 : 500,
+                        cursor: viewingIgnored ? 'default' : 'pointer',
+                        fontFamily: 'inherit', fontSize: 13,
                       }}>
-                        ✓ already exists
+                      <span>
+                        {sel && <span style={{ marginRight: 6 }}>✓</span>}
+                        {eventLabel(ev)}
                       </span>
-                    )}
-                  </button>
+                      {viewingIgnored ? (
+                        <span title="Marked as not getting a marketing campaign" style={{
+                          flexShrink: 0, fontSize: 10, fontWeight: 700,
+                          padding: '2px 8px', borderRadius: 10,
+                          background: 'var(--cream2)', color: 'var(--ash)',
+                          letterSpacing: '.03em',
+                        }}>
+                          🚫 ignored
+                        </span>
+                      ) : hasExisting && (
+                        <span title={`A ${flow} campaign already exists for this event`} style={{
+                          flexShrink: 0, fontSize: 10, fontWeight: 700,
+                          padding: '2px 8px', borderRadius: 10,
+                          background: 'var(--cream2)', color: 'var(--ash)',
+                          letterSpacing: '.03em',
+                        }}>
+                          ✓ already exists
+                        </span>
+                      )}
+                    </button>
+                    <button type="button"
+                      onClick={(e) => { e.stopPropagation(); void toggleIgnore(ev, !viewingIgnored) }}
+                      disabled={saving}
+                      title={viewingIgnored ? 'Restore — show this event in the picker again' : 'Ignore — hide this event from the picker (not a cancellation)'}
+                      style={{
+                        flexShrink: 0, alignSelf: 'center',
+                        fontSize: 11, fontWeight: 700,
+                        padding: '4px 10px', marginRight: 8,
+                        borderRadius: 6,
+                        border: '1px solid var(--pearl)',
+                        background: '#fff',
+                        color: viewingIgnored ? 'var(--green-dark)' : 'var(--mist)',
+                        cursor: saving ? 'wait' : 'pointer',
+                        opacity: saving ? 0.5 : 1,
+                        fontFamily: 'inherit',
+                      }}>
+                      {saving ? '…' : (viewingIgnored ? '↩ restore' : '✕ ignore')}
+                    </button>
+                  </div>
                 )
               })}
             </div>

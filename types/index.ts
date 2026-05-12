@@ -248,6 +248,11 @@ export interface Event {
   marketing_override_by_user_id?: string | null
   assets_override_at?: string | null
   assets_override_by_user_id?: string | null
+  /** Set when an admin/partner marks the event as not getting a
+   *  marketing campaign. Affects only the marketing module
+   *  (New Campaign modal hides ignored events by default).
+   *  See supabase-migration-events-marketing-ignored.sql. */
+  marketing_ignored_at?: string | null
 }
 
 // ── Trunk Communications + Pre-Event Checklist ───────────────
