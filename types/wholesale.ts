@@ -104,9 +104,13 @@ export interface InventoryItem {
   jewelry_metal_color: string | null
   jewelry_metal_karat: string | null
   jewelry_metal_dwt: number | null
-  jewelry_diamond_count: number | null
-  jewelry_diamond_total_ct: number | null
-  jewelry_diamond_shape: string | null
+  // Stones for a jewelry item live in the separate
+  // inventory_item_stones table (see InventoryItemStone below) —
+  // a piece can have any number of stone entries of any type.
+  // This array is populated only by detail-fetch paths that
+  // explicitly join the child table; list queries leave it
+  // undefined to stay cheap.
+  stones?: InventoryItemStone[]
   jewelry_size: string | null
   jewelry_length: string | null
   jewelry_hallmarks: string | null
@@ -157,6 +161,22 @@ export interface InventoryPhoto {
   caption: string | null
   sort_order: number
   uploaded_by: string | null
+  created_at: string
+}
+
+// One row per stone entry on a jewelry item. A piece can have any
+// number of these — e.g., a ring with 5 accent Diamonds + 1 center
+// Ruby is two rows. The renderer puts Diamond entries first in the
+// auto-description regardless of sort_order; sort_order controls
+// ordering only within the same stone-type group.
+export interface InventoryItemStone {
+  id: string
+  item_id: string
+  stone_type: string        // 'Diamond' | 'Ruby' | … or custom from the managed stone_type list
+  shape: string | null      // from the shared diamond_shape list
+  count: number | null
+  total_ct: number | null
+  sort_order: number
   created_at: string
 }
 

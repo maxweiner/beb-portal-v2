@@ -26,9 +26,16 @@ export interface AppraisalPdfData {
     jewelry_metal_color?: string | null
     jewelry_metal_karat?: string | null
     jewelry_metal_dwt?: number | null
-    jewelry_diamond_count?: number | null
-    jewelry_diamond_total_ct?: number | null
-    jewelry_diamond_shape?: string | null
+    // Stones moved to a child table in supabase-migration-jewelry-stones-table.sql.
+    // Caller is expected to pre-fetch and pass them in here for inclusion
+    // in the appraisal spec table.
+    stones?: Array<{
+      stone_type: string
+      shape: string | null
+      count: number | null
+      total_ct: number | null
+      sort_order: number
+    }>
     jewelry_size?: string | null
     jewelry_length?: string | null
     jewelry_hallmarks?: string | null
@@ -112,9 +119,23 @@ export function AppraisalPdfDoc({ data }: { data: AppraisalPdfData }) {
     if (item.jewelry_type) specs.push(['Type', item.jewelry_type])
     if (item.jewelry_metal_type)  specs.push(['Metal', `${item.jewelry_metal_color || ''} ${item.jewelry_metal_karat || ''} ${item.jewelry_metal_type}`.trim()])
     if (item.jewelry_metal_dwt) specs.push(['Metal weight', `${item.jewelry_metal_dwt} dwt`])
-    if (item.jewelry_diamond_count) specs.push(['Diamond count', String(item.jewelry_diamond_count)])
-    if (item.jewelry_diamond_total_ct) specs.push(['Diamond total weight', `${item.jewelry_diamond_total_ct} ct`])
-    if (item.jewelry_diamond_shape) specs.push(['Diamond shape', item.jewelry_diamond_shape])
+    // Stones: one spec row per stone entry. Diamonds-first ordering
+    // matches the Autofill description rule so the PDF and the public
+    // notes line read the same way. Each value reads like
+    // "Round, 5 stones, 0.50 ct tw" with blanks omitted.
+    const sortedStones = [...(item.stones || [])].sort((a, b) => {
+      const ga = a.stone_type === 'Diamond' ? 0 : 1
+      const gb = b.stone_type === 'Diamond' ? 0 : 1
+      if (ga !== gb) return ga - gb
+      return a.sort_order - b.sort_order
+    })
+    for (const s of sortedStones) {
+      const bits: string[] = []
+      if (s.shape)    bits.push(s.shape)
+      if (s.count)    bits.push(`${s.count} stone${s.count === 1 ? '' : 's'}`)
+      if (s.total_ct) bits.push(`${s.total_ct} ct tw`)
+      if (bits.length > 0) specs.push([s.stone_type, bits.join(', ')])
+    }
     if (item.jewelry_size)   specs.push(['Size', item.jewelry_size])
     if (item.jewelry_length) specs.push(['Length', item.jewelry_length])
     if (item.jewelry_hallmarks) specs.push(['Hallmarks', item.jewelry_hallmarks])

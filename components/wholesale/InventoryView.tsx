@@ -13,7 +13,7 @@ import { supabase } from '@/lib/supabase'
 import type {
   InventoryItem, InventoryCategory, InventoryStatus, DiamondLabType,
   WholesaleVendor, WholesaleCustomer, InventoryLocation, InventoryPhoto, InventoryDocument,
-  WholesaleAuditLogEntry,
+  InventoryItemStone, WholesaleAuditLogEntry,
 } from '@/types/wholesale'
 import { fmtMoneyCents, dollarsToCents, centsToDollarsString, fmtDate, fmtDateTime, marginPct } from '@/lib/wholesale/format'
 import { nextWholesaleNumber, prefixForCategory } from '@/lib/wholesale/numbers'
@@ -45,6 +45,11 @@ const CATEGORY_LABEL: Record<InventoryCategory, string> = {
 
 const LIST_KEYS = [
   'jewelry_type','metal_type','metal_color','metal_karat','diamond_shape','period_era',
+  // 'stone_type' backs the jewelry multi-stone block (seeded with
+  // Diamond/Ruby/Emerald/Sapphire/Aquamarine/Garnet; the "+ Add new"
+  // option in the picker inserts into wholesale_admin_lists so the
+  // new value shows up for every other item from then on).
+  'stone_type',
   'watch_brand','watch_band_style','watch_movement','watch_case_material','watch_condition',
 ] as const
 
@@ -749,10 +754,69 @@ function ItemDetailModal({
  *  fields (and their literal labels) are skipped entirely.
  *  Designed to be re-runnable: clicking the button overwrites the
  *  current public_notes field. */
+/** Pluralize a stone type for the auto-description. Seeded six get
+ *  their proper plurals hardcoded; "Add new" customs get a simple "s"
+ *  suffix — the user can edit the result post-Autofill if they want
+ *  a non-standard plural (Topaz → Topazes, etc.). */
+export function pluralizeStone(stone: string, count: number): string {
+  if (count === 1) return stone
+  switch (stone) {
+    case 'Diamond':    return 'Diamonds'
+    case 'Ruby':       return 'Rubies'
+    case 'Emerald':    return 'Emeralds'
+    case 'Sapphire':   return 'Sapphires'
+    case 'Aquamarine': return 'Aquamarines'
+    case 'Garnet':     return 'Garnets'
+    default:           return stone + 's'
+  }
+}
+
+/** Build the per-stone clauses used inside the Autofill description.
+ *  Order rule: Diamond entries first (industry convention), then every
+ *  other stone in user-added order. Each clause is "{N} {Pluralized}
+ *  ~ {X} ct tw" with each piece optional — a stone with no count and
+ *  no carat weight is skipped entirely. Exported so the appraisal PDF
+ *  helper can share the same shape. */
+export function stoneClauses(
+  stones: Array<{ stone_type: string; count: string | number | null; total_ct: string | number | null; sort_order?: number }>,
+): string[] {
+  const trim = (v: any) => String(v ?? '').trim()
+  // Stable sort: Diamond=0, others=1, ties broken by sort_order then
+  // by original index so non-diamonds keep their user-added order.
+  const indexed = stones.map((s, i) => ({ s, i }))
+  indexed.sort((a, b) => {
+    const ga = a.s.stone_type === 'Diamond' ? 0 : 1
+    const gb = b.s.stone_type === 'Diamond' ? 0 : 1
+    if (ga !== gb) return ga - gb
+    const oa = a.s.sort_order ?? a.i
+    const ob = b.s.sort_order ?? b.i
+    return oa - ob
+  })
+
+  const clauses: string[] = []
+  for (const { s } of indexed) {
+    const countStr = trim(s.count)
+    const ctStr    = trim(s.total_ct)
+    if (!countStr && !ctStr) continue
+    const pieces: string[] = []
+    if (countStr) {
+      const n = Number(countStr)
+      const label = Number.isFinite(n) ? pluralizeStone(s.stone_type, n) : pluralizeStone(s.stone_type, 2)
+      pieces.push(`${countStr} ${label}`)
+    } else if (s.stone_type) {
+      // Carat weight but no count — still mention the stone.
+      pieces.push(pluralizeStone(s.stone_type, 2))
+    }
+    if (ctStr) pieces.push(`${ctStr} ct tw`)
+    clauses.push(pieces.join(' ~ '))
+  }
+  return clauses
+}
+
 export function autoJewelryDescription(f: {
   karat?: string; color?: string; metal?: string
   period?: string; type?: string
-  diamond_count?: string; total_ct?: string
+  stones?: Array<{ stone_type: string; count: string | number | null; total_ct: string | number | null; sort_order?: number }>
   dwt?: string; designer?: string
   length?: string; size?: string; hallmarks?: string
 }): string {
@@ -764,11 +828,9 @@ export function autoJewelryDescription(f: {
     .filter(Boolean).join(' ')
   if (head) parts.push(head)
 
-  // Diamonds clause: "{N} Diamonds ~ {X} ct tw" — each piece optional
-  const dPieces: string[] = []
-  if (trim(f.diamond_count)) dPieces.push(`${trim(f.diamond_count)} Diamonds`)
-  if (trim(f.total_ct))      dPieces.push(`${trim(f.total_ct)} ct tw`)
-  if (dPieces.length > 0) parts.push(dPieces.join(' ~ '))
+  // Stone clauses, Diamonds-first then user-added order (see
+  // stoneClauses for details).
+  for (const c of stoneClauses(f.stones || [])) parts.push(c)
 
   if (trim(f.dwt))       parts.push(`${trim(f.dwt)} dwt`)
   if (trim(f.designer))  parts.push(trim(f.designer))
@@ -831,9 +893,19 @@ function ItemForm({
   const [metal_color, setMetalColor]     = useState(existing?.jewelry_metal_color || '')
   const [metal_karat, setKarat]          = useState(existing?.jewelry_metal_karat || '')
   const [metal_dwt, setDwt]              = useState(existing?.jewelry_metal_dwt != null ? String(existing.jewelry_metal_dwt) : '')
-  const [d_count, setDCount]             = useState(existing?.jewelry_diamond_count != null ? String(existing.jewelry_diamond_count) : '')
-  const [d_total, setDTotal]             = useState(existing?.jewelry_diamond_total_ct != null ? String(existing.jewelry_diamond_total_ct) : '')
-  const [d_shape_jew, setDShapeJew]      = useState(existing?.jewelry_diamond_shape || '')
+  // Jewelry stones — child rows in inventory_item_stones. The form
+  // holds them as draft objects (count/total_ct as strings for input
+  // controls); the save handler diffs against `existing` and applies
+  // the smallest set of INSERT/UPDATE/DELETE statements. A row in the
+  // draft list with id === null is a NEW stone (added in this session).
+  // The StoneDraft shape lives at module level alongside StonesEditor.
+  const [stones, setStones] = useState<StoneDraft[]>([])
+  const [stonesLoaded, setStonesLoaded] = useState(false)
+  // Tracks the ids we received from the server on load — anything in
+  // this set that's NOT in the current `stones` array at save time
+  // gets DELETEd. Adding a stone + removing it client-side before save
+  // leaves no trace (its id was never in this set).
+  const initialStoneIdsRef = useRef<Set<string>>(new Set())
   const [j_size, setJSize]               = useState(existing?.jewelry_size || '')
   const [j_length, setJLength]           = useState(existing?.jewelry_length || '')
   const [j_hallmarks, setJHallmarks]     = useState(existing?.jewelry_hallmarks || '')
@@ -872,6 +944,46 @@ function ItemForm({
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [rapnetLoading, setRapnetLoading] = useState(false)
+
+  // Load existing stones for jewelry items being edited. New-item flow
+  // starts with an empty array. Skipped quietly for non-jewelry items
+  // since they don't render the stones section.
+  useEffect(() => {
+    let cancelled = false
+    async function loadStones() {
+      if (mode !== 'edit' || !existing?.id || category !== 'jewelry') {
+        setStonesLoaded(true)
+        return
+      }
+      const { data, error } = await supabase
+        .from('inventory_item_stones')
+        .select('*')
+        .eq('item_id', existing.id)
+        .order('sort_order', { ascending: true })
+      if (cancelled) return
+      if (error) {
+        // Don't block the form — surface in the error banner and let
+        // the user save other fields. The stones section will just
+        // appear empty.
+        setErr(`Couldn't load stones: ${error.message}`)
+        setStonesLoaded(true)
+        return
+      }
+      const rows = (data || []) as InventoryItemStone[]
+      initialStoneIdsRef.current = new Set(rows.map(r => r.id))
+      setStones(rows.map(r => ({
+        id: r.id,
+        stone_type: r.stone_type,
+        shape: r.shape || '',
+        count: r.count != null ? String(r.count) : '',
+        total_ct: r.total_ct != null ? String(r.total_ct) : '',
+        sort_order: r.sort_order,
+      })))
+      setStonesLoaded(true)
+    }
+    void loadStones()
+    return () => { cancelled = true }
+  }, [mode, existing?.id, category])
 
   const costCents = dollarsToCents(cost)
   const wholesaleCents = dollarsToCents(wholesale)
@@ -948,9 +1060,9 @@ function ItemForm({
           jewelry_metal_color: metal_color || null,
           jewelry_metal_karat: metal_karat || null,
           jewelry_metal_dwt: metal_dwt ? Number(metal_dwt) : null,
-          jewelry_diamond_count: d_count ? Number(d_count) : null,
-          jewelry_diamond_total_ct: d_total ? Number(d_total) : null,
-          jewelry_diamond_shape: d_shape_jew || null,
+          // Stones are saved as a separate child-table sync below,
+          // not as flat columns. Old `jewelry_diamond_*` columns
+          // were dropped in supabase-migration-jewelry-stones-table.sql.
           jewelry_size: j_size || null,
           jewelry_length: j_length || null,
           jewelry_hallmarks: j_hallmarks || null,
@@ -993,13 +1105,17 @@ function ItemForm({
         })
       }
 
+      // Resolve the item id we'll attach stones to (insert returns
+      // the new row's id; edit reuses the existing one).
+      let savedItemId: string
       if (mode === 'new') {
         payload.created_by = actorId
         payload.updated_by = actorId
         const { data, error } = await supabase.from('inventory_items').insert(payload).select('*').single()
         if (error) throw new Error(error.message)
+        savedItemId = (data as any).id
         await logAudit({
-          brand, entity_type: 'inventory_item', entity_id: (data as any).id,
+          brand, entity_type: 'inventory_item', entity_id: savedItemId,
           action: 'created', after: { item_number: itemNumber, category },
           actor_id: actorId, actor_email: actorEmail,
         })
@@ -1007,6 +1123,7 @@ function ItemForm({
         payload.updated_by = actorId
         const { error } = await supabase.from('inventory_items').update(payload).eq('id', existing!.id)
         if (error) throw new Error(error.message)
+        savedItemId = existing!.id
         const tracked = [
           'status','gender','cost_cents','wholesale_price_cents','retail_price_cents','insurance_value_cents',
           'public_notes','internal_notes','vendor_id','vendor_stock_number','vendor_invoice_number','memo_in',
@@ -1023,6 +1140,56 @@ function ItemForm({
           })
         }
       }
+
+      // Sync stones (jewelry only). Three-way diff against the
+      // snapshot we captured on load: rows with id present + still
+      // in the draft → UPDATE; rows in the draft with id === null →
+      // INSERT; ids that were on the server but no longer in the
+      // draft → DELETE. Cheap because stones-per-item is small
+      // (handful at most). Run after the parent save so the FK to
+      // inventory_items always resolves (new items got their id
+      // back above; edits already had one).
+      if (category === 'jewelry') {
+        const presentIds = new Set(
+          stones.filter(s => s.id != null).map(s => s.id as string),
+        )
+        const toDelete = Array.from(initialStoneIdsRef.current).filter(id => !presentIds.has(id))
+        if (toDelete.length > 0) {
+          const { error: delErr } = await supabase
+            .from('inventory_item_stones')
+            .delete()
+            .in('id', toDelete)
+          if (delErr) throw new Error(`Stones delete failed: ${delErr.message}`)
+        }
+
+        // Re-stamp sort_order from the current array index so it
+        // matches what the user sees on the screen, regardless of
+        // any add/remove churn during editing.
+        for (let i = 0; i < stones.length; i++) {
+          const s = stones[i]
+          const row = {
+            item_id:    savedItemId,
+            stone_type: s.stone_type,
+            shape:      s.shape || null,
+            count:      s.count    ? Number(s.count)    : null,
+            total_ct:   s.total_ct ? Number(s.total_ct) : null,
+            sort_order: i,
+          }
+          if (s.id) {
+            const { error: upErr } = await supabase
+              .from('inventory_item_stones')
+              .update(row)
+              .eq('id', s.id)
+            if (upErr) throw new Error(`Stones update failed: ${upErr.message}`)
+          } else {
+            const { error: insErr } = await supabase
+              .from('inventory_item_stones')
+              .insert(row)
+            if (insErr) throw new Error(`Stones insert failed: ${insErr.message}`)
+          }
+        }
+      }
+
       onSaved()
     } catch (e: any) {
       setErr(e?.message || 'Save failed')
@@ -1119,17 +1286,22 @@ function ItemForm({
             <Field label="DWT"><input type="number" step="0.01" value={metal_dwt} onChange={e => setDwt(e.target.value)} /></Field>
           </Row>
           <Row>
-            <Field label="Diamond count"><input type="number" value={d_count} onChange={e => setDCount(e.target.value)} /></Field>
-            <Field label="Total ct"><input type="number" step="0.001" value={d_total} onChange={e => setDTotal(e.target.value)} /></Field>
-            <Field label="Diamond shape"><DropdownSelect value={d_shape_jew} options={lists.diamond_shape || []} onChange={setDShapeJew} /></Field>
             <Field label="Period / era"><DropdownSelect value={j_period} options={lists.period_era || []} onChange={setJPeriod} /></Field>
-          </Row>
-          <Row>
             <Field label="Size"><input type="text" value={j_size} onChange={e => setJSize(e.target.value)} /></Field>
             <Field label="Length"><input type="text" value={j_length} onChange={e => setJLength(e.target.value)} /></Field>
             <Field label="Designer / maker"><input type="text" value={j_designer} onChange={e => setJDesigner(e.target.value)} /></Field>
+          </Row>
+          <Row>
             <Field label="Hallmarks"><input type="text" value={j_hallmarks} onChange={e => setJHallmarks(e.target.value)} /></Field>
           </Row>
+          <StonesEditor
+            stones={stones}
+            onChange={setStones}
+            stoneTypeOptions={lists.stone_type || []}
+            shapeOptions={lists.diamond_shape || []}
+            brand={brand}
+            disabled={!stonesLoaded}
+          />
         </Section>
       )}
 
@@ -1209,12 +1381,17 @@ function ItemForm({
             <button type="button" onClick={() => setPublic(autoJewelryDescription({
               karat: metal_karat, color: metal_color, metal: metal_type,
               period: j_period, type: jewelry_type,
-              diamond_count: d_count, total_ct: d_total,
+              stones: stones.map(s => ({
+                stone_type: s.stone_type,
+                count:      s.count,
+                total_ct:   s.total_ct,
+                sort_order: s.sort_order,
+              })),
               dwt: metal_dwt, designer: j_designer, length: j_length,
               size: j_size, hallmarks: j_hallmarks,
             }))}
               className="btn-outline btn-xs" style={{ marginTop: 4 }}
-              title="Build the description from the fields above (karat, color, metal, period, type, diamonds, dwt, designer, length, size, hallmarks). Blank fields are skipped."
+              title="Build the description from the fields above (karat, color, metal, period, type, stones, dwt, designer, length, size, hallmarks). Blank fields are skipped. Diamond entries render first."
             >✨ Auto-fill from fields</button>
           )}
         </Field>
@@ -1726,5 +1903,185 @@ export function DropdownSelect({ value, options, onChange }: { value: string; op
       {options.map(o => <option key={o} value={o}>{o}</option>)}
       {value && !options.includes(value) && <option value={value}>{value} (custom)</option>}
     </Select>
+  )
+}
+
+/* ──────────────────────── stones editor ───────────────────────── */
+
+type StoneDraft = {
+  id: string | null
+  stone_type: string
+  shape: string
+  count: string
+  total_ct: string
+  sort_order: number
+}
+
+/** Multi-stone editor for the jewelry item form. Starts empty —
+ *  user clicks "+ Add stone", picks a type from the managed
+ *  stone_type list (or "+ Add new…" to extend that list), and
+ *  Shape / Count / Carat tw fields appear inline for that row.
+ *  Saves are coordinated by the parent (see the sync block in
+ *  the save() handler of ItemForm); this component only edits
+ *  the draft array. */
+function StonesEditor({
+  stones, onChange, stoneTypeOptions, shapeOptions, brand, disabled,
+}: {
+  stones: StoneDraft[]
+  onChange: (next: StoneDraft[]) => void
+  stoneTypeOptions: string[]
+  shapeOptions: string[]
+  brand: string
+  disabled?: boolean
+}) {
+  // Inline picker visibility for the "+ Add stone" affordance. The
+  // picker is just a dropdown with the seeded list + "+ Add new…"
+  // at the bottom; selecting it prompts for a custom type name and
+  // INSERTs into wholesale_admin_lists so other items see it too.
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [adding, setAdding] = useState(false)
+
+  async function addStone(type: string) {
+    onChange([
+      ...stones,
+      {
+        id: null,
+        stone_type: type,
+        shape: '',
+        count: '',
+        total_ct: '',
+        sort_order: stones.length,
+      },
+    ])
+    setPickerOpen(false)
+  }
+
+  async function promptAddNewType() {
+    const raw = window.prompt('New stone type (e.g. Topaz, Opal, Tanzanite)')
+    if (!raw) { setPickerOpen(false); return }
+    const value = raw.trim()
+    if (!value) { setPickerOpen(false); return }
+    setAdding(true)
+    try {
+      // Persist to the managed list so future items see it. Idempotent
+      // via the unique index (brand, list_key, value) — ON CONFLICT
+      // DO NOTHING semantics via upsert with ignoreDuplicates.
+      const { error } = await supabase
+        .from('wholesale_admin_lists')
+        .upsert(
+          { brand, list_key: 'stone_type', value, active: true, sort_order: 999 },
+          { onConflict: 'brand,list_key,value', ignoreDuplicates: true },
+        )
+      if (error) {
+        // Don't block the add — fall through and stage the stone on
+        // this item even if the list write failed. Most likely cause
+        // is RLS; the user can fix permissions and the value still
+        // appears on this item.
+        // eslint-disable-next-line no-console
+        console.warn('stone_type list insert failed:', error.message)
+      }
+      await addStone(value)
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  function patchStone(idx: number, patch: Partial<StoneDraft>) {
+    onChange(stones.map((s, i) => i === idx ? { ...s, ...patch } : s))
+  }
+
+  function removeStone(idx: number) {
+    onChange(stones.filter((_, i) => i !== idx))
+  }
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
+      }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+          Stones
+        </div>
+        <div style={{ flex: 1 }} />
+        {!pickerOpen && (
+          <button type="button" className="btn-outline btn-xs"
+            disabled={disabled || adding}
+            onClick={() => setPickerOpen(true)}>
+            + Add stone
+          </button>
+        )}
+        {pickerOpen && (
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <Select
+              value=""
+              onChange={(v) => {
+                if (v === '__add_new__') {
+                  void promptAddNewType()
+                } else if (v) {
+                  void addStone(v)
+                }
+              }}
+            >
+              <option value="">— pick stone —</option>
+              {stoneTypeOptions.map(o => <option key={o} value={o}>{o}</option>)}
+              <option value="__add_new__">+ Add new…</option>
+            </Select>
+            <button type="button" className="btn-outline btn-xs"
+              onClick={() => setPickerOpen(false)}>
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
+
+      {stones.length === 0 && (
+        <div style={{ fontSize: 12, color: 'var(--mist)', fontStyle: 'italic' }}>
+          No stones. Click "+ Add stone" if this piece has any.
+        </div>
+      )}
+
+      {stones.map((s, idx) => (
+        <div key={s.id || `new-${idx}`}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '160px 1fr 80px 100px 28px',
+            gap: 6, alignItems: 'center', marginBottom: 6,
+          }}>
+          {/* Stone type — read-only label once added; to change type
+              the user removes and re-adds. Keeps the picker simple. */}
+          <div style={{
+            padding: '6px 8px', background: 'var(--cream2)',
+            border: '1px solid var(--pearl)', borderRadius: 4,
+            fontSize: 13, fontWeight: 600,
+          }}>
+            {s.stone_type}
+          </div>
+          <DropdownSelect
+            value={s.shape}
+            options={shapeOptions}
+            onChange={(v) => patchStone(idx, { shape: v })}
+          />
+          <input
+            type="number" min={0} step={1}
+            value={s.count}
+            placeholder="Count"
+            onChange={(e) => patchStone(idx, { count: e.target.value })}
+          />
+          <input
+            type="number" min={0} step={0.001}
+            value={s.total_ct}
+            placeholder="ct tw"
+            onChange={(e) => patchStone(idx, { total_ct: e.target.value })}
+          />
+          <button type="button"
+            title="Remove this stone"
+            onClick={() => removeStone(idx)}
+            style={{
+              background: 'transparent', border: 'none', color: 'var(--mist)',
+              cursor: 'pointer', fontSize: 18, padding: 0,
+            }}>×</button>
+        </div>
+      ))}
+    </div>
   )
 }
