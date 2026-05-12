@@ -162,6 +162,15 @@ export interface Store {
   owner_name?: string
   owner_phone?: string
   owner_email?: string
+  /** Store's main public-facing phone line (distinct from owner_phone,
+   *  which is the owner's personal contact). Used on marketing
+   *  materials. Stored raw 10-digit; UI formats with dashes. */
+  store_phone?: string
+  /** QUO tracking number for marketing materials (postcards, ads).
+   *  Surfaces under the store name on the marketing campaign detail
+   *  page so the marketer can read it off without context-switching.
+   *  Stored raw 10-digit; UI formats with dashes. */
+  quo_phone_number?: string
   calendar_feed_url?: string
   calendar_offset_hours?: number
   store_image_url?: string
