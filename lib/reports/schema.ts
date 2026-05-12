@@ -171,7 +171,7 @@ export const SOURCES: Record<string, SourceDef> = {
       { key: 'address', label: 'Address', type: 'text' },
       { key: 'owner_name', label: 'Owner', type: 'text' },
       { key: 'owner_email', label: 'Owner email', type: 'text' },
-      { key: 'owner_phone', label: 'Owner phone', type: 'text' },
+      { key: 'owner_mobile_phone', label: 'Owner phone', type: 'text' },
     ],
   },
 }

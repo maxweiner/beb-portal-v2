@@ -160,10 +160,14 @@ export interface Store {
   website?: string
   notes?: string
   owner_name?: string
-  owner_phone?: string
+  /** Owner's personal mobile phone — manually entered, distinct from
+   *  `store_phone` (the business's public-facing line auto-filled
+   *  from Google Places). Was named `owner_mobile_phone` historically;
+   *  renamed via supabase-migration-rename-owner-phone.sql. */
+  owner_mobile_phone?: string
   owner_email?: string
-  /** Store's main public-facing phone line (distinct from owner_phone,
-   *  which is the owner's personal contact). Used on marketing
+  /** Store's main public-facing phone line, auto-filled from Google
+   *  Places on store creation + address update. Used on marketing
    *  materials. Stored raw 10-digit; UI formats with dashes. */
   store_phone?: string
   /** BEB scheduling phone — the number printed on this store's

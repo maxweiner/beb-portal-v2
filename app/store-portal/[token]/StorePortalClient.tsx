@@ -224,9 +224,9 @@ export default function StorePortalClient({
           </div>
           <div className="flex-1 min-w-0">
             <h1 className="text-2xl font-extrabold leading-tight" style={{ color: primary }}>{store.name}</h1>
-            {(store.owner_phone || store.owner_email) && (
+            {(store.owner_mobile_phone || store.owner_email) && (
               <div className="text-sm text-gray-700 mt-1 leading-snug">
-                {store.owner_phone && <div>{formatPhoneDisplay(store.owner_phone)}</div>}
+                {store.owner_mobile_phone && <div>{formatPhoneDisplay(store.owner_mobile_phone)}</div>}
                 {store.owner_email && <div className="break-all">{store.owner_email}</div>}
               </div>
             )}

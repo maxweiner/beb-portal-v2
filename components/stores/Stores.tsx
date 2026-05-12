@@ -40,7 +40,7 @@ export default function Stores() {
   const [showInactive, setShowInactive] = useState(false)
   const [saving, setSaving] = useState(false)
   const [newStore, setNewStore] = useState({
-    name: '', address: '', city: '', state: '', zip: '', lat: 0, lng: 0, website: '', owner_phone: ''
+    name: '', address: '', city: '', state: '', zip: '', lat: 0, lng: 0, website: '', store_phone: ''
   })
   const [placePicked, setPlacePicked] = useState(false)
   const [sort, setSort] = useState<'name' | 'state' | 'spent'>('name')
@@ -103,7 +103,10 @@ export default function Stores() {
       lat: data.lat,
       lng: data.lng,
       website: data.website || '',
-      owner_phone: rawDigits(data.phone || ''),
+      // Places-sourced phone is the BUSINESS's main line, not the
+      // owner's personal mobile. Goes to store_phone now (was
+      // historically miscategorized as owner_phone).
+      store_phone: rawDigits(data.phone || ''),
     }))
     setPlacePicked(true)
   }
@@ -124,7 +127,7 @@ export default function Stores() {
 
       // Reset form
       setShowForm(false)
-      setNewStore({ name: '', address: '', city: '', state: '', zip: '', lat: 0, lng: 0, website: '', owner_phone: '' })
+      setNewStore({ name: '', address: '', city: '', state: '', zip: '', lat: 0, lng: 0, website: '', store_phone: '' })
       setPlacePicked(false)
 
       // Re-fetch stores directly with a fresh slim query.
@@ -205,7 +208,7 @@ export default function Stores() {
                 <div style={{ fontWeight: 700, marginBottom: 4 }}>✓ {newStore.name}</div>
                 <div style={{ fontSize: 13 }}>{newStore.address}, {newStore.city}, {newStore.state} {newStore.zip}</div>
                 {newStore.website && <div style={{ fontSize: 12, marginTop: 2 }}>🌐 {newStore.website}</div>}
-                {newStore.owner_phone && <div style={{ fontSize: 12 }}>📞 {formatPhoneDisplay(newStore.owner_phone)}</div>}
+                {newStore.store_phone && <div style={{ fontSize: 12 }}>📞 {formatPhoneDisplay(newStore.store_phone)}</div>}
               </div>
             )}
 
@@ -357,6 +360,7 @@ function StoreModal({ store, onClose, refetchStores, onDelete }: {
       notes: details.notes,
       store_phone: details.store_phone,
       beb_scheduling_phone: details.beb_scheduling_phone,
+      owner_mobile_phone: details.owner_mobile_phone,
     },
     async (d) => {
       const { error } = await withTimeout(
@@ -369,6 +373,7 @@ function StoreModal({ store, onClose, refetchStores, onDelete }: {
           // onChange, so no extra normalization needed here.
           store_phone: d.store_phone || null,
           beb_scheduling_phone: d.beb_scheduling_phone || null,
+          owner_mobile_phone: d.owner_mobile_phone || null,
         }).eq('id', store.id)
       )
       if (error) throw error
@@ -480,6 +485,10 @@ function StoreModal({ store, onClose, refetchStores, onDelete }: {
                   state: data.state,
                   zip: data.zip,
                   website: data.website || p.website,
+                  // Auto-fill store_phone from Places when present.
+                  // Don't overwrite a manually-set value — only fill
+                  // if the field is currently empty.
+                  store_phone: p.store_phone || rawDigits(data.phone || ''),
                 }))
               }} />
             </div>
@@ -497,10 +506,12 @@ function StoreModal({ store, onClose, refetchStores, onDelete }: {
               <div />
             </div>
 
-            {/* Phone numbers: Store's main line + QUO tracking number
-                used on marketing materials. Raw 10-digit storage;
-                PhoneInput renders / accepts with dashes. */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            {/* Phone numbers — three fields:
+                - Store Telephone Number      = business public line (Places auto-fills)
+                - BEB Scheduling Tel #        = QUO tracking number for marketing
+                - Owner Mobile Phone          = owner's personal cell (manual)
+                Raw 10-digit storage; PhoneInput renders / accepts with dashes. */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
               <div className="field">
                 <label className="fl">Store Telephone Number</label>
                 <PhoneInput
@@ -513,6 +524,13 @@ function StoreModal({ store, onClose, refetchStores, onDelete }: {
                 <PhoneInput
                   value={details.beb_scheduling_phone || ''}
                   onChange={v => setDetails((p: any) => ({ ...p, beb_scheduling_phone: v }))}
+                />
+              </div>
+              <div className="field">
+                <label className="fl">Owner Mobile Phone</label>
+                <PhoneInput
+                  value={details.owner_mobile_phone || ''}
+                  onChange={v => setDetails((p: any) => ({ ...p, owner_mobile_phone: v }))}
                 />
               </div>
             </div>
@@ -1124,7 +1142,7 @@ function NewContactRows({ onAdd }: { onAdd: (c: { name: string; phone: string; e
 
 /* ── ADDRESS UPDATE BUTTON ── */
 function AddressUpdateButton({ onSelect }: {
-  onSelect: (data: { address: string; city: string; state: string; zip: string; website?: string; lat?: number; lng?: number }) => void
+  onSelect: (data: { address: string; city: string; state: string; zip: string; website?: string; lat?: number; lng?: number; phone?: string }) => void
 }) {
   const [open, setOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -1135,13 +1153,16 @@ function AddressUpdateButton({ onSelect }: {
     const autocomplete = new (window as any).google.maps.places.Autocomplete(inputRef.current, {
       types: ['establishment'],
       componentRestrictions: { country: 'us' },
-      fields: ['address_components', 'geometry', 'website'],
+      // Pull phone too so callers can auto-fill the store_phone column
+      // from Places without a second round-trip.
+      fields: ['address_components', 'geometry', 'website', 'formatted_phone_number', 'international_phone_number'],
     })
     autocomplete.addListener('place_changed', () => {
       const place = autocomplete.getPlace()
       if (!place.address_components) return
       const addr = parsePlaceAddress(place)
-      onSelect({ ...addr, website: place.website || '' })
+      const phone = place.formatted_phone_number || place.international_phone_number || ''
+      onSelect({ ...addr, website: place.website || '', phone })
       setOpen(false)
     })
   }, [open, mapsLoaded])

@@ -31,7 +31,7 @@ export interface AppointmentForNotify {
 export interface StoreForNotify {
   name: string
   slug: string | null
-  owner_phone?: string | null
+  owner_mobile_phone?: string | null
   owner_email?: string | null
 }
 
@@ -123,7 +123,7 @@ export async function sendConfirmation({ appt, store }: SendArgs) {
   const vars: Record<string, string> = {
     customer_name: appt.customer_name,
     store_name: store.name,
-    store_phone: store.owner_phone || '',
+    store_phone: store.owner_mobile_phone || '',
     store_email: store.owner_email || '',
     date, time, manage_link: link,
   }
@@ -180,7 +180,7 @@ export async function sendCancellation({ appt, store, skipSms = false }: SendArg
   const vars: Record<string, string> = {
     customer_name: appt.customer_name,
     store_name: store.name,
-    store_phone: store.owner_phone || '',
+    store_phone: store.owner_mobile_phone || '',
     store_email: store.owner_email || '',
     date, time, rebook_link: rebookLink,
   }
@@ -238,7 +238,7 @@ export async function sendReminder({ appt, store, hours }: SendArgs & { hours: 2
   const vars: Record<string, string> = {
     customer_name: appt.customer_name,
     store_name: store.name,
-    store_phone: store.owner_phone || '',
+    store_phone: store.owner_mobile_phone || '',
     store_email: store.owner_email || '',
     date, time, manage_link: link,
   }
