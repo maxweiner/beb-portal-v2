@@ -108,11 +108,16 @@ export async function sendDailyBriefing(args: {
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
   const weekAhead = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
 
+  // Exclude cancelled events. Mirrors the canonical filter used in
+  // lib/context.tsx (events.status='cancelled' OR events.cancelled_at
+  // IS NOT NULL both indicate a cancelled event — check both).
   const { data: events } = await sb.from('events')
     .select('*, days:event_days(*)')
     .eq('brand', brand)
     .gte('start_date', weekAgo)
     .lte('start_date', weekAhead)
+    .neq('status', 'cancelled')
+    .is('cancelled_at', null)
     .order('start_date')
 
   if (!events || events.length === 0) return { brand, skipped: 'no active events' }
