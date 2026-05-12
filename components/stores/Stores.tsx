@@ -355,7 +355,7 @@ function StoreModal({ store, onClose, refetchStores, onDelete }: {
       zip: details.zip,
       notes: details.notes,
       store_phone: details.store_phone,
-      quo_phone_number: details.quo_phone_number,
+      beb_scheduling_phone: details.beb_scheduling_phone,
     },
     async (d) => {
       const { error } = await withTimeout(
@@ -367,7 +367,7 @@ function StoreModal({ store, onClose, refetchStores, onDelete }: {
           // already strips dashes via rawDigits() before calling
           // onChange, so no extra normalization needed here.
           store_phone: d.store_phone || null,
-          quo_phone_number: d.quo_phone_number || null,
+          beb_scheduling_phone: d.beb_scheduling_phone || null,
         }).eq('id', store.id)
       )
       if (error) throw error
@@ -508,10 +508,10 @@ function StoreModal({ store, onClose, refetchStores, onDelete }: {
                 />
               </div>
               <div className="field">
-                <label className="fl">QUO Telephone Number</label>
+                <label className="fl">BEB Scheduling Tel #</label>
                 <PhoneInput
-                  value={details.quo_phone_number || ''}
-                  onChange={v => setDetails((p: any) => ({ ...p, quo_phone_number: v }))}
+                  value={details.beb_scheduling_phone || ''}
+                  onChange={v => setDetails((p: any) => ({ ...p, beb_scheduling_phone: v }))}
                 />
               </div>
             </div>

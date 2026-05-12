@@ -175,13 +175,13 @@ export default function CampaignDetail({ campaign, onBack, onChanged, onDeleted 
         {/* Phones used on marketing materials. Surface here so the
             marketer can pull the right numbers without leaving the
             campaign. Only show when set. */}
-        {(store?.store_phone || store?.quo_phone_number) && (
+        {(store?.store_phone || store?.beb_scheduling_phone) && (
           <div style={{ marginTop: 6, fontSize: 12, color: 'var(--mist)', display: 'flex', gap: 14, flexWrap: 'wrap' }}>
             {store?.store_phone && (
               <span>📞 <strong style={{ color: 'var(--ink)' }}>{formatPhoneDisplay(store.store_phone)}</strong> · store</span>
             )}
-            {store?.quo_phone_number && (
-              <span>📞 <strong style={{ color: 'var(--ink)' }}>{formatPhoneDisplay(store.quo_phone_number)}</strong> · QUO</span>
+            {store?.beb_scheduling_phone && (
+              <span>📞 <strong style={{ color: 'var(--ink)' }}>{formatPhoneDisplay(store.beb_scheduling_phone)}</strong> · BEB scheduling</span>
             )}
           </div>
         )}
