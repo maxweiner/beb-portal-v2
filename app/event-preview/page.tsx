@@ -40,6 +40,10 @@ interface Buy {
   checkNumber: string
   amountCents: number
   commPctLabel: string    // '10%' / '5%' / '0%' / 'Store' per intake-purchase spec
+  /** Required when commPctLabel is '5%' or '0%' — captured at the
+   *  check register so we always have a "why" for non-default
+   *  commissions. Renders under the customer name on this dashboard. */
+  commNote?: string | null
 }
 
 // ── Hardcoded mock data ─────────────────────────────────────────
@@ -84,12 +88,15 @@ const WAITLIST: WaitlistRow[] = [
 const BUYS: Buy[] = [
   { closedAt: '9:14 AM',  buyFormNumber: '12345', customer: 'Janet Smith',      buyerInitials: 'MV', checkNumber: '4521', amountCents:  1_250_00, commPctLabel: '10%'   },
   { closedAt: '9:46 AM',  buyFormNumber: '12346', customer: 'Bob Johnson',      buyerInitials: 'TE', checkNumber: '4522', amountCents:  4_800_00, commPctLabel: '10%'   },
-  { closedAt: '10:18 AM', buyFormNumber: '12347', customer: 'Mary Davis',       buyerInitials: 'NR', checkNumber: '4523', amountCents:  8_400_00, commPctLabel: '5%'    },
-  { closedAt: '10:42 AM', buyFormNumber: '12348', customer: 'Carlos Hernandez', buyerInitials: 'MV', checkNumber: '4524', amountCents: 12_300_00, commPctLabel: '5%'    },
+  { closedAt: '10:18 AM', buyFormNumber: '12347', customer: 'Mary Davis',       buyerInitials: 'NR', checkNumber: '4523', amountCents:  8_400_00, commPctLabel: '5%',
+      commNote: 'Repeat seller — bulk volume offset' },
+  { closedAt: '10:42 AM', buyFormNumber: '12348', customer: 'Carlos Hernandez', buyerInitials: 'MV', checkNumber: '4524', amountCents: 12_300_00, commPctLabel: '5%',
+      commNote: 'Trade-in credit applied against a previous sale' },
   { closedAt: '11:05 AM', buyFormNumber: '12349', customer: 'Pat Reilly',       buyerInitials: 'TE', checkNumber: '4525', amountCents:    675_00, commPctLabel: '10%'   },
   { closedAt: '11:30 AM', buyFormNumber: '12350', customer: 'Anita Vance',      buyerInitials: 'NR', checkNumber: '4526', amountCents:  3_725_00, commPctLabel: 'Store' },
   { closedAt: '11:58 AM', buyFormNumber: '12351', customer: 'Greg Mason',       buyerInitials: 'MV', checkNumber: '4527', amountCents:  6_200_00, commPctLabel: '10%'   },
-  { closedAt: '1:12 PM',  buyFormNumber: '12352', customer: 'Dana Howe',        buyerInitials: 'NR', checkNumber: '4528', amountCents:  4_800_00, commPctLabel: '0%'    },
+  { closedAt: '1:12 PM',  buyFormNumber: '12352', customer: 'Dana Howe',        buyerInitials: 'NR', checkNumber: '4528', amountCents:  4_800_00, commPctLabel: '0%',
+      commNote: 'Charity / donation — no commission' },
 ]
 
 // ── UI ──────────────────────────────────────────────────────────
@@ -284,7 +291,17 @@ export default function EventPreviewPage() {
                     <td style={{ padding: '10px 6px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, color: '#374151' }}>
                       #{b.buyFormNumber}
                     </td>
-                    <td style={{ padding: '10px 6px', fontWeight: 600 }}>{b.customer}</td>
+                    <td style={{ padding: '10px 6px' }}>
+                      <div style={{ fontWeight: 600 }}>{b.customer}</div>
+                      {b.commNote && (
+                        <div style={{
+                          fontSize: 11, color: '#92400e', marginTop: 2,
+                          fontStyle: 'italic',
+                        }}>
+                          📝 {b.commNote}
+                        </div>
+                      )}
+                    </td>
                     <td style={{ padding: '10px 6px', fontSize: 11, fontWeight: 800, color: '#6b7280', letterSpacing: '.04em' }}>
                       {b.buyerInitials}
                     </td>
