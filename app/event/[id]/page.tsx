@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Metadata } from 'next'
+import EventShareUrlPanel from '@/components/events/EventShareUrlPanel'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,6 +43,15 @@ export default async function EventSummaryPage({
   }
 
   const { data: store } = await sb.from('stores').select('*').eq('id', ev.store_id).single()
+
+  // Current active share token (if any) — prefilled into the staff
+  // share-URL panel below so it renders without a loading flicker.
+  const { data: shareTokenRow } = await sb
+    .from('event_share_tokens')
+    .select('id, token, last_sent_at, last_sent_to, view_count, first_viewed_at, revoked_at')
+    .eq('event_id', ev.id)
+    .is('revoked_at', null)
+    .maybeSingle()
 
   const allDays = (ev.days || []).sort((a: any, b: any) => a.day_number - b.day_number)
 
@@ -117,6 +127,15 @@ export default async function EventSummaryPage({
             </div>
           )}
         </div>
+
+        {/* Staff-only: per-event public URL controls (mint / send /
+            rotate / revoke). The URL drives the /e/[token] store-
+            owner dashboard. */}
+        <EventShareUrlPanel
+          eventId={ev.id}
+          initialToken={shareTokenRow as any || null}
+          ownerEmail={store?.owner_email || null}
+        />
 
         {/* Running totals — green header card */}
         <div style={{ background: '#1D6B44', borderRadius: 16, padding: '18px 20px', marginBottom: 16 }}>
