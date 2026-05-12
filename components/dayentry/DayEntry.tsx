@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useEffect, useRef } from 'react'
+import { Fragment, useMemo, useState, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
@@ -32,10 +32,15 @@ interface CheckRow {
   amount: string
   payment_type: string
   commission_rate: number
+  // Required when commission_rate is 5 or 0 (non-default). Captured
+  // inline below the row in the check register. Renders on the public
+  // event dashboard at /e/[token] under the customer name.
+  commission_note?: string
 }
 const emptyCheck = (): CheckRow => ({
   check_number: '', buy_form_number: '', amount: '',
   payment_type: 'check', commission_rate: 10,
+  commission_note: '',
 })
 const nextCheckNumber = (rows: CheckRow[]): string => {
   const last = rows[rows.length - 1]?.check_number.trim() || ''
@@ -336,6 +341,7 @@ export default function DayEntry() {
           amount: c.amount != null ? String(c.amount) : '',
           payment_type: c.payment_type || 'check',
           commission_rate: c.commission_rate === 5 ? 5 : c.commission_rate === 0 ? 0 : 10,
+          commission_note: c.commission_note || '',
         }))
       : [emptyCheck()])
     setLoading(false)
@@ -452,6 +458,13 @@ export default function DayEntry() {
             amount: parseFloat(c.amount) || 0,
             payment_type: c.payment_type,
             commission_rate: c.commission_rate === 5 ? 5 : c.commission_rate === 0 ? 0 : 10,
+            // Only persist a non-empty note when the rate is overridden
+            // (5% or 0%). For the default 10% rows we always write NULL
+            // even if someone typed-then-flipped-back.
+            commission_note:
+              (c.commission_rate === 5 || c.commission_rate === 0)
+                ? (c.commission_note?.trim() || null)
+                : null,
           }))
         )
         if (error) throw error
@@ -960,8 +973,13 @@ export default function DayEntry() {
                         </tr>
                       </thead>
                       <tbody>
-                        {checks.map((c, i) => (
-                          <tr key={i} style={{ borderBottom: '1px solid var(--cream2)' }}>
+                        {checks.map((c, i) => {
+                          const colCount = formColVisible ? 8 : 7
+                          const needsNote = c.commission_rate === 5 || c.commission_rate === 0
+                          const noteMissing = needsNote && !(c.commission_note || '').trim()
+                          return (
+                          <Fragment key={i}>
+                          <tr style={{ borderBottom: needsNote ? 'none' : '1px solid var(--cream2)' }}>
                             <td style={{ padding: '4px 8px', color: 'var(--mist)', fontSize: 12, fontWeight: 700 }}>{i + 1}</td>
                             <td style={{ padding: '4px 8px' }}>
                               <select value={c.payment_type} onChange={e => updateCheck(i, 'payment_type', e.target.value)}
@@ -1017,7 +1035,38 @@ export default function DayEntry() {
                               <button onClick={() => removeCheck(i)} style={{ background: 'none', border: 'none', color: 'var(--mist)', cursor: 'pointer', fontSize: 16, padding: '0 4px' }}>×</button>
                             </td>
                           </tr>
-                        ))}
+                          {needsNote && (
+                            <tr style={{ borderBottom: '1px solid var(--cream2)', background: '#FFFBEB' }}>
+                              <td colSpan={colCount} style={{ padding: '4px 8px 8px 32px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                  <span style={{ fontSize: 11, fontWeight: 800, color: '#92400E', whiteSpace: 'nowrap' }}>
+                                    📝 {c.commission_rate}% reason:
+                                  </span>
+                                  <input
+                                    type="text"
+                                    value={c.commission_note || ''}
+                                    onChange={e => updateCheck(i, 'commission_note' as any, e.target.value)}
+                                    placeholder={c.commission_rate === 0
+                                      ? 'e.g. Charity donation — no commission'
+                                      : 'e.g. Repeat seller — bulk volume offset'}
+                                    style={{
+                                      flex: 1, minWidth: 220,
+                                      fontSize: 12, padding: '4px 8px',
+                                      borderColor: noteMissing ? '#D97706' : undefined,
+                                    }}
+                                  />
+                                  {noteMissing && (
+                                    <span style={{ fontSize: 10, color: '#92400E', whiteSpace: 'nowrap' }}>
+                                      ⚠ note required
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                          </Fragment>
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
