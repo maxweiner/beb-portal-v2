@@ -132,7 +132,12 @@ interface SheetProps {
 }
 
 export default function BuyingEventSheet({ events }: SheetProps) {
-  const { user, users, stores, setEvents, events: ctxEvents, brand } = useApp()
+  // Event detail sheet must work for cancelled events (admins / partners
+  // need to view why an event was cancelled, audit its trail, etc.).
+  // Also: `setEvents` callbacks below splice patches into `ctxEvents` —
+  // if ctxEvents were the filtered list, cancelled rows would silently
+  // drop out of state on every edit. Use allEvents.
+  const { user, users, stores, setEvents, allEvents: ctxEvents, brand } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || !!user?.is_partner
 
   // Column picker state — brand-scoped, persisted to localStorage.

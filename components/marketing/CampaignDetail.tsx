@@ -32,7 +32,9 @@ export default function CampaignDetail({ campaign, onBack, onChanged, onDeleted 
   onChanged: (next: MarketingCampaign) => void
   onDeleted: (id: string) => void
 }) {
-  const { events, stores, user, users } = useApp()
+  // Campaign detail must resolve its event even if cancelled — otherwise
+  // "(unknown store)" + missing date labels appear for paused campaigns.
+  const { allEvents: events, stores, user, users } = useApp()
   const event = useMemo(() => events.find(e => e.id === campaign.event_id), [events, campaign.event_id])
   const store = useMemo(() => stores.find(s => s.id === event?.store_id), [stores, event?.store_id])
   const storeName = store?.name || event?.store_name || '(unknown store)'

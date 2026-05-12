@@ -26,7 +26,9 @@ export function broadcastExpenseStatusChanged() {
 }
 
 export function usePendingApprovals(): { rows: PendingReportRow[]; count: number; loaded: boolean } {
-  const { user, events } = useApp()
+  // Pending-approval queue needs cancelled events visible — a report
+  // submitted before cancellation still needs review. Use allEvents.
+  const { user, allEvents: events } = useApp()
   const isPartner = !!user?.is_partner
   const [rows, setRows] = useState<PendingReportRow[]>([])
   const [loaded, setLoaded] = useState(false)

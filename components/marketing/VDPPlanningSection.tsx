@@ -34,7 +34,9 @@ export default function VDPPlanningSection({ campaign, onChanged }: {
   campaign: MarketingCampaign
   onChanged: (next: MarketingCampaign) => void
 }) {
-  const { user, events } = useApp()
+  // Campaign event lookup must work for cancelled events too — see
+  // CampaignDetail for the same rationale.
+  const { user, allEvents: events } = useApp()
   const event = useMemo(() => events.find(e => e.id === campaign.event_id), [events, campaign.event_id])
   const storeId = event?.store_id
 

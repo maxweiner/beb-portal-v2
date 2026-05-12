@@ -401,7 +401,15 @@ export interface AppState {
    *  alongside `stores` so trunk-show flows can resolve names
    *  + assigned reps from one place. */
   trunkShowStores: TrunkShowStore[]
+  /** Active events only — `status !== 'cancelled' AND cancelled_at IS NULL`.
+   *  This is the safe default for "what's happening now" lists (day entry,
+   *  dashboards, marketing planning, etc). Most consumers want this. */
   events: Event[]
+  /** Every event for the current brand, INCLUDING cancelled ones. Reach for
+   *  this in admin / reports / financials / event-detail views where you
+   *  need to surface or audit cancelled events. Both arrays are derived
+   *  from the same underlying state — `setEvents` updates both. */
+  allEvents: Event[]
   shipments: Shipment[]
   theme: Theme
   year: string

@@ -43,7 +43,9 @@ function fmtEventDate(iso: string | undefined): string {
 }
 
 export default function CampaignsList() {
-  const { events, stores } = useApp()
+  // Campaigns persist across cancellation (PR #402 pauses them rather
+  // than deleting); the row still needs to resolve its event for display.
+  const { allEvents: events, stores } = useApp()
   const [campaigns, setCampaigns] = useState<MarketingCampaign[]>([])
   const [loading, setLoading] = useState(true)
   const [openId, setOpenId] = useState<string | null>(null)

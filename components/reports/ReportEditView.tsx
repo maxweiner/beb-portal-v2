@@ -82,7 +82,9 @@ function buildPreviewHtml(template: TemplateRow, vars: Record<string, string>): 
 }
 
 export default function ReportEditView({ report, onBack }: { report: ReportDef; onBack: () => void }) {
-  const { user, events, stores, brand } = useApp()
+  // Same rationale as Reports.tsx — recaps and event-scoped reports need
+  // cancelled events selectable so historical analysis still works.
+  const { user, allEvents: events, stores, brand } = useApp()
   const isEventRecap = report.id === 'event-recap'
   const isChecksIssued = report.id === 'checks-issued'
   // Treat both event-scoped reports as a single "needs an event picker
