@@ -661,23 +661,25 @@ function ContactsList({
     onChange([...contacts, { name: '', title: '', phone: '', email: '', send_documents: false }])
   }
 
-  // 5 inputs + send-doc + remove. The grid template fits at ~860px;
-  // wraps below that. Using a wider min-width via overflowX so
-  // narrow viewports scroll horizontally inside the modal.
-  const cols = '1fr 130px 130px 1fr 110px 32px'
+  // 5 inputs + send-doc + remove. Shrunk the Send Docs column from
+  // 110px → 56px (it only needs to fit a centered checkbox + the
+  // short "Send" header). minWidth dropped from 720 → 620 so the
+  // row no longer overflows the standard modal width before the
+  // overflowX scrollbar kicks in.
+  const cols = '1fr 120px 120px 1fr 56px 28px'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ overflowX: 'auto' }}>
         <div style={{
-          display: 'grid', gridTemplateColumns: cols, gap: 8, minWidth: 720,
+          display: 'grid', gridTemplateColumns: cols, gap: 8, minWidth: 620,
           fontSize: 11, fontWeight: 700, color: 'var(--mist)', textTransform: 'uppercase', letterSpacing: '.04em',
         }}>
           <span>Name</span>
           <span>Title</span>
           <span>Cell</span>
           <span>Email</span>
-          <span style={{ textAlign: 'center' }}>Send Docs</span>
+          <span style={{ textAlign: 'center' }} title="Send Docs">Send</span>
           <span></span>
         </div>
         {contacts.length === 0 ? (
@@ -686,7 +688,7 @@ function ContactsList({
           </div>
         ) : (
           contacts.map((c, i) => (
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: cols, gap: 8, alignItems: 'center', minWidth: 720, marginTop: 6 }}>
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: cols, gap: 8, alignItems: 'center', minWidth: 620, marginTop: 6 }}>
               <input
                 type="text"
                 value={c.name ?? ''}
