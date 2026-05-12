@@ -19,6 +19,8 @@
 // prefix is also short for SMS forwarding.
 
 import { createClient } from '@supabase/supabase-js'
+import { headers } from 'next/headers'
+import { QRCodeSVG } from 'qrcode.react'
 import { initials } from '@/lib/initials'
 import AutoRefresh from './AutoRefresh'
 
@@ -160,6 +162,16 @@ export default async function Page({ params }: { params: { token: string } }) {
     if (portalRow?.token) bookingUrl = `/store-portal/${portalRow.token}`
   }
 
+  // Absolute version of the booking URL for the QR code — relative
+  // paths don't scan into anything useful on a phone. Pulled from
+  // request headers so preview deploys, custom domains, and localhost
+  // all get the correct origin.
+  const h = headers()
+  const headerHost = h.get('host') || ''
+  const headerProto = h.get('x-forwarded-proto') || (headerHost.startsWith('localhost') ? 'http' : 'https')
+  const headerOrigin = headerHost ? `${headerProto}://${headerHost}` : ''
+  const bookingUrlAbsolute = bookingUrl ? `${headerOrigin}${bookingUrl}` : null
+
   const phaseLabel = phaseLabelFor(phase, dayNumber, start, today, endIso)
 
   // 9. Pre-shape for rendering.
@@ -203,7 +215,7 @@ export default async function Page({ params }: { params: { token: string } }) {
               }}>{initials(storeName)}</div>
           }
 
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
               <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0, letterSpacing: '-0.02em' }}>
                 {storeName}
@@ -218,6 +230,30 @@ export default async function Page({ params }: { params: { token: string } }) {
               {storeLocation && <>{storeLocation} · </>}📅 {dateRange}
             </div>
           </div>
+
+          {/* Store portal QR — top-right of the hero. Encodes the
+              ABSOLUTE booking URL so customers/staff can scan it
+              with their phones from across the counter. Only renders
+              when an active store_portal_token exists for the store. */}
+          {bookingUrlAbsolute && (
+            <a href={bookingUrl!} target="_blank" rel="noopener noreferrer"
+              style={{
+                flexShrink: 0,
+                background: '#fff',
+                padding: 8,
+                borderRadius: 10,
+                boxShadow: '0 2px 6px rgba(0,0,0,.15)',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                textDecoration: 'none',
+              }}
+              title="Open booking page in a new tab"
+            >
+              <QRCodeSVG value={bookingUrlAbsolute} size={96} level="M" />
+              <div style={{ fontSize: 10, fontWeight: 800, color: '#1e3a8a', letterSpacing: '.04em', textTransform: 'uppercase' }}>
+                Scan to book
+              </div>
+            </a>
+          )}
         </div>
 
         {/* KPI row */}
