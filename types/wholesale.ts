@@ -80,6 +80,10 @@ export interface InventoryItem {
   wholesale_price_cents: number | null
   retail_price_cents: number | null
   insurance_value_cents: number | null
+  /** The Edge ask price (Liberty's wholesale send to The Edge POS).
+   *  NULL = "not ready to send to Edge" — the send view filters on
+   *  this column for the readiness gate. See `supabase-migration-edge-export.sql`. */
+  edge_price_cents: number | null
   gender: 'Female' | 'Male' | 'Unisex' | null
   internal_notes: string | null
   public_notes: string | null
@@ -290,4 +294,111 @@ export interface WholesaleAuditLogEntry {
   actor_id: string | null
   actor_email: string | null
   created_at: string
+}
+
+// ───────────────────────────────────────────────────────────────
+// Edge wholesale-export (Send to The Edge POS / Mary Moses)
+// ───────────────────────────────────────────────────────────────
+// Schema lives in supabase-migration-edge-export.sql. Liberty-only
+// feature at the UI layer (brand-gated tab); brand column on these
+// tables is kept generic so BEB use is a one-line change later.
+
+export type EdgeBatchStatus = 'draft' | 'sent' | 'viewed' | 'revoked' | 'failed'
+export type EdgeRecipientRole = 'to' | 'cc' | 'bcc'
+
+/** One outbound send to The Edge. Past batches are immutable — the
+ *  "resend" action creates a fresh batch with a new code. */
+export interface EdgeBatch {
+  id: string
+  brand: string
+  /** Human-readable code in the form `EDGE-YYYYMMDD-XXXX`. Used in
+   *  the email subject, the public URL slug, and on the batch page. */
+  batch_code: string
+  /** URL-safe random token Mary uses to load the public batch page
+   *  without authenticating. Minted at the app layer (crypto.randomBytes). */
+  public_token: string
+  created_by: string | null
+  created_by_email: string | null
+  recipient_email: string
+  recipient_name: string | null
+  cc_emails: string[]
+  bcc_emails: string[]
+  notes: string | null
+  item_count: number
+  photo_count: number
+  csv_path: string | null
+  media_folder: string | null
+  media_zip_path: string | null
+  status: EdgeBatchStatus
+  email_provider_id: string | null
+  email_error: string | null
+  sent_at: string | null
+  first_viewed_at: string | null
+  last_viewed_at: string | null
+  view_count: number
+  revoked_at: string | null
+  revoked_reason: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** Frozen per-item record inside a batch. The `snapshot` field is the
+ *  source of truth for the CSV — it's a copy of every column we ship,
+ *  so regenerating the CSV stays deterministic even if the inventory
+ *  item is later edited/sold/deleted. */
+export interface EdgeBatchItem {
+  id: string
+  batch_id: string
+  /** May be NULL if the underlying item was later deleted. */
+  inventory_item_id: string | null
+  position: number
+  item_number_frozen: string
+  snapshot: EdgeBatchItemSnapshot
+  photo_paths: string[]
+  photo_count: number
+  created_at: string
+}
+
+/** JSONB shape stored in edge_batch_items.snapshot. Keep this in sync
+ *  with the CSV column writer in `lib/wholesale/edgeCsv.ts` (PR 3). */
+export interface EdgeBatchItemSnapshot {
+  item_number: string
+  category: InventoryCategory | null
+  description: string | null
+  vendor_name: string | null
+  vendor_stock_number: string | null
+  cost_cents: number | null
+  edge_price_cents: number | null
+  retail_price_cents: number | null
+  metal_type: string | null
+  metal_color: string | null
+  metal_karat: string | null
+  metal_dwt: number | null
+  stones_summary: string | null
+  primary_stone: string | null
+  primary_stone_ct: number | null
+  gender: 'Female' | 'Male' | 'Unisex' | null
+  size: string | null
+  length: string | null
+  designer: string | null
+  period: string | null
+  hallmarks: string | null
+  date_acquired: string | null
+  public_notes: string | null
+}
+
+/** Recipient settings row. role='to' rows show as primary-recipient
+ *  options (one is_default per brand); role='cc'/'bcc' are added to
+ *  every outbound send unless explicitly removed in the composer. */
+export interface EdgeRecipient {
+  id: string
+  brand: string
+  email: string
+  name: string | null
+  role: EdgeRecipientRole
+  is_default: boolean
+  notes: string | null
+  archived_at: string | null
+  created_at: string
+  updated_at: string
 }
