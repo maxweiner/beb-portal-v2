@@ -178,6 +178,36 @@ export default function EventPreviewPage() {
           <LauncherTile href="#waitlist"     icon="🕒" label="Waitlist"      sub={`${WAITLIST.length} waiting`}  />
         </div>
 
+        {/* ───── Booking CTA (placed up top so store owner can't miss it) ───── */}
+        <div style={{
+          marginBottom: 18, padding: 16,
+          background: '#fff', borderRadius: 12,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: 12, flexWrap: 'wrap',
+          boxShadow: '0 1px 3px rgba(0,0,0,.04)',
+          border: '1px dashed #d1d5db',
+        }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>Need to book an appointment for a customer?</div>
+            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
+              Your booking page is a separate URL — store staff use it to add appointments without seeing live results.
+            </div>
+          </div>
+          <Link
+            href="/store-portal/example-token"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              background: '#1D6B44', color: '#fff',
+              padding: '10px 18px', borderRadius: 8,
+              fontSize: 13, fontWeight: 700, textDecoration: 'none',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Open booking page →
+          </Link>
+        </div>
+
         {/* ───── Appointments section ───── */}
         <Section id="appointments" title="📅 Today's appointments">
           <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, marginTop: -4 }}>
@@ -314,35 +344,6 @@ export default function EventPreviewPage() {
           </div>
         </Section>
 
-        {/* ───── Booking CTA ───── */}
-        <div style={{
-          marginTop: 20, padding: 16,
-          background: '#fff', borderRadius: 12,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          gap: 12, flexWrap: 'wrap',
-          boxShadow: '0 1px 3px rgba(0,0,0,.04)',
-          border: '1px dashed #d1d5db',
-        }}>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 14 }}>Need to book an appointment for a customer?</div>
-            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
-              Your booking page is a separate URL — store staff use it to add appointments without seeing live results.
-            </div>
-          </div>
-          <Link
-            href="/store-portal/example-token"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              background: '#1D6B44', color: '#fff',
-              padding: '10px 18px', borderRadius: 8,
-              fontSize: 13, fontWeight: 700, textDecoration: 'none',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Open booking page →
-          </Link>
-        </div>
 
         <p style={{ marginTop: 24, fontSize: 11, color: '#9ca3af', textAlign: 'center' }}>
           This is a private link for the store owner. Questions? Reply to the text/email this URL came in.
