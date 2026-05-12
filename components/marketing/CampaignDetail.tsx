@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { MarketingCampaign, MarketingStatus, Event } from '@/types'
+import { formatPhoneDisplay } from '@/lib/phone'
 import PhaseTimeline from './PhaseTimeline'
 import PhaseStepCard from './PhaseStepCard'
 import VDPPlanningSection from './VDPPlanningSection'
@@ -171,6 +172,19 @@ export default function CampaignDetail({ campaign, onBack, onChanged, onDeleted 
         <h2 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)', marginTop: 4 }}>
           {storeName}
         </h2>
+        {/* Phones used on marketing materials. Surface here so the
+            marketer can pull the right numbers without leaving the
+            campaign. Only show when set. */}
+        {(store?.store_phone || store?.quo_phone_number) && (
+          <div style={{ marginTop: 6, fontSize: 12, color: 'var(--mist)', display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+            {store?.store_phone && (
+              <span>📞 <strong style={{ color: 'var(--ink)' }}>{formatPhoneDisplay(store.store_phone)}</strong> · store</span>
+            )}
+            {store?.quo_phone_number && (
+              <span>📞 <strong style={{ color: 'var(--ink)' }}>{formatPhoneDisplay(store.quo_phone_number)}</strong> · QUO</span>
+            )}
+          </div>
+        )}
         <EventMeta event={event} />
       </div>
 

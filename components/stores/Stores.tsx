@@ -354,6 +354,8 @@ function StoreModal({ store, onClose, refetchStores, onDelete }: {
       state: details.state,
       zip: details.zip,
       notes: details.notes,
+      store_phone: details.store_phone,
+      quo_phone_number: details.quo_phone_number,
     },
     async (d) => {
       const { error } = await withTimeout(
@@ -361,6 +363,11 @@ function StoreModal({ store, onClose, refetchStores, onDelete }: {
           name: d.name, website: d.website,
           address: d.address, city: d.city,
           state: d.state?.toUpperCase(), zip: d.zip, notes: d.notes,
+          // Phone fields stored as raw 10-digit strings; PhoneInput
+          // already strips dashes via rawDigits() before calling
+          // onChange, so no extra normalization needed here.
+          store_phone: d.store_phone || null,
+          quo_phone_number: d.quo_phone_number || null,
         }).eq('id', store.id)
       )
       if (error) throw error
@@ -488,6 +495,27 @@ function StoreModal({ store, onClose, refetchStores, onDelete }: {
               {field('Zip Code', 'zip', 'text', '12345')}
               <div />
             </div>
+
+            {/* Phone numbers: Store's main line + QUO tracking number
+                used on marketing materials. Raw 10-digit storage;
+                PhoneInput renders / accepts with dashes. */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="field">
+                <label className="fl">Store Telephone Number</label>
+                <PhoneInput
+                  value={details.store_phone || ''}
+                  onChange={v => setDetails((p: any) => ({ ...p, store_phone: v }))}
+                />
+              </div>
+              <div className="field">
+                <label className="fl">QUO Telephone Number</label>
+                <PhoneInput
+                  value={details.quo_phone_number || ''}
+                  onChange={v => setDetails((p: any) => ({ ...p, quo_phone_number: v }))}
+                />
+              </div>
+            </div>
+
             <div className="field">
               <label className="fl">Notes</label>
               <textarea rows={3} value={details.notes || ''} placeholder="Any notes about this store…"
