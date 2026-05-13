@@ -369,29 +369,66 @@ export interface EdgeBatchItem {
 }
 
 /** JSONB shape stored in edge_batch_items.snapshot. Keep this in sync
- *  with the CSV column writer in `lib/wholesale/edgeCsv.ts` (PR 3). */
+ *  with the CSV column writer in `lib/wholesale/edgeCsv.ts`. The
+ *  shape mirrors The Edge's 84-column import spec so the CSV writer
+ *  is mostly a 1:1 mapping. */
 export interface EdgeBatchItemSnapshot {
+  // ── identity / pricing ────────────────────────────────────
   item_number: string
   category: InventoryCategory | null
   description: string | null
   vendor_name: string | null
   vendor_stock_number: string | null
-  cost_cents: number | null
-  edge_price_cents: number | null
-  retail_price_cents: number | null
-  metal_type: string | null
+  cost_cents: number | null          // BEB-internal (NOT exported to Edge)
+  edge_price_cents: number | null    // exported as Edge's "Cost"
+  retail_price_cents: number | null  // exported as Edge's "Retail Price"
+  memo_in: boolean | null
+
+  // ── jewelry common ────────────────────────────────────────
+  item_style: string | null          // jewelry_type — "Ring" / "Necklace" / ...
+  metal_type: string | null          // raw "Gold" / "Platinum"
   metal_color: string | null
   metal_karat: string | null
+  metal_type_label: string | null    // composed "14kt Yellow Gold" for Edge's `Metal Type`
   metal_dwt: number | null
-  stones_summary: string | null
-  primary_stone: string | null
-  primary_stone_ct: number | null
-  gender: 'Female' | 'Male' | 'Unisex' | null
   size: string | null
   length: string | null
   designer: string | null
   period: string | null
   hallmarks: string | null
+
+  // ── stones (primary + summary + sum) ───────────────────────
+  stones_summary: string | null
+  primary_stone: string | null
+  primary_stone_ct: number | null
+  primary_stone_shape: string | null
+  primary_stone_count: number | null
+  total_stone_ct: number | null
+
+  // ── diamonds (loose-stone categories) ──────────────────────
+  diamond_lab: string | null
+  diamond_cert_id: string | null
+  diamond_carat: number | null
+  diamond_shape: string | null
+  diamond_color: string | null
+  diamond_clarity: string | null
+  diamond_cut: string | null
+  diamond_polish: string | null
+  diamond_symmetry: string | null
+  diamond_fluorescence: string | null
+  diamond_depth_pct: number | null
+  diamond_table_pct: number | null
+  diamond_measurements: string | null
+
+  // ── watches ────────────────────────────────────────────────
+  watch_brand: string | null
+  watch_model: string | null
+  watch_serial: string | null
+  watch_band: string | null
+  watch_case_material: string | null
+
+  // ── meta ──────────────────────────────────────────────────
+  gender: 'Female' | 'Male' | 'Unisex' | null
   date_acquired: string | null
   public_notes: string | null
 }
