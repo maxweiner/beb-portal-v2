@@ -19,14 +19,87 @@
 // prefix is also short for SMS forwarding.
 
 import { Fragment } from 'react'
+import type { Metadata } from 'next'
 import { createClient } from '@supabase/supabase-js'
 import { headers } from 'next/headers'
 import { QRCodeSVG } from 'qrcode.react'
 import { initials } from '@/lib/initials'
 import AutoRefresh from './AutoRefresh'
 
-export const metadata = { title: 'Event' }
 export const dynamic = 'force-dynamic'
+
+/** Per-token metadata for rich link previews (iMessage / Slack /
+ *  Discord / etc.). The OG image points at /api/store/[id]/logo,
+ *  which streams the store's base64 logo as binary bytes since
+ *  link previewers won't render data: URLs. */
+export async function generateMetadata({ params }: { params: { token: string } }): Promise<Metadata> {
+  const fallback: Metadata = {
+    title: 'Event Dashboard',
+    description: 'Live event dashboard from Beneficial Estate Buyers.',
+  }
+  if (!params.token || params.token.length < 8 || params.token.length > 64) {
+    return fallback
+  }
+  try {
+    const sb = admin()
+    const { data: tokenRow } = await sb
+      .from('store_share_tokens')
+      .select('store_id, revoked_at')
+      .eq('token', params.token)
+      .maybeSingle()
+    if (!tokenRow || tokenRow.revoked_at) return fallback
+
+    const { data: store } = await sb
+      .from('stores')
+      .select('id, name, city, state, store_image_url')
+      .eq('id', tokenRow.store_id)
+      .maybeSingle()
+    if (!store) return fallback
+
+    const h = headers()
+    const host = h.get('host') || ''
+    const proto = h.get('x-forwarded-proto') || (host.startsWith('localhost') ? 'http' : 'https')
+    const origin = host ? `${proto}://${host}` : ''
+
+    const storeName = (store as any).name as string
+    const where = [(store as any).city, (store as any).state].filter(Boolean).join(', ')
+    const title = `${storeName} · Live Event Dashboard`
+    const description = where
+      ? `Live event dashboard for ${storeName} in ${where}.`
+      : `Live event dashboard for ${storeName}.`
+    const imageUrl = (store as any).store_image_url
+      ? `${origin}/api/store/${(store as any).id}/logo`
+      : undefined
+
+    return {
+      title,
+      description,
+      openGraph: {
+        title,
+        description,
+        url: origin ? `${origin}/e/${params.token}` : undefined,
+        siteName: 'Beneficial Estate Buyers',
+        type: 'website',
+        ...(imageUrl ? {
+          images: [{
+            url: imageUrl,
+            width: 512,
+            height: 512,
+            alt: `${storeName} logo`,
+          }],
+        } : {}),
+      },
+      twitter: {
+        card: 'summary',
+        title,
+        description,
+        ...(imageUrl ? { images: [imageUrl] } : {}),
+      },
+    }
+  } catch {
+    return fallback
+  }
+}
 export const revalidate = 0
 
 function admin() {
