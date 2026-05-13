@@ -65,6 +65,7 @@ export default function EventReturnsTab() {
   const [loaded, setLoaded] = useState(false)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('default')
   const [eventFilter, setEventFilter] = useState<string>('all')
+  const [search, setSearch] = useState<string>('')
   const [drawer, setDrawer] = useState<ShipmentEntry | null>(null)
 
   async function reload() {
@@ -108,11 +109,13 @@ export default function EventReturnsTab() {
 
   // Default filter: ship date ±7 days OR not complete/cancelled.
   const today = new Date()
+  const todayStr = today.toISOString().slice(0, 10)
   const filtered = useMemo(() => {
-    const todayStr = today.toISOString().slice(0, 10)
+    const needle = search.trim().toLowerCase()
 
     return rows.filter(s => {
       if (eventFilter !== 'all' && s.event_id !== eventFilter) return false
+      if (needle && !s.store_name.toLowerCase().includes(needle)) return false
 
       if (statusFilter === 'all') return true
       if (statusFilter === 'has_issue') {
@@ -132,11 +135,24 @@ export default function EventReturnsTab() {
       return statusOfShipment(s) === statusFilter
     }).sort((a, b) => a.ship_date.localeCompare(b.ship_date))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, statusFilter, eventFilter])
+  }, [rows, statusFilter, eventFilter, search])
 
-  const eventOptions = useMemo(() =>
-    [...rows].sort((a, b) => b.ship_date.localeCompare(a.ship_date)),
-  [rows])
+  // Event pulldown: "most recent → future" — today + upcoming first
+  // (soonest at top), then past events at the bottom in DESC order
+  // (most-recent past first). Keeps the actionable events near the
+  // top of the menu while still letting the user reach completed
+  // ones with a scroll.
+  const eventOptions = useMemo(() => {
+    return [...rows].sort((a, b) => {
+      const aPast = a.event_start_date < todayStr
+      const bPast = b.event_start_date < todayStr
+      if (aPast !== bPast) return aPast ? 1 : -1
+      return aPast
+        ? b.event_start_date.localeCompare(a.event_start_date) // past: most-recent first
+        : a.event_start_date.localeCompare(b.event_start_date) // future: soonest first
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows])
 
   return (
     <div className="p-6" style={{ maxWidth: 1280, margin: '0 auto' }}>
@@ -147,7 +163,17 @@ export default function EventReturnsTab() {
 
       {/* Filter bar */}
       <div className="card" style={{ marginBottom: 12, padding: 12 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px,1fr) minmax(220px,1fr)', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(200px,1.2fr) minmax(160px,1fr) minmax(220px,1fr)', gap: 10 }}>
+          <div>
+            <label className="fl">Search store</label>
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Store name…"
+              style={{ width: '100%' }}
+            />
+          </div>
           <div>
             <label className="fl">Status</label>
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as StatusFilter)}>
