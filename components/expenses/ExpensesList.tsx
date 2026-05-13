@@ -51,10 +51,23 @@ const STATUS_FILTERS: { id: 'all' | ExpenseReportStatus; label: string }[] = [
 // reports the buyer hasn't acted on yet. Strip from list + filter.
 const STATUS_FILTERS_ACCOUNTING = STATUS_FILTERS.filter(s => s.id !== 'active')
 
-export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) => void }) {
+export default function ExpensesList({ onOpen, effectiveUserId: effectiveUserIdProp }: {
+  onOpen: (reportId: string) => void
+  /** When the parent Expenses module has the "Submitting for:" picker
+   *  set to a principal (e.g. Alan), it passes that user id here so the
+   *  list re-scopes all "my reports" / "events I'm assigned to" /
+   *  "new-report payload" computations to act on the principal's data
+   *  instead of the delegate's. Defaults to the real caller's id. */
+  effectiveUserId?: string
+}) {
   // Expense rows can point at cancelled events; use allEvents so the
   // "Event" column resolves names instead of falling back to "—".
   const { user, allEvents: events, stores } = useApp()
+  // Data-scoping identity. Permissions checks (user.role,
+  // user.is_partner, canSeeAll, etc.) still use the real caller; only
+  // queries / inserts / filters that previously hardcoded `user.id`
+  // run through this variable so the picker can re-scope the module.
+  const effectiveUserId = effectiveUserIdProp ?? user?.id ?? ''
   // Regular admins still see only their own reports. Superadmins and
   // accounting users get the cross-user view + "User" dropdown filter
   // — accounting needs all reports for AP processing, RLS now permits it.
@@ -84,8 +97,8 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
   const userFilterDefaulted = useRef(false)
   useEffect(() => {
     if (userFilterDefaulted.current || !user) return
-    if (user.role === 'superadmin' && user.id) {
-      setUserFilter(user.id)
+    if (user.role === 'superadmin' && effectiveUserId) {
+      setUserFilter(effectiveUserId)
     }
     userFilterDefaulted.current = true
   }, [user])
@@ -251,17 +264,17 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
       return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
     })()
     const myReportEventIds = new Set(
-      existingReports.filter(r => r.user_id === user.id).map(r => r.event_id),
+      existingReports.filter(r => r.user_id === effectiveUserId).map(r => r.event_id),
     )
     const missing = events
-      .filter(e => isWorkerAssigned(e, user.id))
+      .filter(e => isWorkerAssigned(e, effectiveUserId))
       .filter(e => !myReportEventIds.has(e.id))
       .filter(e => e.start_date && e.start_date >= cutoffIso)
     if (missing.length === 0) return false
     const { error: insErr } = await supabase
       .from('expense_reports')
       .upsert(
-        missing.map(e => ({ event_id: e.id, user_id: user.id })),
+        missing.map(e => ({ event_id: e.id, user_id: effectiveUserId })),
         { onConflict: 'event_id,user_id', ignoreDuplicates: true },
       )
     if (insErr) {
@@ -282,7 +295,7 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
     })()
     return () => { cancelled = true }
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
-  }, [user?.id, events.length])
+  }, [effectiveUserId, events.length])
 
   async function deleteReport(r: ReportRow) {
     if (r.status !== 'active') return
@@ -333,7 +346,7 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
     if (!confirm(`Skip "${eventName}" — mark as already expensed? You can reactivate it later from the "Already expensed" filter.`)) return
     const { error: insertErr } = await supabase
       .from('expense_reports')
-      .insert({ event_id: eventId, user_id: user.id, status: 'no_expenses' })
+      .insert({ event_id: eventId, user_id: effectiveUserId, status: 'no_expenses' })
     if (insertErr) {
       alert(`Could not skip: ${insertErr.message}`)
       return
@@ -364,8 +377,8 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
   // Desktop keeps the full list so admins/accountants can audit.
   const mobileWorkerEventIds = useMemo(() => {
     if (!user || !isMobileDevice()) return null
-    return new Set(events.filter(e => isWorkerAssigned(e, user.id)).map(e => e.id))
-  }, [events, user?.id])
+    return new Set(events.filter(e => isWorkerAssigned(e, effectiveUserId)).map(e => e.id))
+  }, [events, effectiveUserId])
 
   const filtered = useMemo(() => {
     return rows.filter(r => {
@@ -389,7 +402,7 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
         if (userFilter !== 'all' && r.user_id !== userFilter) return false
       } else {
         // Everyone else: own reports only.
-        if (r.user_id !== user?.id) return false
+        if (r.user_id !== effectiveUserId) return false
       }
       // Mobile: hide buying-event reports where the user is no
       // longer a worker. Trunk-show / trade-show reports (no event_id)
@@ -401,7 +414,7 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
       if (!isTrunkRep && (r as any).trunk_show_id) return false
       return true
     })
-  }, [rows, statusFilter, userFilter, timeFilter, todayIsoLocal, canSeeAll, isAccounting, isTrunkRep, user?.id, mobileWorkerEventIds])
+  }, [rows, statusFilter, userFilter, timeFilter, todayIsoLocal, canSeeAll, isAccounting, isTrunkRep, effectiveUserId, mobileWorkerEventIds])
 
   // For the new-report picker: only events the user is an assigned
   // worker on (no point creating an expense report for an event you
@@ -411,18 +424,18 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
   // at the top.
   const eligibleEvents = useMemo(() => {
     if (!user) return []
-    const ownReportEventIds = new Set(rows.filter(r => r.user_id === user.id).map(r => r.event_id))
+    const ownReportEventIds = new Set(rows.filter(r => r.user_id === effectiveUserId).map(r => r.event_id))
     return events
-      .filter(e => isWorkerAssigned(e, user.id))
+      .filter(e => isWorkerAssigned(e, effectiveUserId))
       .filter(e => e.start_date && e.start_date <= todayIsoLocal)
       .filter(e => !ownReportEventIds.has(e.id))
       .sort((a, b) => (b.start_date || '').localeCompare(a.start_date || ''))
-  }, [events, rows, user?.id, todayIsoLocal])
+  }, [events, rows, effectiveUserId, todayIsoLocal])
 
   async function createReport(parent: { kind: 'buying' | 'trunk' | 'trade'; id: string }) {
     if (!user) return
     setCreating(true); setError(null)
-    const payload: any = { user_id: user.id }
+    const payload: any = { user_id: effectiveUserId }
     if (parent.kind === 'buying') payload.event_id = parent.id
     else if (parent.kind === 'trunk') payload.trunk_show_id = parent.id
     else payload.trade_show_id = parent.id
@@ -504,9 +517,9 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
             </div>
           ) : filtered.map(r => {
             const sc = STATUS_COLOR[r.status]
-            const canDelete = r.status === 'active' && (r.user_id === user?.id || canSeeAll)
-            const canDismiss = r.status === 'active' && (r.user_id === user?.id || canSeeAll)
-            const canReactivate = r.status === 'no_expenses' && (r.user_id === user?.id || canSeeAll)
+            const canDelete = r.status === 'active' && (r.user_id === effectiveUserId || canSeeAll)
+            const canDismiss = r.status === 'active' && (r.user_id === effectiveUserId || canSeeAll)
+            const canReactivate = r.status === 'no_expenses' && (r.user_id === effectiveUserId || canSeeAll)
             return (
               <div key={r.id} className="card" style={{
                 position: 'relative', padding: 12, background: '#fff',
@@ -625,7 +638,7 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
                     <td style={{ padding: '10px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                       <button onClick={e => { e.stopPropagation(); onOpen(r.id) }}
                         className="btn-outline btn-sm">Open →</button>
-                      {r.status === 'active' && (r.user_id === user?.id || canSeeAll) && (
+                      {r.status === 'active' && (r.user_id === effectiveUserId || canSeeAll) && (
                         <>
                           <button
                             onClick={e => { e.stopPropagation(); markNoExpenses(r) }}
@@ -650,7 +663,7 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
                           >×</button>
                         </>
                       )}
-                      {r.status === 'no_expenses' && (r.user_id === user?.id || canSeeAll) && (
+                      {r.status === 'no_expenses' && (r.user_id === effectiveUserId || canSeeAll) && (
                         <button
                           onClick={e => { e.stopPropagation(); reactivateReport(r) }}
                           title="Reopen as a draft (active) report"
@@ -703,8 +716,8 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
               eligibleEvents={eligibleEvents}
               trunkShows={isTrunkRep ? trunkShowsList : []}
               tradeShows={tradeShowsList}
-              existingTrunkIds={new Set(rows.filter(r => r.user_id === user?.id).map(r => (r as any).trunk_show_id).filter(Boolean) as string[])}
-              existingTradeIds={new Set(rows.filter(r => r.user_id === user?.id).map(r => (r as any).trade_show_id).filter(Boolean) as string[])}
+              existingTrunkIds={new Set(rows.filter(r => r.user_id === effectiveUserId).map(r => (r as any).trunk_show_id).filter(Boolean) as string[])}
+              existingTradeIds={new Set(rows.filter(r => r.user_id === effectiveUserId).map(r => (r as any).trade_show_id).filter(Boolean) as string[])}
               onPick={(p) => createReport(p)}
               onDismissEvent={dismissEventFromPicker}
             />

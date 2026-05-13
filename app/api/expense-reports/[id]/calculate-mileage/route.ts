@@ -7,7 +7,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getAuthedUser, isAdminLike } from '@/lib/expenses/serverAuth'
+import { getAuthedUser, isAdminLike, canActOnReport } from '@/lib/expenses/serverAuth'
 import { calculateMileageForReport } from '@/lib/expenses/calculateMileage'
 
 export const dynamic = 'force-dynamic'
@@ -30,11 +30,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (rErr) return NextResponse.json({ error: rErr.message }, { status: 500 })
   if (!report) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const isOwner = report.user_id === me.id
-  if (!isOwner && !isAdminLike(me)) {
+  // canActOnReport: owner, active delegate of the owner, or admin.
+  // Admins can recalc on any-status report; owners/delegates only while
+  // the report is still in draft.
+  const canAct = await canActOnReport(me, report.user_id)
+  if (!canAct) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
-  if (isOwner && report.status !== 'active') {
+  if (!isAdminLike(me) && report.status !== 'active') {
     return NextResponse.json({ error: `Report is ${report.status}, no longer editable` }, { status: 409 })
   }
 

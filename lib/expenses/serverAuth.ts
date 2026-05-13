@@ -77,3 +77,42 @@ export async function getAuthedUser(req: Request): Promise<AuthedUser | null> {
 export function isAdminLike(u: AuthedUser | null): boolean {
   return !!u && isAdmin(u)
 }
+
+/**
+ * Returns true if `me` is authorized to operate on an expense report
+ * whose `user_id` is `reportUserId`. Authorization tiers, in order:
+ *
+ *   1. me is admin/superadmin           → always true
+ *   2. me IS the report owner           → true
+ *   3. me has an active delegation to   → true (mirrors RLS via
+ *      reportUserId in expense_delegates  can_act_as_expense_owner)
+ *   else                                → false
+ *
+ * Used by the four owner-only API routes (mark-paid, recall,
+ * upload-receipt, calculate-mileage) which run on the service-role
+ * client and therefore bypass RLS — so they need to enforce the
+ * same delegate rule themselves. Routes that are role-gated only
+ * (bonus, approve, accounting-queue) don't need this helper.
+ */
+export async function canActOnReport(
+  me: AuthedUser | null,
+  reportUserId: string,
+): Promise<boolean> {
+  if (!me) return false
+  if (isAdminLike(me)) return true
+  if (me.id === reportUserId) return true
+  // Active delegation check. Service-role bypasses RLS, which is
+  // what we want here — the route already knows the caller, and
+  // we're just answering "is there an active row pairing them?"
+  const sb = admin()
+  const { data, error } = await sb
+    .from('expense_delegates')
+    .select('id')
+    .eq('delegate_user_id', me.id)
+    .eq('principal_user_id', reportUserId)
+    .is('revoked_at', null)
+    .limit(1)
+    .maybeSingle()
+  if (error) return false
+  return !!data
+}
