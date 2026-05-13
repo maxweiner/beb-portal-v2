@@ -20,6 +20,7 @@ import Schedule from '@/components/schedule/Schedule'
 import Travel from '@/components/travel/Travel'
 import Expenses from '@/components/expenses/Expenses'
 import PendingApprovalsModal from '@/components/expenses/PendingApprovalsModal'
+import PendingW9Modal from '@/components/w9/PendingW9Modal'
 import PartnerFinancials from '@/components/financials/PartnerFinancials'
 import Marketing from '@/components/marketing/Marketing'
 import Calendar from '@/components/calendar/Calendar'
@@ -244,6 +245,10 @@ export default function Home() {
         // Defer so Expenses is mounted before we ask it to open a report.
         setTimeout(() => window.dispatchEvent(new CustomEvent('beb:open-expense-report', { detail: { reportId: id } })), 0)
       }} />
+      {/* Hard-block when the user has a pending W-9 request (PR 4
+          of the W-9 initiative). Renders on top of everything until
+          the form is submitted via /w9/[token]. */}
+      <PendingW9Modal />
       <main className="flex-1 overflow-y-auto">
         <BroadcastBanner />
         {/* `key={navKey}` on every section forces a fresh remount when

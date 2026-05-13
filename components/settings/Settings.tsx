@@ -482,6 +482,12 @@ export default function Settings() {
         <W9RequesterSettings />
       )}
 
+      {/* My Documents — shown to everyone. Currently surfaces the
+          user's completed W-9(s) so they can re-download. Future tax
+          docs (1099s, etc.) can land here too. */}
+      <MyDocumentsSection />
+
+
       {/* Trip Templates (partner only — see is_partner) */}
       {user?.is_partner && <TripTemplatesSettings />}
 
@@ -844,6 +850,73 @@ function W9RequesterSettings() {
       <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
         This block appears in the top-right "Person requesting information" box on each W-9 PDF.
       </div>
+    </CollapsibleCard>
+  )
+}
+
+/* ── MY DOCUMENTS ──
+   Each user's completed W-9 (and future tax docs). Visible to
+   everyone — recipient pulls their PDF from the same /api/w9/[id]/pdf
+   endpoint that staff use, RLS / API gate identical. */
+function MyDocumentsSection() {
+  const { user } = useApp()
+  const [rows, setRows] = useState<Array<{ id: string; signed_at: string | null; recipient_name: string; status: string }>>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!user?.id) { setLoading(false); return }
+    let cancelled = false
+    ;(async () => {
+      const { data } = await supabase
+        .from('w9_requests')
+        .select('id, signed_at, recipient_name, status')
+        .eq('recipient_user_id', user.id)
+        .eq('status', 'completed')
+        .order('signed_at', { ascending: false })
+      if (cancelled) return
+      setRows((data as any) || [])
+      setLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [user?.id])
+
+  if (loading) return null
+
+  return (
+    <CollapsibleCard
+      storageKey="settings-my-documents"
+      title="📄 My Documents"
+      subtitle="Tax documents on file for you. Re-download anytime."
+    >
+      {rows.length === 0 ? (
+        <p style={{ color: 'var(--mist)', fontSize: 13, margin: 0 }}>
+          No documents yet. Submitted W-9 forms will appear here.
+        </p>
+      ) : (
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+          {rows.map(r => (
+            <li key={r.id} style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0',
+              borderTop: '1px solid var(--pearl)',
+            }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>IRS Form W-9</div>
+                <div style={{ fontSize: 11, color: 'var(--mist)' }}>
+                  Signed {r.signed_at ? new Date(r.signed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                </div>
+              </div>
+              <a
+                href={`/api/w9/${r.id}/pdf`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-outline btn-sm"
+              >
+                Download PDF ↗
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
     </CollapsibleCard>
   )
 }
