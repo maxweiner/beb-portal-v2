@@ -354,7 +354,11 @@ export default function DayEntry() {
 
   /* ── Derived ── */
   const nF = (s: string) => parseFloat(s) || 0
-  const validChecks = checks.filter(c => c.amount && parseFloat(c.amount) > 0)
+  // Voided checks stay in the register for audit but DON'T contribute
+  // to dollar totals or the purchase count. They keep their amount
+  // visible in the row so reconciliation can compare against any
+  // cleared-check entry that improperly matches a voided #.
+  const validChecks = checks.filter(c => c.amount && parseFloat(c.amount) > 0 && c.payment_type !== 'voided')
   const checksTotal = validChecks.reduce((s, c) => s + parseFloat(c.amount || '0'), 0)
   const derivedPurchases = validChecks.length
   const derived10 = validChecks.filter(c => c.commission_rate === 10).reduce((s, c) => s + parseFloat(c.amount), 0)
@@ -1007,9 +1011,16 @@ export default function DayEntry() {
                             <td style={{ padding: '4px 8px', color: 'var(--mist)', fontSize: 12, fontWeight: 700 }}>{i + 1}</td>
                             <td style={{ padding: '4px 8px' }}>
                               <select value={c.payment_type} onChange={e => updateCheck(i, 'payment_type', e.target.value)}
-                                style={{ fontSize: 12, padding: '4px 6px', width: 80 }}>
+                                style={{
+                                  fontSize: 12, padding: '4px 6px', width: 96,
+                                  // Visual tag when voided so it stands out
+                                  // in a long register.
+                                  color: c.payment_type === 'voided' ? '#991B1B' : undefined,
+                                  fontWeight: c.payment_type === 'voided' ? 700 : undefined,
+                                }}>
                                 <option value="check">Check</option>
                                 <option value="cash">Cash</option>
+                                <option value="voided">Voided</option>
                               </select>
                             </td>
                             <td style={{ padding: '4px 8px' }}>
@@ -1108,9 +1119,15 @@ export default function DayEntry() {
                         <div style={{ fontWeight: 900, fontSize: 13, color: 'var(--mist)', minWidth: 24, paddingBottom: 8 }}>#{i + 1}</div>
                         <div>
                           <label className="fl">Type</label>
-                          <select value={c.payment_type} onChange={e => updateCheck(i, 'payment_type', e.target.value)} style={{ width: 90 }}>
+                          <select value={c.payment_type} onChange={e => updateCheck(i, 'payment_type', e.target.value)}
+                            style={{
+                              width: 100,
+                              color: c.payment_type === 'voided' ? '#991B1B' : undefined,
+                              fontWeight: c.payment_type === 'voided' ? 700 : undefined,
+                            }}>
                             <option value="check">Check</option>
                             <option value="cash">Cash</option>
+                            <option value="voided">Voided</option>
                           </select>
                         </div>
                         <div>

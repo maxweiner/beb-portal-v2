@@ -388,6 +388,9 @@ export default async function Page({
   for (const b of buys) {
     const dn = Number(b.day_number) || 0
     if (!dn) continue
+    // Voided checks stay in the register list (for audit) but don't
+    // contribute to Spend / Bought totals on the dashboard.
+    if ((b as any).payment_type === 'voided') continue
     const amt = Number(b.amount) || 0
     const rate = Number(b.commission_rate ?? 10)
     const slot = buysByDay.get(dn) || { d10: 0, d5: 0, d0: 0, n: 0 }
@@ -894,20 +897,35 @@ export default async function Page({
                       </tr>
                     </thead>
                     <tbody>
-                      {grp.rows.map(b => (
+                      {grp.rows.map(b => {
+                        const isVoided = (b as any).payment_type === 'voided'
+                        return (
                         <Fragment key={b.id}>
-                          <tr style={{ borderTop: '1px solid #F3F4F6' }}>
+                          <tr style={{ borderTop: '1px solid #F3F4F6', background: isVoided ? '#FEF2F2' : undefined }}>
                             <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', fontWeight: 700, color: '#374151' }}>
                               {formatShortTime(b.created_at)}
                             </td>
                             <td style={{ ...mono, fontWeight: 700, color: '#0f172a' }}>
                               {b.buy_form_number ? `#${b.buy_form_number}` : '—'}
                             </td>
-                            <td style={mono}>{b.check_number ? `#${b.check_number}` : '—'}</td>
+                            <td style={mono}>
+                              {b.check_number ? `#${b.check_number}` : '—'}
+                              {isVoided && (
+                                <span style={{
+                                  marginLeft: 6, padding: '1px 6px', borderRadius: 4,
+                                  background: '#FECACA', color: '#7F1D1D',
+                                  fontSize: 10, fontWeight: 800, letterSpacing: '.05em',
+                                }}>VOIDED</span>
+                              )}
+                            </td>
                             <td style={{ padding: '10px 6px', textAlign: 'center' }}>
                               <CommPill rate={Number(b.commission_rate ?? 10)} />
                             </td>
-                            <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 800, color: '#0f172a' }}>
+                            <td style={{
+                              padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap',
+                              fontWeight: 800, color: isVoided ? '#9CA3AF' : '#0f172a',
+                              textDecoration: isVoided ? 'line-through' : undefined,
+                            }}>
                               {fmt(Math.round(Number(b.amount || 0) * 100))}
                             </td>
                           </tr>
@@ -922,7 +940,8 @@ export default async function Page({
                             </tr>
                           )}
                         </Fragment>
-                      ))}
+                        )
+                      })}
                     </tbody>
                   </table>
                 </Card>

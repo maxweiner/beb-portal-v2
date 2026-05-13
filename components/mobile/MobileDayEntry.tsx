@@ -369,7 +369,9 @@ export default function MobileDayEntry() {
   const commission = nF(tenPct) * 0.1 + nF(fivePct) * 0.05
   const touched = nF(customers) + nF(purchases) + totalSpend > 0
 
-  const validChecks = checks.filter(c => c.amount && parseFloat(c.amount) > 0)
+  // Voided checks stay in the register for audit but DON'T count
+  // toward dollar totals or purchase count.
+  const validChecks = checks.filter(c => c.amount && parseFloat(c.amount) > 0 && c.payment_type !== 'voided')
   const checksTotal = validChecks.reduce((s, c) => s + parseFloat(c.amount || '0'), 0)
   const derivedPurchases = validChecks.length
   const derived10 = validChecks.filter(c => c.commission_rate === 10).reduce((s, c) => s + parseFloat(c.amount), 0)
@@ -987,11 +989,24 @@ export default function MobileDayEntry() {
                         padding: 4, minWidth: 160,
                       }}>
                       <button onClick={() => {
+                        // Cycle between check ↔ cash. Voided is its own
+                        // toggle below so it doesn't get hidden behind
+                        // the cash/check oscillation.
                         setField('payment_type', c.payment_type === 'check' ? 'cash' : 'check')
                         setOverflowOpenIdx(null)
                       }}
                         style={overflowItemStyle}>
                         {c.payment_type === 'check' ? '💵 Mark as cash' : '🧾 Mark as check'}
+                      </button>
+                      <button onClick={() => {
+                        // Toggle voided. From voided, snap back to
+                        // 'check' (the default) so the row resumes
+                        // counting toward totals.
+                        setField('payment_type', c.payment_type === 'voided' ? 'check' : 'voided')
+                        setOverflowOpenIdx(null)
+                      }}
+                        style={{ ...overflowItemStyle, color: c.payment_type === 'voided' ? 'var(--ink)' : '#991B1B' }}>
+                        {c.payment_type === 'voided' ? '↩️ Un-void' : '🚫 Mark as voided'}
                       </button>
                       {checks.length > 1 && (
                         <button onClick={() => {
