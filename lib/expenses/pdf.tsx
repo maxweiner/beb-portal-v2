@@ -177,10 +177,15 @@ export function ExpenseReportPdf({ report, expenses, event, owner, receipts, sig
             <Text style={styles.brandSub}>Expense Report</Text>
           </View>
           <View>
-            <Text style={{ fontSize: 9, color: COLORS.mist, textAlign: 'right' }}>
+            {/* Report # is the primary identifier the accountant uses
+                when filing or referencing this report — give it more
+                visual weight than the Generated-on date below. */}
+            <Text style={{ fontSize: 12, fontWeight: 700, color: COLORS.ink, textAlign: 'right' }}>
+              Report #{report.id.slice(0, 8)}
+            </Text>
+            <Text style={{ fontSize: 9, color: COLORS.mist, textAlign: 'right', marginTop: 2 }}>
               Generated {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
             </Text>
-            <Text style={{ fontSize: 8, color: COLORS.mist, textAlign: 'right' }}>Report #{report.id.slice(0, 8)}</Text>
           </View>
         </View>
 
