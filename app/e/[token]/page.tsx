@@ -134,6 +134,70 @@ export async function generateMetadata({ params }: { params: { token: string } }
 }
 export const revalidate = 0
 
+/** Fetch + parse the store's iCal feed (Google Calendar / SimplyBook),
+ *  filter to events that fall within the picked event's 3-day window,
+ *  and map them to the dashboard's appointment shape. Mirrors the
+ *  staff AppointmentsAdmin pattern. Best-effort: any fetch / parse
+ *  error returns an empty list rather than failing the whole page. */
+async function fetchGcalAppointmentsForEvent(
+  feedUrl: string | null | undefined,
+  offsetHours: number | null | undefined,
+  eventStartIso: string | null | undefined,
+): Promise<any[]> {
+  if (!feedUrl || !eventStartIso) return []
+  try {
+    const hdrs = headers()
+    const host = hdrs.get('host') || ''
+    const proto = hdrs.get('x-forwarded-proto') || (host.startsWith('localhost') ? 'http' : 'https')
+    const origin = host ? `${proto}://${host}` : ''
+    if (!origin) return []
+
+    const res = await fetch(
+      `${origin}/api/fetch-ical?url=${encodeURIComponent(feedUrl)}`,
+      { next: { revalidate: 60 } },  // 1-minute server cache
+    )
+    if (!res.ok) return []
+    const text = await res.text()
+
+    const { parseIcal, parseApptDetail } = await import('@/lib/calendar')
+    const offsetMs = (offsetHours || 0) * 60 * 60 * 1000
+
+    // Inclusive window: Day 1 → Day 3 of the event (start_date + 0..2).
+    const startDay = eventStartIso
+    const endDay = addDays(eventStartIso, 2)
+
+    const out: any[] = []
+    for (const a of parseIcal(text)) {
+      const adj = offsetMs === 0
+        ? a
+        : { ...a, start: new Date(a.start.getTime() + offsetMs), end: new Date(a.end.getTime() + offsetMs) }
+      const date = `${adj.start.getUTCFullYear()}-${String(adj.start.getUTCMonth() + 1).padStart(2, '0')}-${String(adj.start.getUTCDate()).padStart(2, '0')}`
+      // Filter: must fall on Day 1–3 of this event.
+      if (date < startDay || date > endDay) continue
+
+      const time = `${String(adj.start.getUTCHours()).padStart(2, '0')}:${String(adj.start.getUTCMinutes()).padStart(2, '0')}`
+      const detail = parseApptDetail(adj)
+      const customerName = detail.name || adj.title || ''
+      out.push({
+        id: `gcal-${date}-${time}-${customerName}`,
+        appointment_date: date,
+        appointment_time: time,
+        customer_name: customerName,
+        items_bringing: detail.items ? [detail.items] : [],
+        // Use a status the renderer treats as "upcoming" by default.
+        // GCal events don't carry per-row status — staff would need to
+        // mark served/no-show on the canonical side.
+        status: 'confirmed',
+        is_walkin: false,
+        _source: 'gcal',
+      })
+    }
+    return out
+  } catch {
+    return []
+  }
+}
+
 function admin() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -179,7 +243,7 @@ export default async function Page({
   // 3. Store.
   const { data: store } = await sb
     .from('stores')
-    .select('id, name, slug, city, state, store_image_url, color_primary')
+    .select('id, name, slug, city, state, store_image_url, color_primary, calendar_feed_url, calendar_offset_hours')
     .eq('id', tokenRow.store_id)
     .maybeSingle()
   if (!store) return <NotFound />
@@ -286,10 +350,30 @@ export default async function Page({
       .eq('event_id', ev.id)
       .order('day_number', { ascending: true }),
   ])
-  const appts = apptsRes.data ?? []
+  const portalAppts = apptsRes.data ?? []
   const waitlist = waitlistRes.data ?? []
   const buys = buysRes.data ?? []
   const days: any[] = daysRes.data ?? []
+
+  // 5b. Pull Google Calendar / SimplyBook appointments via the
+  //     store's iCal feed and merge into the appointments list. This
+  //     mirrors the staff AppointmentsAdmin behavior so the dashboard
+  //     shows the same merged set the BEB team sees internally.
+  //
+  //     Window: only events that fall on Day 1–3 of the picked event.
+  //     The iCal feed often contains months of bookings — we filter
+  //     down to this event's dates so the section isn't flooded.
+  const gcalAppts = await fetchGcalAppointmentsForEvent(
+    (store as any).calendar_feed_url,
+    (store as any).calendar_offset_hours,
+    ev.start_date,
+  )
+
+  // Concatenate. Sort happens later when grouping by date. If a
+  // portal-table booking and a gcal event share a customer + time
+  // we don't try to dedupe (the staff view doesn't either) — better
+  // to over-show than to hide a real booking.
+  const appts = [...portalAppts, ...gcalAppts]
 
   // 6. KPIs — cumulative across all days (Day Entry totals are the
   //    source of truth, matching the internal staff event summary).
