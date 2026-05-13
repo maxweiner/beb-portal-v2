@@ -475,6 +475,13 @@ export default function Settings() {
         <ExpenseSettings />
       )}
 
+      {/* W-9 Requester Info (admin/superadmin/accounting/partner) —
+          pre-fills the "Person requesting information" box on every
+          W-9 sent through the Accounting Queue. */}
+      {(user?.role === 'admin' || user?.role === 'superadmin' || user?.role === 'accounting' || user?.is_partner) && (
+        <W9RequesterSettings />
+      )}
+
       {/* Trip Templates (partner only — see is_partner) */}
       {user?.is_partner && <TripTemplatesSettings />}
 
@@ -722,6 +729,120 @@ function ExpenseSettings() {
         <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
           Used by the mileage calculator. The 2025 IRS standard rate is $0.67/mi.
         </div>
+      </div>
+    </CollapsibleCard>
+  )
+}
+
+/* ── W-9 REQUESTER SETTINGS ──
+   Pre-fills the "Person requesting information" box at the top-right
+   of every W-9 sent via the Accounting Queue. Stored at
+   `settings.w9.requester_info` as a JSONB blob — see PR 1's
+   supabase-migration-w9-requests.sql for the schema. */
+function W9RequesterSettings() {
+  const [loading, setLoading] = useState(true)
+  const [name, setName] = useState('Beneficial Estate Buyers, LLC')
+  const [address, setAddress] = useState('')
+  const [city, setCity] = useState('')
+  const [state, setStateUS] = useState('')
+  const [zip, setZip] = useState('')
+  const [phone, setPhone] = useState('')
+  const [tin, setTin] = useState('')
+  const [contactName, setContactName] = useState('')
+  const [contactEmail, setContactEmail] = useState('')
+
+  useEffect(() => {
+    const load = async () => {
+      const { data } = await supabase.from('settings').select('value').eq('key', 'w9.requester_info').maybeSingle()
+      const v = (data?.value as any) || {}
+      setName(v.name || 'Beneficial Estate Buyers, LLC')
+      setAddress(v.address || '')
+      setCity(v.city || '')
+      setStateUS(v.state || '')
+      setZip(v.zip || '')
+      setPhone(v.phone || '')
+      setTin(v.tin || '')
+      setContactName(v.contact_name || '')
+      setContactEmail(v.contact_email || '')
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const status = useAutosave(
+    { name, address, city, state, zip, phone, tin, contactName, contactEmail },
+    async (d) => {
+      await supabase.from('settings').upsert({
+        key: 'w9.requester_info',
+        value: {
+          name: d.name.trim(),
+          address: d.address.trim(),
+          city: d.city.trim(),
+          state: d.state.trim().toUpperCase(),
+          zip: d.zip.trim(),
+          phone: d.phone.trim() || null,
+          tin: d.tin.trim() || null,
+          contact_name: d.contactName.trim() || null,
+          contact_email: d.contactEmail.trim() || null,
+        },
+      })
+    },
+    { enabled: !loading, delay: 800 },
+  )
+
+  if (loading) return null
+
+  return (
+    <CollapsibleCard
+      storageKey="settings-w9-requester"
+      title="📧 W-9 Requester Info"
+      titleAccessory={<AutosaveIndicator status={status} />}
+      subtitle="Pre-fills the 'Person requesting information' box on every W-9 sent from the Accounting Queue."
+    >
+      <div className="field">
+        <label className="fl">Company name</label>
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="Beneficial Estate Buyers, LLC" />
+      </div>
+      <div className="field">
+        <label className="fl">Address</label>
+        <input value={address} onChange={e => setAddress(e.target.value)} placeholder="123 Main St" />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 10 }}>
+        <div className="field">
+          <label className="fl">City</label>
+          <input value={city} onChange={e => setCity(e.target.value)} />
+        </div>
+        <div className="field">
+          <label className="fl">State</label>
+          <input value={state} onChange={e => setStateUS(e.target.value.slice(0, 2).toUpperCase())} maxLength={2} />
+        </div>
+        <div className="field">
+          <label className="fl">ZIP</label>
+          <input value={zip} onChange={e => setZip(e.target.value)} />
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <div className="field">
+          <label className="fl">Phone (optional)</label>
+          <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="555-123-4567" />
+        </div>
+        <div className="field">
+          <label className="fl">EIN (optional)</label>
+          <input value={tin} onChange={e => setTin(e.target.value)} placeholder="12-3456789" />
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <div className="field">
+          <label className="fl">Contact name (optional)</label>
+          <input value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Diane Smith" />
+        </div>
+        <div className="field">
+          <label className="fl">Contact email (optional)</label>
+          <input type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} placeholder="accounting@bebllp.com" />
+        </div>
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
+        This block appears in the top-right "Person requesting information" box on each W-9 PDF.
       </div>
     </CollapsibleCard>
   )
