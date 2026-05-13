@@ -38,6 +38,12 @@ interface QueueRow {
   total_bonus: number
   grand_total: number
   receipt_count: number
+  /** Audit fields from the QuickBooks export feature. The detail
+   *  panel surfaces these as the "Exported ✓" pill + a re-export
+   *  warning so Diane doesn't double-book a Bill into QB. */
+  report_number?: string | null
+  exported_to_qb_at?: string | null
+  exported_to_qb_format?: 'iif' | 'csv' | null
 }
 
 type StatusFilter = 'all' | 'submitted_pending_review' | 'approved'
@@ -426,6 +432,13 @@ export default function AccountingQueue({ setNav }: Props) {
                 <button onClick={() => openFullDetail(active.id)} className="btn-outline">
                   Open full report →
                 </button>
+
+                {/* QuickBooks export — IIF (QBD) + CSV (QBO). Mapping
+                    is set under Settings → 💼 QuickBooks Account
+                    Mapping. We mark the report exported on the server
+                    and show an "Exported ✓" hint here so Diane doesn't
+                    double-book the same Bill. */}
+                <ExportToQbButtons row={active} onExported={() => setRefreshTick(t => t + 1)} />
               </div>
 
               <div style={{ marginTop: 12, fontSize: 11, color: 'var(--mist)' }}>
@@ -546,4 +559,99 @@ function ageBadgeStyle(c: { bg: string; fg: string }): React.CSSProperties {
     background: c.bg, color: c.fg,
     letterSpacing: '.02em',
   }
+}
+
+/**
+ * Per-report QuickBooks export controls. Two side-by-side buttons
+ * — IIF for QBD, CSV for QBO — that POST to
+ * /api/expense-reports/[id]/export-quickbooks, stream the file
+ * back, trigger a download, and refresh the queue so the
+ * exported_to_qb_at pill appears.
+ *
+ * If the report has already been exported, the "Exported ✓" pill
+ * shows above the buttons and clicking either button asks the user
+ * to confirm re-export (so Diane doesn't accidentally re-book a
+ * Bill she already imported into QB).
+ */
+function ExportToQbButtons({
+  row, onExported,
+}: { row: QueueRow; onExported: () => void }) {
+  const [busy, setBusy] = useState<'iif' | 'csv' | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function exportAs(format: 'iif' | 'csv') {
+    if (busy) return
+    if (row.exported_to_qb_at) {
+      const prior = row.exported_to_qb_format
+        ? `(last exported as ${row.exported_to_qb_format.toUpperCase()} on ${new Date(row.exported_to_qb_at).toLocaleDateString()})`
+        : ''
+      if (!confirm(`This report was already exported to QuickBooks ${prior}. Re-exporting will produce a fresh file but the Bill in QB stays unchanged. Continue?`)) return
+    }
+    setBusy(format); setError(null)
+    try {
+      const headers = await authHeaders()
+      const res = await fetch(`/api/expense-reports/${row.id}/export-quickbooks?format=${format}`, {
+        method: 'POST',
+        headers,
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({} as any))
+        throw new Error(j.error || `HTTP ${res.status}`)
+      }
+      // Stream → blob → click hidden <a> to download.
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${row.report_number || row.id.slice(0, 8)}.${format}`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      onExported()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Export failed')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+      {row.exported_to_qb_at && (
+        <div style={{
+          fontSize: 11, fontWeight: 700, color: '#166534',
+          background: '#DCFCE7', borderRadius: 4, padding: '4px 8px',
+          alignSelf: 'flex-start',
+        }}>
+          ✓ Exported to QB · {row.exported_to_qb_format?.toUpperCase() || ''} · {new Date(row.exported_to_qb_at).toLocaleDateString()}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button
+          onClick={() => exportAs('iif')}
+          disabled={!!busy}
+          className="btn-outline btn-sm"
+          style={{ flex: 1 }}
+          title="QuickBooks Desktop — drop the .iif into QB → File → Utilities → Import → IIF Files"
+        >
+          {busy === 'iif' ? 'Building…' : '⬇ IIF (QBD)'}
+        </button>
+        <button
+          onClick={() => exportAs('csv')}
+          disabled={!!busy}
+          className="btn-outline btn-sm"
+          style={{ flex: 1 }}
+          title="QuickBooks Online — feed the .csv to SaasAnt / Transaction Pro / Spreadsheet Sync"
+        >
+          {busy === 'csv' ? 'Building…' : '⬇ CSV (QBO)'}
+        </button>
+      </div>
+      {error && (
+        <div style={{ fontSize: 11, color: '#991B1B', background: '#FEE2E2', borderRadius: 4, padding: '4px 8px' }}>
+          ⚠ {error}
+        </div>
+      )}
+    </div>
+  )
 }

@@ -39,6 +39,11 @@ interface QueueRow {
   total_bonus: number
   grand_total: number
   receipt_count: number
+  /** Audit fields surfaced to the queue UI for the "Exported ✓"
+   *  pill + re-export warning. Null when never exported. */
+  report_number: string | null
+  exported_to_qb_at: string | null
+  exported_to_qb_format: 'iif' | 'csv' | null
 }
 
 export async function GET(req: Request) {
@@ -64,6 +69,7 @@ export async function GET(req: Request) {
       id, status, user_id, event_id,
       submitted_at, approved_at,
       total_expenses, total_compensation, bonus_amount, grand_total,
+      report_number, exported_to_qb_at, exported_to_qb_format,
       user:users!user_id(name),
       event:events(store_name, start_date, brand)
     `)
@@ -108,6 +114,9 @@ export async function GET(req: Request) {
       total_bonus: Number(r.bonus_amount) || 0,
       grand_total: Number(r.grand_total) || 0,
       receipt_count: receiptCount.get(r.id) || 0,
+      report_number: r.report_number || null,
+      exported_to_qb_at: r.exported_to_qb_at || null,
+      exported_to_qb_format: r.exported_to_qb_format || null,
     }
   })
 
