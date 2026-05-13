@@ -63,6 +63,82 @@ export interface AddressAutocompleteInputProps {
   /** Forwarded to the underlying <input> for styling parity with sibling inputs. */
   className?: string
   inputType?: 'text' | 'search'
+  /** Optional structured emit. Fires alongside onChange when the user
+   *  picks a Places suggestion (not on plain typing). Lets the parent
+   *  populate sibling fields like city / state / zip without parsing
+   *  the formatted string. Place Details billing tier bumps from "ID"
+   *  to "Contact" when this is set, since we have to fetch
+   *  addressComponents in addition to formattedAddress — only opt in
+   *  on the forms that need structured fields. */
+  onSelectStructured?: (parts: StructuredAddress) => void
+}
+
+/**
+ * Reshape the Google Places `addressComponents` array (list of
+ * `{ longText, shortText, types: [...] }`) into our flat parts.
+ *
+ * Type names we care about (per Google's component-types table):
+ *   street_number              → "1476"
+ *   route                      → "Wesley's Run"
+ *   subpremise                 → "Apt 5"           (rarely set)
+ *   locality                   → "Gladwyne"        (city)
+ *   sublocality / neighborhood → fallback for city when Places
+ *                                doesn't tag a locality (some
+ *                                rural addresses)
+ *   administrative_area_level_1 → "PA"  (state, shortText)
+ *   postal_code                 → "19035"
+ *
+ * Anything missing comes back as an empty string — caller decides
+ * whether to surface a "couldn't parse, fill in manually" hint.
+ */
+function parseAddressComponents(components: any[] | undefined | null, formatted: string): StructuredAddress {
+  const parts: StructuredAddress = { line1: '', line2: '', city: '', state: '', zip: '', formatted }
+  if (!components || components.length === 0) return parts
+
+  // Build a lookup keyed by the first type for quick access. Each
+  // component carries `longText` (display form) + `shortText` (e.g.
+  // 2-letter state abbreviation). We index by every type the
+  // component declares so fallback chains (locality → sublocality)
+  // are simple.
+  const byType = new Map<string, { long: string; short: string }>()
+  for (const c of components) {
+    const long  = (c.longText  ?? c.long_name  ?? '') as string
+    const short = (c.shortText ?? c.short_name ?? '') as string
+    const types: string[] = c.types || []
+    for (const t of types) {
+      if (!byType.has(t)) byType.set(t, { long, short })
+    }
+  }
+
+  const get = (k: string): { long: string; short: string } | undefined => byType.get(k)
+  const streetNumber = get('street_number')?.long || ''
+  const route        = get('route')?.long || ''
+  parts.line1 = [streetNumber, route].filter(Boolean).join(' ').trim()
+  parts.line2 = get('subpremise')?.long || ''
+  parts.city  = get('locality')?.long
+             || get('sublocality')?.long
+             || get('neighborhood')?.long
+             || ''
+  parts.state = get('administrative_area_level_1')?.short || ''
+  parts.zip   = get('postal_code')?.long || ''
+  return parts
+}
+
+/** Structured address parts emitted by onSelectStructured. */
+export interface StructuredAddress {
+  /** `street_number + ' ' + route` (e.g. "1476 Wesley's Run"). */
+  line1: string
+  /** Apartment/suite — usually empty from Places; the parent UI can
+   *  expose a manual line2 input for the user to fill in. */
+  line2: string
+  /** locality (e.g. "Gladwyne"). */
+  city: string
+  /** 2-letter administrative_area_level_1 (e.g. "PA"). */
+  state: string
+  /** postal_code (e.g. "19035"). */
+  zip: string
+  /** Full formatted address — same string passed to onChange. */
+  formatted: string
 }
 
 interface Suggestion {
@@ -73,7 +149,7 @@ interface Suggestion {
 }
 
 export default function AddressAutocompleteInput({
-  value, onChange, placeholder, countries = ['us'], className, inputType = 'text',
+  value, onChange, placeholder, countries = ['us'], className, inputType = 'text', onSelectStructured,
 }: AddressAutocompleteInputProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
@@ -165,12 +241,22 @@ export default function AddressAutocompleteInput({
 
   async function pickSuggestion(s: Suggestion) {
     try {
-      // Convert prediction → Place → fetch only the formatted address.
-      // Limiting fields keeps the Place Details billing tier at "ID".
+      // Convert prediction → Place → fetch what we need. Field list
+      // shrinks when the caller didn't ask for structured parts so
+      // we stay on the cheaper "ID" billing tier; adding
+      // addressComponents bumps it to "Contact" tier per Places
+      // pricing. Caller controls the bump by passing
+      // onSelectStructured.
       const place = s.prediction.toPlace()
-      await place.fetchFields({ fields: ['formattedAddress'] })
+      const fields = onSelectStructured
+        ? ['formattedAddress', 'addressComponents']
+        : ['formattedAddress']
+      await place.fetchFields({ fields })
       const formatted = place.formattedAddress || s.display
       onChange(formatted)
+      if (onSelectStructured) {
+        onSelectStructured(parseAddressComponents(place.addressComponents, formatted))
+      }
     } catch {
       // If the place fetch fails, fall back to the prediction's
       // already-displayed text so the user still gets *something*.

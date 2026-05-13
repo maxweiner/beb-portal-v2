@@ -42,7 +42,16 @@ export default function Settings() {
   const [profile, setProfile] = useState({
     name: user?.name || '',
     phone: user?.phone || '',
+    // Single-line address kept in sync with the structured fields below
+    // — populated by joining line1/line2/city/state/zip on save so the
+    // legacy mileage calculator (which feeds home_address straight to
+    // Google Distance Matrix) keeps working unchanged.
     home_address: user?.home_address || '',
+    home_address_line1: user?.home_address_line1 || '',
+    home_address_line2: user?.home_address_line2 || '',
+    home_city:          user?.home_city          || '',
+    home_state:         user?.home_state         || '',
+    home_zip:           user?.home_zip           || '',
   })
   const [notifyMaster, setNotifyMaster] = useState(user?.notify || false)
   const [notifySms, setNotifySms] = useState(user?.notify_sms || false)
@@ -72,10 +81,29 @@ export default function Settings() {
     profile,
     async (p) => {
       if (!user || !p.name.trim()) return
+      // Assemble the legacy single-line `home_address` from the
+      // structured fields when at least one is filled. Otherwise
+      // preserve whatever the user typed in the legacy field —
+      // older profiles still have the pre-structured value there.
+      const hasStructured =
+        !!(p.home_address_line1.trim() || p.home_city.trim() || p.home_state.trim() || p.home_zip.trim())
+      const assembled = hasStructured
+        ? [
+            p.home_address_line1.trim(),
+            p.home_address_line2.trim(),
+            [p.home_city.trim(), p.home_state.trim()].filter(Boolean).join(', '),
+            p.home_zip.trim(),
+          ].filter(Boolean).join(', ')
+        : p.home_address.trim()
       await supabase.from('users').update({
         name: p.name.trim(),
         phone: p.phone.trim(),
-        home_address: p.home_address.trim() || null,
+        home_address:       assembled || null,
+        home_address_line1: p.home_address_line1.trim() || null,
+        home_address_line2: p.home_address_line2.trim() || null,
+        home_city:          p.home_city.trim() || null,
+        home_state:         p.home_state.trim().slice(0, 2).toUpperCase() || null,
+        home_zip:           p.home_zip.trim() || null,
       }).eq('id', user.id)
       // Refresh any in-flight notifications for this buyer so the
       // updated name/phone shows up when they actually send.
@@ -200,13 +228,64 @@ export default function Settings() {
           <input type="tel" value={profile.phone} onChange={e => setProfile(p => ({ ...p, phone: e.target.value }))} />
         </div>
         <div className="field">
-          <label className="fl">Home Address</label>
+          <label className="fl">Home Address — Line 1</label>
           <AddressAutocompleteInput
-            value={profile.home_address}
-            placeholder="Start typing your address…"
-            onChange={v => setProfile(p => ({ ...p, home_address: v }))} />
+            value={profile.home_address_line1}
+            placeholder="Start typing your street address…"
+            onChange={v => setProfile(p => ({ ...p, home_address_line1: v }))}
+            onSelectStructured={parts => setProfile(p => ({
+              ...p,
+              // Picker emits both onChange (full formatted string into
+              // line1) and onSelectStructured (parsed parts). The
+              // latter runs second, so it wins for line1 — restoring
+              // it to just street number + route.
+              home_address_line1: parts.line1 || p.home_address_line1,
+              home_address_line2: parts.line2 || p.home_address_line2,
+              home_city:          parts.city  || p.home_city,
+              home_state:         parts.state || p.home_state,
+              home_zip:           parts.zip   || p.home_zip,
+            }))}
+          />
           <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
-            Used by the mileage calculator (home → store → home). Pick from the suggestions to lock in a clean, geocodable address.
+            Pick from the suggestions to auto-fill City / State / Zip. Used to prefill the W-9 tax form and as the home origin for mileage calculations.
+          </div>
+        </div>
+        <div className="field">
+          <label className="fl">Address Line 2 <span style={{ color: 'var(--mist)', fontWeight: 400 }}>(optional — apt / suite)</span></label>
+          <input
+            type="text"
+            value={profile.home_address_line2}
+            placeholder="Apt 5 / Suite 200"
+            onChange={e => setProfile(p => ({ ...p, home_address_line2: e.target.value }))}
+          />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 10 }}>
+          <div className="field">
+            <label className="fl">City</label>
+            <input
+              type="text"
+              value={profile.home_city}
+              onChange={e => setProfile(p => ({ ...p, home_city: e.target.value }))}
+            />
+          </div>
+          <div className="field">
+            <label className="fl">State</label>
+            <input
+              type="text"
+              value={profile.home_state}
+              maxLength={2}
+              placeholder="PA"
+              onChange={e => setProfile(p => ({ ...p, home_state: e.target.value.toUpperCase().slice(0, 2) }))}
+            />
+          </div>
+          <div className="field">
+            <label className="fl">ZIP</label>
+            <input
+              type="text"
+              value={profile.home_zip}
+              placeholder="19035"
+              onChange={e => setProfile(p => ({ ...p, home_zip: e.target.value }))}
+            />
           </div>
         </div>
       </CollapsibleCard>
