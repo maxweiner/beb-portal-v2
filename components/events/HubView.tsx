@@ -177,7 +177,13 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
     void (async () => {
       setLoading(true)
       const [evRes, campaignsRes, travelRes, ackRes, bookingRes, assetsRes] = await Promise.all([
-        supabase.from('events').select('*').eq('brand', brand).order('start_date'),
+        // Include event_days so eventSpend() + the Customers KPI +
+        // the Day Entry launcher's "N/3 entered" sub-label have the
+        // per-day data they need. Without this join `ev.days` stays
+        // empty and every card reads $0 / 0 customers even when
+        // buyers have entered data. Mirrors the canonical fetch shape
+        // in lib/context.tsx + components/events/Events.tsx.
+        supabase.from('events').select('*, days:event_days(*)').eq('brand', brand).order('start_date'),
         supabase.from('marketing_campaigns').select('event_id, flow_type, status, paid_at'),
         supabase.from('travel_reservations').select('event_id, buyer_id, type'),
         supabase.from('travel_acknowledgments').select('event_id, buyer_id, type'),
