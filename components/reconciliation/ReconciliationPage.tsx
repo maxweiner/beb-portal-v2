@@ -22,7 +22,7 @@ const withTimeout = <T,>(promise: PromiseLike<T>, ms = 15000): Promise<T> => {
   ])
 }
 
-type FindingType = 'matched' | 'amount_mismatch' | 'duplicate_clearing' | 'orphan_cleared' | 'outstanding'
+type FindingType = 'matched' | 'amount_mismatch' | 'duplicate_clearing' | 'orphan_cleared' | 'outstanding' | 'voided_cashed'
 type FindingStatus = 'open' | 'disputed' | 'resolved' | 'ignored'
 
 interface Finding {
@@ -76,6 +76,7 @@ const TYPE_LABEL: Record<FindingType, string> = {
   duplicate_clearing: 'Duplicate clearing',
   orphan_cleared: 'Orphan cleared',
   outstanding: 'Outstanding',
+  voided_cashed: 'VOIDED CHECK CASHED',
 }
 const TYPE_ICON: Record<FindingType, string> = {
   matched: '✅',
@@ -83,6 +84,7 @@ const TYPE_ICON: Record<FindingType, string> = {
   duplicate_clearing: '🚨',
   orphan_cleared: '❓',
   outstanding: '📭',
+  voided_cashed: '🚨',
 }
 const TYPE_COLOR: Record<FindingType, { bg: string; fg: string }> = {
   matched:            { bg: '#D1FAE5', fg: '#065F46' },
@@ -90,6 +92,7 @@ const TYPE_COLOR: Record<FindingType, { bg: string; fg: string }> = {
   duplicate_clearing: { bg: '#FEE2E2', fg: '#991B1B' },
   orphan_cleared:     { bg: '#E0E7FF', fg: '#3730A3' },
   outstanding:        { bg: '#F5F5F4', fg: '#78716C' },
+  voided_cashed:      { bg: '#7F1D1D', fg: '#FFFFFF' }, // ALARM — inverted reds
 }
 const STATUS_LABEL: Record<FindingStatus, string> = {
   open: 'Open', disputed: 'Disputed', resolved: 'Resolved', ignored: 'Ignored',
@@ -166,7 +169,7 @@ export default function ReconciliationPage() {
     // resolved orphan still fires as a new duplicate_clearing finding)
     // but they don't pad the working count.
     const by: Record<FindingType, number> = {
-      matched: 0, amount_mismatch: 0, duplicate_clearing: 0, orphan_cleared: 0, outstanding: 0,
+      matched: 0, amount_mismatch: 0, duplicate_clearing: 0, orphan_cleared: 0, outstanding: 0, voided_cashed: 0,
     }
     for (const f of findings || []) {
       if (f.status !== 'open') continue
