@@ -12,6 +12,7 @@ import { NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { getAuthedUser } from '@/lib/expenses/serverAuth'
 import { pdfAdmin } from '@/lib/wholesale/pdfHelpers'
+import { sendEmail } from '@/lib/email'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,7 +51,9 @@ export async function POST(req: Request) {
 
   const brand = String(body.brand || 'beb')
   if (brand !== 'beb' && brand !== 'liberty') return NextResponse.json({ error: 'Invalid brand' }, { status: 400 })
-  const sendEmail = body.send_email !== false  // default true
+  // Local flag renamed from `sendEmail` to avoid shadowing the
+  // imported sendEmail() helper used by emailW9Link() below.
+  const shouldEmail = body.send_email !== false  // default true
 
   const sb = pdfAdmin()
 
@@ -98,9 +101,8 @@ export async function POST(req: Request) {
   // Optional send.
   const url = `${originFrom(req)}/w9/${token}`
   let sentTo: string | null = null
-  if (sendEmail) {
+  if (shouldEmail) {
     const sent = await emailW9Link({
-      sb,
       brand: brand as 'beb' | 'liberty',
       toEmail: recipientEmail,
       toName: recipientName,
@@ -143,24 +145,26 @@ export async function GET(req: Request) {
 
 
 async function emailW9Link({
-  sb, brand, toEmail, toName, fromName, url,
+  brand, toEmail, toName, fromName, url,
 }: {
-  sb: ReturnType<typeof pdfAdmin>
   brand: 'beb' | 'liberty'
   toEmail: string
   toName: string
   fromName: string
   url: string
 }): Promise<boolean> {
-  const { data: cfgRow } = await sb.from('settings').select('value').eq('key', 'email').maybeSingle()
-  const apiKey = (cfgRow?.value as any)?.apiKey
-  if (!apiKey) {
-    console.warn('[w9 create] Resend API key missing in settings.email')
-    return false
-  }
-  const FROM = brand === 'liberty'
-    ? { name: 'Liberty Estate Buyers', email: 'noreply@libertyestatebuyers.com' }
-    : { name: 'BEB Portal',            email: 'noreply@updates.bebllp.com' }
+  // Use the shared sendEmail() helper rather than calling Resend
+  // directly here — that way the W-9 send participates in the same
+  // config-lookup, dev-recipient sender swap, and error surface as
+  // every other transactional email in the app. Historically this
+  // route had its own Resend fetch + a different settings key
+  // ('email' with a nested .apiKey) which silently fell out of sync
+  // with the rest of the codebase (which reads 'resend_api_key' as a
+  // flat value), so emails appeared as "no API key" even when one
+  // was configured.
+  const fromAddr = brand === 'liberty'
+    ? 'Liberty Estate Buyers <noreply@libertyestatebuyers.com>'
+    : 'BEB Portal <noreply@updates.bebllp.com>'
 
   const subject = 'Please complete a W-9 tax form'
   const html = `<!DOCTYPE html>
@@ -174,16 +178,18 @@ async function emailW9Link({
   </p>
   <p style="margin:16px 0 0; font-size:13px; color:#6b7280;">The link is valid for 30 days. Reply to this email with any questions.</p>
 </body></html>`
-  const r = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: `${FROM.name} <${FROM.email}>`, to: [toEmail], subject, html }),
-  })
-  if (!r.ok) {
-    console.warn(`[w9 create] Resend ${r.status}: ${await r.text().catch(() => '')}`)
+
+  try {
+    const id = await sendEmail({ to: toEmail, subject, html, from: fromAddr })
+    // sendEmail returns null when no API key is configured (silent
+    // no-op). The caller surfaces that as "Email not sent (no API
+    // key)" in the UI — same as before, but now driven by the same
+    // settings key the rest of the app uses.
+    return !!id
+  } catch (err) {
+    console.warn(`[w9 create] sendEmail failed: ${err instanceof Error ? err.message : String(err)}`)
     return false
   }
-  return true
 }
 
 function escapeHtml(s: string): string {
