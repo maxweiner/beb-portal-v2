@@ -19,6 +19,7 @@ import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import { fmtMoney } from '@/lib/format'
 import Checkbox from '@/components/ui/Checkbox'
+import W9Panel from './W9Panel'
 import type { NavPage } from '@/app/page'
 
 interface QueueRow {
@@ -258,6 +259,10 @@ export default function AccountingQueue({ setNav }: Props) {
         <KpiTile label="Awaiting payment" count={kpis.payCount} amount={kpis.paySum} accent="#1D6B44" />
         <KpiTile label="Overdue (7+ days)" count={kpis.overdueCount} amount={null} accent={kpis.overdueCount > 0 ? '#B22234' : 'var(--mist)'} />
       </div>
+
+      {/* W-9 panel — Send-W-9 modal + recent-history table. Lives
+          above the expense queue since it's a fast everyday action. */}
+      <W9Panel />
 
       {/* Filter bar */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, padding: 12, marginBottom: 14, background: '#fff', border: '1px solid var(--pearl)', borderRadius: 'var(--r)' }}>
