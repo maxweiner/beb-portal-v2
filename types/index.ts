@@ -712,3 +712,99 @@ export interface EventShareToken {
   created_at: string
   updated_at: string
 }
+
+// ───────────────────────────────────────────────────────────────
+// W-9 Requests — Diane's "Send W-9" flow. Schema at
+// supabase-migration-w9-requests.sql.
+// ───────────────────────────────────────────────────────────────
+
+export type W9RequestStatus =
+  | 'pending'   // sent but not yet opened by recipient
+  | 'opened'    // recipient loaded the form at least once
+  | 'completed' // signed + PDF generated + emailed to accountant
+  | 'expired'   // 30-day window lapsed without completion
+  | 'revoked'   // accountant killed it before completion
+
+/** One row per W-9 request, internal or external. Internal recipients
+ *  link to an existing `users` row via `recipient_user_id`; external
+ *  ones leave it NULL and rely on the typed-in name + email. */
+export interface W9Request {
+  id: string
+  brand: string
+  recipient_user_id: string | null
+  recipient_name: string
+  recipient_email: string
+  token: string
+  requested_by: string | null
+  requested_by_email: string | null
+  requested_by_name: string | null
+  status: W9RequestStatus
+  expires_at: string
+  revoked_at: string | null
+  revoked_reason: string | null
+  first_opened_at: string | null
+  last_opened_at: string | null
+  open_count: number
+  last_sent_at: string | null
+  last_sent_to: string | null
+  send_count: number
+  /** JSONB snapshot of submitted form fields. Excludes TIN/SSN — those
+   *  live only inside the signed PDF for audit-surface minimization. */
+  form_data: W9FormData | null
+  signed_pdf_path: string | null
+  signed_at: string | null
+  delivered_pdf_to: string | null
+  delivered_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** Shape of `w9_requests.form_data` JSONB. Mirrors the IRS W-9 form
+ *  layout. TIN is NOT stored here — only inside the signed PDF. */
+export interface W9FormData {
+  // Line 1 — name (as shown on tax return)
+  name: string
+  // Line 2 — business / disregarded entity name (if different)
+  business_name: string | null
+  // Line 3 — tax classification
+  tax_classification:
+    | 'individual'
+    | 'c_corp'
+    | 's_corp'
+    | 'partnership'
+    | 'trust_estate'
+    | 'llc'
+    | 'other'
+  // Line 3 sub-options when tax_classification === 'llc'
+  llc_classification: 'C' | 'S' | 'P' | null
+  // Line 3 free text when tax_classification === 'other'
+  other_classification: string | null
+  // Line 4 — exemptions (rarely set — kept as free text)
+  exempt_payee_code: string | null
+  exempt_fatca_code: string | null
+  // Lines 5-6 — address
+  address: string
+  city: string
+  state: string
+  zip: string
+  // Part I — TIN type (which kind they filled in; actual digits in PDF only)
+  tin_type: 'ssn' | 'ein'
+  // Part II certification
+  signed_name: string  // typed name alongside the drawn signature
+  signed_at: string    // ISO timestamp captured at submit
+}
+
+/** BEB's requester info — populates the "person requesting information"
+ *  box at top right of the W-9 form. Stored in `settings` under key
+ *  'w9.requester_info'. */
+export interface W9RequesterInfo {
+  name: string
+  address: string
+  city: string
+  state: string
+  zip: string
+  phone: string | null
+  tin: string | null  // BEB's EIN — optional; some accountants want it visible
+  contact_name: string | null
+  contact_email: string | null
+}
