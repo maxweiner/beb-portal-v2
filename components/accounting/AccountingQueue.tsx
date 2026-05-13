@@ -60,18 +60,31 @@ interface Props {
 }
 
 export default function AccountingQueue({ setNav }: Props) {
-  const { user } = useApp()
+  const { user, brand } = useApp()
   const isAllowed = user?.role === 'accounting' || user?.role === 'admin' || user?.role === 'superadmin' || user?.is_partner === true
 
   const [rows, setRows] = useState<QueueRow[] | null>(null)
   const [err, setErr]   = useState<string | null>(null)
   const [refreshTick, setRefreshTick] = useState(0)
 
-  // Filters
+  // Filters. Brand auto-scopes to the brand picker on first mount —
+  // when the user is in Liberty mode, the queue shows Liberty reports
+  // only; same for BEB. They can still flip to "All brands" to see
+  // both. The brandFilter state also re-syncs when the user changes
+  // brands via the top-of-portal switcher (effect below).
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
-  const [brandFilter,  setBrandFilter]  = useState<BrandFilter>('all')
+  const [brandFilter,  setBrandFilter]  = useState<BrandFilter>(
+    brand === 'beb' || brand === 'liberty' ? brand : 'all'
+  )
   const [ageFilter,    setAgeFilter]    = useState<AgeFilter>('all')
   const [search,       setSearch]       = useState('')
+
+  // Keep brand filter in sync with the global brand picker.
+  useEffect(() => {
+    if (brand === 'beb' || brand === 'liberty') {
+      setBrandFilter(brand)
+    }
+  }, [brand])
 
   // Selection (multi-select for bulk-paid)
   const [picked, setPicked] = useState<Set<string>>(new Set())
