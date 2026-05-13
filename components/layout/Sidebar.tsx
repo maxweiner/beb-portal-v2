@@ -98,6 +98,7 @@ const LIBERTY_NAV: NavItem[] = [
   { id: 'marketing',    label: 'Marketing',      iconKey: 'marketing' },
   { id: 'shipping',     label: 'Shipping',       iconKey: 'shipping' },
   { id: 'expenses',     label: 'Expenses',       iconKey: 'expenses' },
+  { id: 'accounting-queue', label: 'Accounting Queue', iconKey: 'expenses' },
   { id: 'reconciliation', label: 'Reconciliation', iconKey: 'financials' },
   { id: 'customers',    label: 'Customers',      iconKey: 'staff' },
   { label: 'Admin', section: true },
