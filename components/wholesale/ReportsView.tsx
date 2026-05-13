@@ -8,9 +8,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
-import type { InventoryItem, WholesaleInvoice, WholesaleInvoiceLine, WholesaleMemo } from '@/types/wholesale'
+import type { InventoryItem, WholesaleInvoice, WholesaleInvoiceLine, WholesaleMemo, WholesaleVendor } from '@/types/wholesale'
 import { fmtMoneyCents, fmtDate } from '@/lib/wholesale/format'
 import { Modal, Field, Row } from './InventoryView'
+
+// Reports that filter by vendor. Non-inventory reports (sales,
+// AR aging, customer activity) ignore the vendor filter even when
+// it's set — the dropdown is still visible but has no effect on
+// those tables. Easier to read than hiding/showing the dropdown
+// conditionally on each report click.
+const VENDOR_FILTERABLE: ReportId[] = ['inventory_on_hand', 'aging_inventory', 'vendor_activity', 'sold_items_log']
 
 type ReportId =
   | 'inventory_on_hand' | 'aging_inventory' | 'open_memos'
@@ -37,6 +44,18 @@ export default function ReportsView() {
   const yearStart = today.slice(0, 4) + '-01-01'
   const [from, setFrom] = useState(yearStart)
   const [to,   setTo]   = useState(today)
+  // Vendor filter — scope inventory-based reports to a single
+  // vendor. Non-inventory reports (sales, AR, etc.) ignore it.
+  const [vendorId, setVendorId] = useState<string>('all')
+  const [vendors, setVendors] = useState<WholesaleVendor[]>([])
+
+  useEffect(() => {
+    if (!brand) return
+    void supabase.from('wholesale_vendors')
+      .select('id, company_name')
+      .eq('brand', brand).is('archived_at', null).order('company_name')
+      .then(({ data }) => setVendors((data || []) as WholesaleVendor[]))
+  }, [brand])
 
   return (
     <div>
@@ -45,6 +64,19 @@ export default function ReportsView() {
         <input type="date" value={from} onChange={e => setFrom(e.target.value)} />
         <span style={{ color: 'var(--mist)' }}>–</span>
         <input type="date" value={to} onChange={e => setTo(e.target.value)} />
+        <span style={{ fontSize: 11, color: 'var(--mist)', marginLeft: 12 }}>Vendor</span>
+        <select
+          value={vendorId}
+          onChange={e => setVendorId(e.target.value)}
+          style={{ fontSize: 12, padding: '6px 10px', maxWidth: 220 }}
+          title="Filter inventory reports by vendor (other reports ignore this)"
+        >
+          <option value="all">All vendors</option>
+          <option value="__none__">— no vendor —</option>
+          {vendors.map(v => (
+            <option key={v.id} value={v.id}>{v.company_name}</option>
+          ))}
+        </select>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
         {REPORTS.map(r => (
@@ -66,14 +98,14 @@ export default function ReportsView() {
 
       {open && brand && (
         <div className="card" style={{ padding: 12, marginTop: 12 }}>
-          <ReportPanel id={open} brand={brand} from={from} to={to} />
+          <ReportPanel id={open} brand={brand} from={from} to={to} vendorId={vendorId} />
         </div>
       )}
     </div>
   )
 }
 
-function ReportPanel({ id, brand, from, to }: { id: ReportId; brand: string; from: string; to: string }) {
+function ReportPanel({ id, brand, from, to, vendorId }: { id: ReportId; brand: string; from: string; to: string; vendorId: string }) {
   const [rows, setRows] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -91,7 +123,7 @@ function ReportPanel({ id, brand, from, to }: { id: ReportId; brand: string; fro
     setPreviewUrl(null); setPreviewBlob(null)
     void (async () => {
       try {
-        const result = await runReport(id, brand, from, to)
+        const result = await runReport(id, brand, from, to, vendorId)
         if (cancelled) return
         setRows(result.rows)
         setColumns(result.columns)
@@ -99,7 +131,7 @@ function ReportPanel({ id, brand, from, to }: { id: ReportId; brand: string; fro
       setLoading(false)
     })()
     return () => { cancelled = true }
-  }, [id, brand, from, to])
+  }, [id, brand, from, to, vendorId])
 
   // Revoke any blob URL when the panel re-renders for a different report.
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
@@ -288,21 +320,35 @@ function csvEscape(v: any): string {
 
 interface ReportResult { columns: string[]; rows: any[] }
 
-async function runReport(id: ReportId, brand: string, from: string, to: string): Promise<ReportResult> {
+/** Apply vendorId filter to a Supabase query. 'all' = no filter,
+ *  '__none__' = items with vendor_id NULL/empty, otherwise = match
+ *  vendor_id exactly. */
+function withVendorFilter(query: any, vendorId: string): any {
+  if (!vendorId || vendorId === 'all') return query
+  if (vendorId === '__none__') return query.is('vendor_id', null)
+  return query.eq('vendor_id', vendorId)
+}
+
+async function runReport(id: ReportId, brand: string, from: string, to: string, vendorId: string = 'all'): Promise<ReportResult> {
   if (id === 'inventory_on_hand') {
-    const { data } = await supabase.from('inventory_items')
-      .select('item_number, category, public_notes, cost_cents, wholesale_price_cents, retail_price_cents, location:inventory_locations(name)')
+    const base = supabase.from('inventory_items')
+      .select('item_number, category, public_notes, cost_cents, wholesale_price_cents, retail_price_cents, edge_price_cents, vendor_id, location:inventory_locations(name)')
       .eq('brand', brand).eq('status', 'in_stock').is('archived_at', null).order('category').order('item_number')
+    const { data } = await withVendorFilter(base, vendorId)
     const rows = ((data || []) as any[])
     const totalCost      = rows.reduce((s, r) => s + (r.cost_cents || 0), 0)
     const totalWholesale = rows.reduce((s, r) => s + (r.wholesale_price_cents || 0), 0)
     const totalRetail    = rows.reduce((s, r) => s + (r.retail_price_cents || 0), 0)
+    const totalEdge      = rows.reduce((s, r) => s + (r.edge_price_cents || 0), 0)
     return {
-      columns: ['Item','Category','Description','Cost','Wholesale','Retail','Location'],
+      columns: ['Item','Category','Description','Cost','Wholesale','Retail','Edge','Location'],
       rows: [
         ...rows.map(r => ({
           Item: r.item_number, Category: r.category, Description: r.public_notes || '',
-          Cost: fmtMoneyCents(r.cost_cents), Wholesale: fmtMoneyCents(r.wholesale_price_cents), Retail: fmtMoneyCents(r.retail_price_cents),
+          Cost: fmtMoneyCents(r.cost_cents),
+          Wholesale: fmtMoneyCents(r.wholesale_price_cents),
+          Retail: fmtMoneyCents(r.retail_price_cents),
+          Edge: r.edge_price_cents == null ? '—' : fmtMoneyCents(r.edge_price_cents),
           Location: r.location?.name || '',
         })),
         // Totals row — flagged so the table renders it bold.
@@ -312,15 +358,17 @@ async function runReport(id: ReportId, brand: string, from: string, to: string):
           Cost: fmtMoneyCents(totalCost),
           Wholesale: fmtMoneyCents(totalWholesale),
           Retail: fmtMoneyCents(totalRetail),
+          Edge: fmtMoneyCents(totalEdge),
           Location: '',
         },
       ],
     }
   }
   if (id === 'aging_inventory') {
-    const { data } = await supabase.from('inventory_items')
-      .select('item_number, category, public_notes, cost_cents, date_acquired, created_at')
+    const base = supabase.from('inventory_items')
+      .select('item_number, category, public_notes, cost_cents, vendor_id, date_acquired, created_at')
       .eq('brand', brand).eq('status', 'in_stock').is('archived_at', null)
+    const { data } = await withVendorFilter(base, vendorId)
     const out = ((data || []) as any[]).map(r => {
       const acq = r.date_acquired || r.created_at
       const days = Math.floor((Date.now() - new Date(acq).getTime()) / 86400000)
@@ -413,10 +461,11 @@ async function runReport(id: ReportId, brand: string, from: string, to: string):
     }
   }
   if (id === 'vendor_activity') {
-    const { data } = await supabase.from('inventory_items')
-      .select('cost_cents, date_acquired, vendor:wholesale_vendors(id, company_name)')
+    const base = supabase.from('inventory_items')
+      .select('cost_cents, vendor_id, date_acquired, vendor:wholesale_vendors(id, company_name)')
       .eq('brand', brand).is('archived_at', null)
       .gte('date_acquired', from).lte('date_acquired', to)
+    const { data } = await withVendorFilter(base, vendorId)
     const by: Record<string, { name: string; count: number; total: number }> = {}
     for (const r of (data || []) as any[]) {
       const k = r.vendor?.id || 'unknown'
@@ -452,12 +501,13 @@ async function runReport(id: ReportId, brand: string, from: string, to: string):
     }
   }
   // sold_items_log
-  const { data } = await supabase.from('inventory_items')
+  const baseSold = supabase.from('inventory_items')
     .select(`
-      item_number, category, public_notes, cost_cents,
+      item_number, category, public_notes, cost_cents, vendor_id,
       sold_invoice:wholesale_invoices(invoice_number, invoice_date, customer:wholesale_customers(company_name))
     `)
     .eq('brand', brand).eq('status', 'sold').is('archived_at', null)
+  const { data } = await withVendorFilter(baseSold, vendorId)
   const filtered = ((data || []) as any[]).filter(r =>
     r.sold_invoice && r.sold_invoice.invoice_date >= from && r.sold_invoice.invoice_date <= to,
   )
