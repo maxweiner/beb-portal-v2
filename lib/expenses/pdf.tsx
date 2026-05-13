@@ -186,7 +186,7 @@ export function ExpenseReportPdf({ report, expenses, event, owner, submittedBy, 
                 when filing or referencing this report — give it more
                 visual weight than the Generated-on date below. */}
             <Text style={{ fontSize: 12, fontWeight: 700, color: COLORS.ink, textAlign: 'right' }}>
-              Report #{report.id.slice(0, 8)}
+              {report.report_number || `Report #${report.id.slice(0, 8)}`}
             </Text>
             <Text style={{ fontSize: 9, color: COLORS.mist, textAlign: 'right', marginTop: 2 }}>
               Generated {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -299,7 +299,7 @@ export function ExpenseReportPdf({ report, expenses, event, owner, submittedBy, 
 
         <View style={styles.footer} fixed>
           <Text style={styles.footerNote}>Page 2</Text>
-          <Text style={styles.footerNote}>Report #{report.id.slice(0, 8)}</Text>
+          <Text style={styles.footerNote}>{report.report_number || `Report #${report.id.slice(0, 8)}`}</Text>
         </View>
       </Page>
 
@@ -324,7 +324,7 @@ export function ExpenseReportPdf({ report, expenses, event, owner, submittedBy, 
           </View>
           <View style={styles.footer} fixed>
             <Text style={styles.footerNote}>Receipt appendix</Text>
-            <Text style={styles.footerNote}>Report #{report.id.slice(0, 8)}</Text>
+            <Text style={styles.footerNote}>{report.report_number || `Report #${report.id.slice(0, 8)}`}</Text>
           </View>
         </Page>
       )}

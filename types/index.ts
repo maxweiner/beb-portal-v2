@@ -81,6 +81,14 @@ export type ExpenseSource =
 
 export interface ExpenseReport {
   id: string
+  /** Brand the report belongs to. Auto-derived on insert from the
+   *  linked event's brand (or owner's last_active_brand). Drives the
+   *  per-brand counter for report_number. */
+  brand: string
+  /** Human-readable identifier shown on PDFs + emails. Format:
+   *  'ER-B10001' (BEB) / 'ER-L20001' (Liberty). Monotonic per-brand,
+   *  assigned by a BEFORE INSERT trigger. Immutable once set. */
+  report_number: string
   event_id: string
   user_id: string
   status: ExpenseReportStatus
