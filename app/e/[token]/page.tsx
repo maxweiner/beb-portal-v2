@@ -375,24 +375,51 @@ export default async function Page({
   // to over-show than to hide a real booking.
   const appts = [...portalAppts, ...gcalAppts]
 
-  // 6. KPIs — cumulative across all days (Day Entry totals are the
-  //    source of truth, matching the internal staff event summary).
-  const dayTotals = days.reduce((acc: any, d: any) => ({
-    customers: acc.customers + (Number(d.customers) || 0),
-    purchases: acc.purchases + (Number(d.purchases) || 0),
-    dollars10: acc.dollars10 + (Number(d.dollars10) || 0),
-    dollars5:  acc.dollars5  + (Number(d.dollars5)  || 0),
-    dollars0:  acc.dollars0  + (Number(d.dollars0)  || 0),
-    src_vdp:        acc.src_vdp        + (Number(d.src_vdp)        || 0),
-    src_postcard:   acc.src_postcard   + (Number(d.src_postcard)   || 0),
-    src_social:     acc.src_social     + (Number(d.src_social)     || 0),
-    src_wom:        acc.src_wom        + (Number(d.src_wordofmouth) || 0),
-    src_repeat:     acc.src_repeat     + (Number(d.src_repeat)     || 0),
-    src_store:      acc.src_store      + (Number(d.src_store)      || 0),
-    src_text:       acc.src_text       + (Number(d.src_text)       || 0),
-    src_newspaper:  acc.src_newspaper  + (Number(d.src_newspaper)  || 0),
-    src_other:      acc.src_other      + (Number(d.src_other)      || 0),
-  }), {
+  // 6. KPIs — cumulative across all days. We pull customer counts +
+  //    source attribution from event_days (the Day Entry totals row),
+  //    but for **dollar amounts** we prefer the buyer_checks sum per
+  //    day when any checks exist for that day. Why: event_days.dollars*
+  //    is a denormalized snapshot — if a user fixes a check amount in
+  //    the register (e.g. $799.99 → $800) but the parent totals row
+  //    didn't get re-saved, the staleness sticks in event_days.dollars*
+  //    forever. The buyer_checks rows always carry the canonical
+  //    amount, so deriving from them self-heals.
+  const buysByDay = new Map<number, { d10: number; d5: number; d0: number; n: number }>()
+  for (const b of buys) {
+    const dn = Number(b.day_number) || 0
+    if (!dn) continue
+    const amt = Number(b.amount) || 0
+    const rate = Number(b.commission_rate ?? 10)
+    const slot = buysByDay.get(dn) || { d10: 0, d5: 0, d0: 0, n: 0 }
+    if (rate === 5) slot.d5 += amt
+    else if (rate === 0) slot.d0 += amt
+    else slot.d10 += amt
+    slot.n += 1
+    buysByDay.set(dn, slot)
+  }
+
+  const dayTotals = days.reduce((acc: any, d: any) => {
+    const checks = buysByDay.get(Number(d.day_number) || 0)
+    const useChecks = checks && checks.n > 0
+    return {
+      customers: acc.customers + (Number(d.customers) || 0),
+      purchases: acc.purchases + (Number(d.purchases) || 0),
+      // Prefer check-sum when present; fall back to event_days totals
+      // for days with no checks (quick-mode entry).
+      dollars10: acc.dollars10 + (useChecks ? checks!.d10 : (Number(d.dollars10) || 0)),
+      dollars5:  acc.dollars5  + (useChecks ? checks!.d5  : (Number(d.dollars5)  || 0)),
+      dollars0:  acc.dollars0  + (useChecks ? checks!.d0  : (Number(d.dollars0)  || 0)),
+      src_vdp:        acc.src_vdp        + (Number(d.src_vdp)        || 0),
+      src_postcard:   acc.src_postcard   + (Number(d.src_postcard)   || 0),
+      src_social:     acc.src_social     + (Number(d.src_social)     || 0),
+      src_wom:        acc.src_wom        + (Number(d.src_wordofmouth) || 0),
+      src_repeat:     acc.src_repeat     + (Number(d.src_repeat)     || 0),
+      src_store:      acc.src_store      + (Number(d.src_store)      || 0),
+      src_text:       acc.src_text       + (Number(d.src_text)       || 0),
+      src_newspaper:  acc.src_newspaper  + (Number(d.src_newspaper)  || 0),
+      src_other:      acc.src_other      + (Number(d.src_other)      || 0),
+    }
+  }, {
     customers:0, purchases:0, dollars10:0, dollars5:0, dollars0:0,
     src_vdp:0, src_postcard:0, src_social:0, src_wom:0, src_repeat:0,
     src_store:0, src_text:0, src_newspaper:0, src_other:0,
@@ -703,7 +730,13 @@ export default async function Page({
                   {days.map(d => {
                     const dayCustomers = Number(d.customers) || 0
                     const dayPurchases = Number(d.purchases) || 0
-                    const dayDollars   = Math.round(((Number(d.dollars10) || 0) + (Number(d.dollars5) || 0)) * 100)
+                    // Prefer check-sum when present (self-healing if
+                    // event_days has stale dollars10/5 from before a
+                    // check edit).
+                    const dayCheckSlot = buysByDay.get(Number(d.day_number) || 0)
+                    const dayDollars = (dayCheckSlot && dayCheckSlot.n > 0)
+                      ? Math.round((dayCheckSlot.d10 + dayCheckSlot.d5) * 100)
+                      : Math.round(((Number(d.dollars10) || 0) + (Number(d.dollars5) || 0)) * 100)
                     const dayClose = dayCustomers > 0 ? Math.round((dayPurchases / dayCustomers) * 100) : null
                     return (
                       <tr key={d.day_number} style={{ borderTop: '1px solid #F3F4F6' }}>

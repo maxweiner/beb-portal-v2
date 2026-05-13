@@ -58,12 +58,23 @@ function formatMoneyInput(raw: string): string {
   const n = parseInt(raw, 10)
   return isNaN(n) ? raw : n.toLocaleString('en-US')
 }
-// Strip commas and anything that isn't a digit or the first decimal point.
+// Whole-dollar entry. BEB checks are always written in whole dollars;
+// stripping/rounding any decimal at parse time prevents arrow-key
+// nudges or accidental "." taps from leaving .99 in the data — which
+// would then surface on the public Spend KPI and stick around even
+// after the user "fixed" the register.
+//
+// Behavior:
+//   "800"        → "800"
+//   "799.99"     → "800"  (round to nearest dollar)
+//   "1,234.50"   → "1235"
+//   "."          → ""     (lone dot collapses; user can keep typing)
 function parseMoneyInput(input: string): string {
   const cleaned = input.replace(/[^\d.]/g, '')
-  const parts = cleaned.split('.')
-  if (parts.length <= 2) return cleaned
-  return parts[0] + '.' + parts.slice(1).join('')
+  if (!cleaned.includes('.')) return cleaned
+  const n = parseFloat(cleaned)
+  if (isNaN(n)) return ''
+  return String(Math.round(n))
 }
 
 export default function MobileDayEntry() {
@@ -460,7 +471,10 @@ export default function MobileDayEntry() {
           event_id: selectedEventId,
           day_number: selectedDay,
           check_number: c.check_number, buy_form_number: c.buy_form_number,
-          amount: parseFloat(c.amount) || 0, payment_type: c.payment_type,
+          // Force whole dollars — defense in depth against any
+          // legacy / pasted decimal that snuck past parseMoneyInput.
+          amount: Math.round(parseFloat(c.amount) || 0),
+          payment_type: c.payment_type,
           commission_rate: c.commission_rate === 5 ? 5 : c.commission_rate === 0 ? 0 : 10,
           commission_note:
             (c.commission_rate === 5 || c.commission_rate === 0)
