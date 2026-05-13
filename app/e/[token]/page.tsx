@@ -63,7 +63,39 @@ export async function generateMetadata({ params }: { params: { token: string } }
 
     const storeName = (store as any).name as string
     const where = [(store as any).city, (store as any).state].filter(Boolean).join(', ')
-    const title = `${storeName} · Live Event Dashboard`
+
+    // Resolve the same "current event" the dashboard would pick:
+    // live → recently-ended (≤24h) → soonest upcoming. Stuff the
+    // resulting date range into the title so the link preview reads
+    // "Sami Fine Jewelers · May 11–13" instead of just "Event".
+    const todayMeta = todayIso()
+    const horizonIso = addDays(todayMeta, -3) // start_date >= today-3 ⇒ end >= today
+    const { data: evRows } = await sb
+      .from('events')
+      .select('id, start_date, status')
+      .eq('store_id', (store as any).id)
+      .gte('start_date', horizonIso)
+      .neq('status', 'cancelled')
+      .order('start_date', { ascending: true })
+    const evList = (evRows || []) as any[]
+    const liveEv = evList.find(e => e.start_date && e.start_date <= todayMeta && addDays(e.start_date, 2) >= todayMeta)
+    const recentEv = !liveEv ? evList.find(e => {
+      if (!e.start_date) return false
+      const end = addDays(e.start_date, 2)
+      return end < todayMeta && daysBetween(end, todayMeta) <= 1
+    }) : null
+    const upcomingEv = !liveEv && !recentEv
+      ? evList.find(e => e.start_date && e.start_date > todayMeta)
+      : null
+    const currentEv = liveEv || recentEv || upcomingEv || null
+    const dateLabel = currentEv?.start_date
+      ? formatDateRange(currentEv.start_date, addDays(currentEv.start_date, 2))
+      : null
+    const phaseTag = liveEv ? ' · LIVE' : (recentEv ? ' · just ended' : '')
+
+    const title = dateLabel
+      ? `${storeName} · ${dateLabel}${phaseTag}`
+      : storeName
     const description = where
       ? `Live event dashboard for ${storeName} in ${where}.`
       : `Live event dashboard for ${storeName}.`
