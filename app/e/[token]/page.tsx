@@ -18,6 +18,7 @@
 // staff-internal event view at app/event/[id]/page.tsx). The /e/
 // prefix is also short for SMS forwarding.
 
+import { Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { headers } from 'next/headers'
 import { QRCodeSVG } from 'qrcode.react'
@@ -664,40 +665,41 @@ export default async function Page({
                     <thead style={{ background: '#FFF' }}>
                       <tr>
                         <Th style={{ width: 90 }}>Time</Th>
-                        <Th style={{ width: 84 }}>Form #</Th>
-                        <Th>Customer</Th>
-                        <Th style={{ width: 70 }}>Buyer</Th>
-                        <Th style={{ width: 84 }}>Check #</Th>
-                        <Th style={{ width: 70, textAlign: 'center' }}>Comm</Th>
-                        <Th style={{ width: 110, textAlign: 'right' }}>Amount</Th>
+                        <Th>Form #</Th>
+                        <Th>Check #</Th>
+                        <Th style={{ width: 90, textAlign: 'center' }}>Comm</Th>
+                        <Th style={{ width: 130, textAlign: 'right' }}>Amount</Th>
                       </tr>
                     </thead>
                     <tbody>
                       {grp.rows.map(b => (
-                        <tr key={b.id} style={{ borderTop: '1px solid #F3F4F6' }}>
-                          <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', fontWeight: 700, color: '#374151' }}>
-                            {formatShortTime(b.created_at)}
-                          </td>
-                          <td style={mono}>{b.buy_form_number ? `#${b.buy_form_number}` : '—'}</td>
-                          <td style={{ padding: '10px 6px' }}>
-                            <div style={{ fontWeight: 600 }}>{b.customer_name || '—'}</div>
-                            {b.commission_note && (
-                              <div style={{ fontSize: 11, color: '#92400e', marginTop: 2, fontStyle: 'italic' }}>
+                        <Fragment key={b.id}>
+                          <tr style={{ borderTop: '1px solid #F3F4F6' }}>
+                            <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', fontWeight: 700, color: '#374151' }}>
+                              {formatShortTime(b.created_at)}
+                            </td>
+                            <td style={{ ...mono, fontWeight: 700, color: '#0f172a' }}>
+                              {b.buy_form_number ? `#${b.buy_form_number}` : '—'}
+                            </td>
+                            <td style={mono}>{b.check_number ? `#${b.check_number}` : '—'}</td>
+                            <td style={{ padding: '10px 6px', textAlign: 'center' }}>
+                              <CommPill rate={Number(b.commission_rate ?? 10)} />
+                            </td>
+                            <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 800, color: '#0f172a' }}>
+                              {fmt(Math.round(Number(b.amount || 0) * 100))}
+                            </td>
+                          </tr>
+                          {b.commission_note && (
+                            <tr style={{ borderTop: 'none' }}>
+                              <td colSpan={5} style={{
+                                padding: '0 14px 8px 14px',
+                                fontSize: 11, color: '#92400e', fontStyle: 'italic',
+                              }}>
                                 📝 {b.commission_note}
-                              </div>
-                            )}
-                          </td>
-                          <td style={{ padding: '10px 6px', fontSize: 11, fontWeight: 800, color: '#6b7280', letterSpacing: '.04em' }}>
-                            {b.buyer_id ? buyerInitialsFor(b.buyer_id, workers) : '—'}
-                          </td>
-                          <td style={mono}>{b.check_number ? `#${b.check_number}` : '—'}</td>
-                          <td style={{ padding: '10px 6px', textAlign: 'center' }}>
-                            <CommPill rate={Number(b.commission_rate ?? 10)} />
-                          </td>
-                          <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 800, color: '#0f172a' }}>
-                            {fmt(Math.round(Number(b.amount || 0) * 100))}
-                          </td>
-                        </tr>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
                       ))}
                     </tbody>
                   </table>
