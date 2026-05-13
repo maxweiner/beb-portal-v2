@@ -833,8 +833,15 @@ export default function DayEntry() {
                     <label className="fl">$ @ 10% Commission</label>
                     <div style={{ position: 'relative' }}>
                       <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)' }}>$</span>
-                      <input type="number" min="0" step="0.01" value={dollars10}
-                        onChange={e => setDollars10(e.target.value)} placeholder="0" style={{ paddingLeft: 20 }} />
+                      <input type="text" inputMode="numeric" value={dollars10}
+                        onChange={e => setDollars10(e.target.value.replace(/[^\d.]/g, ''))}
+                        onBlur={e => {
+                          const v = e.target.value.trim()
+                          if (v === '') return
+                          const rounded = String(Math.round(parseFloat(v) || 0))
+                          if (rounded !== v) setDollars10(rounded)
+                        }}
+                        placeholder="0" style={{ paddingLeft: 20 }} />
                     </div>
                   </div>
                   {show5pct && (
@@ -842,8 +849,15 @@ export default function DayEntry() {
                       <label className="fl">$ @ 5% Commission</label>
                       <div style={{ position: 'relative' }}>
                         <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)' }}>$</span>
-                        <input type="number" min="0" step="0.01" value={dollars5}
-                          onChange={e => setDollars5(e.target.value)} placeholder="0" style={{ paddingLeft: 20 }} />
+                        <input type="text" inputMode="numeric" value={dollars5}
+                          onChange={e => setDollars5(e.target.value.replace(/[^\d.]/g, ''))}
+                          onBlur={e => {
+                            const v = e.target.value.trim()
+                            if (v === '') return
+                            const rounded = String(Math.round(parseFloat(v) || 0))
+                            if (rounded !== v) setDollars5(rounded)
+                          }}
+                          placeholder="0" style={{ paddingLeft: 20 }} />
                       </div>
                     </div>
                   )}
@@ -852,8 +866,15 @@ export default function DayEntry() {
                       <label className="fl" title="Store purchases — no commission, excluded from event totals">$ @ 0% (Store)</label>
                       <div style={{ position: 'relative' }}>
                         <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)' }}>$</span>
-                        <input type="number" min="0" step="0.01" value={dollars0}
-                          onChange={e => setDollars0(e.target.value)} placeholder="0" style={{ paddingLeft: 20 }} />
+                        <input type="text" inputMode="numeric" value={dollars0}
+                          onChange={e => setDollars0(e.target.value.replace(/[^\d.]/g, ''))}
+                          onBlur={e => {
+                            const v = e.target.value.trim()
+                            if (v === '') return
+                            const rounded = String(Math.round(parseFloat(v) || 0))
+                            if (rounded !== v) setDollars0(rounded)
+                          }}
+                          placeholder="0" style={{ paddingLeft: 20 }} />
                       </div>
                     </div>
                   )}
@@ -1006,8 +1027,8 @@ export default function DayEntry() {
                             <td style={{ padding: '4px 8px' }}>
                               <div style={{ position: 'relative', width: 110 }}>
                                 <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)', fontSize: 13 }}>$</span>
-                                <input type="number" min="0" step="1" inputMode="numeric" value={c.amount || ''}
-                                  onChange={e => updateCheck(i, 'amount', e.target.value)}
+                                <input type="text" inputMode="numeric" value={c.amount || ''}
+                                  onChange={e => updateCheck(i, 'amount', e.target.value.replace(/[^\d.]/g, ''))}
                                   onBlur={e => {
                                     const v = e.target.value.trim()
                                     if (v === '') return
@@ -1110,8 +1131,8 @@ export default function DayEntry() {
                           <label className="fl">Amount</label>
                           <div style={{ position: 'relative' }}>
                             <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)' }}>$</span>
-                            <input type="number" min="0" step="1" inputMode="numeric" value={c.amount || ''}
-                              onChange={e => updateCheck(i, 'amount', e.target.value)}
+                            <input type="text" inputMode="numeric" value={c.amount || ''}
+                              onChange={e => updateCheck(i, 'amount', e.target.value.replace(/[^\d.]/g, ''))}
                               onBlur={e => {
                                 const v = e.target.value.trim()
                                 if (v === '') return
@@ -1231,9 +1252,15 @@ export default function DayEntry() {
                         <label className="fl">Amount</label>
                         <div style={{ position: 'relative' }}>
                           <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)' }}>$</span>
-                          <input type="number" min="0" step="0.01" value={storeCommCheckAmt}
-                            onChange={e => setStoreCommCheckAmt(e.target.value)}
-                            placeholder="0.00"
+                          <input type="text" inputMode="numeric" value={storeCommCheckAmt}
+                            onChange={e => setStoreCommCheckAmt(e.target.value.replace(/[^\d.]/g, ''))}
+                            onBlur={e => {
+                              const v = e.target.value.trim()
+                              if (v === '') return
+                              const rounded = String(Math.round(parseFloat(v) || 0))
+                              if (rounded !== v) setStoreCommCheckAmt(rounded)
+                            }}
+                            placeholder="0"
                             style={{ paddingLeft: 22 }} />
                         </div>
                       </div>
