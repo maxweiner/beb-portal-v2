@@ -91,6 +91,7 @@ export default function InventoryView() {
   const [showBulkUpload, setShowBulkUpload] = useState(false)
   const [view, setView] = useState<'list' | 'sheet'>('list')
   const [lists, setLists] = useState<Record<string, string[]>>({})
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
   const reloadRef = useRef<() => Promise<void>>(async () => {})
   reloadRef.current = async () => {
@@ -289,7 +290,13 @@ export default function InventoryView() {
                       <td style={{ padding: '6px 10px', width: 50 }}>
                         {photoUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={photoUrl} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--pearl)' }} />
+                          <img
+                            src={photoUrl}
+                            alt=""
+                            title="Click to enlarge"
+                            onClick={e => { e.stopPropagation(); setLightboxUrl(photoUrl) }}
+                            style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--pearl)', cursor: 'zoom-in' }}
+                          />
                         ) : (
                           <div style={{ width: 36, height: 36, borderRadius: 4, background: 'var(--cream2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
                             {it.category === 'jewelry' ? '💍' : it.category === 'watch' ? '⌚' : it.category === 'diamond' ? '💎' : '📦'}
@@ -364,6 +371,36 @@ export default function InventoryView() {
           onClose={() => setOpenItemId(null)}
           onChanged={() => void reloadRef.current()}
         />
+      )}
+
+      {/* Lightbox — clicking a list thumbnail opens the primary
+          photo at full size. Dismisses on any click (including the
+          image itself) or Escape via the onClick wrapper. Esc-key
+          listener intentionally omitted to keep this tiny; click-
+          anywhere is the discoverable dismissal. */}
+      {lightboxUrl && (
+        <div
+          onClick={() => setLightboxUrl(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1500,
+            background: 'rgba(0,0,0,.85)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 20, cursor: 'zoom-out',
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightboxUrl}
+            alt=""
+            style={{
+              maxWidth: 'min(95vw, 1200px)',
+              maxHeight: '90vh',
+              objectFit: 'contain',
+              borderRadius: 6,
+              boxShadow: '0 20px 60px rgba(0,0,0,.5)',
+            }}
+          />
+        </div>
       )}
     </div>
   )
@@ -1310,12 +1347,11 @@ function ItemForm({
           </Field>
           <Field label="Memo In">
             {/* True ⇒ item is on memo *into* the company (loaned by a
-                vendor). Label trimmed so the checkbox fits on one line
-                inside the standard 4-col Row grid — the field label
-                already says MEMO IN so the inline copy doesn't need
-                to re-explain. */}
-            <div style={{ display: 'flex', alignItems: 'center', height: '100%', paddingTop: 4 }}>
-              <Checkbox checked={memo_in} onChange={setMemoIn} label="On memo from vendor" />
+                vendor). The field label already says MEMO IN, so the
+                inline label is just "From vendor" — short enough to
+                stay on one line in the narrow grid column. */}
+            <div style={{ display: 'flex', alignItems: 'center', paddingTop: 6 }}>
+              <Checkbox checked={memo_in} onChange={setMemoIn} label="From vendor" />
             </div>
           </Field>
           <Field label="Location">
@@ -2025,9 +2061,24 @@ export function Row({ children }: { children: React.ReactNode }) {
 }
 
 export function Field({ label, warn, children }: { label: string; warn?: boolean; children: React.ReactNode }) {
+  // Reserve 2 line-heights of vertical space for the label so a
+  // wrapped label (e.g. "WHOLESALE ($) · 25% MARGIN") doesn't push
+  // its input below the adjacent inputs whose labels happen to
+  // fit on one line. Result: every input in the same Row sits at
+  // the same Y.
   return (
-    <div className="field">
-      <label className="fl" style={{ color: warn ? '#92400E' : undefined }}>{label}</label>
+    <div className="field" style={{ display: 'flex', flexDirection: 'column' }}>
+      <label
+        className="fl"
+        style={{
+          color: warn ? '#92400E' : undefined,
+          display: 'block',
+          minHeight: '2.4em',
+          lineHeight: 1.15,
+        }}
+      >
+        {label}
+      </label>
       {children}
     </div>
   )
