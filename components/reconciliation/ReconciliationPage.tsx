@@ -271,6 +271,148 @@ export default function ReconciliationPage() {
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
   }
 
+  // Print the currently filtered findings — scoped same as Export CSV
+  // (the visible/filtered subset, not manual checkbox selection). Opens
+  // a clean printable window with a styled table, totals footer, and a
+  // notes section for any rows carrying a free-text note. Auto-triggers
+  // window.print() so the user lands directly in the print dialog.
+  function printFindings() {
+    if (filtered.length === 0) return
+
+    // Build the filter chip label that appears under the page title.
+    const filterChips: string[] = []
+    if (tab === 'outstanding') {
+      filterChips.push('Outstanding')
+    } else if (typeFilter !== 'all') {
+      filterChips.push(TYPE_LABEL[typeFilter])
+    }
+    if (statusFilter !== 'all') filterChips.push(STATUS_LABEL[statusFilter])
+    if (search.trim()) filterChips.push(`"${search.trim()}"`)
+    const filterLabel = filterChips.length > 0 ? filterChips.join(' · ') : 'All findings'
+
+    // Totals across printed rows. amount_delta in the DB is stored as a
+    // positive magnitude for mismatch/duplicate findings, so summing it
+    // gives the total dollar exposure on the page.
+    let totalWritten = 0, totalCleared = 0, totalDelta = 0
+    for (const f of filtered) {
+      if (f.written_amount != null) totalWritten += f.written_amount
+      if (f.cleared_amount_total != null) totalCleared += f.cleared_amount_total
+      if (f.amount_delta != null) totalDelta += f.amount_delta
+    }
+
+    const printedDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    const brandLabel = (brand || '').toUpperCase()
+
+    // HTML-escape user-supplied strings before injecting into the
+    // printable doc. Payee / event / note all carry free text.
+    const esc = (v: unknown): string => String(v ?? '').replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as Record<string, string>
+    )[c])
+
+    const rowsHtml = filtered.map(f => {
+      const dateStr = (f.cleared_dates && f.cleared_dates.length > 0)
+        ? f.cleared_dates.map(d => fmtDate(d)).join(', ')
+        : fmtDate(f.written_date)
+      return `<tr>
+        <td>${esc(f.check_number)}</td>
+        <td>${esc(TYPE_LABEL[f.finding_type])}</td>
+        <td class="num">${esc(fmtMoney(f.written_amount))}</td>
+        <td class="num">${esc(fmtMoney(f.cleared_amount_total))}</td>
+        <td class="num delta">${esc(fmtMoney(f.amount_delta))}</td>
+        <td>${esc(dateStr)}</td>
+        <td>
+          <div>${esc(f.payee_label || '—')}</div>
+          ${f.event_label ? `<div class="event">${esc(f.event_label)}</div>` : ''}
+        </td>
+        <td>${esc(STATUS_LABEL[f.status])}</td>
+      </tr>`
+    }).join('')
+
+    const noteItems = filtered
+      .filter(f => f.note && f.note.trim())
+      .map(f => `<div class="note"><strong>#${esc(f.check_number)}:</strong> ${esc(f.note)}</div>`)
+      .join('')
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Reconciliation — ${esc(filterLabel)}</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1f2937; padding: 24px; margin: 0; }
+  .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #1f2937; padding-bottom: 8px; margin-bottom: 16px; }
+  h1 { font-size: 18pt; margin: 0; }
+  h1 .brand { font-size: 11pt; color: #6b7280; font-weight: 600; margin-left: 8px; }
+  .filter { font-size: 10pt; color: #374151; font-weight: 600; margin-top: 4px; }
+  .meta { font-size: 9pt; color: #6b7280; text-align: right; }
+  table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+  th, td { padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: left; vertical-align: top; }
+  th { background: #f3f4f6; font-weight: 700; font-size: 8pt; text-transform: uppercase; color: #374151; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.delta { color: #b91c1c; font-weight: 600; }
+  td .event { font-size: 8pt; color: #6b7280; margin-top: 2px; }
+  tfoot td { border-top: 2px solid #1f2937; border-bottom: none; font-weight: 700; background: #f9fafb; }
+  tr { page-break-inside: avoid; }
+  .notes { margin-top: 18px; }
+  .notes h2 { font-size: 11pt; margin: 0 0 6px 0; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
+  .note { font-size: 9pt; color: #374151; margin-bottom: 4px; }
+  @media print { body { padding: 0; } }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>🏦 Reconciliation <span class="brand">· ${esc(brandLabel)}</span></h1>
+      <div class="filter">${esc(filterLabel)} · ${filtered.length} ${filtered.length === 1 ? 'finding' : 'findings'}</div>
+    </div>
+    <div class="meta">Printed ${esc(printedDate)}</div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Check #</th>
+        <th>Type</th>
+        <th class="num">Written</th>
+        <th class="num">Cleared</th>
+        <th class="num">Δ</th>
+        <th>Date</th>
+        <th>Payee · Event</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>${rowsHtml}</tbody>
+    <tfoot>
+      <tr>
+        <td colspan="2">Totals</td>
+        <td class="num">${esc(fmtMoney(totalWritten))}</td>
+        <td class="num">${esc(fmtMoney(totalCleared))}</td>
+        <td class="num delta">${esc(fmtMoney(totalDelta))}</td>
+        <td colspan="3"></td>
+      </tr>
+    </tfoot>
+  </table>
+
+  ${noteItems ? `<div class="notes"><h2>Notes</h2>${noteItems}</div>` : ''}
+
+  <script>
+    // Pop the print dialog as soon as the doc paints. Small delay so the
+    // print preview shows the styled doc, not a flash of unstyled content.
+    window.addEventListener('load', function () { setTimeout(function () { window.print() }, 100) })
+  </script>
+</body>
+</html>`
+
+    const w = window.open('', '_blank', 'width=900,height=700')
+    if (!w) {
+      alert('Pop-up blocked — please allow pop-ups for this site to print.')
+      return
+    }
+    w.document.open()
+    w.document.write(html)
+    w.document.close()
+  }
+
   if (!isAllowed) {
     return (
       <div className="p-6" style={{ maxWidth: 800, margin: '0 auto' }}>
@@ -291,6 +433,7 @@ export default function ReconciliationPage() {
           <button onClick={reRunMatch} disabled={running} className="btn-outline btn-sm">
             {running ? 'Matching…' : '↻ Re-run matching'}
           </button>
+          <button onClick={printFindings} disabled={filtered.length === 0} className="btn-outline btn-sm" title={`Print ${filtered.length} ${filtered.length === 1 ? 'finding' : 'findings'} (current filter)`}>🖨 Print</button>
           <button onClick={exportCsv} className="btn-outline btn-sm">⬇ Export CSV</button>
         </div>
       </div>
