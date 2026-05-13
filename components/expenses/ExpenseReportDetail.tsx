@@ -341,18 +341,37 @@ export default function ExpenseReportDetail({
   async function submitForReview() {
     if (!canSubmit || !report) return
     setSubmitting(true); setError(null)
-    const { error: upErr } = await supabase.from('expense_reports')
-      .update({ status: 'submitted_pending_review', submitted_at: new Date().toISOString() })
-      .eq('id', report.id)
-    if (upErr) { setSubmitting(false); setError(upErr.message); return }
-    setReport(p => p ? { ...p, status: 'submitted_pending_review', submitted_at: new Date().toISOString() } : p)
-    broadcastExpenseStatusChanged()
-    // Fire the partner alert email — best effort. The state transition
-    // already succeeded; if the email fails the user sees a non-fatal
-    // banner and can ask an admin to chase it down.
     try {
-      await authedFetch(`/api/expense-reports/${report.id}/notify-partners`, { method: 'POST' })
-    } catch { /* swallow — see comment above */ }
+      // Routes through /submit (rather than a direct supabase update)
+      // so the server can stamp submitted_by_user_id when the caller
+      // is a delegate, and fire the email + SMS to the principal in
+      // the same round-trip. Self-submissions go through the same
+      // route — server short-circuits the delegate notification.
+      const res = await authedFetch(`/api/expense-reports/${report.id}/submit`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.ok) {
+        setError(json.error || 'Could not submit.')
+        setSubmitting(false)
+        return
+      }
+      setReport(p => p ? {
+        ...p,
+        status: 'submitted_pending_review',
+        submitted_at: json.submitted_at,
+        submitted_by_user_id: json.submitted_by_user_id ?? null,
+      } : p)
+      broadcastExpenseStatusChanged()
+      // Partner alert email — best effort. Distinct from the principal
+      // notification fired by the /submit endpoint above (that one only
+      // runs on delegated submissions; this one always runs). If it
+      // fails the buyer sees a non-fatal banner and an admin can
+      // chase it down.
+      try {
+        await authedFetch(`/api/expense-reports/${report.id}/notify-partners`, { method: 'POST' })
+      } catch { /* swallow — see comment above */ }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Network error')
+    }
     setSubmitting(false)
   }
 

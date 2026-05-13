@@ -8,7 +8,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getAuthedUser, isAdminLike } from '@/lib/expenses/serverAuth'
+import { getAuthedUser, canActOnReport } from '@/lib/expenses/serverAuth'
 import { generateAndStoreReportPdf } from '@/lib/expenses/generatePdf'
 
 export const dynamic = 'force-dynamic'
@@ -32,13 +32,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (!report) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   // Anyone who can act on the report should be able to print it:
-  // owner (their own), admin/superadmin (full review), partners
-  // (financial sign-off; users.is_partner flag, distinct from role
-  // — see partner ≠ superadmin feedback note), and accounting
-  // (drives the queue, needs to print PDFs to file).
-  const isOwner      = report.user_id === me.id
+  // owner (their own), active delegate of the owner (canActOnReport
+  // covers both, plus admin/superadmin override), partners (financial
+  // sign-off; users.is_partner flag, distinct from role — see partner
+  // ≠ superadmin feedback note), and accounting (drives the queue,
+  // needs to print PDFs to file).
+  const canAct      = await canActOnReport(me, report.user_id)
   const isAccounting = me.role === 'accounting'
-  if (!isOwner && !isAdminLike(me) && !me.is_partner && !isAccounting) {
+  if (!canAct && !me.is_partner && !isAccounting) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

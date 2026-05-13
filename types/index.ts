@@ -85,6 +85,12 @@ export interface ExpenseReport {
   user_id: string
   status: ExpenseReportStatus
   submitted_at: string | null
+  /** Who submitted this report. NULL when the owner submitted their
+   *  own; set to the delegate's user id when an active expense_delegate
+   *  filed on their behalf. Snapshot at submit-time — survives
+   *  revocation of the delegation. PDF renders an audit line near the
+   *  header when this is set. */
+  submitted_by_user_id: string | null
   approved_at: string | null
   approved_by: string | null
   paid_at: string | null
