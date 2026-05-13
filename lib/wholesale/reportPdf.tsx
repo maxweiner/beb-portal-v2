@@ -57,7 +57,16 @@ export function ReportPdfDoc({ data }: { data: ReportPdfData }) {
         <View style={styles.hdrRow}>
           <View style={styles.brandBlock}>
             {data.brandLogoDataUrl ? (
-              <Image src={data.brandLogoDataUrl} style={{ width: 140, height: 50, objectFit: 'contain', objectPosition: 'left center', marginBottom: 4 }} />
+              // Liberty wordmark renders ~30% larger than BEB because
+              // the artwork has a lot of whitespace baked into the PNG —
+              // at the BEB scale it reads small on a Liberty letterhead.
+              <Image
+                src={data.brandLogoDataUrl}
+                style={data.brand === 'liberty'
+                  ? { width: 182, height: 65, objectFit: 'contain', objectPosition: 'left center', marginBottom: 6 }
+                  : { width: 140, height: 50, objectFit: 'contain', objectPosition: 'left center', marginBottom: 4 }
+                }
+              />
             ) : null}
             <Text style={styles.brandName}>{data.brandFullName}</Text>
             {data.brandAddress ? <Text style={styles.brandLine}>{data.brandAddress}</Text> : null}

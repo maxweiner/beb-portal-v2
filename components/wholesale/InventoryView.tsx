@@ -277,6 +277,7 @@ export default function InventoryView() {
                   <SortableTh label="Cost"      field="cost_cents"            sort={sort} onClick={cycleSort} />
                   <SortableTh label="Wholesale" field="wholesale_price_cents" sort={sort} onClick={cycleSort} />
                   <SortableTh label="Retail"    field="retail_price_cents"    sort={sort} onClick={cycleSort} />
+                  <SortableTh label="Edge" />
                   <SortableTh label="Status" />
                   <SortableTh label="" />
                 </tr>
@@ -323,6 +324,9 @@ export default function InventoryView() {
                       <td style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>{fmtMoneyCents(it.cost_cents)}</td>
                       <td style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>{fmtMoneyCents(it.wholesale_price_cents)}</td>
                       <td style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>{fmtMoneyCents(it.retail_price_cents)}</td>
+                      <td style={{ padding: '6px 10px', whiteSpace: 'nowrap', color: (it as any).edge_price_cents == null ? 'var(--mist)' : undefined }}>
+                        {(it as any).edge_price_cents == null ? '—' : fmtMoneyCents((it as any).edge_price_cents)}
+                      </td>
                       <td style={{ padding: '6px 10px' }}>
                         <span style={{ background: sc.bg, color: sc.fg, padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap' }}>
                           {STATUS_LABEL[it.status]}
