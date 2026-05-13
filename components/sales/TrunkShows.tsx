@@ -43,6 +43,13 @@ export default function TrunkShows({ setNav }: { setNav?: (n: import('@/app/page
   const [filter, setFilter] = useState<Filter>('all')
   const [sort, setSort] = useState<Sort>('date-desc')
   const [view, setView] = useState<View>('cards')
+  // When true, the sheet view renders in a full-viewport modal
+  // instead of inline beneath the sidebar. Trunk Shows is dense
+  // enough that ~280px of sidebar chrome makes the sheet cramped
+  // — Teri uses this view for long stretches and asked for the
+  // whole screen. Toggled via a ⛶ button in the toolbar (only
+  // visible when view === 'sheet') and ESC dismisses.
+  const [sheetFullscreen, setSheetFullscreen] = useState(false)
   const [search, setSearch] = useState('')
   // Default: hide trunk shows whose end_date is more than 30 days ago.
   // Toggle to bring historical rows back into view.
@@ -65,6 +72,31 @@ export default function TrunkShows({ setNav }: { setNav?: (n: import('@/app/page
     setLoaded(true)
   }
   useEffect(() => { void reload() }, [])
+
+  // ESC closes the fullscreen sheet workspace. Body scroll-lock
+  // while open so the underlying page can't accidentally scroll
+  // behind the modal.
+  useEffect(() => {
+    if (!sheetFullscreen) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setSheetFullscreen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    const priorOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = priorOverflow
+    }
+  }, [sheetFullscreen])
+
+  // Belt-and-suspenders: if the user switches AWAY from the sheet
+  // view while the fullscreen modal is open, close the modal too.
+  // (Can't normally happen because the trigger button is only
+  // visible in sheet view, but defensive against state surprises.)
+  useEffect(() => {
+    if (view !== 'sheet' && sheetFullscreen) setSheetFullscreen(false)
+  }, [view, sheetFullscreen])
 
   const storesById = useMemo(() => new Map(trunkShowStores.map(s => [s.id, s])), [trunkShowStores])
   const usersById  = useMemo(() => new Map(users.map(u => [u.id, u])), [users])
@@ -184,6 +216,18 @@ export default function TrunkShows({ setNav }: { setNav?: (n: import('@/app/page
             </button>
           ))}
         </div>
+        {/* Fullscreen toggle — only renders in sheet view since the
+            other view modes already fit comfortably in the inline
+            chrome. ESC closes (handled in the useEffect above). */}
+        {view === 'sheet' && (
+          <button
+            onClick={() => setSheetFullscreen(true)}
+            className="btn-outline btn-xs"
+            title="Open the sheet in a fullscreen workspace (ESC to close)"
+          >
+            ⛶ Fullscreen
+          </button>
+        )}
         <label style={{ fontSize: 11, color: 'var(--mist)', display: 'flex', alignItems: 'center', gap: 6 }}>
           Sort:
           <select value={sort} onChange={e => setSort(e.target.value as Sort)}
@@ -270,7 +314,13 @@ export default function TrunkShows({ setNav }: { setNav?: (n: import('@/app/page
       ) : view === 'columns' ? (
         <ColumnsView shows={filtered} usersById={usersById} storesById={storesById} onOpen={setOpenId} />
       ) : view === 'sheet' ? (
-        <TrunkShowSheet shows={filtered} onChanged={() => void reload()} onOpen={setOpenId} />
+        // When the fullscreen modal is open the sheet renders inside
+        // it instead — skip the inline render so TrunkShowSheet stays
+        // a single-instance mount (avoids duplicate fetches / state
+        // forks if the component ever gains internal state).
+        sheetFullscreen ? null : (
+          <TrunkShowSheet shows={filtered} onChanged={() => void reload()} onOpen={setOpenId} />
+        )
       ) : (
         <ListView shows={filtered} usersById={usersById} storesById={storesById} onOpen={setOpenId} />
       )}
@@ -281,6 +331,47 @@ export default function TrunkShows({ setNav }: { setNav?: (n: import('@/app/page
           onClose={() => setCreateOpen(false)}
           onCreated={(id) => { setCreateOpen(false); void reload(); setOpenId(id) }}
         />
+      )}
+
+      {/* Fullscreen sheet workspace — only mounts when the user
+          opts in via the ⛶ toolbar button. Sits above the entire
+          portal chrome (sidebar + content). ESC + the ✕ button
+          close it; the ESC handler lives in a useEffect higher
+          in this component so it can also un-lock body scroll. */}
+      {sheetFullscreen && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9000,
+          background: 'var(--cream)',
+          display: 'flex', flexDirection: 'column',
+          fontFamily: 'inherit',
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '10px 16px',
+            background: '#fff',
+            borderBottom: '1px solid var(--pearl)',
+            flexShrink: 0,
+          }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--ink)' }}>
+                📚 Trunk Shows · Sheet workspace
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>
+                {filtered.length} of {rows.length} · ESC to close
+              </div>
+            </div>
+            <button
+              onClick={() => setSheetFullscreen(false)}
+              className="btn-outline btn-sm"
+              title="Close (ESC)"
+            >
+              ✕ Close
+            </button>
+          </div>
+          <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+            <TrunkShowSheet shows={filtered} onChanged={() => void reload()} onOpen={setOpenId} />
+          </div>
+        </div>
       )}
     </div>
   )
