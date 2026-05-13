@@ -960,9 +960,33 @@ function FindingDetailModal({
     setBusy(false)
   }
 
-  function downloadDisputeLetter() {
+  async function downloadDisputeLetter() {
     if (!finding) return
-    window.open(`/api/reconciliation/findings/${finding.id}/dispute-letter`, '_blank')
+    // The API requires an Authorization: Bearer header. window.open()
+    // can't attach custom headers, so it returned 401. Fetch the PDF
+    // with the auth header, then surface it via a blob URL.
+    setBusy(true); setErr(null)
+    try {
+      const session = await supabase.auth.getSession()
+      const token = session.data.session?.access_token || ''
+      const res = await fetch(`/api/reconciliation/findings/${finding.id}/dispute-letter`, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        let msg = `Dispute letter failed (${res.status})`
+        try { const j = await res.json(); if (j?.error) msg = j.error } catch {}
+        throw new Error(msg)
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+      // Revoke after a delay so the new tab has time to load.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (e: any) {
+      setErr(e?.message || 'Failed to open dispute letter')
+    }
+    setBusy(false)
   }
 
   return (
