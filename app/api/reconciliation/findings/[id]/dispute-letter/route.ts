@@ -22,7 +22,7 @@ function admin() {
 }
 
 const BRAND_FULL_NAME: Record<string, string> = {
-  beb: 'Beneficial Estate Buyers, LLC',
+  beb: 'Beneficial Estate Buyers, LLP',
   liberty: 'Liberty Estate Buyers, LLC',
 }
 
