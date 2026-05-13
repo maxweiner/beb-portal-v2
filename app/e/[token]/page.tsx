@@ -37,61 +37,118 @@ function admin() {
 }
 
 // ── Page ────────────────────────────────────────────────────────
-export default async function Page({ params }: { params: { token: string } }) {
+export default async function Page({
+  params,
+  searchParams,
+}: {
+  params: { token: string }
+  searchParams?: { ev?: string }
+}) {
   const token = params.token
   if (!token || token.length < 8 || token.length > 64) {
     return <NotFound />
   }
 
   const sb = admin()
+  const today = todayIso()
+  const nowIso = new Date().toISOString()
 
-  // 1. Look up the token (must be unrevoked).
+  // 1. Look up the token (must be unrevoked) in store_share_tokens.
+  //    The page now resolves to a STORE — picker chooses the event.
   const { data: tokenRow } = await sb
-    .from('event_share_tokens')
-    .select('id, event_id, revoked_at, revoked_reason, view_count, first_viewed_at')
+    .from('store_share_tokens')
+    .select('id, store_id, revoked_at, revoked_reason, view_count, first_viewed_at')
     .eq('token', token)
     .maybeSingle()
   if (!tokenRow) return <NotFound />
   if (tokenRow.revoked_at) return <Revoked reason={tokenRow.revoked_reason} />
 
   // 2. Fire-and-forget view tracking (best-effort; never block render).
-  const nowIso = new Date().toISOString()
-  sb.from('event_share_tokens').update({
+  sb.from('store_share_tokens').update({
     first_viewed_at: tokenRow.first_viewed_at || nowIso,
     last_viewed_at: nowIso,
     view_count: (tokenRow.view_count || 0) + 1,
   }).eq('id', tokenRow.id).then(() => {}, () => {})
 
-  // 3. Event + store.
-  const { data: ev } = await sb
-    .from('events')
-    .select('id, store_id, store_name, start_date, status, workers, brand')
-    .eq('id', tokenRow.event_id)
-    .maybeSingle()
-  if (!ev) return <NotFound />
-
+  // 3. Store.
   const { data: store } = await sb
     .from('stores')
     .select('id, name, slug, city, state, store_image_url, color_primary')
-    .eq('id', ev.store_id)
+    .eq('id', tokenRow.store_id)
     .maybeSingle()
+  if (!store) return <NotFound />
 
-  // 4. Compute phase + day label (mirrors the staff HubView logic).
-  const today = todayIso()
+  // 4. Fetch this store's events that are LIVE / RECENTLY-ENDED
+  //    (within 24h post-end) / UPCOMING. Past events older than that
+  //    window are hidden per user spec ("hide past").
+  //
+  //    Event window = start_date through start_date + 2 days (3-day
+  //    event). "Recently ended" window = up to 24h after the last
+  //    day, i.e. start_date + 3 days >= today.
+  const yesterdayIso = addDays(today, -3) // start_date >= yesterday-3 == start_date+3 >= today
+
+  const { data: evs } = await sb
+    .from('events')
+    .select('id, store_id, store_name, start_date, status, workers, brand')
+    .eq('store_id', store.id)
+    .gte('start_date', yesterdayIso)
+    .order('start_date', { ascending: true })
+  const allEvents = (evs || []) as any[]
+
+  // Filter out cancelled events. Reserved events kept — they're
+  // upcoming-soon and worth surfacing.
+  const eligibleEvents = allEvents.filter(e => e.status !== 'cancelled')
+
+  if (eligibleEvents.length === 0) {
+    return (
+      <NoActiveEvents
+        storeName={store.name}
+        storeLogo={store.store_image_url}
+      />
+    )
+  }
+
+  // 5. Default-event picker, rule (b):
+  //    (1) currently LIVE  → that event
+  //    (2) just ended ≤24h → that event (post-event recap)
+  //    (3) soonest upcoming → that event
+  const live = eligibleEvents.find(e => {
+    if (!e.start_date) return false
+    return e.start_date <= today && addDays(e.start_date, 2) >= today
+  })
+  const recentlyEnded = !live ? eligibleEvents.find(e => {
+    if (!e.start_date) return false
+    const endIso = addDays(e.start_date, 2)
+    // "Within 24h after end" = today is exactly endIso + 1 day or earlier
+    return endIso < today && daysBetween(endIso, today) <= 1
+  }) : null
+  const soonestUpcoming = !live && !recentlyEnded
+    ? eligibleEvents.find(e => e.start_date && e.start_date > today)
+    : null
+  const defaultEvent = live || recentlyEnded || soonestUpcoming || eligibleEvents[0]
+
+  // 6. Honor ?ev=<id> override if present and valid.
+  const requestedEventId = (searchParams?.ev || '').trim()
+  const ev = (requestedEventId && eligibleEvents.find(e => e.id === requestedEventId))
+    || defaultEvent
+
+  // 7. Compute phase + day label (mirrors the staff HubView logic).
   const start = ev.start_date as string
   const endIso = addDays(start, 2)
   const reserved = ev.status === 'reserved'
   const cancelled = ev.status === 'cancelled'
-  const live = !reserved && !cancelled && start <= today && endIso >= today
+  const isLive = !reserved && !cancelled && start <= today && endIso >= today
   const past = !reserved && !cancelled && endIso < today
-  const dayIndexZeroBased = live ? clamp(daysBetween(start, today), 0, 2) : 0
+  const dayIndexZeroBased = isLive ? clamp(daysBetween(start, today), 0, 2) : 0
   const dayNumber = dayIndexZeroBased + 1  // 1..3
   const phase: 'live' | 'soon' | 'past' | 'reserved' | 'cancelled' | 'upcoming' =
     cancelled ? 'cancelled'
     : reserved ? 'reserved'
     : past ? 'past'
-    : live ? 'live'
+    : isLive ? 'live'
     : 'upcoming'
+
+  // (phase / day label / etc. computed above when ev was picked)
 
   // 5. Data fetch.
   //    - appts: ALL non-cancelled appointments for the event (every day)
@@ -224,6 +281,42 @@ export default async function Page({ params }: { params: { token: string } }) {
     }}>
       <AutoRefresh />
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 16px' }}>
+
+        {/* Event picker — visible whenever the store has >1 eligible
+            event. Each option is a regular <a> so it survives the
+            30-second auto-refresh + lands the user on the same event
+            on browser back/forward. Past events (>24h after end) are
+            already filtered out upstream per the "hide past" spec. */}
+        {eligibleEvents.length > 1 && (
+          <div style={{
+            background: '#fff', borderRadius: 10, padding: '10px 14px',
+            marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,.04)',
+            display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+          }}>
+            <span style={{ fontSize: 11, fontWeight: 800, color: '#6b7280', letterSpacing: '.05em', textTransform: 'uppercase' }}>
+              Event:
+            </span>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {eligibleEvents.map((e: any) => {
+                const isSelected = e.id === ev.id
+                const pillStr = eventPickerLabel(e, today)
+                return (
+                  <a key={e.id}
+                    href={`/e/${token}?ev=${e.id}`}
+                    style={{
+                      padding: '5px 10px', borderRadius: 6,
+                      fontSize: 12, fontWeight: 700, textDecoration: 'none',
+                      background: isSelected ? '#1e3a8a' : '#F3F4F6',
+                      color: isSelected ? '#fff' : '#374151',
+                      border: isSelected ? '1px solid #1e3a8a' : '1px solid #E5E7EB',
+                    }}>
+                    {pillStr}
+                  </a>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Header card */}
         <div style={{
@@ -676,6 +769,32 @@ export default async function Page({ params }: { params: { token: string } }) {
 
 
 // ── Stubs for not-found / revoked ────────────────────────────────
+/** Stub rendered when a store has no live / upcoming / recently-
+ *  ended events. The token itself is still valid — just nothing to
+ *  show. Matches the same blue gradient hero so it doesn't feel
+ *  like an error page. */
+function NoActiveEvents({ storeName, storeLogo }: { storeName: string; storeLogo: string | null | undefined }) {
+  return (
+    <div style={{ minHeight: '100vh', background: '#FAF8F4', padding: 24, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif' }}>
+      <div style={{
+        maxWidth: 600, margin: '64px auto', padding: 32,
+        background: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)',
+        color: '#fff', borderRadius: 14, textAlign: 'center',
+        boxShadow: '0 4px 12px rgba(30,58,138,.18)',
+      }}>
+        {storeLogo
+          ? <img src={storeLogo} alt={storeName} style={{ width: 72, height: 72, borderRadius: '50%', marginBottom: 16 }} />
+          : null
+        }
+        <h1 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 8px' }}>{storeName}</h1>
+        <p style={{ opacity: 0.92, fontSize: 14, margin: 0 }}>
+          No active or upcoming events right now. This page will populate when the next event is on the calendar.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 function NotFound() {
   return (
     <Frame>
@@ -841,6 +960,30 @@ function formatDateRange(startIso: string, endIso: string): string {
     return `${startStr}–${endStr}, ${e.getFullYear()}`
   } catch { return startIso }
 }
+/** Pill text for the event-picker chip. Mirrors the phase label
+ *  conventions but keeps each chip compact. */
+function eventPickerLabel(ev: any, today: string): string {
+  if (!ev?.start_date) return '—'
+  const start = ev.start_date as string
+  const endIso = addDays(start, 2)
+  const d = new Date(start + 'T12:00:00')
+  const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+
+  if (ev.status === 'cancelled') return `${dateStr} · cancelled`
+  if (ev.status === 'reserved') return `${dateStr} · save the date`
+  if (start <= today && endIso >= today) {
+    const day = Math.max(0, Math.min(2, daysBetween(start, today))) + 1
+    return `${dateStr} · LIVE · Day ${day}`
+  }
+  if (endIso < today) {
+    return `${dateStr} · wrapped`
+  }
+  const days = daysBetween(today, start)
+  if (days === 0) return `${dateStr} · starts today`
+  if (days === 1) return `${dateStr} · in 1 day`
+  return `${dateStr} · in ${days} days`
+}
+
 function phaseLabelFor(phase: string, dayNumber: number, start: string, today: string, endIso: string): string {
   if (phase === 'live') return `LIVE · DAY ${dayNumber}`
   if (phase === 'cancelled') return 'CANCELLED'

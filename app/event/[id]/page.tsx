@@ -46,14 +46,15 @@ export default async function EventSummaryPage({
 
   const { data: store } = await sb.from('stores').select('*').eq('id', ev.store_id).single()
 
-  // Current active share token (if any) — prefilled into the staff
-  // share-URL panel below so it renders without a loading flicker.
-  const { data: shareTokenRow } = await sb
-    .from('event_share_tokens')
-    .select('id, token, last_sent_at, last_sent_to, view_count, first_viewed_at, revoked_at')
-    .eq('event_id', ev.id)
+  // Current active STORE share token (if any). Replaces the previous
+  // per-event token lookup — store owners now get one durable URL
+  // per store with an event picker on the public dashboard.
+  const { data: shareTokenRow } = ev.store_id ? await sb
+    .from('store_share_tokens')
+    .select('id, store_id, token, last_sent_at, last_sent_to, view_count, first_viewed_at, revoked_at')
+    .eq('store_id', ev.store_id)
     .is('revoked_at', null)
-    .maybeSingle()
+    .maybeSingle() : { data: null as any }
 
   // Active store-portal token (used for the "flash this at the
   // counter" QR card below). Same shape as the public /e/[token]
@@ -148,11 +149,13 @@ export default async function EventSummaryPage({
           )}
         </div>
 
-        {/* Staff-only: per-event public URL controls (mint / send /
-            rotate / revoke). The URL drives the /e/[token] store-
-            owner dashboard. */}
+        {/* Staff-only: store-level public URL controls (mint / send /
+            rotate / revoke). The URL drives the /e/[token] dashboard
+            with an event picker. Token is store-scoped (one per
+            store), not per-event — store owners can bookmark this
+            URL permanently. */}
         <EventShareUrlPanel
-          eventId={ev.id}
+          storeId={ev.store_id}
           initialToken={shareTokenRow as any || null}
           ownerEmail={store?.owner_email || null}
         />

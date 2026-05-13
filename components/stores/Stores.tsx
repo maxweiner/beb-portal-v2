@@ -9,7 +9,7 @@ import Checkbox from '@/components/ui/Checkbox'
 import BookingConfigCard from './BookingConfigCard'
 import QrCodesSection from './QrCodesSection'
 import StorePortalAccessCard from './StorePortalAccessCard'
-import StoreEventShareUrlsCard from './StoreEventShareUrlsCard'
+import StoreShareUrlCard from './StoreShareUrlCard'
 import WelcomeEmailSender from './WelcomeEmailSender'
 import PhoneInput from '@/components/ui/PhoneInput'
 import { formatPhoneDisplay, rawDigits } from '@/lib/phone'
@@ -598,11 +598,12 @@ function StoreModal({ store, onClose, refetchStores, onDelete }: {
           {/* Store Portal Access (staff portal token + URL + QR) */}
           <StorePortalAccessCard storeId={store.id} />
 
-          {/* Event Share URLs (per-event public store-owner dashboard URLs).
-              Distinct from Store Portal Access: that token is for store
-              EMPLOYEES booking appointments; these tokens are for the
-              store OWNER to watch live event progress. */}
-          <StoreEventShareUrlsCard storeId={store.id} ownerEmail={store.owner_email} />
+          {/* Store-owner Dashboard URL (one per store, with event
+              picker on the public page). Distinct from Store Portal
+              Access: that token is for store EMPLOYEES booking
+              appointments; this token is for the store OWNER to watch
+              live event progress. */}
+          <StoreShareUrlCard storeId={store.id} ownerEmail={store.owner_email} />
 
           {/* Customer Booking URL & QR Codes (slug + channel/custom/employee QRs) */}
           <QrCodesSection
