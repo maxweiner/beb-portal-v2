@@ -214,6 +214,25 @@ function ReportPanel({ id, brand, from, to, vendorId }: { id: ReportId; brand: s
         <>
         {previewUrl && (
           <div style={{ marginBottom: 10, border: '1px solid var(--pearl)', borderRadius: 8, overflow: 'hidden' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '6px 10px', background: 'var(--cream2)', borderBottom: '1px solid var(--pearl)',
+            }}>
+              <span style={{ fontSize: 11, color: 'var(--mist)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                PDF Preview
+              </span>
+              <button
+                onClick={() => {
+                  // Revoke the blob URL when closing — re-clicking
+                  // "Preview PDF" rebuilds and re-objectifies the blob.
+                  if (previewUrl) URL.revokeObjectURL(previewUrl)
+                  setPreviewUrl(null)
+                  setPreviewBlob(null)
+                }}
+                className="btn-outline btn-xs"
+                title="Close preview"
+              >✕ Close preview</button>
+            </div>
             <iframe src={previewUrl} title="Report PDF preview" style={{ width: '100%', height: 560, border: 'none', display: 'block' }} />
           </div>
         )}
