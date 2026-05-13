@@ -9,6 +9,7 @@ import type { Theme, BuyerVacation } from '@/types'
 import AvatarPicker from './AvatarPicker'
 import BrandLogosPanel from './BrandLogosPanel'
 import RoleManagerPanel from './RoleManagerPanel'
+import ExpenseDelegatesPanel from './ExpenseDelegatesPanel'
 import DatePicker from '@/components/ui/DatePicker'
 import ImpersonationLogPanel from '@/components/impersonation/ImpersonationLogPanel'
 import AdHocGCalEvents from './AdHocGCalEvents'
@@ -379,6 +380,20 @@ export default function Settings() {
           subtitle="Create roles and choose which modules each one unlocks. Drives the sidebar + page guards (PRs C/D in this initiative wire them in)."
         >
           <RoleManagerPanel />
+        </CollapsibleCard>
+      )}
+
+      {/* Expense Delegates (max@bebllp.com only — POST/revoke API
+          hard-rejects others; same single-actor pattern as
+          impersonation and Role Manager). Lets one user submit
+          expense reports on behalf of another. */}
+      {user?.email?.toLowerCase() === 'max@bebllp.com' && (
+        <CollapsibleCard
+          storageKey="settings-expense-delegates"
+          title="🤝 Expense Delegates"
+          subtitle="Let one user submit expense reports on behalf of another (e.g. Ryan files for Alan). Reports are owned by the principal; the delegate appears only on a small audit line. Soft-deleted on revoke so historical filings stay attributed."
+        >
+          <ExpenseDelegatesPanel />
         </CollapsibleCard>
       )}
 
