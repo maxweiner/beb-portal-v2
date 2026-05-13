@@ -10,7 +10,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getAuthedUser } from '@/lib/expenses/serverAuth'
+import { getAuthedUser, canActOnReport } from '@/lib/expenses/serverAuth'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,8 +32,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (rErr) return NextResponse.json({ error: rErr.message }, { status: 500 })
   if (!report) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  if (report.user_id !== me.id) {
-    return NextResponse.json({ error: 'Only the report owner can recall' }, { status: 403 })
+  // canActOnReport returns true for the owner or an active delegate
+  // of the owner (and admins, who can recall on behalf of either).
+  const canAct = await canActOnReport(me, report.user_id)
+  if (!canAct) {
+    return NextResponse.json({ error: 'Only the report owner or an active delegate can recall' }, { status: 403 })
   }
   if (report.status !== 'submitted_pending_review') {
     return NextResponse.json(

@@ -29,15 +29,23 @@ import TemplateChecklist from './TemplateChecklist'
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 
 export default function ExpenseReportDetail({
-  reportId, onBack,
+  reportId, onBack, effectiveUserId: effectiveUserIdProp,
 }: {
   reportId: string
   onBack: () => void
+  /** When the parent Expenses module's "Submitting for:" picker is set
+   *  to a principal, this carries that user id so the ownership check
+   *  (isOwner / canMutate gates) honors delegation. Permissions checks
+   *  (isAdmin / isPartner / isAccounting) still use the real caller. */
+  effectiveUserId?: string
 }) {
   // An expense report can be attached to a cancelled event (the report
   // existed before the cancel). Use allEvents so the event lookup still
   // resolves and we don't render "Unknown event".
   const { user, users, allEvents: events } = useApp()
+  // Identity for ownership-scoped checks. See header doc on
+  // effectiveUserId prop above.
+  const effectiveUserId = effectiveUserIdProp ?? user?.id ?? ''
   const [report, setReport] = useState<ExpenseReport | null>(null)
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [ownerName, setOwnerName] = useState<string>('')
@@ -53,7 +61,13 @@ export default function ExpenseReportDetail({
   const [emailMsg, setEmailMsg] = useState<string | null>(null)
   const [approvalMsg, setApprovalMsg] = useState<string | null>(null)
 
-  const isOwner = !!user && !!report && user.id === report.user_id
+  // "Owner" here is the effective owner — true when the caller IS the
+  // owner, or when the caller is an active delegate operating on the
+  // owner's report via the parent module's picker. The 4 owner-only
+  // API routes apply the same delegate-aware rule server-side via
+  // canActOnReport(), so client + server agree on what "owner can
+  // mutate" means.
+  const isOwner = !!user && !!report && effectiveUserId === report.user_id
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
   const isPartner = !!user?.is_partner
   const isAccounting = user?.role === 'accounting'

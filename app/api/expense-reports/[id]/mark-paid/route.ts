@@ -6,7 +6,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getAuthedUser } from '@/lib/expenses/serverAuth'
+import { getAuthedUser, canActOnReport } from '@/lib/expenses/serverAuth'
 import { blockIfImpersonating } from '@/lib/impersonation/server'
 
 export const dynamic = 'force-dynamic'
@@ -32,11 +32,15 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (rErr) return NextResponse.json({ error: rErr.message }, { status: 500 })
   if (!report) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const isOwner = report.user_id === me.id
+  // canActOnReport returns true for the owner, an active delegate
+  // of the owner, or admin/superadmin. Partners and accounting role
+  // get their own explicit allow below (they can mark anyone's
+  // report paid regardless of ownership).
+  const canAct = await canActOnReport(me, report.user_id)
   const isAccounting = me.role === 'accounting'
-  if (!isOwner && !me.is_partner && !isAccounting) {
+  if (!canAct && !me.is_partner && !isAccounting) {
     return NextResponse.json(
-      { error: 'Only partners, accounting, or the report owner can mark paid' },
+      { error: 'Only partners, accounting, the report owner, or an active delegate can mark paid' },
       { status: 403 },
     )
   }
