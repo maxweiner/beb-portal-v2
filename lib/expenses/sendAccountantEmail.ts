@@ -14,6 +14,11 @@ interface ReportSummaryRow {
   user_id: string
   event_id: string
   status: string
+  /** Human-readable identifier (e.g. 'ER-B10001'). Backed by the
+   *  expense_reports.report_number column populated by the
+   *  per-brand counter trigger. Falls back to id.slice in display
+   *  for any pre-migration row that somehow slipped through. */
+  report_number: string | null
   total_expenses: number | string
   total_compensation: number | string
   grand_total: number | string
@@ -141,7 +146,7 @@ export async function sendAccountantEmailForReport(
       </table>
 
       ${portalUrl ? `<p style="margin-top:18px;"><a href="${portalUrl}" style="color:#1D6B44;font-weight:700;">View in portal</a></p>` : ''}
-      <p style="margin-top:18px;font-size:12px;color:#9CA3AF;">Report #${r.id.slice(0, 8)} — sent automatically by Beneficial Estate Buyers portal.</p>
+      <p style="margin-top:18px;font-size:12px;color:#9CA3AF;">${r.report_number || `Report #${r.id.slice(0, 8)}`} — sent automatically by Beneficial Estate Buyers portal.</p>
     </div>
   `.trim()
 
