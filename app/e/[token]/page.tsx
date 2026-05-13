@@ -93,16 +93,14 @@ export default async function Page({ params }: { params: { token: string } }) {
     : live ? 'live'
     : 'upcoming'
 
-  // 5. Today's appointments / waitlist / buys. For "today" we use the
-  //    user's calendar date — DATE column comparisons work fine
-  //    against today's ISO.
-  const todayDate = today
-  const [apptsRes, waitlistRes, buysRes, intakesCountRes] = await Promise.all([
-    // ALL non-cancelled appointments for the event, across every
-    // day. Previously this was filtered to `appointment_date = today`,
-    // which made the section look empty whenever the dashboard was
-    // opened on a day without scheduled appointments (e.g. evening
-    // of Day 1 when Day 2's bookings exist but Day 1 is done).
+  // 5. Data fetch.
+  //    - appts: ALL non-cancelled appointments for the event (every day)
+  //    - waitlist: live waiting queue only
+  //    - buys: ALL buyer_checks for the event (every day) — drives both
+  //      the Check Register section and the per-day spend totals
+  //    - days: event_days rows (one per day_number, denormalized
+  //      day-level totals + source breakdown from staff Day Entry)
+  const [apptsRes, waitlistRes, buysRes, daysRes] = await Promise.all([
     sb.from('appointments')
       .select('id, appointment_date, appointment_time, customer_name, items_bringing, status, is_walkin')
       .eq('event_id', ev.id)
@@ -118,23 +116,56 @@ export default async function Page({ params }: { params: { token: string } }) {
     sb.from('buyer_checks')
       .select('id, check_number, buy_form_number, amount, commission_rate, commission_note, customer_name, buyer_id, day_number, created_at, payment_type')
       .eq('event_id', ev.id)
-      .eq('day_number', dayNumber)
+      .order('day_number', { ascending: true })
       .order('created_at', { ascending: true }),
-    sb.from('customer_intakes')
-      .select('id', { count: 'exact', head: true })
-      .eq('event_id', ev.id),
+    sb.from('event_days')
+      .select('*')
+      .eq('event_id', ev.id)
+      .order('day_number', { ascending: true }),
   ])
   const appts = apptsRes.data ?? []
   const waitlist = waitlistRes.data ?? []
   const buys = buysRes.data ?? []
-  const seenCount = intakesCountRes.count ?? 0
+  const days: any[] = daysRes.data ?? []
 
-  // 6. KPIs.
-  const buysToday = buys
-  const boughtCount = buysToday.filter(b => Number(b.amount || 0) > 0).length
-  const spendCents = Math.round(
-    buysToday.reduce((sum, b) => sum + (Number(b.amount || 0) * 100), 0),
-  )
+  // 6. KPIs — cumulative across all days (Day Entry totals are the
+  //    source of truth, matching the internal staff event summary).
+  const dayTotals = days.reduce((acc: any, d: any) => ({
+    customers: acc.customers + (Number(d.customers) || 0),
+    purchases: acc.purchases + (Number(d.purchases) || 0),
+    dollars10: acc.dollars10 + (Number(d.dollars10) || 0),
+    dollars5:  acc.dollars5  + (Number(d.dollars5)  || 0),
+    dollars0:  acc.dollars0  + (Number(d.dollars0)  || 0),
+    src_vdp:        acc.src_vdp        + (Number(d.src_vdp)        || 0),
+    src_postcard:   acc.src_postcard   + (Number(d.src_postcard)   || 0),
+    src_social:     acc.src_social     + (Number(d.src_social)     || 0),
+    src_wom:        acc.src_wom        + (Number(d.src_wordofmouth) || 0),
+    src_repeat:     acc.src_repeat     + (Number(d.src_repeat)     || 0),
+    src_store:      acc.src_store      + (Number(d.src_store)      || 0),
+    src_text:       acc.src_text       + (Number(d.src_text)       || 0),
+    src_newspaper:  acc.src_newspaper  + (Number(d.src_newspaper)  || 0),
+    src_other:      acc.src_other      + (Number(d.src_other)      || 0),
+  }), {
+    customers:0, purchases:0, dollars10:0, dollars5:0, dollars0:0,
+    src_vdp:0, src_postcard:0, src_social:0, src_wom:0, src_repeat:0,
+    src_store:0, src_text:0, src_newspaper:0, src_other:0,
+  })
+  const totalSpentCents = Math.round((dayTotals.dollars10 + dayTotals.dollars5) * 100)
+  const closeRate = dayTotals.customers > 0
+    ? Math.round((dayTotals.purchases / dayTotals.customers) * 100)
+    : 0
+  const sources = [
+    { label: 'VDP / Large Postcard', value: dayTotals.src_vdp,       color: '#059669' },
+    { label: 'Store Postcard',       value: dayTotals.src_postcard,  color: '#3B82F6' },
+    { label: 'Social Media',         value: dayTotals.src_social,    color: '#8B5CF6' },
+    { label: 'Word of Mouth',        value: dayTotals.src_wom,       color: '#F59E0B' },
+    { label: 'Repeat Customer',      value: dayTotals.src_repeat,    color: '#F43F5E' },
+    { label: 'Store',                value: dayTotals.src_store,     color: '#0EA5E9' },
+    { label: 'Text Message',         value: dayTotals.src_text,      color: '#10B981' },
+    { label: 'Newspaper',            value: dayTotals.src_newspaper, color: '#6366F1' },
+    { label: 'Other',                value: dayTotals.src_other,     color: '#6B7280' },
+  ].filter(s => s.value > 0)
+  const srcTotal = sources.reduce((a, b) => a + b.value, 0)
 
   // 7. Buyer roster — events.workers JSONB has {id, name, deleted?}.
   //    Join to users for photo_url if we have buyer ids.
@@ -269,9 +300,12 @@ export default async function Page({ params }: { params: { token: string } }) {
           overflow: 'hidden',
           boxShadow: '0 1px 3px rgba(0,0,0,.05)',
         }}>
-          <Kpi label="Seen"   value={`${seenCount}`}    hint="Customers checked in (all days)" />
-          <Kpi label="Bought" value={`${boughtCount}`}  hint={seenCount > 0 ? `${pct(boughtCount, seenCount)}% close rate` : 'No buys yet today'} />
-          <Kpi label="Spend"  value={fmt(spendCents)}   hint={`Day ${dayNumber}`} emphasize />
+          <Kpi label="Customers" value={`${dayTotals.customers.toLocaleString()}`}
+            hint={`Cumulative · ${days.filter(d => Number(d.customers) > 0).length || 0} day${days.filter(d => Number(d.customers) > 0).length === 1 ? '' : 's'} of data`} />
+          <Kpi label="Purchases" value={`${dayTotals.purchases.toLocaleString()}`}
+            hint={dayTotals.customers > 0 ? `${closeRate}% close rate` : 'No buys logged yet'} />
+          <Kpi label="Spend"     value={fmt(totalSpentCents)}
+            hint="Cumulative across all days" emphasize />
         </div>
 
         {/* Launcher row */}
@@ -279,10 +313,12 @@ export default async function Page({ params }: { params: { token: string } }) {
           display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12,
           marginBottom: 18,
         }}>
-          <LauncherTile href="#appointments" icon="📅" label="Appointments"  sub={apptLauncherSub(appts, today)} />
-          <LauncherTile href="#buyers"       icon="👥" label="Buyers"        sub={`${workers.length} on-site`} />
-          <LauncherTile href="#buys"         icon="💰" label="Today's buys"  sub={`${buys.length} buys · ${fmt(spendCents)}`} />
-          <LauncherTile href="#waitlist"     icon="🕒" label="Waitlist"      sub={`${waitlist.length} waiting`} />
+          <LauncherTile href="#appointments" icon="📅" label="Appointments"   sub={apptLauncherSub(appts, today)} />
+          <LauncherTile href="#daily"        icon="📊" label="Daily Results"  sub={dailyLauncherSub(days)} />
+          <LauncherTile href="#sources"      icon="📣" label="How heard"      sub={srcTotal > 0 ? `${srcTotal} attributed` : 'No data yet'} />
+          <LauncherTile href="#buyers"       icon="👥" label="Buyers"         sub={`${workers.length} on-site`} />
+          <LauncherTile href="#checks"       icon="💰" label="Check Register" sub={`${buys.length} buys · ${fmt(totalBuyerCheckCents(buys))}`} />
+          <LauncherTile href="#waitlist"     icon="🕒" label="Waitlist"       sub={`${waitlist.length} waiting`} />
         </div>
 
         {/* Booking CTA */}
@@ -362,6 +398,111 @@ export default async function Page({ params }: { params: { token: string } }) {
           )}
         </Section>
 
+        {/* Daily Results — Day Entry totals per day_number with a
+            cumulative footer. Matches the staff event summary so the
+            numbers line up exactly. */}
+        <Section id="daily" title="📊 Daily Results">
+          {days.length === 0 ? (
+            <Empty>No daily totals submitted yet.</Empty>
+          ) : (
+            <Card>
+              <table style={tableStyle}>
+                <thead style={{ background: '#F9FAFB' }}>
+                  <tr>
+                    <Th>Day</Th>
+                    <Th style={{ width: 90, textAlign: 'right' }}>Customers</Th>
+                    <Th style={{ width: 90, textAlign: 'right' }}>Purchases</Th>
+                    <Th style={{ width: 80, textAlign: 'right' }}>Close %</Th>
+                    <Th style={{ width: 110, textAlign: 'right' }}>Amount</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {days.map(d => {
+                    const dayCustomers = Number(d.customers) || 0
+                    const dayPurchases = Number(d.purchases) || 0
+                    const dayDollars   = Math.round(((Number(d.dollars10) || 0) + (Number(d.dollars5) || 0)) * 100)
+                    const dayClose = dayCustomers > 0 ? Math.round((dayPurchases / dayCustomers) * 100) : null
+                    return (
+                      <tr key={d.day_number} style={{ borderTop: '1px solid #F3F4F6' }}>
+                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', fontWeight: 700, color: '#374151' }}>
+                          Day {d.day_number}
+                          <div style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 500, marginTop: 2 }}>
+                            {dayDateLabel(start, d.day_number, today)}
+                          </div>
+                        </td>
+                        <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                          {dayCustomers.toLocaleString()}
+                        </td>
+                        <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                          {dayPurchases.toLocaleString()}
+                        </td>
+                        <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap', color: '#6b7280' }}>
+                          {dayClose != null ? `${dayClose}%` : '—'}
+                        </td>
+                        <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 800 }}>
+                          {fmt(dayDollars)}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot style={{ background: '#F9FAFB' }}>
+                  <tr style={{ borderTop: '2px solid var(--green-dark, #1D6B44)' }}>
+                    <td style={{ padding: '10px 14px', fontWeight: 900, fontSize: 13, color: '#0f172a' }}>
+                      Cumulative
+                    </td>
+                    <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 900 }}>
+                      {dayTotals.customers.toLocaleString()}
+                    </td>
+                    <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 900 }}>
+                      {dayTotals.purchases.toLocaleString()}
+                    </td>
+                    <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 900, color: '#6b7280' }}>
+                      {closeRate}%
+                    </td>
+                    <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 900, color: '#1D6B44', fontSize: 15 }}>
+                      {fmt(totalSpentCents)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </Card>
+          )}
+        </Section>
+
+        {/* How did you hear — customer source attribution from Day
+            Entry. Renders a sorted bar list so the biggest source
+            jumps out visually. */}
+        <Section id="sources" title="📣 How did you hear">
+          {sources.length === 0 ? (
+            <Empty>No source data logged yet.</Empty>
+          ) : (
+            <Card>
+              <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {sources
+                  .slice()
+                  .sort((a, b) => b.value - a.value)
+                  .map(s => {
+                    const pctOfTotal = srcTotal > 0 ? (s.value / srcTotal) * 100 : 0
+                    return (
+                      <div key={s.label}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>{s.label}</span>
+                          <span style={{ fontSize: 12, color: '#6b7280' }}>
+                            <strong style={{ color: '#0f172a' }}>{s.value}</strong> · {pctOfTotal.toFixed(0)}%
+                          </span>
+                        </div>
+                        <div style={{ height: 8, background: '#F3F4F6', borderRadius: 4, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${pctOfTotal}%`, background: s.color, borderRadius: 4 }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+              </div>
+            </Card>
+          )}
+        </Section>
+
         {/* Buyers */}
         <Section id="buyers" title="👥 Buyers on-site">
           {workers.length === 0 ? (
@@ -396,67 +537,97 @@ export default async function Page({ params }: { params: { token: string } }) {
           )}
         </Section>
 
-        {/* Buys */}
-        <Section id="buys" title="💰 Today's buys">
+        {/* Check Register — every buy across every day, grouped by
+            day_number. Each day group has its own footer subtotal,
+            plus a grand-total footer for the whole event. */}
+        <Section id="checks" title="💰 Check Register">
           <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, marginTop: -4 }}>
-            {buys.length} buys · {fmt(spendCents)} total · Day {dayNumber}
+            {buys.length} check{buys.length === 1 ? '' : 's'} across all days · {fmt(totalBuyerCheckCents(buys))} total
           </div>
           {buys.length === 0 ? (
-            <Empty>No buys logged yet today.</Empty>
+            <Empty>No buys logged yet.</Empty>
           ) : (
-            <Card>
-              <table style={tableStyle}>
-                <thead style={{ background: '#F9FAFB' }}>
-                  <tr>
-                    <Th style={{ width: 90 }}>Time</Th>
-                    <Th style={{ width: 84 }}>Form #</Th>
-                    <Th>Customer</Th>
-                    <Th style={{ width: 70 }}>Buyer</Th>
-                    <Th style={{ width: 84 }}>Check #</Th>
-                    <Th style={{ width: 70, textAlign: 'center' }}>Comm</Th>
-                    <Th style={{ width: 110, textAlign: 'right' }}>Amount</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {buys.map((b) => (
-                    <tr key={b.id} style={{ borderTop: '1px solid #F3F4F6' }}>
-                      <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', fontWeight: 700, color: '#374151' }}>
-                        {formatShortTime(b.created_at)}
-                      </td>
-                      <td style={mono}>{b.buy_form_number ? `#${b.buy_form_number}` : '—'}</td>
-                      <td style={{ padding: '10px 6px' }}>
-                        <div style={{ fontWeight: 600 }}>{b.customer_name || '—'}</div>
-                        {b.commission_note && (
-                          <div style={{ fontSize: 11, color: '#92400e', marginTop: 2, fontStyle: 'italic' }}>
-                            📝 {b.commission_note}
-                          </div>
-                        )}
-                      </td>
-                      <td style={{ padding: '10px 6px', fontSize: 11, fontWeight: 800, color: '#6b7280', letterSpacing: '.04em' }}>
-                        {b.buyer_id ? buyerInitialsFor(b.buyer_id, workers) : '—'}
-                      </td>
-                      <td style={mono}>{b.check_number ? `#${b.check_number}` : '—'}</td>
-                      <td style={{ padding: '10px 6px', textAlign: 'center' }}>
-                        <CommPill rate={Number(b.commission_rate ?? 10)} />
-                      </td>
-                      <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 800, color: '#0f172a' }}>
-                        {fmt(Math.round(Number(b.amount || 0) * 100))}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot style={{ background: '#F9FAFB' }}>
-                  <tr>
-                    <td colSpan={6} style={{ padding: '10px 14px', fontWeight: 700, fontSize: 12, color: '#6b7280' }}>
-                      Total · {buys.length} buys
-                    </td>
-                    <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 900, color: '#1D6B44', fontSize: 15 }}>
-                      {fmt(spendCents)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </Card>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {groupBuysByDay(buys).map(grp => (
+                <Card key={grp.dayNumber}>
+                  <div style={{
+                    padding: '8px 14px', background: '#F9FAFB',
+                    fontSize: 11, fontWeight: 800, color: '#374151',
+                    textTransform: 'uppercase', letterSpacing: '.05em',
+                    borderBottom: '1px solid #F3F4F6',
+                    display: 'flex', alignItems: 'center', gap: 8,
+                  }}>
+                    <span>Day {grp.dayNumber} · {dayDateLabel(start, grp.dayNumber, today)}</span>
+                    <span style={{ color: '#9CA3AF', fontWeight: 600 }}>·</span>
+                    <span style={{ color: '#9CA3AF', fontWeight: 600 }}>
+                      {grp.rows.length} check{grp.rows.length === 1 ? '' : 's'}
+                    </span>
+                    <span style={{ flex: 1 }} />
+                    <span style={{ color: '#1D6B44', fontWeight: 800 }}>
+                      {fmt(totalBuyerCheckCents(grp.rows))}
+                    </span>
+                  </div>
+                  <table style={tableStyle}>
+                    <thead style={{ background: '#FFF' }}>
+                      <tr>
+                        <Th style={{ width: 90 }}>Time</Th>
+                        <Th style={{ width: 84 }}>Form #</Th>
+                        <Th>Customer</Th>
+                        <Th style={{ width: 70 }}>Buyer</Th>
+                        <Th style={{ width: 84 }}>Check #</Th>
+                        <Th style={{ width: 70, textAlign: 'center' }}>Comm</Th>
+                        <Th style={{ width: 110, textAlign: 'right' }}>Amount</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {grp.rows.map(b => (
+                        <tr key={b.id} style={{ borderTop: '1px solid #F3F4F6' }}>
+                          <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', fontWeight: 700, color: '#374151' }}>
+                            {formatShortTime(b.created_at)}
+                          </td>
+                          <td style={mono}>{b.buy_form_number ? `#${b.buy_form_number}` : '—'}</td>
+                          <td style={{ padding: '10px 6px' }}>
+                            <div style={{ fontWeight: 600 }}>{b.customer_name || '—'}</div>
+                            {b.commission_note && (
+                              <div style={{ fontSize: 11, color: '#92400e', marginTop: 2, fontStyle: 'italic' }}>
+                                📝 {b.commission_note}
+                              </div>
+                            )}
+                          </td>
+                          <td style={{ padding: '10px 6px', fontSize: 11, fontWeight: 800, color: '#6b7280', letterSpacing: '.04em' }}>
+                            {b.buyer_id ? buyerInitialsFor(b.buyer_id, workers) : '—'}
+                          </td>
+                          <td style={mono}>{b.check_number ? `#${b.check_number}` : '—'}</td>
+                          <td style={{ padding: '10px 6px', textAlign: 'center' }}>
+                            <CommPill rate={Number(b.commission_rate ?? 10)} />
+                          </td>
+                          <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 800, color: '#0f172a' }}>
+                            {fmt(Math.round(Number(b.amount || 0) * 100))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </Card>
+              ))}
+              {/* Grand-total footer */}
+              <div style={{
+                background: '#FFF', borderRadius: 10,
+                padding: '10px 14px', boxShadow: '0 1px 3px rgba(0,0,0,.04)',
+                display: 'flex', alignItems: 'center', gap: 12,
+              }}>
+                <span style={{ fontWeight: 800, fontSize: 13, color: '#0f172a' }}>
+                  Event total
+                </span>
+                <span style={{ color: '#9CA3AF', fontSize: 12, fontWeight: 600 }}>
+                  {buys.length} check{buys.length === 1 ? '' : 's'} across all days
+                </span>
+                <span style={{ flex: 1 }} />
+                <span style={{ color: '#1D6B44', fontWeight: 900, fontSize: 16 }}>
+                  {fmt(totalBuyerCheckCents(buys))}
+                </span>
+              </div>
+            </div>
           )}
         </Section>
 
@@ -574,6 +745,50 @@ function formatShortTime(iso: string | null | undefined): string {
 }
 /** Sub-text for the Appointments launcher tile. If anything is on today,
  *  highlight today's counts; otherwise summarize the whole event. */
+/** Sum of buyer_check.amount values (numbers in dollars) → cents. */
+function totalBuyerCheckCents(rows: { amount: number | string | null | undefined }[]): number {
+  return Math.round(rows.reduce((s, r) => s + (Number(r.amount || 0) * 100), 0))
+}
+
+/** Group buyer_checks rows by day_number (1–3). NULL day_number
+ *  falls into a synthetic "Other" bucket at the end. */
+function groupBuysByDay<T extends { day_number: number | null | undefined }>(rows: T[]): { dayNumber: number; rows: T[] }[] {
+  const map = new Map<number, T[]>()
+  for (const r of rows) {
+    const d = Number(r.day_number) > 0 ? Number(r.day_number) : 99
+    const arr = map.get(d) || []
+    arr.push(r)
+    map.set(d, arr)
+  }
+  return Array.from(map.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([dayNumber, rs]) => ({ dayNumber, rows: rs }))
+}
+
+/** Per-day date label for table headers. Falls back to "—" if
+ *  start_date is missing. */
+function dayDateLabel(startIso: string | null | undefined, dayNumber: number, today: string): string {
+  if (!startIso) return '—'
+  const iso = addDays(startIso, dayNumber - 1)
+  const d = new Date(iso + 'T12:00:00')
+  const weekday = d.toLocaleDateString('en-US', { weekday: 'short' })
+  const monthDay = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  if (iso === today) return `Today · ${weekday} ${monthDay}`
+  return `${weekday} ${monthDay}`
+}
+
+/** Sub-text for the Daily Results launcher tile. Highlights cumulative
+ *  customer + purchase counts when present; otherwise advertises N days. */
+function dailyLauncherSub(days: any[]): string {
+  if (days.length === 0) return 'No data yet'
+  const tot = days.reduce((acc: any, d: any) => ({
+    c: acc.c + (Number(d.customers) || 0),
+    p: acc.p + (Number(d.purchases) || 0),
+  }), { c: 0, p: 0 })
+  if (tot.c === 0 && tot.p === 0) return `${days.length} day${days.length === 1 ? '' : 's'} of data`
+  return `${tot.c.toLocaleString()} customers · ${tot.p.toLocaleString()} buys`
+}
+
 function apptLauncherSub(
   rows: { appointment_date: string; status: string }[],
   today: string,
