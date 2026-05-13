@@ -1,19 +1,20 @@
-// POST /api/event/[id]/share-token
+// POST /api/store/[id]/share-token
 // Body: { action: 'mint' | 'rotate' | 'revoke' | 'send', to?: string, reason?: string }
 //
-// Manages the per-event public share URL (`event_share_tokens` rows
-// that drive the /e/[token] dashboard).
+// Manages the per-STORE public share URL (`store_share_tokens` rows
+// that drive the /e/[token] dashboard with the event picker).
+//
 //   - mint    : create a token if none active; otherwise return the
 //               existing active one
 //   - rotate  : revoke the current active token + create a fresh one
 //               (the old URL stops working)
 //   - revoke  : kill the current active token without replacement
 //   - send    : ensure-or-create a token, then email the URL to the
-//               store's owner_email via Resend. last_sent_at /
-//               last_sent_to are persisted for the staff panel.
+//               store's owner_email (or `body.to` override) via Resend.
+//               Persists last_sent_at + last_sent_to.
 //
-// Auth: admin / superadmin / partner — same gate as the rest of the
-// event-view actions in this app.
+// Replaces /api/event/[id]/share-token from the previous architecture.
+// Auth: admin / superadmin / partner — same gate as the event view.
 
 import { NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
@@ -46,20 +47,20 @@ function originFrom(req: Request): string {
   return ''
 }
 
-async function loadActive(sb: ReturnType<typeof pdfAdmin>, eventId: string) {
-  const { data } = await sb.from('event_share_tokens')
+async function loadActive(sb: ReturnType<typeof pdfAdmin>, storeId: string) {
+  const { data } = await sb.from('store_share_tokens')
     .select('*')
-    .eq('event_id', eventId)
+    .eq('store_id', storeId)
     .is('revoked_at', null)
     .maybeSingle()
   return data as any
 }
 
-async function createNew(sb: ReturnType<typeof pdfAdmin>, eventId: string, me: any) {
+async function createNew(sb: ReturnType<typeof pdfAdmin>, storeId: string, me: any) {
   const token = mintToken()
-  const { data, error } = await sb.from('event_share_tokens')
+  const { data, error } = await sb.from('store_share_tokens')
     .insert({
-      event_id: eventId,
+      store_id: storeId,
       token,
       created_by: me.id,
       created_by_email: me.email,
@@ -70,7 +71,7 @@ async function createNew(sb: ReturnType<typeof pdfAdmin>, eventId: string, me: a
 }
 
 async function revokeRow(sb: ReturnType<typeof pdfAdmin>, id: string, reason: string | null) {
-  const { error } = await sb.from('event_share_tokens')
+  const { error } = await sb.from('store_share_tokens')
     .update({ revoked_at: new Date().toISOString(), revoked_reason: reason })
     .eq('id', id)
   if (error) throw new Error(error.message)
@@ -88,45 +89,43 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
   const action = body.action as 'mint' | 'rotate' | 'revoke' | 'send'
 
   const sb = pdfAdmin()
-  const eventId = ctx.params.id
+  const storeId = ctx.params.id
 
-  const { data: ev, error: evErr } = await sb.from('events')
-    .select('id, store_id, brand').eq('id', eventId).maybeSingle()
-  if (evErr) return NextResponse.json({ error: evErr.message }, { status: 500 })
-  if (!ev) return NextResponse.json({ error: 'Event not found' }, { status: 404 })
+  const { data: store, error: storeErr } = await sb.from('stores')
+    .select('id, name, brand, owner_email, owner_name')
+    .eq('id', storeId).maybeSingle()
+  if (storeErr) return NextResponse.json({ error: storeErr.message }, { status: 500 })
+  if (!store) return NextResponse.json({ error: 'Store not found' }, { status: 404 })
 
   try {
     if (action === 'revoke') {
-      const active = await loadActive(sb, eventId)
+      const active = await loadActive(sb, storeId)
       if (!active) return NextResponse.json({ ok: true, message: 'No active token' })
       await revokeRow(sb, active.id, body.reason ? String(body.reason).trim() : null)
       return NextResponse.json({ ok: true })
     }
 
     if (action === 'mint') {
-      const active = await loadActive(sb, eventId)
+      const active = await loadActive(sb, storeId)
       if (active) return NextResponse.json({ ok: true, token: active })
-      const fresh = await createNew(sb, eventId, me)
+      const fresh = await createNew(sb, storeId, me)
       return NextResponse.json({ ok: true, token: fresh })
     }
 
     if (action === 'rotate') {
-      const active = await loadActive(sb, eventId)
+      const active = await loadActive(sb, storeId)
       if (active) await revokeRow(sb, active.id, 'rotated')
-      const fresh = await createNew(sb, eventId, me)
+      const fresh = await createNew(sb, storeId, me)
       return NextResponse.json({ ok: true, token: fresh })
     }
 
     if (action === 'send') {
-      let active = await loadActive(sb, eventId)
-      if (!active) active = await createNew(sb, eventId, me)
+      let active = await loadActive(sb, storeId)
+      if (!active) active = await createNew(sb, storeId, me)
 
-      // Resolve recipient.
-      const { data: store } = await sb.from('stores')
-        .select('owner_email, owner_name, name').eq('id', ev.store_id).maybeSingle()
       const recipient = (typeof body.to === 'string' && body.to.trim())
         ? body.to.trim()
-        : (store?.owner_email || '')
+        : (store.owner_email || '')
       if (!recipient || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(recipient)) {
         return NextResponse.json({
           error: 'No recipient email — set the store\'s owner_email or pass `to` in the body.',
@@ -134,14 +133,13 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
         }, { status: 400 })
       }
 
-      // Pull Resend API key from settings.
       const { data: cfgRow } = await sb.from('settings').select('value').eq('key', 'email').maybeSingle()
       const apiKey = (cfgRow?.value as any)?.apiKey
       if (!apiKey) {
         return NextResponse.json({ error: 'Resend API key missing in settings.email', token: active }, { status: 500 })
       }
 
-      const brand: string = (ev as any).brand || 'beb'
+      const brand: string = (store as any).brand || 'beb'
       const FROM = brand === 'liberty'
         ? { name: 'Liberty Estate Buyers', email: 'noreply@libertyestatebuyers.com' }
         : { name: 'BEB Portal', email: 'noreply@updates.bebllp.com' }
@@ -149,18 +147,17 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
       const origin = originFrom(req)
       const url = `${origin}/e/${active.token}`
 
-      const storeName = store?.name || ''
-      const greeting = store?.owner_name
+      const greeting = store.owner_name
         ? `Hi ${escapeHtml(store.owner_name as string)},`
         : 'Hi,'
-      const subject = `Your event dashboard — ${storeName || 'BEB event'}`
+      const subject = `Your live event dashboard — ${store.name || 'BEB event'}`
       const html = `<!DOCTYPE html>
 <html><body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; color:#1f2937; max-width:560px; margin:0 auto; padding:24px;">
   <p style="margin:0 0 12px;">${greeting}</p>
-  <p style="margin:0 0 16px;">Here's your live dashboard for the buying event. It refreshes automatically — open it any time during the event to see appointments, today's buys, the waitlist, and on-site buyers.</p>
+  <p style="margin:0 0 16px;">Here's your live event dashboard for <strong>${escapeHtml(store.name || '')}</strong>. Bookmark this — it always shows your current event (and switches automatically when the next one starts).</p>
   <p style="margin:24px 0;">
     <a href="${url}" style="display:inline-block; background:#1D6B44; color:#fff; padding:12px 22px; border-radius:8px; text-decoration:none; font-weight:700;">
-      Open event dashboard
+      Open dashboard
     </a>
   </p>
   <p style="margin:16px 0 0; font-size:13px; color:#6b7280;">If this link ever stops working, reply to this email and we'll send a fresh one.</p>
@@ -182,7 +179,7 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
       }
       const json = await r.json().catch(() => ({}))
 
-      await sb.from('event_share_tokens')
+      await sb.from('store_share_tokens')
         .update({ last_sent_at: new Date().toISOString(), last_sent_to: recipient })
         .eq('id', active.id)
 

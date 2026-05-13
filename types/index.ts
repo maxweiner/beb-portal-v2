@@ -672,6 +672,30 @@ export interface Lead {
  *  row and revokes the previous one (revoked_at IS NOT NULL). The
  *  partial unique index in the migration enforces "one active token
  *  per event." */
+
+/** Per-store public-dashboard share token. Replaces per-event tokens
+ *  — store owners get one durable URL per store. Schema in
+ *  supabase-migration-store-share-tokens.sql. */
+export interface StoreShareToken {
+  id: string
+  store_id: string
+  token: string
+  created_by: string | null
+  created_by_email: string | null
+  revoked_at: string | null
+  revoked_reason: string | null
+  first_viewed_at: string | null
+  last_viewed_at: string | null
+  view_count: number
+  last_sent_at: string | null
+  last_sent_to: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** @deprecated Per-event share tokens are replaced by StoreShareToken
+ *  as of 2026-05-12. Existing rows kept for audit but the migration
+ *  marks them revoked. */
 export interface EventShareToken {
   id: string
   event_id: string

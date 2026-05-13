@@ -1,11 +1,11 @@
 'use client'
 
-// Staff-side controls for the per-event share URL (the /e/[token]
-// public dashboard). Sits inside the internal event summary page
-// at app/event/[id]. Shows the current URL with a copy button + a
-// row of actions (send, rotate, revoke).
+// Staff-side controls for the per-STORE share URL (the /e/[token]
+// public dashboard with the event picker). Sits inside the internal
+// event summary page at app/event/[id] for convenience, but the
+// token itself is store-scoped — store owners get one durable URL.
 //
-// All mutations go through /api/event/[id]/share-token.
+// All mutations go through /api/store/[id]/share-token.
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -21,7 +21,7 @@ interface TokenRow {
 }
 
 interface Props {
-  eventId: string
+  storeId: string
   /** Pre-fetched current active token (or null). Avoids a flash of
    *  "Loading…" on first paint since the server already knows it. */
   initialToken: TokenRow | null
@@ -34,7 +34,7 @@ async function authHeader(): Promise<string> {
   return s.data.session?.access_token || ''
 }
 
-export default function EventShareUrlPanel({ eventId, initialToken, ownerEmail }: Props) {
+export default function EventShareUrlPanel({ storeId, initialToken, ownerEmail }: Props) {
   const [token, setToken] = useState<TokenRow | null>(initialToken)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -51,7 +51,7 @@ export default function EventShareUrlPanel({ eventId, initialToken, ownerEmail }
   async function call(action: 'mint' | 'rotate' | 'revoke' | 'send', to?: string) {
     setBusy(true); setError(null); setFlash(null)
     try {
-      const r = await fetch(`/api/event/${eventId}/share-token`, {
+      const r = await fetch(`/api/store/${storeId}/share-token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await authHeader()}` },
         body: JSON.stringify({ action, ...(to ? { to } : {}) }),
