@@ -23,6 +23,7 @@
 import { NextResponse } from 'next/server'
 import { pdfAdmin } from '@/lib/wholesale/pdfHelpers'
 import { generateSignedW9Pdf } from '@/lib/w9/pdf'
+import { sendEmail } from '@/lib/email'
 import type { W9FormData, W9RequesterInfo } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -133,13 +134,19 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
   if (upErr) return NextResponse.json({ error: `Storage upload: ${upErr.message}` }, { status: 500 })
 
   // 6. Email the accountant with the PDF attached.
-  const accountantEmail = w9.requested_by_email || requester.contact_email || null
+  //
+  // Destination priority: the *configured* accountant address
+  // (settings.w9.requester_info.contact_email) wins over the
+  // who-clicked-Send fallback (requested_by_email). The
+  // requester_info contact is the stable place to point W-9s at
+  // a shared mailbox like accounting@bebllp.com regardless of
+  // which admin pressed the button.
+  const accountantEmail = requester.contact_email || w9.requested_by_email || null
   let deliveredAt: string | null = null
   let deliveredTo: string | null = null
   if (accountantEmail) {
     try {
       const sent = await emailW9ToAccountant({
-        sb,
         toEmail: accountantEmail,
         toName: w9.requested_by_name || null,
         recipientName: formData.name,
@@ -176,9 +183,8 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
 
 
 async function emailW9ToAccountant({
-  sb, toEmail, toName, recipientName, pdfBytes, pdfFilename, brand,
+  toEmail, toName, recipientName, pdfBytes, pdfFilename, brand,
 }: {
-  sb: ReturnType<typeof pdfAdmin>
   toEmail: string
   toName: string | null
   recipientName: string
@@ -186,16 +192,15 @@ async function emailW9ToAccountant({
   pdfFilename: string
   brand: 'beb' | 'liberty'
 }): Promise<boolean> {
-  const { data: cfgRow } = await sb.from('settings').select('value').eq('key', 'email').maybeSingle()
-  const apiKey = (cfgRow?.value as any)?.apiKey
-  if (!apiKey) {
-    console.warn('[w9 submit] Resend API key missing in settings.email')
-    return false
-  }
-
-  const FROM = brand === 'liberty'
-    ? { name: 'Liberty Estate Buyers', email: 'noreply@libertyestatebuyers.com' }
-    : { name: 'BEB Portal',            email: 'noreply@updates.bebllp.com' }
+  // Use the shared sendEmail() helper rather than calling Resend
+  // directly. The previous implementation read its API key from
+  // a different settings row (`email.apiKey` JSON) than the rest
+  // of the app (`resend_api_key` flat value), which silently
+  // failed once the canonical key was set. Now both create + submit
+  // routes participate in the same config + dev-recipient logic.
+  const fromAddr = brand === 'liberty'
+    ? 'Liberty Estate Buyers <noreply@libertyestatebuyers.com>'
+    : 'BEB Portal <noreply@updates.bebllp.com>'
 
   const greeting = toName ? `Hi ${escapeHtml(toName)},` : 'Hi,'
   const subject = `Signed W-9 from ${recipientName}`
@@ -206,25 +211,21 @@ async function emailW9ToAccountant({
   <p style="margin:16px 0 0; font-size:13px; color:#6b7280;">This email was generated automatically by the BEB portal.</p>
 </body></html>`
 
-  const r = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      from: `${FROM.name} <${FROM.email}>`,
-      to: [toEmail],
+  try {
+    const id = await sendEmail({
+      to: toEmail,
       subject,
       html,
+      from: fromAddr,
       attachments: [
         { filename: pdfFilename, content: Buffer.from(pdfBytes).toString('base64') },
       ],
-    }),
-  })
-  if (!r.ok) {
-    const errText = await r.text().catch(() => '')
-    console.warn(`[w9 submit] Resend ${r.status}: ${errText}`)
+    })
+    return !!id
+  } catch (err) {
+    console.warn(`[w9 submit] sendEmail failed: ${err instanceof Error ? err.message : String(err)}`)
     return false
   }
-  return true
 }
 
 function escapeHtml(s: string): string {
