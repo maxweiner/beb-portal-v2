@@ -1010,6 +1010,25 @@ function ItemForm({
   const [err, setErr] = useState<string | null>(null)
   const [rapnetLoading, setRapnetLoading] = useState(false)
 
+  // Autosave plumbing (edit mode only). The full form's state is
+  // serialized into formSnapshot; a debounced effect detects changes
+  // and fires the same save() the manual button used to call. New-item
+  // mode still uses the explicit "Create item" button — autosave on a
+  // half-typed brand-new row would create an empty/garbage record.
+  //
+  // saveState drives the inline indicator in the bottom button row
+  // ("Saving…" / "Saved ✓" / "Save failed — retry"). idle = nothing
+  // to show. Transitions:
+  //   idle  → saving (debounce fires)
+  //   saving → saved (success; auto-clears to idle in 2s)
+  //          → error (save() returned false; sticky until next change)
+  type AutoSaveState = 'idle' | 'saving' | 'saved' | 'error'
+  const [saveState, setSaveState] = useState<AutoSaveState>('idle')
+  const lastSavedSnapshotRef = useRef<string | null>(null)
+  const autoSaveReadyRef = useRef(false)
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const savedFadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   // Danger zone state — null when no confirm is open. Edit-only.
   const [dangerAction, setDangerAction] = useState<null | 'scrap' | 'delete'>(null)
   const [scrapReason, setScrapReason] = useState('')
@@ -1053,6 +1072,93 @@ function ItemForm({
     void loadStones()
     return () => { cancelled = true }
   }, [mode, existing?.id, category])
+
+  // ── Autosave (edit mode only) ────────────────────────────────
+  //
+  // Build a serialized snapshot of every editable field. The snapshot
+  // is compared against the last-saved snapshot inside a debounced
+  // effect below; when they differ, the same save() function the
+  // (now-removed) manual button used to call fires automatically
+  // 800ms after the user stops typing.
+  //
+  // useMemo here is cheap — JSON.stringify over ~40 short strings
+  // runs in microseconds, only when one of the deps actually changes.
+  const formSnapshot = useMemo(() => JSON.stringify({
+    category,
+    vendor_id, vendor_stock_number, vendor_invoice_number, memo_in, location_id,
+    cost, wholesale, retail, insurance, edge,
+    public_notes, internal_notes, status, gender,
+    jewelry_type, metal_type, metal_color, metal_karat, metal_dwt, stones,
+    j_size, j_length, j_hallmarks, j_designer, j_period,
+    watch_brand, watch_model, watch_serial, watch_band, watch_movement, watch_year,
+    watch_condition, watch_box, watch_case_mat, watch_case_size, watch_dial, watch_complications,
+    d_lab, d_report, d_shape, d_carat, d_color, d_clarity, d_cut, d_polish,
+    d_symmetry, d_fluor, d_meas, d_depth, d_table,
+  }), [
+    category,
+    vendor_id, vendor_stock_number, vendor_invoice_number, memo_in, location_id,
+    cost, wholesale, retail, insurance, edge,
+    public_notes, internal_notes, status, gender,
+    jewelry_type, metal_type, metal_color, metal_karat, metal_dwt, stones,
+    j_size, j_length, j_hallmarks, j_designer, j_period,
+    watch_brand, watch_model, watch_serial, watch_band, watch_movement, watch_year,
+    watch_condition, watch_box, watch_case_mat, watch_case_size, watch_dial, watch_complications,
+    d_lab, d_report, d_shape, d_carat, d_color, d_clarity, d_cut, d_polish,
+    d_symmetry, d_fluor, d_meas, d_depth, d_table,
+  ])
+
+  // Arm autosave once the async stones load (for jewelry) has
+  // settled. Without this guard, the stones-loaded transition (empty
+  // array → loaded rows) would itself look like a "user edit" to the
+  // snapshot diff and fire a save that mass-deletes the very stones
+  // we just loaded. Non-jewelry items have stonesLoaded === true
+  // unconditionally, so this arms immediately for them.
+  useEffect(() => {
+    if (mode !== 'edit') return
+    if (!stonesLoaded) return
+    if (autoSaveReadyRef.current) return
+    autoSaveReadyRef.current = true
+    lastSavedSnapshotRef.current = formSnapshot
+  }, [mode, stonesLoaded, formSnapshot])
+
+  // Debounced autosave. Fires 800ms after the last field change, only
+  // in edit mode, only once autosave is armed, and only when the
+  // snapshot actually differs from the last saved one (so re-renders
+  // that don't change form state don't trigger a save).
+  useEffect(() => {
+    if (mode !== 'edit') return
+    if (!autoSaveReadyRef.current) return
+    if (formSnapshot === lastSavedSnapshotRef.current) return
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+    autoSaveTimerRef.current = setTimeout(async () => {
+      if (busy) return  // a manual or earlier autosave is in flight
+      setSaveState('saving')
+      const ok = await save()
+      if (ok) {
+        // Capture the snapshot at save-fire time — if the user has
+        // typed more during the network round-trip, that's a NEW
+        // pending save the next effect cycle will pick up.
+        lastSavedSnapshotRef.current = formSnapshot
+        setSaveState('saved')
+        if (savedFadeTimerRef.current) clearTimeout(savedFadeTimerRef.current)
+        savedFadeTimerRef.current = setTimeout(() => {
+          setSaveState(s => s === 'saved' ? 'idle' : s)
+        }, 2000)
+      } else {
+        // err state is set inside save(); the indicator surfaces it.
+        setSaveState('error')
+      }
+    }, 800)
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+    }
+  }, [formSnapshot, mode, busy])
+
+  // Cleanup pending timers on unmount.
+  useEffect(() => () => {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+    if (savedFadeTimerRef.current) clearTimeout(savedFadeTimerRef.current)
+  }, [])
 
   const costCents = dollarsToCents(cost)
   const wholesaleCents = dollarsToCents(wholesale)
@@ -1099,7 +1205,10 @@ function ItemForm({
     setRapnetLoading(false)
   }
 
-  async function save() {
+  // Returns true on success, false on failure. The autosave effect
+  // below uses the return value to update saveState ('saved' vs
+  // 'error') without racing on the err state setter.
+  async function save(): Promise<boolean> {
     setBusy(true); setErr(null)
     try {
       // New items always have a category (NewItemModal picks first).
@@ -1265,10 +1374,13 @@ function ItemForm({
       }
 
       onSaved()
+      setBusy(false)
+      return true
     } catch (e: any) {
       setErr(e?.message || 'Save failed')
+      setBusy(false)
+      return false
     }
-    setBusy(false)
   }
 
   /** Mark the item scrapped — status flip + reason note. Visible in
@@ -1627,11 +1739,32 @@ function ItemForm({
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-        <button onClick={onCancel} className="btn-outline btn-sm">Cancel</button>
-        <button onClick={save} disabled={busy} className="btn-primary btn-sm">
-          {busy ? 'Saving…' : (mode === 'new' ? 'Create item' : 'Save')}
-        </button>
+      <div style={{ display: 'flex', gap: 6, justifyContent: 'space-between', alignItems: 'center' }}>
+        {/* Edit mode: live autosave indicator on the left. Aligns to
+            the same horizontal band as the Close button so the chrome
+            stays balanced regardless of which state we're in. */}
+        {mode === 'edit' ? (
+          <div style={{ fontSize: 12, color: 'var(--mist)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            {saveState === 'saving' && <span>💾 Saving…</span>}
+            {saveState === 'saved'  && <span style={{ color: '#1D6B44', fontWeight: 700 }}>✓ Saved</span>}
+            {saveState === 'error'  && <span style={{ color: '#991B1B', fontWeight: 700 }}>⚠ Save failed — keep editing to retry</span>}
+            {saveState === 'idle'   && <span style={{ fontStyle: 'italic' }}>Autosaves as you type</span>}
+          </div>
+        ) : <span />}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={onCancel} className="btn-outline btn-sm">
+            {mode === 'edit' ? 'Close' : 'Cancel'}
+          </button>
+          {/* New-item mode keeps the explicit Create button — autosave
+              would mid-create a half-typed record and the new-item flow
+              has the user pick a category first anyway, so an explicit
+              click is right. Edit mode hides this button entirely. */}
+          {mode === 'new' && (
+            <button onClick={save} disabled={busy} className="btn-primary btn-sm">
+              {busy ? 'Saving…' : 'Create item'}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
