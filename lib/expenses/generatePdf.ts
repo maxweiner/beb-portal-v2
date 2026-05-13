@@ -69,11 +69,16 @@ export async function generateAndStoreReportPdf(reportId: string): Promise<{
     .from('expense_reports').select('*').eq('id', reportId).maybeSingle()
   if (rErr || !report) throw new Error(rErr?.message ?? 'Report not found')
 
-  const [{ data: expensesRaw }, { data: eventRaw }, { data: ownerRaw }] = await Promise.all([
+  const [{ data: expensesRaw }, { data: eventRaw }, { data: ownerRaw }, { data: submitterRaw }] = await Promise.all([
     sb.from('expenses').select('*').eq('expense_report_id', reportId)
       .order('expense_date', { ascending: true }).order('created_at', { ascending: true }),
     sb.from('events').select('store_name, start_date').eq('id', report.event_id).maybeSingle(),
     sb.from('users').select('name, signature_url, last_active_brand').eq('id', report.user_id).maybeSingle(),
+    // Submitter name lookup — only populated when submitted_by_user_id
+    // is set (delegate path). Self-submissions skip the name resolution.
+    (report as any).submitted_by_user_id
+      ? sb.from('users').select('name').eq('id', (report as any).submitted_by_user_id).maybeSingle()
+      : Promise.resolve({ data: null } as { data: null }),
   ])
 
   const expenses = (expensesRaw ?? []) as Expense[]
@@ -81,6 +86,11 @@ export async function generateAndStoreReportPdf(reportId: string): Promise<{
   const owner = { name: (ownerRaw as any)?.name ?? '(unknown)' }
   const signatureUrl = (ownerRaw as any)?.signature_url ?? null
   const ownerBrand = ((ownerRaw as any)?.last_active_brand ?? 'beb') as 'beb' | 'liberty'
+  // submittedBy is non-null only when this was a delegated submission.
+  // The PDF uses it to render the "Submitted by … on behalf of …" line.
+  const submittedBy = submitterRaw && (submitterRaw as { name?: string }).name
+    ? { name: (submitterRaw as { name: string }).name }
+    : null
 
   // Sign receipt URLs in batch — only those with an actual receipt_url.
   const receiptExpenses = expenses.filter(e => !!e.receipt_url)
@@ -111,6 +121,7 @@ export async function generateAndStoreReportPdf(reportId: string): Promise<{
     expenses,
     event,
     owner,
+    submittedBy,
     receipts,
     signatureUrl,
     logo: await loadBrandLogo(sb, ownerBrand),

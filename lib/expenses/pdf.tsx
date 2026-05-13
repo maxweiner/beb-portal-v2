@@ -129,6 +129,11 @@ export interface PdfData {
   expenses: Expense[]
   event: { store_name: string; start_date: string } | null
   owner: { name: string }
+  /** Set only on delegated submissions (when report.submitted_by_user_id
+   *  is non-null and resolved to a user). Drives the "Submitted by Ryan
+   *  on behalf of Alan" audit line near the cover-page header. NULL for
+   *  self-submissions — the line doesn't render. */
+  submittedBy?: { name: string } | null
   receipts: PdfReceipt[]
   signatureUrl?: string | null
   /** Brand wordmark + the encoding format detected from the bytes.
@@ -136,7 +141,7 @@ export interface PdfData {
   logo?: { data: Buffer; format: 'png' | 'jpg' } | null
 }
 
-export function ExpenseReportPdf({ report, expenses, event, owner, receipts, signatureUrl, logo }: PdfData) {
+export function ExpenseReportPdf({ report, expenses, event, owner, submittedBy, receipts, signatureUrl, logo }: PdfData) {
   // Group + sum by category, in canonical order so the cover totals
   // and the itemized section line up.
   const byCat = new Map<ExpenseCategory, Expense[]>()
@@ -201,6 +206,19 @@ export function ExpenseReportPdf({ report, expenses, event, owner, receipts, sig
             <View style={styles.metaRow}><Text style={styles.metaLabel}>Submitted</Text><Text style={styles.metaValue}>{fmtDateLong(report.submitted_at.slice(0, 10))}</Text></View>
           )}
         </View>
+
+        {/* Delegated-submission audit line. Only renders when the
+            submitted_by_user_id column was set on submit (i.e. the
+            caller was a delegate, not the owner). Format per the
+            spec wording: "Submitted by Ryan Smith on behalf of Alan
+            Jones · May 13, 2026 at 3:42 PM". */}
+        {submittedBy && report.submitted_at && (
+          <View style={{ marginTop: 8 }}>
+            <Text style={{ fontSize: 9, color: COLORS.ash, fontStyle: 'italic' }}>
+              Submitted by {submittedBy.name} on behalf of {owner.name} · {fmtDateLong(report.submitted_at.slice(0, 10))} at {new Date(report.submitted_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+            </Text>
+          </View>
+        )}
 
         <Text style={styles.sectionHdr}>Totals by Category</Text>
         <View style={styles.totalsTable}>
