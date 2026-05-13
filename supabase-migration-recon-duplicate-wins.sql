@@ -1,29 +1,37 @@
--- ── Wells Fargo reconciliation matcher ──
+-- ── Reconciliation: duplicate_clearing must win over orphan_cleared ──
 --
--- reconciliation_run_match(p_brand) classifies every (written check,
--- cleared check) pair into one of:
---   matched              written ≈ cleared, single clearing, no row stored
---   amount_mismatch      single clearing, |written - cleared| > $0.01
---   duplicate_clearing   same check_number cleared more than once
---   orphan_cleared       cleared rows but no matching written check;
---                        skipped if check_number is on the
---                        non_event_check_numbers allowlist
---   outstanding          written check, no clearing yet
+-- The classification CASE had `orphan_cleared` listed before
+-- `duplicate_clearing`, and the orphan branch only checked
+-- `cleared_count > 0` — so any check with 2+ clearings AND no
+-- written-side row matched orphan first and never reached the
+-- duplicate branch.
 --
--- "Written checks" = union of:
---   buyer_checks (per-seller + per-day store commission)
---   event_days.store_commission_check_* (older flow for some stores)
--- both filtered to events.brand = p_brand.
+-- Real example caught in the field: check #42981 cleared twice on
+-- the same day at different amounts ($200 and $100), no written
+-- check on record. The user had originally flagged it as a
+-- duplicate; after a matcher re-run it silently reclassified to
+-- orphan and the old `duplicate_clearing` row got swept by the
+-- end-of-function DELETE.
 --
--- Findings rows are upserted on (brand, check_number, finding_type),
--- preserving status / note / resolved_by / resolved_at so a re-run
--- doesn't blow away user-set state. Open findings that no longer
--- apply (issue resolved itself between runs) are deleted; disputed /
--- resolved / ignored findings are kept as historical record.
+-- Fix: put `duplicate_clearing` ahead of `orphan_cleared` so a
+-- multi-clear check is always reported as a duplicate first.
+-- A double-clear with no written check is still a bank-side error
+-- and the dispute letter handles it cleanly — both clearings can
+-- be challenged at once.
 --
--- Returns JSONB summary counts.
+-- Side note on the allowlist: orphan_cleared still filters by
+-- `NOT allowlisted` (so non-event checks like payroll don't show
+-- up as orphans). duplicate_clearing deliberately does NOT filter
+-- by allowlist — even allowlisted check numbers should be flagged
+-- if they duplicate-cleared.
 --
--- Safe to re-run.
+-- Idempotent. Safe to re-run. Refreshes existing findings at the
+-- bottom, so any check currently mis-bucketed as orphan flips to
+-- duplicate in place — the ON CONFLICT clause preserves user-set
+-- status / note / resolved_by / resolved_at on (brand, check_number,
+-- finding_type), but since the finding_type itself changes a NEW
+-- row is inserted under duplicate_clearing and the old orphan row
+-- is dropped by the end-of-run DELETE (status='open' only).
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.reconciliation_run_match(p_brand TEXT)
@@ -40,14 +48,11 @@ DECLARE
   v_orphan      INT;
   v_outstanding INT;
 BEGIN
-  -- All three CTEs + temp table in one statement so the matcher is
-  -- atomic — no half-updated findings state if anything fails.
+  DROP TABLE IF EXISTS _tmp_recon_findings;
+
   CREATE TEMP TABLE _tmp_recon_findings ON COMMIT DROP AS
   WITH written_checks AS (
     -- (a) buyer_checks: per-seller payments + end-of-event commission.
-    -- Commission label sourced from `commission_note` (only populated
-    -- when the user explicitly tags a check as the commission payment).
-    -- entry_id IS NULL is NOT a commission signal — historical bug.
     SELECT
       bc.check_number,
       bc.amount AS written_amount,
@@ -70,7 +75,6 @@ BEGIN
 
     UNION ALL
 
-    -- (b) event_days store-commission check (older flow)
     SELECT
       ed.store_commission_check_number AS check_number,
       ed.store_commission_check_amount AS written_amount,
@@ -87,9 +91,6 @@ BEGIN
       AND COALESCE(ed.store_commission_check_amount, 0) > 0
   ),
   written_grouped AS (
-    -- Same check number can appear twice (rare but possible — entry-level
-    -- + event-day-level clash). Take the most recent event for the label,
-    -- sum amounts so the match comparison stays correct.
     SELECT
       check_number,
       SUM(written_amount) AS written_amount,
@@ -141,15 +142,16 @@ BEGIN
       p_brand AS brand,
       check_number,
       CASE
-        -- Duplicates win first. A multi-clear with no written check
-        -- is both an orphan and a duplicate; we report the duplicate
-        -- so the user can dispute all clearings at once.
+        -- Duplicates win first — a multi-clear is the most actionable
+        -- signal, including the case where there's no written check
+        -- (in which case it's both an orphan AND a duplicate; we report
+        -- the duplicate so the user can dispute both clearings).
         WHEN cleared_count > 1 THEN 'duplicate_clearing'
         WHEN written_amount IS NULL AND cleared_count > 0 AND NOT allowlisted THEN 'orphan_cleared'
         WHEN written_amount IS NOT NULL AND cleared_count = 0 THEN 'outstanding'
         WHEN cleared_count = 1 AND ABS(amount_delta) > 0.01 THEN 'amount_mismatch'
         WHEN cleared_count = 1 AND ABS(amount_delta) <= 0.01 THEN 'matched'
-        ELSE NULL  -- allowlisted orphans land here; skip
+        ELSE NULL
       END::reconciliation_finding_type AS finding_type,
       written_amount, cleared_amount_total, cleared_count, amount_delta,
       written_date, cleared_dates, payee_label, event_id, event_label
@@ -157,14 +159,12 @@ BEGIN
   )
   SELECT * FROM classified WHERE finding_type IS NOT NULL;
 
-  -- Counts (incl. matched, which we don't persist)
   SELECT COUNT(*) FILTER (WHERE finding_type = 'matched')            INTO v_matched     FROM _tmp_recon_findings;
   SELECT COUNT(*) FILTER (WHERE finding_type = 'amount_mismatch')    INTO v_mismatch    FROM _tmp_recon_findings;
   SELECT COUNT(*) FILTER (WHERE finding_type = 'duplicate_clearing') INTO v_duplicate   FROM _tmp_recon_findings;
   SELECT COUNT(*) FILTER (WHERE finding_type = 'orphan_cleared')     INTO v_orphan      FROM _tmp_recon_findings;
   SELECT COUNT(*) FILTER (WHERE finding_type = 'outstanding')        INTO v_outstanding FROM _tmp_recon_findings;
 
-  -- Upsert findings (excluding matched — too noisy to persist)
   INSERT INTO public.reconciliation_findings (
     brand, check_number, finding_type, written_amount, cleared_amount_total,
     cleared_count, amount_delta, written_date, cleared_dates, payee_label,
@@ -187,14 +187,13 @@ BEGIN
     event_id             = excluded.event_id,
     event_label          = excluded.event_label,
     last_matched_at      = excluded.last_matched_at;
-    -- status, note, resolved_by, resolved_at intentionally NOT updated
 
-  -- Drop open findings whose issue resolved itself between runs.
-  -- (disputed / resolved / ignored stay as historical record.)
   DELETE FROM public.reconciliation_findings
    WHERE brand = p_brand
      AND status = 'open'
      AND last_matched_at < v_run_at;
+
+  DROP TABLE IF EXISTS _tmp_recon_findings;
 
   RETURN jsonb_build_object(
     'brand',                    p_brand,
@@ -209,8 +208,11 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.reconciliation_run_match(TEXT) IS
-  'Re-runs reconciliation matching for one brand. Upserts non-matched findings, preserves user-set status, drops open findings that resolved themselves. Returns JSONB count summary.';
+  'Reconciliation matcher. duplicate_clearing wins over orphan_cleared so multi-clear checks are always reported as duplicates. Commission label sourced from buyer_checks.commission_note. Safe for back-to-back calls in one transaction.';
+
+SELECT public.reconciliation_run_match('beb');
+SELECT public.reconciliation_run_match('liberty');
 
 DO $$ BEGIN
-  RAISE NOTICE 'Reconciliation matcher installed. Call: SELECT public.reconciliation_run_match(''beb'');';
+  RAISE NOTICE 'duplicate_clearing now wins over orphan_cleared; both brands refreshed.';
 END $$;
