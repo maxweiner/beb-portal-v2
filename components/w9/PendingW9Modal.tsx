@@ -2,11 +2,18 @@
 
 // Portal hard-block for users with a pending W-9. Mounted globally
 // at the portal shell (app/page.tsx). Polls w9_requests on user
-// change; when a pending row exists for me, renders a non-
-// dismissible full-screen modal with a "Complete W-9 →" CTA that
-// navigates to /w9/[token]. After the recipient submits and lands
-// back in the portal, the next render finds no pending row and the
-// modal goes away.
+// change; when a pending row exists for me, renders a full-screen
+// modal with a "Complete W-9 →" CTA that navigates to /w9/[token].
+// After the recipient submits and lands back in the portal, the
+// next render finds no pending row and the modal goes away.
+//
+// Admin escape hatch: anyone with the role/perm-set that can
+// SEND a W-9 (admin / superadmin / accounting / partner) also
+// sees a small "✕ Skip for now" link in the modal's top-right.
+// Click → tab-session dismissal (sessionStorage) so they can keep
+// working / testing. Refresh re-arms the block. Non-admin
+// recipients (the buyers we actually want signed W-9s from) see
+// no escape — same hard-block as before.
 //
 // We don't try to render the W-9 form inline inside the modal —
 // that form is 400+ lines and tightly coupled to a token-only
@@ -17,6 +24,8 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
+
+const DISMISS_SESSION_KEY = 'beb-pending-w9-dismissed'
 
 interface PendingRow {
   id: string
@@ -30,6 +39,22 @@ export default function PendingW9Modal() {
   const { user } = useApp()
   const [row, setRow] = useState<PendingRow | null>(null)
   const [loading, setLoading] = useState(true)
+  // Tab-session dismiss flag — set when an admin clicks "Skip for
+  // now". Cleared on refresh so the block re-arms.
+  const [dismissed, setDismissed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return window.sessionStorage.getItem(DISMISS_SESSION_KEY) === '1'
+  })
+
+  // Anyone who can SEND a W-9 can also dismiss one targeted at them.
+  // Mirrors the gating in components/accounting/W9Panel.tsx so the
+  // capability is consistent: if you have audit-level access, you're
+  // trusted to escape your own test send.
+  const canDismiss =
+    user?.role === 'admin'
+    || user?.role === 'superadmin'
+    || user?.role === 'accounting'
+    || user?.is_partner === true
 
   useEffect(() => {
     if (!user?.id) { setRow(null); setLoading(false); return }
@@ -64,7 +89,7 @@ export default function PendingW9Modal() {
     return () => { cancelled = true; window.removeEventListener('focus', onFocus) }
   }, [user?.id])
 
-  if (loading || !row) return null
+  if (loading || !row || dismissed) return null
 
   const expiry = (() => {
     const days = Math.max(0, Math.round((new Date(row.expires_at).getTime() - Date.now()) / 86_400_000))
@@ -84,7 +109,31 @@ export default function PendingW9Modal() {
         background: '#fff', borderRadius: 14,
         padding: '32px 28px',
         boxShadow: '0 12px 32px rgba(0,0,0,.35)',
+        position: 'relative',
       }}>
+        {/* Admin escape hatch — only renders for users who can also
+            send W-9s. Clears the modal for the rest of this tab
+            session; a refresh re-arms the block. */}
+        {canDismiss && (
+          <button
+            onClick={() => {
+              if (typeof window !== 'undefined') {
+                window.sessionStorage.setItem(DISMISS_SESSION_KEY, '1')
+              }
+              setDismissed(true)
+            }}
+            title="Dismiss this block for the rest of the tab session (admin only). Refresh re-arms it."
+            style={{
+              position: 'absolute', top: 12, right: 14,
+              background: 'transparent', border: 'none',
+              fontSize: 12, color: '#9CA3AF', cursor: 'pointer',
+              fontFamily: 'inherit', padding: '4px 6px',
+            }}
+          >
+            ✕ Skip for now (admin)
+          </button>
+        )}
+
         <div style={{ fontSize: 11, fontWeight: 800, color: '#1D6B44', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
           Action required
         </div>
