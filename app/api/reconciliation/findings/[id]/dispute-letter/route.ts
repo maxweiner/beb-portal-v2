@@ -6,8 +6,10 @@
 // preview before saving.
 
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { renderToBuffer } from '@react-pdf/renderer'
+import { readFile } from 'fs/promises'
+import path from 'path'
 import { getAuthedUser } from '@/lib/expenses/serverAuth'
 import { DisputeLetterPdf, type DisputeLetterData } from '@/lib/reconciliation/disputeLetterPdf'
 
@@ -24,6 +26,48 @@ function admin() {
 const BRAND_FULL_NAME: Record<string, string> = {
   beb: 'Beneficial Estate Buyers, LLP',
   liberty: 'Liberty Estate Buyers, LLC',
+}
+
+// ── Logo loader ─────────────────────────────────────────────
+// Mirrors the pattern in lib/expenses/generatePdf.ts:
+//   1. Per-brand uploaded logo in `brand_logos` table.
+//   2. Bundled `public/beb-wordmark.png` fallback (BEB only —
+//      Liberty without an upload renders no logo rather than
+//      showing the BEB wordmark on a Liberty letter).
+
+const BUNDLED_BEB_WORDMARK = path.join(process.cwd(), 'public', 'beb-wordmark.png')
+let bundledBebBuf: Buffer | null = null
+
+function detectImageFormat(buf: Buffer): 'png' | 'jpg' {
+  if (buf.length >= 3 && buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return 'jpg'
+  return 'png'
+}
+
+async function loadLogo(
+  sb: SupabaseClient,
+  brand: string,
+): Promise<{ data: Buffer; format: 'png' | 'jpg' } | null> {
+  // 1. Per-brand uploaded logo (Settings → Brand Logos).
+  try {
+    const { data: row } = await sb
+      .from('brand_logos').select('logo_path').eq('brand', brand).maybeSingle()
+    const logoPath = (row as any)?.logo_path
+    if (logoPath) {
+      const { data: file } = await sb.storage.from('brand-logos').download(logoPath)
+      if (file) {
+        const buf = Buffer.from(await file.arrayBuffer())
+        return { data: buf, format: detectImageFormat(buf) }
+      }
+    }
+  } catch { /* fall through */ }
+
+  // 2. BEB-only bundled fallback.
+  if (brand !== 'beb') return null
+  if (bundledBebBuf) return { data: bundledBebBuf, format: 'png' }
+  try {
+    bundledBebBuf = await readFile(BUNDLED_BEB_WORDMARK)
+    return { data: bundledBebBuf, format: 'png' }
+  } catch { return null }
 }
 
 function isAllowed(role: string | null | undefined, isPartner: boolean | null | undefined): boolean {
@@ -95,6 +139,7 @@ export async function GET(req: Request, ctx: { params: { id: string } }) {
     amountDelta: finding.amount_delta != null ? Number(finding.amount_delta) : null,
     bankName: 'Wells Fargo Bank, N.A.',
     accountLastFour,
+    logo: await loadLogo(sb, finding.brand),
   }
 
   const buffer = await renderToBuffer(DisputeLetterPdf({ data }) as any)

@@ -1,10 +1,11 @@
 // One-page dispute letter for a Wells Fargo cleared-check finding.
 // Used by /api/reconciliation/findings/[id]/dispute-letter.
-// Style is intentionally plain — no logo/colors — so it formats well
-// when faxed or mailed to Wells Fargo.
+// Black/white only so it photocopies and faxes cleanly. The brand
+// wordmark sits at the top-left of the letterhead when available,
+// with the legal name and address beneath.
 
 import React from 'react'
-import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer'
+import { Document, Page, View, Text, StyleSheet, Image } from '@react-pdf/renderer'
 
 interface ClearedRow {
   cleared_date: string      // ISO
@@ -30,12 +31,14 @@ export interface DisputeLetterData {
   amountDelta: number | null          // written - cleared (signed)
   bankName: string                    // 'Wells Fargo Bank, N.A.'
   accountLastFour?: string | null
+  logo?: { data: Buffer; format: 'png' | 'jpg' } | null
 }
 
 const styles = StyleSheet.create({
   page:       { padding: 54, fontSize: 11, fontFamily: 'Helvetica', color: '#000', lineHeight: 1.45 },
-  hdrRow:     { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
+  hdrRow:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
   hdrLeft:    { flexDirection: 'column' },
+  logo:       { width: 160, height: 50, objectFit: 'contain', objectPosition: 'left center', marginBottom: 6 },
   hdrCo:      { fontWeight: 700, fontSize: 13, marginBottom: 2 },
   hdrSm:      { fontSize: 10, color: '#222' },
   hdrRight:   { flexDirection: 'column', alignItems: 'flex-end' },
@@ -90,6 +93,9 @@ function Body({ data }: { data: DisputeLetterData }) {
     <Page size="LETTER" style={styles.page}>
       <View style={styles.hdrRow}>
         <View style={styles.hdrLeft}>
+          {data.logo ? (
+            <Image style={styles.logo} src={{ data: data.logo.data, format: data.logo.format }} />
+          ) : null}
           <Text style={styles.hdrCo}>{data.brandFullName}</Text>
           {data.brandAddress ? <Text style={styles.hdrSm}>{data.brandAddress}</Text> : null}
         </View>
