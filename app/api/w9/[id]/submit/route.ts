@@ -1,9 +1,16 @@
-// POST /api/w9/[token]/submit
+// POST /api/w9/[id]/submit
 //
 // Public endpoint (no auth) — the recipient fills the form via
 // /w9/[token] and POSTs here. We validate the token, generate the
 // signed PDF, store it, update the w9_requests row, and email the
 // accountant a copy with the PDF attached.
+//
+// Slug-name note: this directory is `[id]` (not `[token]`) so the
+// dynamic segment matches its sibling admin routes (`[id]/pdf`,
+// `[id]/action`). Next.js refuses to build sibling dynamic segments
+// with mismatched slug names. The URL still passes the token in
+// this position — the handler looks it up via the `token` column,
+// not the `id` column.
 //
 // Body shape (JSON):
 //   {
@@ -32,13 +39,17 @@ interface SubmitBody {
   signatureTypedName?: string
 }
 
-export async function POST(req: Request, ctx: { params: { token: string } }) {
+export async function POST(req: Request, ctx: { params: { id: string } }) {
   const sb = pdfAdmin()
+
+  // The URL slug is named `id` for Next.js routing reasons, but the
+  // value is always a token. Look it up against the `token` column.
+  const token = ctx.params.id
 
   // 1. Token lookup + state validation.
   const { data: w9, error: lookupErr } = await sb.from('w9_requests')
     .select('*')
-    .eq('token', ctx.params.token)
+    .eq('token', token)
     .maybeSingle()
   if (lookupErr) return NextResponse.json({ error: lookupErr.message }, { status: 500 })
   if (!w9) return NextResponse.json({ error: 'W-9 request not found' }, { status: 404 })
