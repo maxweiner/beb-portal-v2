@@ -111,7 +111,20 @@ export default function ExpensesList({ onOpen }: { onOpen: (reportId: string) =>
       setLoaded(true)
       return
     }
-    const reportsArr = (reports ?? []) as ExpenseReport[]
+    const allReportsArr = (reports ?? []) as ExpenseReport[]
+
+    // Brand-scope: `events` from useApp() is already filtered to the
+    // current brand. A report whose event_id isn't in that set belongs
+    // to the OTHER brand — hide it so Liberty buyers don't see BEB
+    // expense reports and vice versa. Reports with no event_id
+    // (orphans, plus trunk-show / trade-show linked rows) pass through
+    // — those are handled by their own parent linkage and shouldn't
+    // be filtered here.
+    const brandEventIds = new Set(events.map(e => e.id))
+    const reportsArr = allReportsArr.filter(r => {
+      if (!r.event_id) return true
+      return brandEventIds.has(r.event_id)
+    })
 
     // Pull sales-side parents in parallel. Reports tied to trunk
     // shows / trade shows reference these via their respective
