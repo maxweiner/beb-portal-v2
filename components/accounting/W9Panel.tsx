@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
+import Checkbox from '@/components/ui/Checkbox'
 import type { W9Request, User } from '@/types'
 
 async function authHeader(): Promise<string> {
@@ -294,10 +295,14 @@ function SendW9Modal({
               </div>
             )}
 
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, fontSize: 13 }}>
-              <input type="checkbox" checked={sendEmail} onChange={e => setSendEmail(e.target.checked)} />
-              Email the link now (uncheck if you just want the URL to copy)
-            </label>
+            <div style={{ marginTop: 14 }}>
+              <Checkbox
+                checked={sendEmail}
+                onChange={setSendEmail}
+                label="Email the link now (uncheck if you just want the URL to copy)"
+                labelStyle={{ fontSize: 13 }}
+              />
+            </div>
 
             {error && <div style={{ marginTop: 10, padding: 10, background: '#fee2e2', color: '#991b1b', borderRadius: 6, fontSize: 13 }}>⚠ {error}</div>}
 
