@@ -455,7 +455,10 @@ export default function DayEntry() {
             day_number: selectedDay,
             check_number: c.check_number,
             buy_form_number: c.buy_form_number,
-            amount: parseFloat(c.amount) || 0,
+            // Force whole dollars — BEB never writes checks for cents,
+            // and the dashboard's Spend KPI ends up surfacing any stray
+            // .99 left in here.
+            amount: Math.round(parseFloat(c.amount) || 0),
             payment_type: c.payment_type,
             commission_rate: c.commission_rate === 5 ? 5 : c.commission_rate === 0 ? 0 : 10,
             // Only persist a non-empty note when the rate is overridden
@@ -1003,8 +1006,15 @@ export default function DayEntry() {
                             <td style={{ padding: '4px 8px' }}>
                               <div style={{ position: 'relative', width: 110 }}>
                                 <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)', fontSize: 13 }}>$</span>
-                                <input type="number" min="0" step="0.01" value={c.amount || ''} onChange={e => updateCheck(i, 'amount', e.target.value)}
-                                  placeholder="0.00" style={{ paddingLeft: 20, width: '100%', fontSize: 13, padding: '4px 8px 4px 20px' }} />
+                                <input type="number" min="0" step="1" inputMode="numeric" value={c.amount || ''}
+                                  onChange={e => updateCheck(i, 'amount', e.target.value)}
+                                  onBlur={e => {
+                                    const v = e.target.value.trim()
+                                    if (v === '') return
+                                    const rounded = String(Math.round(parseFloat(v) || 0))
+                                    if (rounded !== v) updateCheck(i, 'amount', rounded)
+                                  }}
+                                  placeholder="0" style={{ paddingLeft: 20, width: '100%', fontSize: 13, padding: '4px 8px 4px 20px' }} />
                               </div>
                             </td>
                             {formColVisible && (
@@ -1100,8 +1110,15 @@ export default function DayEntry() {
                           <label className="fl">Amount</label>
                           <div style={{ position: 'relative' }}>
                             <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--mist)' }}>$</span>
-                            <input type="number" min="0" step="0.01" value={c.amount || ''} onChange={e => updateCheck(i, 'amount', e.target.value)}
-                              placeholder="0.00" style={{ paddingLeft: 20, width: 110 }} />
+                            <input type="number" min="0" step="1" inputMode="numeric" value={c.amount || ''}
+                              onChange={e => updateCheck(i, 'amount', e.target.value)}
+                              onBlur={e => {
+                                const v = e.target.value.trim()
+                                if (v === '') return
+                                const rounded = String(Math.round(parseFloat(v) || 0))
+                                if (rounded !== v) updateCheck(i, 'amount', rounded)
+                              }}
+                              placeholder="0" style={{ paddingLeft: 20, width: 110 }} />
                           </div>
                         </div>
                         {formColVisible && (
