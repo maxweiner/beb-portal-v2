@@ -71,6 +71,7 @@ export default function InventoryView() {
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<'all' | InventoryCategory>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | InventoryStatus>('in_stock')
+  const [vendorFilter, setVendorFilter] = useState<string>('all')   // 'all' | wholesale_vendors.id
   const [openItemId, setOpenItemId] = useState<string | null>(null)
   // Per-session sort. null = natural order (DB returned order). Click
   // a sortable header to cycle: none → asc → desc → none. Only four
@@ -154,6 +155,12 @@ export default function InventoryView() {
     const rows = items.filter(i => {
       if (categoryFilter !== 'all' && i.category !== categoryFilter) return false
       if (statusFilter !== 'all' && i.status !== statusFilter) return false
+      if (vendorFilter !== 'all') {
+        // '' or null vendor_id is the explicit "no vendor" group.
+        const id = (i as any).vendor_id || ''
+        if (vendorFilter === '__none__') { if (id) return false }
+        else if (id !== vendorFilter) return false
+      }
       if (q) {
         const blob = [
           i.item_number, i.public_notes, i.internal_notes,
@@ -186,7 +193,7 @@ export default function InventoryView() {
       return (Number(av) - Number(bv)) * sign
     })
     return sorted
-  }, [items, search, categoryFilter, statusFilter, sort])
+  }, [items, search, categoryFilter, statusFilter, vendorFilter, sort])
 
   const counts = useMemo(() => {
     const by = { in_stock: 0, on_memo: 0, on_hold: 0, sold: 0 } as Record<string, number>
@@ -221,6 +228,18 @@ export default function InventoryView() {
         <input type="search" value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search item #, description, serial, report #, designer…"
           style={{ flex: '1 1 240px', maxWidth: 360, fontSize: 12, padding: '6px 10px' }} />
+        <select
+          value={vendorFilter}
+          onChange={e => setVendorFilter(e.target.value)}
+          title="Filter by vendor"
+          style={{ flex: '0 1 180px', fontSize: 12, padding: '6px 10px' }}
+        >
+          <option value="all">All vendors</option>
+          <option value="__none__">— no vendor —</option>
+          {vendors.map(v => (
+            <option key={v.id} value={v.id}>{v.company_name}</option>
+          ))}
+        </select>
         {(['all','jewelry','watch','diamond'] as const).map(c => (
           <button key={c} onClick={() => setCategoryFilter(c)}
             className={categoryFilter === c ? 'btn-primary btn-xs' : 'btn-outline btn-xs'}
