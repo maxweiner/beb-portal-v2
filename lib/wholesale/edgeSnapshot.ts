@@ -1,12 +1,14 @@
 // Builds the immutable per-item snapshot stored in edge_batch_items.
 //
 // Why a snapshot: the CSV we send to The Edge must stay reproducible
-// even if the underlying inventory_items row is later edited, sold, or
-// deleted. Snapshotting freezes the values at send time so a "view past
-// batch" or "resend identical CSV" action gives byte-identical output.
+// even if the underlying inventory_items row is later edited, sold,
+// or deleted. Snapshotting freezes the values at send time so a
+// "view past batch" or "resend identical CSV" action gives byte-
+// identical output.
 //
-// Shape mirrors `EdgeBatchItemSnapshot` in types/wholesale.ts and the
-// column order in lib/wholesale/edgeCsv.ts. Keep all three in sync.
+// Shape mirrors `EdgeBatchItemSnapshot` in types/wholesale.ts. The
+// CSV writer in `edgeCsv.ts` maps these fields to The Edge's 84
+// official import columns.
 
 import type {
   InventoryItem, InventoryItemStone, WholesaleVendor, EdgeBatchItemSnapshot,
@@ -20,8 +22,8 @@ export interface SnapshotInput {
 
 export function buildSnapshot({ item, vendor, stones }: SnapshotInput): EdgeBatchItemSnapshot {
   const sorted = [...stones].sort((a, b) => {
-    // Diamonds always first (matches the auto-description convention used
-    // elsewhere in the wholesale module), then by sort_order.
+    // Diamonds always first — matches the auto-description convention
+    // used elsewhere in the wholesale module.
     const aD = (a.stone_type || '').toLowerCase() === 'diamond' ? 0 : 1
     const bD = (b.stone_type || '').toLowerCase() === 'diamond' ? 0 : 1
     if (aD !== bD) return aD - bD
@@ -29,9 +31,10 @@ export function buildSnapshot({ item, vendor, stones }: SnapshotInput): EdgeBatc
   })
 
   const primary = sorted[0] ?? null
-  const stones_summary = sorted.length
+  const stonesSummary = sorted.length
     ? sorted.map(s => formatStone(s)).filter(Boolean).join('; ')
     : null
+  const totalStoneCt = sorted.reduce((acc, s) => acc + (Number(s.total_ct) || 0), 0)
 
   return {
     item_number: item.item_number,
@@ -42,19 +45,48 @@ export function buildSnapshot({ item, vendor, stones }: SnapshotInput): EdgeBatc
     cost_cents: item.cost_cents ?? null,
     edge_price_cents: item.edge_price_cents ?? null,
     retail_price_cents: item.retail_price_cents ?? null,
+    memo_in: item.memo_in ?? false,
+
+    item_style: item.jewelry_type ?? null,
     metal_type: item.jewelry_metal_type ?? null,
     metal_color: item.jewelry_metal_color ?? null,
     metal_karat: item.jewelry_metal_karat ?? null,
+    metal_type_label: buildMetalLabel(item),
     metal_dwt: item.jewelry_metal_dwt ?? null,
-    stones_summary,
-    primary_stone: primary?.stone_type ?? null,
-    primary_stone_ct: primary?.total_ct ?? null,
-    gender: item.gender ?? null,
     size: item.jewelry_size ?? null,
     length: item.jewelry_length ?? null,
     designer: item.jewelry_designer ?? null,
     period: item.jewelry_period ?? null,
     hallmarks: item.jewelry_hallmarks ?? null,
+
+    stones_summary: stonesSummary,
+    primary_stone: primary?.stone_type ?? null,
+    primary_stone_ct: primary?.total_ct ?? null,
+    primary_stone_shape: primary?.shape ?? null,
+    primary_stone_count: primary?.count ?? null,
+    total_stone_ct: totalStoneCt > 0 ? Number(totalStoneCt.toFixed(2)) : null,
+
+    diamond_lab: item.diamond_lab_type ?? null,
+    diamond_cert_id: item.diamond_report_number ?? null,
+    diamond_carat: item.diamond_carat ?? null,
+    diamond_shape: item.diamond_shape ?? null,
+    diamond_color: item.diamond_color ?? null,
+    diamond_clarity: item.diamond_clarity ?? null,
+    diamond_cut: item.diamond_cut ?? null,
+    diamond_polish: item.diamond_polish ?? null,
+    diamond_symmetry: item.diamond_symmetry ?? null,
+    diamond_fluorescence: item.diamond_fluorescence ?? null,
+    diamond_depth_pct: item.diamond_depth_pct ?? null,
+    diamond_table_pct: item.diamond_table_pct ?? null,
+    diamond_measurements: item.diamond_measurements ?? null,
+
+    watch_brand: item.watch_brand ?? null,
+    watch_model: item.watch_model ?? null,
+    watch_serial: item.watch_serial_number ?? null,
+    watch_band: item.watch_band_style ?? null,
+    watch_case_material: item.watch_case_material ?? null,
+
+    gender: item.gender ?? null,
     date_acquired: item.date_acquired ?? null,
     public_notes: item.public_notes ?? null,
   }
@@ -69,6 +101,15 @@ function formatStone(s: InventoryItemStone): string {
   return parts.join(' ').trim()
 }
 
+/** Compose Edge's `Metal Type` field — they expect a single string
+ *  like "14kt Yellow Gold" rather than three separate columns. */
+function buildMetalLabel(item: InventoryItem): string | null {
+  const parts = [item.jewelry_metal_karat, item.jewelry_metal_color, item.jewelry_metal_type]
+    .map(p => (p || '').trim())
+    .filter(Boolean)
+  return parts.length ? parts.join(' ') : null
+}
+
 function buildDescription({
   item, primary, vendor,
 }: {
@@ -76,12 +117,11 @@ function buildDescription({
   primary: InventoryItemStone | null
   vendor: WholesaleVendor | null
 }): string | null {
-  // If the user wrote public_notes, prefer that — it's the curated
-  // description they want on a wholesale list.
+  // If the user wrote public_notes, prefer that — curated description
+  // for the wholesale listing.
   if (item.public_notes?.trim()) return item.public_notes.trim()
 
-  // Otherwise auto-compose from structured fields. Pattern:
-  //   "14kt Yellow Gold Ladies Ring with 0.50 ct Diamond"
+  // Otherwise auto-compose from structured fields.
   const bits: string[] = []
   if (item.jewelry_metal_karat) bits.push(item.jewelry_metal_karat)
   if (item.jewelry_metal_color) bits.push(item.jewelry_metal_color)
