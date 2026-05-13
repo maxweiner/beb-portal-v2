@@ -62,22 +62,36 @@ export default async function Page({ params }: { params: { token: string } }) {
   const { data: reqRow } = await sb.from('settings').select('value').eq('key', 'w9.requester_info').maybeSingle()
   const requester = (reqRow?.value as any) || null
 
-  // For internal users, prefill what we can. The users table only
-  // has `home_address` as a single text blob — we dump it into the
-  // form's Line 5 (Address) and let the recipient split city/state/
-  // zip themselves. External recipients fill everything fresh.
+  // For internal users, prefill from the structured-address columns
+  // populated via Settings → Profile (Google Places autocomplete). If
+  // those are still null (legacy rows pre-migration), fall back to
+  // dumping the single-line `home_address` into Line 5 and let the
+  // recipient split it manually before signing. External recipients
+  // fill everything fresh.
   let prefill: any = {
     name: w9.recipient_name,
     address: '', city: '', state: '', zip: '',
   }
   if (w9.recipient_user_id) {
     const { data: u } = await sb.from('users')
-      .select('name, home_address')
+      .select('name, home_address, home_address_line1, home_address_line2, home_city, home_state, home_zip')
       .eq('id', w9.recipient_user_id)
       .maybeSingle()
     if (u) {
-      prefill.name = (u as any).name || prefill.name
-      prefill.address = (u as any).home_address || ''
+      const uu = u as any
+      prefill.name = uu.name || prefill.name
+      const hasStructured = !!(uu.home_address_line1 || uu.home_city || uu.home_state || uu.home_zip)
+      if (hasStructured) {
+        // Concat line1 + line2 into the form's single Address field;
+        // the W-9 PDF doesn't have a separate Apt slot, so the
+        // assembled string is what the IRS sees.
+        prefill.address = [uu.home_address_line1, uu.home_address_line2].filter(Boolean).join(', ')
+        prefill.city  = uu.home_city  || ''
+        prefill.state = uu.home_state || ''
+        prefill.zip   = uu.home_zip   || ''
+      } else {
+        prefill.address = uu.home_address || ''
+      }
     }
   }
 

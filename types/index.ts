@@ -22,8 +22,20 @@ export interface User {
   /** Last brand the user actively selected — synced across devices.
    *  Null = never set; fall back to localStorage / 'beb'. */
   last_active_brand?: 'beb' | 'liberty' | null
-  /** Expenses module additions (PR1 schema). */
+  /** Expenses module additions (PR1 schema). Single-line assembled
+   *  form of the structured columns below, kept in sync by the
+   *  Settings profile save handler so the mileage calculator (which
+   *  feeds this directly to Google Distance Matrix) keeps working. */
   home_address?: string | null
+  /** Structured home-address columns populated via Google Places
+   *  autocomplete on the Settings profile form. Used to prefill the
+   *  W-9 tax form's city/state/zip slots cleanly instead of dumping
+   *  the whole address into Line 1. */
+  home_address_line1?: string | null
+  home_address_line2?: string | null
+  home_city?:  string | null
+  home_state?: string | null
+  home_zip?:   string | null
   signature_url?: string | null
   magic_inbox_email?: string | null
   /** Partner = approves financials + gets the partner default rate.
