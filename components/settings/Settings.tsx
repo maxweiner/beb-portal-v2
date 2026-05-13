@@ -10,6 +10,7 @@ import AvatarPicker from './AvatarPicker'
 import BrandLogosPanel from './BrandLogosPanel'
 import RoleManagerPanel from './RoleManagerPanel'
 import ExpenseDelegatesPanel from './ExpenseDelegatesPanel'
+import QuickBooksMappingPanel from './QuickBooksMappingPanel'
 import DatePicker from '@/components/ui/DatePicker'
 import ImpersonationLogPanel from '@/components/impersonation/ImpersonationLogPanel'
 import AdHocGCalEvents from './AdHocGCalEvents'
@@ -473,6 +474,20 @@ export default function Settings() {
           subtitle="Let one user submit expense reports on behalf of another (e.g. Ryan files for Alan). Reports are owned by the principal; the delegate appears only on a small audit line. Soft-deleted on revoke so historical filings stay attributed."
         >
           <ExpenseDelegatesPanel />
+        </CollapsibleCard>
+      )}
+
+      {/* QuickBooks account mapping — admin / superadmin / accounting
+          / partner. Drives the IIF + CSV exports from the Accounting
+          Queue (⬇ Export to QB). Same audience as the Accounting
+          Queue itself. */}
+      {(user?.role === 'admin' || user?.role === 'superadmin' || user?.role === 'accounting' || user?.is_partner) && (
+        <CollapsibleCard
+          storageKey="settings-quickbooks-mapping"
+          title="💼 QuickBooks Account Mapping"
+          subtitle="Map each portal expense category to its QuickBooks account. The export reads this map when generating IIF (QBD) + CSV (QBO) files. Use Parent:Child syntax to match QB's sub-accounts."
+        >
+          <QuickBooksMappingPanel />
         </CollapsibleCard>
       )}
 

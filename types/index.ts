@@ -127,8 +127,36 @@ export interface ExpenseReport {
   grand_total: number
   pdf_url: string | null
   template_id: string | null
+  /** Audit timestamp + format of the most recent QuickBooks
+   *  export. Drives the "Exported ✓" pill + re-export warning in
+   *  the Accounting Queue. NULL = never exported. */
+  exported_to_qb_at: string | null
+  exported_to_qb_format: 'iif' | 'csv' | null
   created_at: string
   updated_at: string
+}
+
+/** Settings row `quickbooks.account_mapping` — portal expense category
+ *  (or special key) → QB account name. The export reads this map; a
+ *  missing key falls back to the seeded default so a future new
+ *  category doesn't crash the export. Account-name syntax matches
+ *  QB's hierarchy ("Parent:Child"). */
+export interface QuickbooksAccountMapping {
+  flight:            string
+  rental_car:        string
+  rideshare:         string
+  hotel:             string
+  meals:             string
+  shipping_supplies: string
+  jewelry_lots_cash: string
+  mileage:           string
+  custom:            string
+  /** Per-trip compensation (comp_rate) line. */
+  compensation:      string
+  /** Partner-granted bonus (bonus_amount) line. */
+  bonus:             string
+  /** Credit side of the Bill — usually 'Accounts Payable'. */
+  ap_account:        string
 }
 
 export interface ExpenseReportTemplate {
