@@ -1,29 +1,34 @@
--- ── Wells Fargo reconciliation matcher ──
+-- ── Reconciliation matcher: fix bogus "Store commission" label ──
 --
--- reconciliation_run_match(p_brand) classifies every (written check,
--- cleared check) pair into one of:
---   matched              written ≈ cleared, single clearing, no row stored
---   amount_mismatch      single clearing, |written - cleared| > $0.01
---   duplicate_clearing   same check_number cleared more than once
---   orphan_cleared       cleared rows but no matching written check;
---                        skipped if check_number is on the
---                        non_event_check_numbers allowlist
---   outstanding          written check, no clearing yet
+-- The previous matcher branched on `bc.entry_id IS NULL` to decide
+-- payee_kind:
+--   CASE WHEN bc.entry_id IS NULL THEN 'Store commission' ELSE 'Seller' END
 --
--- "Written checks" = union of:
---   buyer_checks (per-seller + per-day store commission)
---   event_days.store_commission_check_* (older flow for some stores)
--- both filtered to events.brand = p_brand.
+-- That's wrong. `entry_id IS NULL` only means a buyer_checks row
+-- isn't tied to a per-seller entry form row — it does NOT mean the
+-- check is the event's store-commission check. The real signal for
+-- a commission check is `buyer_checks.commission_note`, which the
+-- end-of-event flow populates only when the user explicitly tags
+-- a single check as the commission payment.
 --
--- Findings rows are upserted on (brand, check_number, finding_type),
--- preserving status / note / resolved_by / resolved_at so a re-run
--- doesn't blow away user-set state. Open findings that no longer
--- apply (issue resolved itself between runs) are deleted; disputed /
--- resolved / ignored findings are kept as historical record.
+-- New label rules for buyer_checks rows:
+--   • commission_note IS NOT NULL  →  'Commission check'
+--   • customer_name   IS NOT NULL  →  customer_name           (the seller)
+--   • else                          →  NULL                    (UI falls back
+--                                                              to event_label
+--                                                              which already
+--                                                              carries the
+--                                                              store name)
 --
--- Returns JSONB summary counts.
+-- Legacy event_days.store_commission_check_* rows stay labeled
+-- 'Store commission' — that table column IS the old explicit
+-- per-day store-commission flow.
 --
--- Safe to re-run.
+-- Existing findings rows in reconciliation_findings keep their
+-- stale payee_label until the matcher is re-run. The ON CONFLICT
+-- clause already updates payee_label, so a single click of
+-- "Re-run match" in the reconciliation UI refreshes them in place,
+-- preserving status / note / resolved_by / resolved_at.
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.reconciliation_run_match(p_brand TEXT)
@@ -40,14 +45,9 @@ DECLARE
   v_orphan      INT;
   v_outstanding INT;
 BEGIN
-  -- All three CTEs + temp table in one statement so the matcher is
-  -- atomic — no half-updated findings state if anything fails.
   CREATE TEMP TABLE _tmp_recon_findings ON COMMIT DROP AS
   WITH written_checks AS (
-    -- (a) buyer_checks: per-seller payments + end-of-event commission.
-    -- Commission label sourced from `commission_note` (only populated
-    -- when the user explicitly tags a check as the commission payment).
-    -- entry_id IS NULL is NOT a commission signal — historical bug.
+    -- (a) buyer_checks: per-seller payments + end-of-event commission
     SELECT
       bc.check_number,
       bc.amount AS written_amount,
@@ -70,7 +70,8 @@ BEGIN
 
     UNION ALL
 
-    -- (b) event_days store-commission check (older flow)
+    -- (b) event_days store-commission check (older flow). These rows
+    -- ARE always commission by definition, so the literal stays.
     SELECT
       ed.store_commission_check_number AS check_number,
       ed.store_commission_check_amount AS written_amount,
@@ -154,14 +155,12 @@ BEGIN
   )
   SELECT * FROM classified WHERE finding_type IS NOT NULL;
 
-  -- Counts (incl. matched, which we don't persist)
   SELECT COUNT(*) FILTER (WHERE finding_type = 'matched')            INTO v_matched     FROM _tmp_recon_findings;
   SELECT COUNT(*) FILTER (WHERE finding_type = 'amount_mismatch')    INTO v_mismatch    FROM _tmp_recon_findings;
   SELECT COUNT(*) FILTER (WHERE finding_type = 'duplicate_clearing') INTO v_duplicate   FROM _tmp_recon_findings;
   SELECT COUNT(*) FILTER (WHERE finding_type = 'orphan_cleared')     INTO v_orphan      FROM _tmp_recon_findings;
   SELECT COUNT(*) FILTER (WHERE finding_type = 'outstanding')        INTO v_outstanding FROM _tmp_recon_findings;
 
-  -- Upsert findings (excluding matched — too noisy to persist)
   INSERT INTO public.reconciliation_findings (
     brand, check_number, finding_type, written_amount, cleared_amount_total,
     cleared_count, amount_delta, written_date, cleared_dates, payee_label,
@@ -186,8 +185,6 @@ BEGIN
     last_matched_at      = excluded.last_matched_at;
     -- status, note, resolved_by, resolved_at intentionally NOT updated
 
-  -- Drop open findings whose issue resolved itself between runs.
-  -- (disputed / resolved / ignored stay as historical record.)
   DELETE FROM public.reconciliation_findings
    WHERE brand = p_brand
      AND status = 'open'
@@ -206,8 +203,13 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.reconciliation_run_match(TEXT) IS
-  'Re-runs reconciliation matching for one brand. Upserts non-matched findings, preserves user-set status, drops open findings that resolved themselves. Returns JSONB count summary.';
+  'Re-runs reconciliation matching for one brand. Commission label is sourced from buyer_checks.commission_note only; legacy event_days store-commission rows keep their literal label. Upserts non-matched findings, preserves user-set status, drops open findings that resolved themselves.';
+
+-- Refresh existing findings in place so the bogus "Store commission"
+-- labels disappear without waiting for the next nightly run.
+SELECT public.reconciliation_run_match('beb');
+SELECT public.reconciliation_run_match('liberty');
 
 DO $$ BEGIN
-  RAISE NOTICE 'Reconciliation matcher installed. Call: SELECT public.reconciliation_run_match(''beb'');';
+  RAISE NOTICE 'Commission-label fix applied + matcher re-run for both brands.';
 END $$;
