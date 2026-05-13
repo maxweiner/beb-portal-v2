@@ -36,6 +36,11 @@ export default function PendingW9Modal() {
     let cancelled = false
 
     async function load() {
+      // Use array form (no .maybeSingle) — when no row matches,
+      // PostgREST returns 200 + [] cleanly instead of the 404
+      // that .maybeSingle() sometimes emits, which was spamming
+      // the console on every page load for users who never have
+      // a pending W-9 (i.e., almost everyone).
       const { data } = await supabase
         .from('w9_requests')
         .select('id, token, recipient_name, requested_by_name, expires_at, status, revoked_at')
@@ -45,9 +50,9 @@ export default function PendingW9Modal() {
         .gt('expires_at', new Date().toISOString())
         .order('created_at', { ascending: false })
         .limit(1)
-        .maybeSingle()
       if (cancelled) return
-      setRow(data as any || null)
+      const first = (data && data.length > 0) ? data[0] : null
+      setRow(first as any)
       setLoading(false)
     }
 
