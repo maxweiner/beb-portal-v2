@@ -808,3 +808,33 @@ export interface W9RequesterInfo {
   contact_name: string | null
   contact_email: string | null
 }
+
+// ───────────────────────────────────────────────────────────────
+// Expense Delegates — Ryan submits expense reports on Alan's
+// behalf inside the Expenses module only. Schema at
+// supabase-migration-expense-delegates.sql.
+// ───────────────────────────────────────────────────────────────
+
+/** One row per delegation pairing. Soft-deleted via revoked_at;
+ *  active rows are those where revoked_at IS NULL. A given
+ *  (delegate_user_id, principal_user_id) pair can have at most
+ *  one active row at a time (partial unique index), but multiple
+ *  historical revoked rows for audit.
+ *
+ *  Scope is Expenses-module only — outside the Expenses page the
+ *  delegate stays themselves. Writes are Max-only, enforced at
+ *  the API layer in Phase 2 (no write-RLS policies; service-role
+ *  bypass only). */
+export interface ExpenseDelegate {
+  id: string
+  /** The user who can file expense reports on behalf of someone else. */
+  delegate_user_id: string
+  /** The user being filed for — the owner of the resulting report. */
+  principal_user_id: string
+  created_at: string
+  /** Who configured this row (Max). Nullable so deleting Max's
+   *  user row doesn't FK-break the history. */
+  created_by: string | null
+  /** ISO timestamp when revoked; null while active. */
+  revoked_at: string | null
+}
