@@ -38,7 +38,7 @@ const styles = StyleSheet.create({
   page:       { padding: 54, fontSize: 11, fontFamily: 'Helvetica', color: '#000', lineHeight: 1.45 },
   hdrRow:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
   hdrLeft:    { flexDirection: 'column' },
-  logo:       { width: 160, height: 50, objectFit: 'contain', objectPosition: 'left center', marginBottom: 6 },
+  logo:       { width: 280, height: 90, objectFit: 'contain', objectPosition: 'left center', marginBottom: 10 },
   hdrCo:      { fontWeight: 700, fontSize: 13, marginBottom: 2 },
   hdrSm:      { fontSize: 10, color: '#222' },
   hdrRight:   { flexDirection: 'column', alignItems: 'flex-end' },
