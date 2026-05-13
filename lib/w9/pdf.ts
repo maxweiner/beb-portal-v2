@@ -145,7 +145,7 @@ export async function generateSignedW9Pdf(input: GenerateW9Input): Promise<Uint8
   // we took. Format: MM/DD/YYYY in plain Helvetica.
   const helvetica = await pdf.embedFont(StandardFonts.Helvetica)
   const dateStr = formatSignedDate(f.signed_at)
-  page.drawText(dateStr, {
+  page.drawText(sanitizeForPdf(dateStr), {
     x: SIG_DATE_X, y: SIG_DATE_Y,
     size: 11, font: helvetica, color: rgb(0, 0, 0),
   })
@@ -159,10 +159,51 @@ export async function generateSignedW9Pdf(input: GenerateW9Input): Promise<Uint8
 
 // ── helpers ─────────────────────────────────────────────────────
 
+/**
+ * pdf-lib's built-in Helvetica is WinAnsi-1252 encoded — it can't
+ * render Unicode characters like → / — / " / ' / … . Any of those
+ * sneaking into a drawn string throws at PDF.save() time with
+ * "WinAnsi cannot encode '<char>' (0xNNNN)".
+ *
+ * Common sources:
+ *   - The seed `w9.requester_info.address` placeholder ships as
+ *     "— set in Settings → Accounting →" so an un-edited install
+ *     bombs the moment anyone signs a W-9.
+ *   - Users copy-pasting "Settings → Profile" or smart-quoted
+ *     addresses from email / Word.
+ *   - Google Places sometimes returns en-dashes in suite numbers.
+ *
+ * Replace the common ones with ASCII equivalents; for anything
+ * else outside Latin-1 (0x00–0xFF), drop it. The PDF stays
+ * readable — at worst the user sees "?" — and the render no
+ * longer crashes.
+ *
+ * If we ever need true Unicode (e.g. accented names that ARE in
+ * Latin-1 we want preserved, or non-Latin scripts), the proper
+ * fix is to embed a Unicode-capable font via fontkit
+ * (pdf-lib's embedFont with a TTF). For now sanitization is
+ * sufficient — the IRS W-9 is US-English by design.
+ */
+function sanitizeForPdf(s: string | null | undefined): string {
+  if (s == null) return ''
+  return String(s)
+    .replace(/[→➡➔]/g, '->')   // → ➡ ➔
+    .replace(/[←⬅]/g, '<-')         // ← ⬅
+    .replace(/[—–]/g, '-')          // — – (em/en dash)
+    .replace(/[“”]/g, '"')          // " "
+    .replace(/[‘’]/g, "'")          // ' '
+    .replace(/…/g, '...')                // …
+    .replace(/•/g, '*')                  // •
+    .replace(/ /g, ' ')                  // non-breaking space
+    // After the targeted swaps, drop anything that's still not in
+    // Latin-1 so the encoder doesn't get a surprise.
+    .replace(/[^\x00-\xFF]/g, '')
+}
+
 function setText(form: ReturnType<PDFDocument['getForm']>, name: string, value: string, opts?: { multiline?: boolean }) {
   try {
     const field = form.getTextField(name)
-    field.setText(value)
+    field.setText(sanitizeForPdf(value))
     if (opts?.multiline) field.enableMultiline()
   } catch (e) {
     console.warn('[w9 pdf] field not found:', name, (e as Error).message)
@@ -182,7 +223,7 @@ async function drawTypedSignature(pdf: PDFDocument, page: ReturnType<PDFDocument
   // though it's just typed text. (StandardFonts.TimesItalicBold
   // would also work; oblique-helvetica is more universal.)
   const font = await pdf.embedFont(StandardFonts.HelveticaOblique)
-  page.drawText(name, {
+  page.drawText(sanitizeForPdf(name), {
     x: SIG_X, y: SIG_Y + 8,
     size: 14, font, color: rgb(0, 0, 0.5),
   })
