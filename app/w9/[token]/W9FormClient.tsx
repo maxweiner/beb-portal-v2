@@ -147,8 +147,18 @@ export default function W9FormClient({
     return (
       <Frame>
         <h1 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 8px' }}>✓ Submitted</h1>
-        <p style={{ color: '#374151', margin: 0 }}>
-          Your W-9 has been signed and sent to {requesterName}. A copy has been saved with your record. You can close this tab.
+        <p style={{ color: '#374151', margin: '0 0 18px' }}>
+          Your W-9 has been signed and sent to {requesterName}. A copy has been saved with your record.
+        </p>
+        <a href="/" style={{
+          display: 'inline-block', background: '#1D6B44', color: '#fff',
+          padding: '10px 20px', borderRadius: 8,
+          fontSize: 13, fontWeight: 700, textDecoration: 'none',
+        }}>
+          Continue to portal →
+        </a>
+        <p style={{ marginTop: 14, fontSize: 11, color: '#9CA3AF' }}>
+          (If you don&apos;t have a portal account, you can just close this tab.)
         </p>
       </Frame>
     )
