@@ -103,17 +103,20 @@ export default function BusinessAutocompleteInput({
 
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+    console.log('[biz-ac] mount, apiKey present?', !!apiKey)
     if (!apiKey) return
     let cancelled = false
     loadGoogleMaps(apiKey)
       .then(() => {
         if (cancelled) return
         const places = window.google?.maps?.places
+        console.log('[biz-ac] gmaps loaded; AutocompleteSuggestion?', !!places?.AutocompleteSuggestion)
         if (!places?.AutocompleteSuggestion) return
         placesReadyRef.current = true
         sessionTokenRef.current = new places.AutocompleteSessionToken()
+        console.log('[biz-ac] placesReadyRef set true')
       })
-      .catch(() => { /* degrade silently — plain typing still works */ })
+      .catch((e) => { console.log('[biz-ac] gmaps load failed:', e) })
     return () => { cancelled = true }
   }, [])
 
@@ -131,8 +134,24 @@ export default function BusinessAutocompleteInput({
   }, [open])
 
   const fetchSuggestions = useCallback(async (input: string) => {
-    if (!placesReadyRef.current) return
+    console.log('[biz-ac] fetchSuggestions called, input:', JSON.stringify(input), 'ready?', placesReadyRef.current)
+    if (!placesReadyRef.current) {
+      // Fallback — script may have loaded via a sibling component but
+      // this instance's useEffect never resolved. Re-check window.
+      const places = window.google?.maps?.places
+      if (places?.AutocompleteSuggestion) {
+        placesReadyRef.current = true
+        if (!sessionTokenRef.current) {
+          sessionTokenRef.current = new places.AutocompleteSessionToken()
+        }
+        console.log('[biz-ac] late-recovery: places exists on window, continuing')
+      } else {
+        console.log('[biz-ac] bail: places not ready')
+        return
+      }
+    }
     if (!input || input.trim().length < 2) {
+      console.log('[biz-ac] bail: input too short')
       setSuggestions([])
       return
     }
@@ -141,38 +160,34 @@ export default function BusinessAutocompleteInput({
       const request: any = {
         input: input.trim(),
         sessionToken: sessionTokenRef.current,
-        // 'establishment' = any business / point-of-interest.
-        // Cast wide here on purpose — wholesale vendors include
-        // designers (manufacturer-type), local jewelers (retail),
-        // and lab-grown suppliers (service-type), all of which
-        // surface under different finer-grained types.
         includedPrimaryTypes: ['establishment'],
       }
       if (countries.length > 0) request.includedRegionCodes = countries
+      console.log('[biz-ac] firing API call with', request)
       const { suggestions: result } = await AutocompleteSuggestion.fetchAutocompleteSuggestions(request)
+      console.log('[biz-ac] got', result?.length ?? 0, 'raw suggestions:', result)
       const mapped: Suggestion[] = (result || [])
         .filter((s: any) => s.placePrediction)
         .slice(0, 6)
         .map((s: any) => {
           const p = s.placePrediction
-          // PlacePrediction surfaces structured text via .structuredFormat
-          // in the new API, but the older path .text still resolves for
-          // back-compat. Try both.
           const primary = p?.structuredFormat?.mainText?.toString?.()
             || p?.text?.toString?.()
             || ''
           const secondary = p?.structuredFormat?.secondaryText?.toString?.() || ''
           return { primary, secondary, prediction: p }
         })
+      console.log('[biz-ac] mapped to', mapped.length, 'rows; setting state')
       setSuggestions(mapped)
       setActiveIdx(-1)
-    } catch {
-      // Network blip or rate limit — keep prior suggestions visible.
+    } catch (e) {
+      console.log('[biz-ac] API call threw:', e)
     }
   }, [countries])
 
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     const v = e.target.value
+    console.log('[biz-ac] handleInputChange fired, value:', JSON.stringify(v))
     onChange(v)
     setOpen(true)
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -238,6 +253,7 @@ export default function BusinessAutocompleteInput({
     }
   }
 
+  console.log('[biz-ac] render, open:', open, 'suggestions.length:', suggestions.length, 'value:', JSON.stringify(value))
   return (
     <div ref={wrapperRef} style={{ position: 'relative' }}>
       <input
