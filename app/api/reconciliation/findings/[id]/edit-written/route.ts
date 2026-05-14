@@ -1,20 +1,27 @@
 // PATCH /api/reconciliation/findings/[id]/edit-written
 //
-// Inline-edit the written amount on a buyer_checks row (or an
-// event_days store-commission check) tied to a reconciliation
-// finding. Used when the user spots an entry-time typo on the
-// reconciliation page and wants to fix it without navigating to
-// Day Entry.
+// Inline-edit a buyer_checks row (or an event_days store-commission
+// check) tied to a reconciliation finding. Used when the user spots
+// an entry-time typo on the reconciliation page and wants to fix it
+// without navigating to Day Entry — handy for day-less rows that
+// the Day Entry filter hides.
 //
 // Body: {
-//   source_table: 'buyer_checks' | 'event_days',
-//   source_id:    string,
-//   new_amount:   number          // positive
+//   source_table:     'buyer_checks' | 'event_days',
+//   source_id:        string,
+//   new_amount?:      number   // positive; optional if changing only the check #
+//   new_check_number?: string  // optional if changing only the amount
 // }
 //
-// On success, also re-runs the matcher for the finding's brand so
-// the finding reclassifies (e.g. mismatch → matched) on the next
-// page reload.
+// At least one of new_amount / new_check_number must be provided.
+// Changing the check_number lets you fix a "wrong number written on
+// the wrong check" typo — the source row will fall off the current
+// finding (whose check_number no longer matches) and either match a
+// different finding cleanly or disappear if no cleared check of
+// that number is left short.
+//
+// On success, re-runs the matcher for the finding's brand so any
+// findings reclassify (e.g. mismatch → matched) on next reload.
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -51,13 +58,36 @@ export async function PATCH(req: Request, ctx: { params: { id: string } }) {
   }
   const sourceTable = String(body?.source_table || '')
   const sourceId    = String(body?.source_id || '')
-  const newAmount   = Number(body?.new_amount)
   if (!ALLOWED_TABLES.has(sourceTable)) {
     return NextResponse.json({ error: 'source_table must be buyer_checks or event_days' }, { status: 400 })
   }
   if (!sourceId) return NextResponse.json({ error: 'source_id required' }, { status: 400 })
-  if (!Number.isFinite(newAmount) || newAmount < 0) {
-    return NextResponse.json({ error: 'new_amount must be a non-negative number' }, { status: 400 })
+
+  // ── Parse optional new_amount / new_check_number ────────────
+  let newAmount: number | null = null
+  if (body?.new_amount !== undefined && body?.new_amount !== null && body?.new_amount !== '') {
+    const n = Number(body.new_amount)
+    if (!Number.isFinite(n) || n < 0) {
+      return NextResponse.json({ error: 'new_amount must be a non-negative number' }, { status: 400 })
+    }
+    newAmount = n
+  }
+
+  let newCheckNumber: string | null = null
+  if (body?.new_check_number !== undefined && body?.new_check_number !== null) {
+    const trimmed = String(body.new_check_number).trim()
+    // Allow alphanumeric + dashes (some pads use 'CK-1234'); cap at 50.
+    if (trimmed.length === 0) {
+      return NextResponse.json({ error: 'new_check_number cannot be empty' }, { status: 400 })
+    }
+    if (trimmed.length > 50) {
+      return NextResponse.json({ error: 'new_check_number too long (max 50)' }, { status: 400 })
+    }
+    newCheckNumber = trimmed
+  }
+
+  if (newAmount === null && newCheckNumber === null) {
+    return NextResponse.json({ error: 'At least one of new_amount or new_check_number is required' }, { status: 400 })
   }
 
   const sb = admin()
@@ -72,20 +102,21 @@ export async function PATCH(req: Request, ctx: { params: { id: string } }) {
     return NextResponse.json({ error: fErr?.message || 'Finding not found' }, { status: 404 })
   }
 
-  // Apply the update to the right table. Both columns are NUMERIC.
+  // Build the per-table patch — column names differ between
+  // buyer_checks (amount, check_number) and event_days
+  // (store_commission_check_amount, store_commission_check_number).
   let updErr: { message: string } | null = null
   if (sourceTable === 'buyer_checks') {
-    const { error } = await sb
-      .from('buyer_checks')
-      .update({ amount: newAmount })
-      .eq('id', sourceId)
+    const patch: Record<string, unknown> = {}
+    if (newAmount !== null)      patch.amount       = newAmount
+    if (newCheckNumber !== null) patch.check_number = newCheckNumber
+    const { error } = await sb.from('buyer_checks').update(patch).eq('id', sourceId)
     updErr = error
   } else {
-    // event_days commission column
-    const { error } = await sb
-      .from('event_days')
-      .update({ store_commission_check_amount: newAmount })
-      .eq('id', sourceId)
+    const patch: Record<string, unknown> = {}
+    if (newAmount !== null)      patch.store_commission_check_amount = newAmount
+    if (newCheckNumber !== null) patch.store_commission_check_number = newCheckNumber
+    const { error } = await sb.from('event_days').update(patch).eq('id', sourceId)
     updErr = error
   }
   if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 })
