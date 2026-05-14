@@ -47,7 +47,13 @@ const SIG_Y = 175          // signature line baseline, page 1 (from bottom)
 const SIG_WIDTH = 230
 const SIG_HEIGHT = 28
 const SIG_DATE_X = 410     // date column on the same signature row
-const SIG_DATE_Y = 178
+// Empirically tuned to land on the Date line next to the signature
+// on the Oct-2018+ IRS revision shipped in public/forms/fw9.pdf.
+// The previous value (178) was rendering ~30pt below the date line
+// — bumped to 215 so the date text baseline sits on the same row
+// as the drawn signature. If the IRS revises the form again, scoot
+// this number; the rest of the code doesn't depend on it.
+const SIG_DATE_Y = 215
 
 /** Generates a filled + signed W-9 PDF. Returns raw bytes ready
  *  for Supabase Storage upload. */

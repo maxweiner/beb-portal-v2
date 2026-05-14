@@ -11,6 +11,7 @@
 // or telemetry, and a successful submit immediately navigates away.
 
 import { useRef, useState } from 'react'
+import Checkbox from '@/components/ui/Checkbox'
 
 interface Requester {
   name: string
@@ -203,10 +204,15 @@ export default function W9FormClient({
             <Field label="LLC tax classification (C = C corp, S = S corp, P = Partnership) *">
               <div style={{ display: 'flex', gap: 12 }}>
                 {(['C', 'S', 'P'] as const).map(c => (
-                  <label key={c} style={radioLabel}>
-                    <input type="radio" name="llc" checked={llcCode === c} onChange={() => setLlcCode(c)} style={radioInput} />
-                    {c}
-                  </label>
+                  // Visually a Checkbox (matches portal style), but
+                  // ignores "uncheck" so radio-group invariant holds —
+                  // exactly one of C/S/P stays selected.
+                  <Checkbox
+                    key={c}
+                    checked={llcCode === c}
+                    onChange={v => { if (v) setLlcCode(c) }}
+                    label={c}
+                  />
                 ))}
               </div>
             </Field>
@@ -251,14 +257,16 @@ export default function W9FormClient({
           {/* Part I — TIN */}
           <h2 style={{ fontSize: 14, fontWeight: 800, margin: '20px 0 8px', color: '#0f172a' }}>Part I — Taxpayer Identification Number (TIN)</h2>
           <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}>
-            <label style={radioLabel}>
-              <input type="radio" name="tinType" checked={tinType === 'ssn'} onChange={() => { setTinType('ssn'); setTin('') }} style={radioInput} />
-              SSN
-            </label>
-            <label style={radioLabel}>
-              <input type="radio" name="tinType" checked={tinType === 'ein'} onChange={() => { setTinType('ein'); setTin('') }} style={radioInput} />
-              EIN
-            </label>
+            <Checkbox
+              checked={tinType === 'ssn'}
+              onChange={v => { if (v) { setTinType('ssn'); setTin('') } }}
+              label="SSN"
+            />
+            <Checkbox
+              checked={tinType === 'ein'}
+              onChange={v => { if (v) { setTinType('ein'); setTin('') } }}
+              label="EIN"
+            />
           </div>
           <Field label={tinType === 'ssn' ? 'Social Security Number *' : 'Employer Identification Number *'}>
             <input
@@ -279,14 +287,16 @@ export default function W9FormClient({
           </p>
 
           <div style={{ display: 'flex', gap: 12, marginBottom: 10 }}>
-            <label style={radioLabel}>
-              <input type="radio" name="sigMode" checked={sigMode === 'drawn'} onChange={() => setSigMode('drawn')} style={radioInput} />
-              Draw signature
-            </label>
-            <label style={radioLabel}>
-              <input type="radio" name="sigMode" checked={sigMode === 'typed'} onChange={() => setSigMode('typed')} style={radioInput} />
-              Type name
-            </label>
+            <Checkbox
+              checked={sigMode === 'drawn'}
+              onChange={v => { if (v) setSigMode('drawn') }}
+              label="Draw signature"
+            />
+            <Checkbox
+              checked={sigMode === 'typed'}
+              onChange={v => { if (v) setSigMode('typed') }}
+              label="Type name"
+            />
           </div>
 
           {sigMode === 'drawn' && (
@@ -436,13 +446,8 @@ const ipt: React.CSSProperties = {
   border: '1px solid #d1d5db', borderRadius: 6, background: '#fff',
   fontFamily: 'inherit',
 }
-const radioLabel: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#374151', cursor: 'pointer',
-}
-// globals.css applies `width: 100%` to every <input>, which stretches
-// native radios into full-width boxes (see recurring Checkbox-fix
-// note in CLAUDE.md memory). Override width + height to restore the
-// browser's default ~13×13 radio size.
-const radioInput: React.CSSProperties = {
-  width: 'auto', height: 'auto', margin: 0, accentColor: '#0f172a', cursor: 'pointer',
-}
+// (Former radioLabel / radioInput style constants removed — all
+// W-9 radio groups now render through the shared Checkbox
+// component, which carries the portal's standard styling AND
+// dodges the globals.css `input { width: 100% }` rule that
+// stretched the native radios into wide rectangles.)
