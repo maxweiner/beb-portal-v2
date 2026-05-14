@@ -96,6 +96,15 @@ export async function GET(req: Request) {
   const paidCutoff = new Date(Date.now() - paidLookbackDays * 24 * 60 * 60 * 1000).toISOString()
 
   // ── Active reports (always returned) ───────────────────────
+  // Deliberately ONE join to users (the submitter / owner). An
+  // earlier attempt added `paid_by_user:users!paid_by(name)` here
+  // to surface the AP user on paid rows in the same trip — but
+  // PostgREST silently drops rows when a query has TWO foreign
+  // keys to the same target table and one is NULL (paid_by is
+  // null on every never-paid row). That broke the listing for
+  // newly-unmarked-paid reports specifically (Alan's report,
+  // 2026-05-14). Switching to a separate fetch for paid_by names
+  // below restores the original 1:1 join semantics here.
   const { data: activeReports, error } = await sb
     .from('expense_reports')
     .select(`
@@ -104,7 +113,6 @@ export async function GET(req: Request) {
       total_expenses, total_compensation, bonus_amount, grand_total,
       report_number, exported_to_qb_at, exported_to_qb_format,
       user:users!user_id(name),
-      paid_by_user:users!paid_by(name),
       event:events(store_name, start_date, brand)
     `)
     .in('status', ['submitted_pending_review', 'approved'])
@@ -112,9 +120,8 @@ export async function GET(req: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // ── Paid reports (opt-in via ?include_paid=true) ───────────
-  // Same shape as active so the response is uniform. Window-
-  // limited so the response stays small even on long-running
-  // installations.
+  // Same single-users-join shape as active. paid_by_name is
+  // hydrated in the merge step below.
   let paidReports: any[] = []
   if (includePaid) {
     const { data, error: paidErr } = await sb
@@ -125,7 +132,6 @@ export async function GET(req: Request) {
         total_expenses, total_compensation, bonus_amount, grand_total,
         report_number, exported_to_qb_at, exported_to_qb_format,
         user:users!user_id(name),
-        paid_by_user:users!paid_by(name),
         event:events(store_name, start_date, brand)
       `)
       .eq('status', 'paid')
@@ -136,6 +142,24 @@ export async function GET(req: Request) {
   }
 
   const reports = [...(activeReports || []), ...paidReports]
+
+  // ── paid_by user names — separate fetch ─────────────────────
+  // Only the paid rows have paid_by set, so the lookup is bounded
+  // (typically <100 rows in a 90-day window). One trip per render
+  // is cheap.
+  const paidByIds = Array.from(new Set(
+    (reports || []).map(r => (r as any).paid_by).filter(Boolean) as string[],
+  ))
+  const paidByNameById = new Map<string, string>()
+  if (paidByIds.length > 0) {
+    const { data: payers } = await sb
+      .from('users')
+      .select('id, name')
+      .in('id', paidByIds)
+    for (const u of (payers || []) as any[]) {
+      if (u.id && u.name) paidByNameById.set(u.id, u.name)
+    }
+  }
 
   // Receipt counts per report — single roundtrip with .in().
   const ids = (reports || []).map(r => r.id)
@@ -176,7 +200,7 @@ export async function GET(req: Request) {
       approved_at: r.approved_at,
       paid_at: r.paid_at || null,
       paid_by_user_id: r.paid_by || null,
-      paid_by_name: r.paid_by_user?.name || null,
+      paid_by_name: r.paid_by ? (paidByNameById.get(r.paid_by) || null) : null,
       paid_note: r.paid_note || null,
       age_days: age,
       total_expenses: Number(r.total_expenses) || 0,
