@@ -100,7 +100,14 @@ async function buildInput(row: QueueRow, settings: BrandSettings): Promise<GcalE
   const initialsTag = settings.include_buyer_names && workers.length > 0
     ? ` (${workers.map(w => initials(w.name || '')).join('/')})`
     : ''
-  const summary = `${p.store_name || 'Event'}${initialsTag}`
+  // Status suffix — only "reserved" (Save-the-Date / tentative) gets a
+  // marker. Scheduled / completed are the default state and stay
+  // unmarked. Cancelled events never reach this code path (the
+  // trigger short-circuits them to a delete). Status is stamped into
+  // the payload by the events→queue trigger; older queue rows that
+  // pre-date that migration won't have it and fall back to no suffix.
+  const statusTag = p.status === 'reserved' ? ' (reserved)' : ''
+  const summary = `${p.store_name || 'Event'}${initialsTag}${statusTag}`
 
   const descLines: string[] = []
   if (settings.include_buyer_names) {
