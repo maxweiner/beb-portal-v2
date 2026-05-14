@@ -11,6 +11,7 @@ import BrandLogosPanel from './BrandLogosPanel'
 import RoleManagerPanel from './RoleManagerPanel'
 import ExpenseDelegatesPanel from './ExpenseDelegatesPanel'
 import QuickBooksMappingPanel from './QuickBooksMappingPanel'
+import WhiteSheetSettingsPanel from './WhiteSheetSettingsPanel'
 import DatePicker from '@/components/ui/DatePicker'
 import ImpersonationLogPanel from '@/components/impersonation/ImpersonationLogPanel'
 import AdHocGCalEvents from './AdHocGCalEvents'
@@ -488,6 +489,19 @@ export default function Settings() {
           subtitle="Map each portal expense category to its QuickBooks account. The export reads this map when generating IIF (QBD) + CSV (QBO) files. Use Parent:Child syntax to match QB's sub-accounts."
         >
           <QuickBooksMappingPanel />
+        </CollapsibleCard>
+      )}
+
+      {/* White Sheet Upload — admin / superadmin / partner. Per-brand
+          "Review every page" toggle (escape hatch for new-model
+          rollouts) + 30-day pipeline-health stats. */}
+      {(user?.role === 'admin' || user?.role === 'superadmin' || user?.is_partner) && (
+        <CollapsibleCard
+          storageKey="settings-white-sheets"
+          title="📄 White Sheet Upload"
+          subtitle="Per-brand 'Review every page' escape hatch + 30-day pipeline stats (uploads, auto-commit rate, cost). The toggle forces every OCR'd page into the review pile regardless of the 5-check filter — handy for stress-testing a new model version."
+        >
+          <WhiteSheetSettingsPanel />
         </CollapsibleCard>
       )}
 
