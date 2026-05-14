@@ -91,9 +91,12 @@ export default function WhiteSheetPageDetail({
   // ── Signed-URL fetch (30-min TTL) ────────────────────────────
   const [signedUrl, setSignedUrl] = useState<string | null>(null)
   const [urlError, setUrlError] = useState<string | null>(null)
+  // Phase 9: distinguish "preview purged after 90 days" from a
+  // generic failure so the UI can show a friendly state.
+  const [previewExpired, setPreviewExpired] = useState(false)
   useEffect(() => {
     let cancelled = false
-    setSignedUrl(null); setUrlError(null)
+    setSignedUrl(null); setUrlError(null); setPreviewExpired(false)
     async function fetchUrl() {
       try {
         const { data: { session } } = await supabase.auth.getSession()
@@ -105,6 +108,10 @@ export default function WhiteSheetPageDetail({
           body: JSON.stringify({ page_id: page.id }),
         })
         const json = await res.json().catch(() => ({}))
+        if (res.status === 410 && json?.error === 'page_pdf_expired') {
+          if (!cancelled) setPreviewExpired(true)
+          return
+        }
         if (!res.ok) throw new Error(json.error || `${res.status}`)
         if (!cancelled) setSignedUrl(json.signed_url)
       } catch (e: any) {
@@ -257,7 +264,17 @@ export default function WhiteSheetPageDetail({
           {urlError && (
             <div style={{ padding: 20, color: '#991B1B', fontSize: 13 }}>⚠ {urlError}</div>
           )}
-          {!signedUrl && !urlError && (
+          {previewExpired && (
+            <div style={{ padding: 24, color: 'var(--mist)', fontSize: 13, textAlign: 'center' }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>📂</div>
+              <div style={{ fontWeight: 800, color: 'var(--ink)', marginBottom: 4 }}>Preview expired</div>
+              <div style={{ lineHeight: 1.5 }}>
+                Per-page PDFs are purged after 90 days to save storage. The OCR result + audit trail
+                are retained — you can still edit fields and resolve the page.
+              </div>
+            </div>
+          )}
+          {!signedUrl && !urlError && !previewExpired && (
             <div style={{ padding: 20, color: 'var(--mist)', fontSize: 13 }}>Loading preview…</div>
           )}
           {signedUrl && (
