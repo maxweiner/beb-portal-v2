@@ -92,7 +92,7 @@ export function isAdminLike(u: AuthedUser | null): boolean {
  * upload-receipt, calculate-mileage) which run on the service-role
  * client and therefore bypass RLS — so they need to enforce the
  * same delegate rule themselves. Routes that are role-gated only
- * (bonus, approve, accounting-queue) don't need this helper.
+ * (bonus, approve, accounting-hub) don't need this helper.
  */
 export async function canActOnReport(
   me: AuthedUser | null,

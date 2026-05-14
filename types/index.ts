@@ -129,7 +129,7 @@ export interface ExpenseReport {
   template_id: string | null
   /** Audit timestamp + format of the most recent QuickBooks
    *  export. Drives the "Exported ✓" pill + re-export warning in
-   *  the Accounting Queue. NULL = never exported. */
+   *  the Accounting Hub. NULL = never exported. */
   exported_to_qb_at: string | null
   exported_to_qb_format: 'iif' | 'csv' | null
   created_at: string

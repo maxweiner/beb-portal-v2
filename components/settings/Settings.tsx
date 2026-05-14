@@ -600,7 +600,7 @@ export default function Settings() {
 
       {/* W-9 Requester Info (admin/superadmin/accounting/partner) —
           pre-fills the "Person requesting information" box on every
-          W-9 sent through the Accounting Queue. */}
+          W-9 sent through the Accounting Hub. */}
       {(user?.role === 'admin' || user?.role === 'superadmin' || user?.role === 'accounting' || user?.is_partner) && (
         <W9RequesterSettings />
       )}
@@ -865,7 +865,7 @@ function ExpenseSettings() {
 
 /* ── W-9 REQUESTER SETTINGS ──
    Pre-fills the "Person requesting information" box at the top-right
-   of every W-9 sent via the Accounting Queue. Stored at
+   of every W-9 sent via the Accounting Hub. Stored at
    `settings.w9.requester_info` as a JSONB blob — see PR 1's
    supabase-migration-w9-requests.sql for the schema. */
 function W9RequesterSettings() {
@@ -926,7 +926,7 @@ function W9RequesterSettings() {
       storageKey="settings-w9-requester"
       title="📧 W-9 Requester Info"
       titleAccessory={<AutosaveIndicator status={status} />}
-      subtitle="Pre-fills the 'Person requesting information' box on every W-9 sent from the Accounting Queue."
+      subtitle="Pre-fills the 'Person requesting information' box on every W-9 sent from the Accounting Hub."
     >
       <div className="field">
         <label className="fl">Company name</label>

@@ -1,4 +1,4 @@
-// POST /api/accounting-queue/bulk-paid
+// POST /api/accounting-hub/bulk-paid
 //
 // Body: { ids: string[], notify?: boolean }
 //

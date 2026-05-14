@@ -1,6 +1,6 @@
 'use client'
 
-// W-9 panel inside the Accounting Queue. Header button "📧 Send W-9"
+// W-9 panel inside the Accounting Hub. Header button "📧 Send W-9"
 // opens a modal with two tabs (internal user picker / external name
 // + email). Below the button a small history table lists recent
 // W-9 requests with status, copy-link, resend, revoke.

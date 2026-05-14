@@ -1,6 +1,6 @@
 'use client'
 
-// Accounting Queue — single-screen dashboard for the accountant.
+// Accounting Hub — single-screen dashboard for the accountant.
 // Two-pane layout (desktop only):
 //   • Left: every expense report awaiting action (Submitted →
 //     awaiting approval; Approved → awaiting payment). Aging
@@ -65,14 +65,14 @@ interface Props {
   setNav?: (n: NavPage) => void
 }
 
-export default function AccountingQueue({ setNav }: Props) {
+export default function AccountingHub({ setNav }: Props) {
   const { user, brand } = useApp()
   const isAllowed = user?.role === 'accounting' || user?.role === 'admin' || user?.role === 'superadmin' || user?.is_partner === true
 
   const [rows, setRows] = useState<QueueRow[] | null>(null)
   const [err, setErr]   = useState<string | null>(null)
   const [refreshTick, setRefreshTick] = useState(0)
-  // Fullscreen workspace. AccountingQueue already has its own
+  // Fullscreen workspace. AccountingHub already has its own
   // title + toolbar so we toggle the OUTER container's styling
   // directly (position:fixed; inset:0) rather than wrapping in
   // <FullscreenWorkspace /> — avoids a duplicate title bar.
@@ -130,7 +130,7 @@ export default function AccountingQueue({ setNav }: Props) {
     ;(async () => {
       setErr(null)
       try {
-        const r = await fetch('/api/accounting-queue', { headers: await authHeaders() })
+        const r = await fetch('/api/accounting-hub', { headers: await authHeaders() })
         const j = await r.json().catch(() => ({}))
         if (cancelled) return
         if (!r.ok) { setErr(j.error || `Load failed (${r.status})`); setRows([]); return }
@@ -248,7 +248,7 @@ export default function AccountingQueue({ setNav }: Props) {
     if (!confirm(`Mark ${ids.length} report${ids.length === 1 ? '' : 's'} as paid?${notifyOnPay ? ' Submitter(s) will be emailed.' : ''}`)) return
     setPaying(true); setPayResult(null)
     try {
-      const r = await fetch('/api/accounting-queue/bulk-paid', {
+      const r = await fetch('/api/accounting-hub/bulk-paid', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
         body: JSON.stringify({ ids, notify: notifyOnPay }),
@@ -296,7 +296,7 @@ export default function AccountingQueue({ setNav }: Props) {
     }>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <h1 style={{ fontSize: 22, fontWeight: 900, margin: 0 }}>
-          💼 Accounting Queue
+          💼 Accounting Hub
           {fullscreen && (
             <span style={{ fontSize: 13, color: 'var(--mist)', fontWeight: 700, marginLeft: 8 }}>
               · Fullscreen · ESC to close
