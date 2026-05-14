@@ -41,6 +41,10 @@
       "schedule": "17 5 * * *"
     },
     {
+      "path": "/api/cron/lead-follow-up-reminders?secret=bebportal2024",
+      "schedule": "0 13 * * *"
+    },
+    {
       "path": "/api/cron/poll-tracking?secret=bebportal2024",
       "schedule": "*/30 * * * *"
     },
