@@ -72,11 +72,24 @@ export async function POST(req: Request) {
   // prevents path-traversal / cross-event signing.)
   const { data: page } = await sb
     .from('white_sheet_pages')
-    .select('id, page_pdf_path')
+    .select('id, page_pdf_path, status, created_at')
     .eq('id', page_id)
     .maybeSingle()
-  if (!page || !(page as any).page_pdf_path) {
-    return NextResponse.json({ error: 'page_not_found_or_unsplit' }, { status: 404 })
+  if (!page) {
+    return NextResponse.json({ error: 'page_not_found' }, { status: 404 })
+  }
+  if (!(page as any).page_pdf_path) {
+    // Phase 9: the 90-day cleanup cron purges per-page PDFs for
+    // settled rows but keeps the DB row + OCR result. The signed-
+    // URL caller (review pile re-open after 90 days) gets a
+    // distinct 410 Gone so the UI can show a clear "preview
+    // expired" state instead of a generic 404.
+    return NextResponse.json({
+      error: 'page_pdf_expired',
+      message: 'Per-page PDF preview was purged after 90 days. The OCR data + audit trail remain on this page.',
+      status: (page as any).status,
+      created_at: (page as any).created_at,
+    }, { status: 410 })
   }
 
   const { data: signed, error: signErr } = await sb.storage

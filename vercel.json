@@ -33,6 +33,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/cleanup-white-sheet-pages?secret=bebportal2024",
+      "schedule": "13 4 * * *"
+    },
+    {
       "path": "/api/cron/poll-tracking?secret=bebportal2024",
       "schedule": "*/30 * * * *"
     },
