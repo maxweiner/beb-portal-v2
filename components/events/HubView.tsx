@@ -37,6 +37,7 @@ import IntakeCaptureFlow from '@/components/intake/IntakeCaptureFlow'
 import IntakeWorksheet from '@/components/intake/IntakeWorksheet'
 import WaitlistPanel from './WaitlistPanel'
 import WhiteSheetUploadModal from '@/components/whitesheets/WhiteSheetUploadModal'
+import WhiteSheetReviewPile from '@/components/whitesheets/WhiteSheetReviewPile'
 import Checkbox from '@/components/ui/Checkbox'
 import { CALENDAR_COLORS } from '@/lib/calendarColors'
 
@@ -151,6 +152,11 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
   // historically lived.
   const [waitlistEventId, setWaitlistEventId] = useState<string | null>(null)
   const [whiteSheetEventId, setWhiteSheetEventId] = useState<string | null>(null)
+  // Phase 4: when set, opens the review pile workspace for that
+  // event. Distinct from whiteSheetEventId (which opens the upload
+  // modal) so the operator can have the workspace up without an
+  // active upload dialog.
+  const [whiteSheetReviewEventId, setWhiteSheetReviewEventId] = useState<string | null>(null)
   /** Existing box labels for the event whose manifest modal is currently open.
    *  Lazily fetched so we can drive the "replace?" warning + preset pills. */
   const [manifestExistingLabels, setManifestExistingLabels] = useState<string[]>([])
@@ -502,6 +508,21 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
         )
       })()}
 
+      {/* White Sheet Review Pile (Phase 4). Per-event full-screen
+          workspace for operators to confirm OCR'd customer fields,
+          promote unmatched pages to new buy rows, etc. Opens from
+          the upload modal's "X pages need review" link. */}
+      {whiteSheetReviewEventId && (() => {
+        const ev = events.find(e => e.id === whiteSheetReviewEventId)
+        if (!ev) return null
+        return (
+          <WhiteSheetReviewPile
+            event={ev}
+            onClose={() => setWhiteSheetReviewEventId(null)}
+          />
+        )
+      })()}
+
       {/* White Sheet Upload (Phase 2). Drops a PDF, kicks off the
           background splitter. Live counter + review pile live in
           later phases. */}
@@ -514,6 +535,10 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
             brand={brand}
             onClose={() => setWhiteSheetEventId(null)}
             onSubmitted={() => { /* Phase 6 wires the live counter; no-op for now */ }}
+            onOpenReviewPile={() => {
+              setWhiteSheetEventId(null)
+              setWhiteSheetReviewEventId(ev.id)
+            }}
           />
         )
       })()}

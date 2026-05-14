@@ -21,7 +21,7 @@
 // know when it's done" toast on success and close. Live counter +
 // notification + email summary land in Phase 6.
 
-import { useState, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 
 const MAX_BYTES = 80 * 1024 * 1024  // 80 MB
@@ -35,6 +35,11 @@ interface Props {
   brand: string
   onClose: () => void
   onSubmitted: () => void
+  /** Phase 4: when there are pages needing review for this event,
+   *  the modal shows a "X pages need review →" link at the top.
+   *  Click → invokes this callback (parent closes the upload modal
+   *  and opens the review pile workspace). */
+  onOpenReviewPile?: () => void
 }
 
 function uuidv4(): string {
@@ -48,12 +53,33 @@ function uuidv4(): string {
   })
 }
 
-export default function WhiteSheetUploadModal({ eventId, brand, onClose, onSubmitted }: Props) {
+export default function WhiteSheetUploadModal({ eventId, brand, onClose, onSubmitted, onOpenReviewPile }: Props) {
   const [file, setFile] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  // Phase 4: poll the review-pile count on mount so we can offer
+  // the operator a fast jump to the workspace when there are pages
+  // waiting. Cheap query — index-covered, ~ms.
+  const [reviewCount, setReviewCount] = useState<number | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    async function fetchCount() {
+      try {
+        const { count } = await supabase
+          .from('white_sheet_pages')
+          .select('id', { count: 'exact', head: true })
+          .eq('event_id', eventId)
+          .in('status', ['needs_review', 'errored'])
+        if (!cancelled) setReviewCount(count ?? 0)
+      } catch {
+        if (!cancelled) setReviewCount(null)
+      }
+    }
+    fetchCount()
+    return () => { cancelled = true }
+  }, [eventId])
 
   function pickFile(f: File | null) {
     setError(null)
@@ -145,11 +171,32 @@ export default function WhiteSheetUploadModal({ eventId, brand, onClose, onSubmi
           }}>×</button>
         </div>
 
-        <p style={{ fontSize: 13, color: 'var(--mist)', margin: '0 0 16px' }}>
+        <p style={{ fontSize: 13, color: 'var(--mist)', margin: '0 0 12px' }}>
           Upload the scanned PDF of dealer-copy white sheets for this event. The system splits
           the PDF into pages and queues each for OCR — you can keep working while it processes
           in the background.
         </p>
+
+        {/* Phase 4: jump to the per-event review pile if any pages
+            are waiting. Rendered only when count > 0 and the parent
+            wired the callback. */}
+        {reviewCount !== null && reviewCount > 0 && onOpenReviewPile && (
+          <button
+            onClick={onOpenReviewPile}
+            style={{
+              width: '100%', marginBottom: 12,
+              padding: '10px 14px', borderRadius: 8,
+              background: '#FEF3C7', color: '#92400E',
+              border: '1px solid #FCD34D',
+              fontSize: 13, fontWeight: 800, cursor: 'pointer',
+              fontFamily: 'inherit', textAlign: 'left',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}
+          >
+            <span>📋 {reviewCount} page{reviewCount === 1 ? '' : 's'} need{reviewCount === 1 ? 's' : ''} review</span>
+            <span>Open pile →</span>
+          </button>
+        )}
 
         {/* Drop-zone */}
         <div
