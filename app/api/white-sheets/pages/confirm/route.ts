@@ -123,7 +123,7 @@ export async function POST(req: Request) {
   const { data: page } = await sb
     .from('white_sheet_pages')
     .select(`
-      id, upload_id, event_id, status, review_reasons, ocr_raw, buyer_check_id
+      id, upload_id, event_id, status, review_reasons, ocr_raw, buyer_check_id, page_pdf_path
     `)
     .eq('id', page_id)
     .maybeSingle()
@@ -209,6 +209,36 @@ export async function POST(req: Request) {
     .select('pages_in_review, pages_auto_committed, pages_errored')
     .eq('id', (page as any).upload_id)
     .maybeSingle()
+  // ── 3b. Bootstrap user_signature_samples (Phase 5) ─────────
+  // When the operator picks a buyer in the review pile, save
+  // this page's PDF as a reference sample so the closed-set
+  // classifier can use it for future pages. Idempotent — skip
+  // if a sample for this page already exists (operator may
+  // re-confirm a page after edits).
+  if (isUuid(fields.buyer_user_id) && (page as any).page_pdf_path) {
+    const { data: existingSample } = await sb
+      .from('user_signature_samples')
+      .select('id')
+      .eq('source_page_id', page_id)
+      .eq('user_id', fields.buyer_user_id)
+      .maybeSingle()
+    if (!existingSample) {
+      const { error: sampleErr } = await sb
+        .from('user_signature_samples')
+        .insert({
+          user_id: fields.buyer_user_id,
+          // Phase 5 ships with full-page PDFs as samples; a future
+          // polish PR may add real initials-box cropping. Until then
+          // the classifier prompt asks the model to focus on the
+          // AUTHORIZED BUYER box at the bottom-left.
+          image_path: (page as any).page_pdf_path,
+          source_page_id: page_id,
+          is_active: true,
+        })
+      if (sampleErr) console.warn('[whiteSheets.confirm] signature sample insert failed', sampleErr.message)
+    }
+  }
+
   if (u) {
     // If the page was in 'errored' before (rare — operator
     // resolving an errored page via this confirm endpoint), pull

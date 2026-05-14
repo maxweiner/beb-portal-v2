@@ -27,6 +27,7 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import type { WhiteSheetOcrResult } from './ocr'
+import type { ClassifierResult } from './classifyInitials'
 import type { WhiteSheetReviewReason } from '@/types'
 
 let _admin: SupabaseClient | null = null
@@ -76,10 +77,15 @@ function normalizeFormish(s: string | null | undefined): string {
   return String(s).toLowerCase().replace(/[\s\-_/]/g, '')
 }
 
-/** Run the match-back + 5-check filter. */
+/** Run the match-back + 5-check filter.
+ *
+ *  `classifierVerdict` is the result of the Phase 5 closed-set
+ *  buyer-initials classifier — pass null to fall back to the
+ *  Phase 3 behavior of always flagging `initials_pending`. */
 export async function applyAutoCommitChecks(
   ocr: WhiteSheetOcrResult,
   eventId: string,
+  classifierVerdict: ClassifierResult | null = null,
 ): Promise<MatchResult> {
   const sb = admin()
   const reasons: WhiteSheetReviewReason[] = []
@@ -135,18 +141,35 @@ export async function applyAutoCommitChecks(
     reasons.push('low_confidence_phone')
   }
 
-  // ── 5. Buyer initials — DEFERRED ─────────────────────────────
-  // Phase 5 ships the classifier. Until then every page lands in
-  // the review pile with 'initials_pending'. Spec phase-3 narrative
-  // is explicit on this — see docs/white-sheet-ocr-spec.md.
-  reasons.push('initials_pending')
+  // ── 5. Buyer initials ────────────────────────────────────────
+  // Phase 5 introduces a verdict from the closed-set classifier
+  // (lib/white-sheets/classifyInitials.ts). We translate it into
+  // a review reason here so the auto-commit decision stays
+  // centralized:
+  //
+  //   confident=true                       → no flag (clean)
+  //   not confident, cold start / no workers → 'initials_pending'
+  //   not confident, below threshold       → 'initials_ambiguous'
+  //
+  // The orchestrator passes verdict=null when the classifier was
+  // skipped entirely (e.g., during Phase 5's rollout window where
+  // we want to gate on a env flag). In that case we fall back to
+  // the Phase-3 behavior of always flagging 'initials_pending'.
+  if (!classifierVerdict) {
+    reasons.push('initials_pending')
+  } else if (!classifierVerdict.confident) {
+    const skipReason = classifierVerdict.skipped_reason
+    if (skipReason === 'no_assigned_workers' || skipReason === 'cold_start_no_samples') {
+      reasons.push('initials_pending')
+    } else {
+      reasons.push('initials_ambiguous')
+    }
+  }
+  // else: classifier confident → no flag added.
 
   return {
     buyer_check_id,
     review_reasons: reasons,
-    // 'initials_pending' is always present in Phase 3, so this is
-    // always 'needs_review'. Kept as a computed field anyway so
-    // the orchestrator doesn't bake-in the Phase-3 reality.
     recommended_status: reasons.length > 0 ? 'needs_review' : 'auto_committed',
   }
 }

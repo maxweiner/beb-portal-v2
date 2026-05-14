@@ -118,7 +118,7 @@ export async function POST(req: Request) {
   // Pull the page + upload context.
   const { data: page } = await sb
     .from('white_sheet_pages')
-    .select('id, upload_id, event_id, status, ocr_raw')
+    .select('id, upload_id, event_id, status, ocr_raw, page_pdf_path')
     .eq('id', page_id)
     .maybeSingle()
   if (!page) return NextResponse.json({ error: 'page_not_found' }, { status: 404 })
@@ -220,6 +220,30 @@ export async function POST(req: Request) {
     .eq('id', page_id)
   if (updErr) {
     return NextResponse.json({ error: 'page_update_failed', detail: updErr.message }, { status: 500 })
+  }
+
+  // ── 3b. Bootstrap user_signature_samples (Phase 5) ─────────
+  // Same insert as /confirm — when the operator picks a buyer,
+  // save the page PDF as a reference sample for the closed-set
+  // classifier. Idempotent on (user_id, source_page_id).
+  if (isUuid(fields.buyer_user_id) && (page as any).page_pdf_path) {
+    const { data: existingSample } = await sb
+      .from('user_signature_samples')
+      .select('id')
+      .eq('source_page_id', page_id)
+      .eq('user_id', fields.buyer_user_id)
+      .maybeSingle()
+    if (!existingSample) {
+      const { error: sampleErr } = await sb
+        .from('user_signature_samples')
+        .insert({
+          user_id: fields.buyer_user_id,
+          image_path: (page as any).page_pdf_path,
+          source_page_id: page_id,
+          is_active: true,
+        })
+      if (sampleErr) console.warn('[whiteSheets.promote] signature sample insert failed', sampleErr.message)
+    }
   }
 
   // ── 4. Rebalance upload counters ──────────────────────────

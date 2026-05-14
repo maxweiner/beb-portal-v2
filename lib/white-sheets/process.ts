@@ -26,6 +26,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { ocrWhiteSheetPage, type WhiteSheetOcrResult } from './ocr'
 import { applyAutoCommitChecks } from './match'
+import { classifyBuyerInitials, type ClassifierResult } from './classifyInitials'
 import { dedupAndUpsertWhiteSheetCustomer } from './customerWrite'
 import type { WhiteSheetReviewReason } from '@/types'
 
@@ -157,8 +158,32 @@ export async function processWhiteSheetPage(
     }
   }
 
-  // ── 2. Match-back + auto-commit checks ─────────────────────
-  const match = await applyAutoCommitChecks(ocr, page.event_id)
+  // ── 2a. Buyer-initials classifier (Phase 5) ───────────────
+  // Closed-set vision call against the event's assigned workers
+  // using each worker's active signature samples as references.
+  // Returns { confident, best_user_id, best_score, ... } — see
+  // lib/white-sheets/classifyInitials.ts for the threshold logic.
+  // Failure modes (network, cold-start, missing samples) return
+  // a non-confident verdict rather than throwing; the page just
+  // flows into the review pile with 'initials_pending' as
+  // before.
+  let classifier: ClassifierResult | null = null
+  try {
+    classifier = await classifyBuyerInitials(page.page_pdf_path, page.event_id)
+  } catch (e: any) {
+    console.warn('[whiteSheets.process] classifier crashed for page', page.id, e?.message)
+    classifier = {
+      confident: false,
+      best_user_id: null,
+      best_score: null,
+      second_best_score: null,
+      skipped_reason: 'classifier_error',
+      raw_text: e?.message?.slice(0, 200),
+    }
+  }
+
+  // ── 2b. Match-back + auto-commit checks ───────────────────
+  const match = await applyAutoCommitChecks(ocr, page.event_id, classifier)
 
   // Brand-wide review_every_page override forces needs_review.
   // The orchestrator still runs OCR + match-back, just routes the
@@ -185,10 +210,28 @@ export async function processWhiteSheetPage(
   }
 
   // ── 4. Persist the page row ─────────────────────────────────
+  // Bake the classifier result into ocr_raw under a dedicated key
+  // so the review pile UI + future model-version comparisons keep
+  // an audit trail. Plus surface buyer_user_id / confidence on
+  // dedicated columns (review pile's pill row pre-selects the
+  // best guess even when the classifier wasn't confident enough
+  // to auto-commit).
+  const ocrPayload: any = { ...ocr }
+  if (classifier) {
+    ocrPayload.initials_classifier = {
+      confident: classifier.confident,
+      best_user_id: classifier.best_user_id,
+      best_score: classifier.best_score,
+      second_best_score: classifier.second_best_score,
+      skipped_reason: classifier.skipped_reason || null,
+      scores: classifier.scores || {},
+    }
+  }
+
   await updatePageRow(sb, page.id, {
     status: finalStatus,
     review_reasons: match.review_reasons,
-    ocr_raw: ocr as any,
+    ocr_raw: ocrPayload,
     buy_form_number_ocr: ocr.buy_form_number?.value ?? null,
     check_number_ocr:    ocr.check_number?.value    ?? null,
     amount_ocr:          ocr.amount?.value          ?? null,
@@ -196,6 +239,8 @@ export async function processWhiteSheetPage(
     items_raw:           ocr.items_description?.value ?? null,
     buyer_check_id:      match.buyer_check_id,
     customer_id:         customerWriteResult.customer_id,
+    buyer_user_id:       classifier?.best_user_id ?? null,
+    initials_classifier_confidence: classifier?.best_score ?? null,
     processed_at:        new Date().toISOString(),
   })
 
@@ -232,6 +277,8 @@ interface UpdatePageRowPatch {
   items_raw?: string | null
   buyer_check_id?: string | null
   customer_id?: string | null
+  buyer_user_id?: string | null
+  initials_classifier_confidence?: number | null
   last_error?: string | null
   processed_at: string
 }
