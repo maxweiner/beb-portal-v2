@@ -211,8 +211,25 @@ button { cursor: pointer; font-family: 'Lato', sans-serif; font-size: 14px; font
 .tab:hover { color: var(--ash); }
 .tab.active { color: var(--green-dark); border-bottom-color: var(--green); }
 
-/* ── FORMS ── */
-input, select, textarea {
+/* ── FORMS ──
+ *
+ * Text-style inputs, selects, and textareas get the portal's
+ * standard pill-shaped form-field treatment (full-width, cream
+ * background, pearl border, etc.). Non-text input types
+ * (checkbox, radio, file, color, range, native buttons) are
+ * intentionally EXCLUDED so they keep their native rendering
+ * — otherwise width:100% stretches them into wide rectangles
+ * and -webkit-appearance:none strips the check/dot rendering.
+ *
+ * Previously this rule applied to ALL inputs, which meant every
+ * new form had to either reach for the shared <Checkbox /> wrapper
+ * (which sidesteps the rule via appearance:none + custom paint)
+ * or manually inline `style={{ width:'auto' }}`. We kept finding
+ * raw <input type=checkbox/radio> bugs in code review. Scoping
+ * the selector at the source ends the whack-a-mole. */
+input:not(:is([type=checkbox], [type=radio], [type=file], [type=color], [type=range], [type=submit], [type=button], [type=reset], [type=image])),
+select,
+textarea {
   width: 100%;
   padding: 9px 13px;
   border: 2px solid var(--pearl);
@@ -232,7 +249,9 @@ select {
   padding-right: 36px;
   cursor: pointer;
 }
-input:focus, select:focus, textarea:focus { border-color: var(--green); }
+input:not(:is([type=checkbox], [type=radio], [type=file], [type=color], [type=range], [type=submit], [type=button], [type=reset], [type=image])):focus,
+select:focus,
+textarea:focus { border-color: var(--green); }
 /* Strip the up/down spinners from number inputs everywhere — they look
    noisy in dollar-amount fields (Day Entry checks, expenses, etc.) and
    nobody uses them. */
