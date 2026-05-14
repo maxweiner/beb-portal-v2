@@ -892,3 +892,127 @@ export interface ExpenseDelegate {
   /** ISO timestamp when revoked; null while active. */
   revoked_at: string | null
 }
+
+// ───────────────────────────────────────────────────────────────
+// White Sheet OCR — Phase 1 schema. After each event, operator
+// uploads one multi-page PDF of dealer-copy bill-of-sale forms;
+// the worker (Phase 3) OCRs each page via Claude Sonnet 4.6 vision
+// and harvests customer fields + verifies the typed buyer_checks
+// row. Full design at docs/white-sheet-ocr-spec.md.
+// ───────────────────────────────────────────────────────────────
+
+export type WhiteSheetUploadStatus = 'splitting' | 'processing' | 'complete'
+
+export type WhiteSheetPageStatus =
+  | 'pending'
+  | 'processing'
+  | 'auto_committed'
+  | 'needs_review'
+  | 'errored'
+
+/** Soft flags explaining why a page needs review. New values may be
+ *  added without a migration — the UI uses a TS lookup for labels
+ *  and falls back to the raw key when it doesn't recognize one. */
+export type WhiteSheetReviewReason =
+  | 'unmatched_form'
+  | 'amount_mismatch'
+  | 'check_mismatch'
+  | 'low_confidence_phone'
+  | 'initials_ambiguous'
+  | 'initials_pending'
+  | 'errored'
+
+/** One row per uploaded PDF. Header for a set of WhiteSheetPage
+ *  rows; the Hub launcher card reads from here for live progress
+ *  and completion summaries. */
+export interface WhiteSheetUpload {
+  id: string
+  event_id: string
+  brand: string
+  uploaded_by_user_id: string | null
+  /** Storage path in the private `white-sheets/` bucket. */
+  source_pdf_path: string
+  original_filename: string | null
+
+  /** Set after the PDF is split; running totals update as pages
+   *  settle into their terminal status. */
+  pages_total: number
+  pages_auto_committed: number
+  pages_in_review: number
+  pages_errored: number
+
+  status: WhiteSheetUploadStatus
+
+  /** Running sum of per-page Anthropic Vision API spend in cents.
+   *  Surfaced in Settings → White Sheet Upload (Phase 7) as a
+   *  rolling 30-day spend tile. */
+  estimated_cost_cents: number
+
+  created_at: string
+  completed_at: string | null
+}
+
+/** One row per page of the source PDF. Per-page status drives the
+ *  auto-commit vs. review-pile flow. */
+export interface WhiteSheetPage {
+  id: string
+  upload_id: string
+  /** Denormalized from white_sheet_uploads.event_id so per-event
+   *  review-pile queries don't need a two-hop join. */
+  event_id: string
+  page_number: number
+  /** Storage path of the per-page PNG render. May be null until the
+   *  splitter has rendered the page. */
+  image_path: string | null
+
+  status: WhiteSheetPageStatus
+  review_reasons: WhiteSheetReviewReason[]
+
+  /** Full Claude vision response — JSON shape varies by model
+   *  version. Kept verbatim for debugging + re-running classification
+   *  after a model upgrade. */
+  ocr_raw: Record<string, unknown> | null
+  buy_form_number_ocr: string | null
+  check_number_ocr: string | null
+  amount_ocr: number | null
+
+  buyer_check_id: string | null
+  customer_id: string | null
+
+  buyer_user_id: string | null
+  initials_classifier_confidence: number | null
+  initials_crop_path: string | null
+
+  /** DL # / ID number — compliance paper trail. Intentionally NOT
+   *  copied to customers.id_number; PII isolation per spec. */
+  id_number_raw: string | null
+  /** Free-text items description. Optional trend-analysis input;
+   *  not parsed into structured item rows. */
+  items_raw: string | null
+
+  attempts: number
+  last_error: string | null
+  processed_at: string | null
+
+  reviewed_by_user_id: string | null
+  reviewed_at: string | null
+
+  created_at: string
+}
+
+/** Buyer-initials reference library, bootstrapped from operator-
+ *  confirmed pages in the review pile. Phase 5 reads active rows
+ *  per assigned buyer at classification time and feeds them as
+ *  few-shot anchors to the closed-set vision classifier. */
+export interface UserSignatureSample {
+  id: string
+  user_id: string
+  image_path: string
+  /** The page the crop came from. Nullable so deleting a white
+   *  sheet doesn't FK-cascade the sample out of existence. */
+  source_page_id: string | null
+  /** Soft-delete flag — flip to false to retire a misclassification
+   *  without losing the audit trail. */
+  is_active: boolean
+  created_at: string
+}
