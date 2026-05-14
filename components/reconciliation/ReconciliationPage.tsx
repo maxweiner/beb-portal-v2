@@ -946,7 +946,11 @@ function FindingDetailModal({
     event_label: string | null
   }[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
+  // editValue = amount input; editCheck = check_number input.
+  // Both populate from the current source row when Edit is clicked;
+  // Save sends only the fields that actually changed.
   const [editValue, setEditValue] = useState('')
+  const [editCheck, setEditCheck] = useState('')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -1023,8 +1027,29 @@ function FindingDetailModal({
 
   async function saveWrittenAmount(source_table: 'buyer_checks' | 'event_days', source_id: string) {
     if (!finding) return
+    // Figure out the original values so we only send the fields
+    // the user actually changed. Saves an unnecessary write when
+    // they only touched one field.
+    const row = writtenChecks.find(w => w.source_id === source_id && w.source_table === source_table)
+    if (!row) { setErr('Row not found'); return }
+
     const v = Number(editValue)
     if (!Number.isFinite(v) || v < 0) { setErr('Enter a non-negative number'); return }
+    const trimmedCheck = editCheck.trim()
+    if (trimmedCheck.length === 0) { setErr('Check # cannot be empty'); return }
+
+    const amountChanged = Math.abs(v - row.amount) > 0.005
+    const checkChanged  = trimmedCheck !== (finding.check_number || '')
+    if (!amountChanged && !checkChanged) {
+      // No-op — close the editor without hitting the API.
+      setEditingId(null); setEditValue(''); setEditCheck('')
+      return
+    }
+
+    const payload: Record<string, unknown> = { source_table, source_id }
+    if (amountChanged) payload.new_amount = v
+    if (checkChanged)  payload.new_check_number = trimmedCheck
+
     setBusy(true); setErr(null)
     try {
       const session = await supabase.auth.getSession()
@@ -1032,18 +1057,31 @@ function FindingDetailModal({
       const res = await fetch(`/api/reconciliation/findings/${finding.id}/edit-written`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ source_table, source_id, new_amount: v }),
+        body: JSON.stringify(payload),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json?.error || 'Update failed')
-      // Update local row + close edit state
-      setWrittenChecks(prev => prev.map(w =>
-        w.source_id === source_id && w.source_table === source_table
-          ? { ...w, amount: v }
-          : w,
-      ))
+      // Update local row state. NOTE: if the user changed
+      // check_number, the source row likely no longer belongs to
+      // THIS finding (the finding is keyed on check_number).
+      // onChanged() refreshes the parent list; the user will see
+      // the new state on next open.
+      if (amountChanged && !checkChanged) {
+        setWrittenChecks(prev => prev.map(w =>
+          w.source_id === source_id && w.source_table === source_table
+            ? { ...w, amount: v }
+            : w,
+        ))
+      } else {
+        // check_number changed — drop the row from the local
+        // sources list since it no longer matches this finding.
+        setWrittenChecks(prev => prev.filter(w =>
+          !(w.source_id === source_id && w.source_table === source_table),
+        ))
+      }
       setEditingId(null)
       setEditValue('')
+      setEditCheck('')
       onChanged()
     } catch (e: any) {
       setErr(e?.message || 'Update failed')
@@ -1226,6 +1264,7 @@ function FindingDetailModal({
                     <tr style={{ background: 'var(--cream2)' }}>
                       <th style={{ padding: 6, textAlign: 'left', fontSize: 10, color: 'var(--mist)' }}>Event</th>
                       <th style={{ padding: 6, textAlign: 'left', fontSize: 10, color: 'var(--mist)' }}>Source</th>
+                      <th style={{ padding: 6, textAlign: 'left', fontSize: 10, color: 'var(--mist)' }}>Check #</th>
                       <th style={{ padding: 6, textAlign: 'left', fontSize: 10, color: 'var(--mist)' }}>Amount</th>
                       <th style={{ padding: 6, textAlign: 'left', fontSize: 10, color: 'var(--mist)' }}>Day</th>
                       <th style={{ padding: 6, textAlign: 'right' }}></th>
@@ -1244,6 +1283,22 @@ function FindingDetailModal({
                           </td>
                           <td style={{ padding: 6, color: 'var(--mist)' }}>{w.source_label}</td>
                           <td style={{ padding: 6, whiteSpace: 'nowrap' }}>
+                            {/* Check # column. View mode shows the finding's
+                                check_number (all rows in writtenChecks share
+                                it — this group IS the duplicate-entries pile
+                                for that number). Edit mode becomes an input
+                                so the operator can fix a typo'd check #
+                                in place — the common "wrote the wrong
+                                number on a different check" failure mode. */}
+                            {isEditing ? (
+                              <input type="text" value={editCheck}
+                                onChange={e => setEditCheck(e.target.value)}
+                                style={{ width: 100, padding: '4px 6px', fontSize: 12, border: '1px solid var(--pearl)', borderRadius: 4, fontFamily: 'monospace' }} />
+                            ) : (
+                              <span style={{ fontFamily: 'monospace', color: 'var(--mist)' }}>#{finding?.check_number}</span>
+                            )}
+                          </td>
+                          <td style={{ padding: 6, whiteSpace: 'nowrap' }}>
                             {isEditing ? (
                               <input type="number" min={0} step="0.01" value={editValue}
                                 onChange={e => setEditValue(e.target.value)}
@@ -1259,15 +1314,19 @@ function FindingDetailModal({
                               <>
                                 <button onClick={() => saveWrittenAmount(w.source_table, w.source_id)}
                                   disabled={busy} className="btn-primary btn-xs">Save</button>
-                                <button onClick={() => { setEditingId(null); setEditValue('') }}
+                                <button onClick={() => { setEditingId(null); setEditValue(''); setEditCheck('') }}
                                   disabled={busy} className="btn-outline btn-xs" style={{ marginLeft: 4 }}>Cancel</button>
                               </>
                             ) : (
                               <span style={{ display: 'inline-flex', gap: 4 }}>
                                 <button
-                                  onClick={() => { setEditingId(w.source_id); setEditValue(w.amount.toFixed(2)) }}
+                                  onClick={() => {
+                                    setEditingId(w.source_id)
+                                    setEditValue(w.amount.toFixed(2))
+                                    setEditCheck(finding?.check_number || '')
+                                  }}
                                   disabled={busy}
-                                  title="Edit this amount in the underlying ledger"
+                                  title="Edit this row's amount and / or check # in the underlying ledger"
                                   className="btn-outline btn-xs">✎ Edit</button>
                                 {/* Open Register — deep-link into Day Entry on the
                                     source's event + day so the operator can fix the
