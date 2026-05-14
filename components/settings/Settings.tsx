@@ -1463,7 +1463,7 @@ function GCalSyncSettings({ brand }: { brand: 'beb' | 'liberty' }) {
       <Checkbox
         checked={includeBuyers}
         onChange={setIncludeBuyers}
-        label={<span style={{ fontSize: 12, color: 'var(--mist)' }}>Include buyer names in event description</span>}
+        label={<span style={{ fontSize: 12, color: 'var(--mist)' }}>Include buyer initials in title and full names in description (e.g. “Sami Fine Jewelry (MW/NR/TB)”)</span>}
         labelStyle={{ marginBottom: 12 }}
       />
 

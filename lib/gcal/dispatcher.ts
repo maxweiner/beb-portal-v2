@@ -15,6 +15,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { createGcalEvent, deleteGcalEvent, patchGcalEvent, type GcalEventInput } from './client'
 import { sendEmail } from '@/lib/email'
+import { initials } from '@/lib/initials'
 
 const RETRY_BACKOFF_MINUTES = [1, 5, 15]
 
@@ -83,9 +84,23 @@ async function buildInput(row: QueueRow, settings: BrandSettings): Promise<GcalE
     }
   }
 
-  const workers = (p.workers || []) as Array<{ id: string; name: string }>
+  // Filter out tombstoned workers — the events.workers JSONB keeps
+  // historical assignments with `deleted: true` rather than splicing
+  // them out, and we never want those on the calendar.
+  const workers = ((p.workers || []) as Array<{ id: string; name: string; deleted?: boolean }>)
+    .filter(w => !w.deleted)
   const lead = workers[0]
   const others = workers.slice(1).map(w => w.name).join(', ')
+
+  // Initials for the title — "Sami Fine Jewelry (MW/NR/TB)". Operator-
+  // requested so the calendar grid surfaces who's working each show
+  // without opening the event. Lead first, slash-separated, uppercased
+  // by the shared `initials()` helper. Same gate as the description
+  // (`include_buyer_names`) — one toggle controls both surfaces.
+  const initialsTag = settings.include_buyer_names && workers.length > 0
+    ? ` (${workers.map(w => initials(w.name || '')).join('/')})`
+    : ''
+  const summary = `${p.store_name || 'Event'}${initialsTag}`
 
   const descLines: string[] = []
   if (settings.include_buyer_names) {
@@ -98,7 +113,7 @@ async function buildInput(row: QueueRow, settings: BrandSettings): Promise<GcalE
   descLines.push(`Open in BEB Portal: ${portalUrl()}/?event=${row.event_id}`)
 
   return {
-    summary: p.store_name || 'Event',
+    summary,
     description: descLines.join('\n'),
     location,
     startDate,
