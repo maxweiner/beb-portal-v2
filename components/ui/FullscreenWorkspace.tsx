@@ -4,7 +4,7 @@
 // etc.) out of the sidebar-constrained inline layout and gives it
 // the whole screen. Used wherever ~280px of left-sidebar chrome
 // makes the inline render cramped: Trunk Shows sheet, Buying
-// Events sheet, Inventory sheet, Accounting Queue list, etc.
+// Events sheet, Inventory sheet, Accounting Hub list, etc.
 //
 // Behavior:
 //   - position: fixed; inset: 0; z-index: 9000 (above sidebar +

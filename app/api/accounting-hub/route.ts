@@ -1,4 +1,4 @@
-// GET /api/accounting-queue
+// GET /api/accounting-hub
 //
 // Lists every expense report awaiting accountant action — both the
 // 'submitted_pending_review' (needs approve) bucket and the

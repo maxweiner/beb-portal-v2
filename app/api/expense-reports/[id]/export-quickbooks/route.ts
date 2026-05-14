@@ -3,11 +3,11 @@
 // Builds the IIF (QBD) or CSV (QBO) for a single approved /
 // paid expense report and streams it back as a download. Also
 // stamps expense_reports.exported_to_qb_at + _format so the
-// Accounting Queue can show an "Exported ✓" pill and warn
+// Accounting Hub can show an "Exported ✓" pill and warn
 // before re-exporting.
 //
 // Auth: admin / superadmin / partner / accounting — same gating
-// as the Accounting Queue itself (anyone who can see + approve
+// as the Accounting Hub itself (anyone who can see + approve
 // reports can export them).
 
 import { NextResponse } from 'next/server'
@@ -134,7 +134,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     : buildExpenseReportCsv(buildInput)
 
   // Mark exported on the row — best-effort, non-fatal if it
-  // fails. The Accounting Queue uses this for the "Exported ✓"
+  // fails. The Accounting Hub uses this for the "Exported ✓"
   // pill + re-export warning.
   void sb.from('expense_reports').update({
     exported_to_qb_at: new Date().toISOString(),
