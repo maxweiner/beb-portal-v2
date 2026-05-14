@@ -280,7 +280,7 @@ export default function Home() {
         {nav === 'travel'     && <ModuleWriteGate moduleId="travel"><Travel key={navKey} /></ModuleWriteGate>}
         {nav === 'marketing'  && <ModuleWriteGate moduleId="marketing"><Marketing key={navKey} /></ModuleWriteGate>}
         {nav === 'accounting-hub' && <ModuleGuard moduleId="accounting-hub"><ModuleWriteGate moduleId="accounting-hub"><AccountingHub key={navKey} setNav={setNav} /></ModuleWriteGate></ModuleGuard>}
-        {nav === 'reconciliation' && <ModuleGuard moduleId="reconciliation"><ModuleWriteGate moduleId="reconciliation"><ReconciliationPage key={navKey} /></ModuleWriteGate></ModuleGuard>}
+        {nav === 'reconciliation' && <ModuleGuard moduleId="reconciliation"><ModuleWriteGate moduleId="reconciliation"><ReconciliationPage key={navKey} setNav={setNav} /></ModuleWriteGate></ModuleGuard>}
         {nav === 'wholesale' && <ModuleGuard moduleId="wholesale"><ModuleWriteGate moduleId="wholesale"><WholesalePage key={navKey} /></ModuleWriteGate></ModuleGuard>}
         {nav === 'broadcast' && <ModuleGuard moduleId="broadcast"><ModuleWriteGate moduleId="broadcast"><BroadcastPage key={navKey} /></ModuleWriteGate></ModuleGuard>}
         {nav === 'admin' && (

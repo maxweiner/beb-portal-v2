@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import Checkbox from '@/components/ui/Checkbox'
+import type { NavPage } from '@/app/page'
 
 const withTimeout = <T,>(promise: PromiseLike<T>, ms = 15000): Promise<T> => {
   return Promise.race([
@@ -119,7 +120,7 @@ function daysSince(iso: string | null | undefined): number {
   return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000))
 }
 
-export default function ReconciliationPage() {
+export default function ReconciliationPage({ setNav }: { setNav?: (n: NavPage) => void } = {}) {
   const { user, brand } = useApp()
   const isAllowed = user?.role === 'accounting' || user?.role === 'admin' || user?.role === 'superadmin' || user?.is_partner === true
 
@@ -548,6 +549,7 @@ export default function ReconciliationPage() {
           findingId={openId}
           onClose={() => setOpenId(null)}
           onChanged={() => void reloadRef.current()}
+          setNav={setNav}
         />
       )}
     </div>
@@ -919,12 +921,18 @@ function OutstandingTable({ findings, onOpen }: { findings: Finding[]; onOpen: (
 }
 
 function FindingDetailModal({
-  findingId, onClose, onChanged,
+  findingId, onClose, onChanged, setNav,
 }: {
   findingId: string
   onClose: () => void
   onChanged: () => void
+  /** Optional — when set, the per-row "Open Register" button uses
+   *  it (with setDayEntryIntent) to deep-link into Day Entry on
+   *  the source's event + day. Falls back to "no button" when
+   *  unset (e.g. embedded views without nav). */
+  setNav?: (n: NavPage) => void
 }) {
+  const { setDayEntryIntent } = useApp()
   const [finding, setFinding] = useState<Finding | null>(null)
   const [clearings, setClearings] = useState<ClearedCheck[]>([])
   const [writtenChecks, setWrittenChecks] = useState<{
@@ -1255,11 +1263,34 @@ function FindingDetailModal({
                                   disabled={busy} className="btn-outline btn-xs" style={{ marginLeft: 4 }}>Cancel</button>
                               </>
                             ) : (
-                              <button
-                                onClick={() => { setEditingId(w.source_id); setEditValue(w.amount.toFixed(2)) }}
-                                disabled={busy}
-                                title="Edit this amount in the underlying ledger"
-                                className="btn-outline btn-xs">✎ Edit</button>
+                              <span style={{ display: 'inline-flex', gap: 4 }}>
+                                <button
+                                  onClick={() => { setEditingId(w.source_id); setEditValue(w.amount.toFixed(2)) }}
+                                  disabled={busy}
+                                  title="Edit this amount in the underlying ledger"
+                                  className="btn-outline btn-xs">✎ Edit</button>
+                                {/* Open Register — deep-link into Day Entry on the
+                                    source's event + day so the operator can fix the
+                                    actual ledger row (delete a typo'd check, swap
+                                    a check #, etc.) rather than just adjust the
+                                    amount inline. Only when we have an event_id;
+                                    legacy import rows without one stay edit-only. */}
+                                {w.event_id && setNav && (
+                                  <button
+                                    onClick={() => {
+                                      onClose()
+                                      setDayEntryIntent({
+                                        eventId: w.event_id!,
+                                        day: w.day_number || 1,
+                                        mode: 'buyer',
+                                      })
+                                      setNav('dayentry')
+                                    }}
+                                    disabled={busy}
+                                    title="Open this check in the Day Entry register so you can edit / delete the source row in context"
+                                    className="btn-outline btn-xs">↗ Open Register</button>
+                                )}
+                              </span>
                             )}
                           </td>
                         </tr>
