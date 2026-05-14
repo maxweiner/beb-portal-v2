@@ -57,7 +57,6 @@ interface QueueRow {
 // 'all_incl_paid' shows active + paid (lookback'd). The default
 // 'all' keeps the historical behavior — active only, no payload bloat.
 type StatusFilter = 'all' | 'submitted_pending_review' | 'approved' | 'paid' | 'all_incl_paid'
-type BrandFilter  = 'all' | 'beb' | 'liberty'
 type AgeFilter    = 'all' | 'overdue' | 'recent'
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -103,24 +102,13 @@ export default function AccountingHub({ setNav }: Props) {
     }
   }, [fullscreen])
 
-  // Filters. Brand auto-scopes to the brand picker on first mount —
-  // when the user is in Liberty mode, the queue shows Liberty reports
-  // only; same for BEB. They can still flip to "All brands" to see
-  // both. The brandFilter state also re-syncs when the user changes
-  // brands via the top-of-portal switcher (effect below).
+  // Filters. Brand is locked to the global brand picker — BEB and
+  // Liberty accounting queues are strictly isolated, so there's no
+  // per-page brand filter dropdown. The server applies the brand
+  // filter (?brand=<beb|liberty>) when we fetch.
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
-  const [brandFilter,  setBrandFilter]  = useState<BrandFilter>(
-    brand === 'beb' || brand === 'liberty' ? brand : 'all'
-  )
   const [ageFilter,    setAgeFilter]    = useState<AgeFilter>('all')
   const [search,       setSearch]       = useState('')
-
-  // Keep brand filter in sync with the global brand picker.
-  useEffect(() => {
-    if (brand === 'beb' || brand === 'liberty') {
-      setBrandFilter(brand)
-    }
-  }, [brand])
 
   // Selection (multi-select for bulk-paid)
   const [picked, setPicked] = useState<Set<string>>(new Set())
@@ -154,9 +142,19 @@ export default function AccountingHub({ setNav }: Props) {
         // them — keeps the default payload lean. Server caps the
         // lookback at 90 days unless we override.
         const includePaid = statusFilter === 'paid' || statusFilter === 'all_incl_paid'
-        const url = includePaid
-          ? '/api/accounting-hub?include_paid=true&paid_lookback_days=90'
-          : '/api/accounting-hub'
+        const params = new URLSearchParams()
+        // Brand isolation. ?brand=beb|liberty narrows server-side.
+        // If the global picker is somehow neither (rare — usually
+        // means context isn't ready yet), we omit the param so the
+        // route returns everything; the rendered queue is empty
+        // until the picker settles.
+        if (brand === 'beb' || brand === 'liberty') params.set('brand', brand)
+        if (includePaid) {
+          params.set('include_paid', 'true')
+          params.set('paid_lookback_days', '90')
+        }
+        const qs = params.toString()
+        const url = qs ? `/api/accounting-hub?${qs}` : '/api/accounting-hub'
         const r = await fetch(url, { headers: await authHeaders() })
         const j = await r.json().catch(() => ({}))
         if (cancelled) return
@@ -167,7 +165,7 @@ export default function AccountingHub({ setNav }: Props) {
       }
     })()
     return () => { cancelled = true }
-  }, [isAllowed, refreshTick, statusFilter])
+  }, [isAllowed, refreshTick, statusFilter, brand])
 
   const filtered = useMemo(() => {
     if (!rows) return []
@@ -180,7 +178,7 @@ export default function AccountingHub({ setNav }: Props) {
       if (statusFilter === 'submitted_pending_review' && r.status !== 'submitted_pending_review') return false
       if (statusFilter === 'approved' && r.status !== 'approved') return false
       // 'all_incl_paid' is no-op — all statuses pass
-      if (brandFilter !== 'all' && r.brand !== brandFilter) return false
+      // No brand filter — server scoped the response by brand already.
       if (ageFilter === 'overdue' && r.age_days < 7) return false
       if (ageFilter === 'recent'  && r.age_days >= 7) return false
       if (q) {
@@ -189,7 +187,7 @@ export default function AccountingHub({ setNav }: Props) {
       }
       return true
     })
-  }, [rows, statusFilter, brandFilter, ageFilter, search])
+  }, [rows, statusFilter, ageFilter, search])
 
   const groupedFiltered = useMemo(() => {
     const submitted = filtered.filter(r => r.status === 'submitted_pending_review')
@@ -203,32 +201,24 @@ export default function AccountingHub({ setNav }: Props) {
     return { submitted, approved, paid }
   }, [filtered])
 
-  // Header KPIs respect the brand filter (since brand is a 'scope'
-  // choice — if the user is looking at BEB-only, the queue counts
-  // should match what's BELOW the tiles). They deliberately IGNORE
-  // status / age / search filters — those narrow the list, but the
-  // KPI tiles ARE the status segmentation, the overdue tile has its
-  // own count rule, and search shouldn't change the summary.
-  //
-  // Without the brand pass-through, the user sees "6 to be paid"
-  // in the tile but only "5 awaiting payment" in the list when
-  // one of the reports is brand-null (e.g. a trunk-show or trade-
-  // show expense report — those don't carry a brand from the event
-  // join).
+  // Header KPIs deliberately IGNORE status / age / search filters
+  // — those narrow the list, but the KPI tiles ARE the status
+  // segmentation, the overdue tile has its own count rule, and
+  // search shouldn't change the summary. Brand-scoping happens
+  // server-side now, so the response already only contains the
+  // current brand's rows.
   const kpis = useMemo(() => {
-    const brandScoped = (rows || []).filter(r =>
-      brandFilter === 'all' || r.brand === brandFilter
-    )
-    const submitted = brandScoped.filter(r => r.status === 'submitted_pending_review')
-    const approved  = brandScoped.filter(r => r.status === 'approved')
+    const all = rows || []
+    const submitted = all.filter(r => r.status === 'submitted_pending_review')
+    const approved  = all.filter(r => r.status === 'approved')
     return {
       reviewCount: submitted.length,
       reviewSum:   submitted.reduce((s, r) => s + r.grand_total, 0),
       payCount:    approved.length,
       paySum:      approved.reduce((s, r) => s + r.grand_total, 0),
-      overdueCount: brandScoped.filter(r => r.age_days >= 7 && r.status !== 'paid').length,
+      overdueCount: all.filter(r => r.age_days >= 7 && r.status !== 'paid').length,
     }
-  }, [rows, brandFilter])
+  }, [rows])
 
   const active = useMemo(
     () => rows?.find(r => r.id === activeId) || null,
@@ -438,14 +428,9 @@ export default function AccountingHub({ setNav }: Props) {
             <option value="all_incl_paid">All (incl. paid)</option>
           </select>
         </div>
-        <div className="field" style={{ marginBottom: 0 }}>
-          <label className="fl">Brand</label>
-          <select value={brandFilter} onChange={e => setBrandFilter(e.target.value as BrandFilter)}>
-            <option value="all">All</option>
-            <option value="beb">BEB</option>
-            <option value="liberty">Liberty</option>
-          </select>
-        </div>
+        {/* Brand dropdown removed — BEB and Liberty are strictly
+            isolated. The active brand is set by the global brand
+            switcher in the top nav and read server-side. */}
         <div className="field" style={{ marginBottom: 0 }}>
           <label className="fl">Age</label>
           <select value={ageFilter} onChange={e => setAgeFilter(e.target.value as AgeFilter)}>
@@ -862,7 +847,9 @@ function QueueGroup({ title, rows, showBulkSelect, allChecked, onToggleAll, acti
                   )}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--mist)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {r.event_label || '—'}{r.brand ? ` · ${r.brand.toUpperCase()}` : ''}
+                  {/* No brand suffix — the whole view is one brand
+                      now (server-scoped via the global brand picker). */}
+                  {r.event_label || '—'}
                 </div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
