@@ -21,6 +21,7 @@ import { logAudit, diffFields, fetchItemHistory } from '@/lib/wholesale/audit'
 import { loadAdminLists } from '@/lib/wholesale/lists'
 import Checkbox from '@/components/ui/Checkbox'
 import InventorySheet from './InventorySheet'
+import FullscreenWorkspace from '@/components/ui/FullscreenWorkspace'
 
 const PHOTO_BUCKET = 'wholesale-photos'
 const DOC_BUCKET = 'wholesale-documents'
@@ -90,6 +91,15 @@ export default function InventoryView() {
   const [showNewModal, setShowNewModal] = useState(false)
   const [showBulkUpload, setShowBulkUpload] = useState(false)
   const [view, setView] = useState<'list' | 'sheet'>('list')
+  // Fullscreen workspace for the sheet view. Only the ⊞ Sheet
+  // mode exposes the ⛶ trigger.
+  const [sheetFullscreen, setSheetFullscreen] = useState(false)
+
+  // Close fullscreen if the user flips back to List view (defensive
+  // — can't normally happen since the trigger is only in sheet view).
+  useEffect(() => {
+    if (view !== 'sheet' && sheetFullscreen) setSheetFullscreen(false)
+  }, [view, sheetFullscreen])
   const [lists, setLists] = useState<Record<string, string[]>>({})
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
@@ -221,6 +231,15 @@ export default function InventoryView() {
             style={{ background: view === 'sheet' ? '#fff' : 'transparent', border: 'none', borderRadius: 4, padding: '4px 10px', cursor: 'pointer', fontSize: 12 }}
             title="Sheet view (fast triage)">⊞ Sheet</button>
         </div>
+        {view === 'sheet' && (
+          <button
+            onClick={() => setSheetFullscreen(true)}
+            className="btn-outline btn-sm"
+            title="Open the sheet in a fullscreen workspace (ESC to close)"
+          >
+            ⛶ Fullscreen
+          </button>
+        )}
         <button onClick={() => setShowBulkUpload(true)} className="btn-outline btn-sm">📸 Bulk photos</button>
         <button onClick={() => setShowNewModal(true)} className="btn-primary btn-sm">+ New Item</button>
       </div>
@@ -255,7 +274,11 @@ export default function InventoryView() {
       {items === null ? (
         <div className="card" style={{ padding: 30, textAlign: 'center', color: 'var(--mist)' }}>Loading…</div>
       ) : view === 'sheet' ? (
-        <InventorySheet items={items} onChanged={() => void reloadRef.current()} />
+        // Skip inline render when fullscreen modal is open so
+        // InventorySheet stays a single-instance mount.
+        sheetFullscreen ? null : (
+          <InventorySheet items={items} onChanged={() => void reloadRef.current()} />
+        )
       ) : filtered.length === 0 ? (
         <div className="card" style={{ padding: 30, textAlign: 'center', color: 'var(--mist)' }}>
           {(items.length === 0) ? 'No inventory yet — click "+ New Item".' : 'Nothing matches the current filters.'}
@@ -405,6 +428,16 @@ export default function InventoryView() {
             }}
           />
         </div>
+      )}
+
+      {sheetFullscreen && items !== null && (
+        <FullscreenWorkspace
+          title="📦 Inventory · Sheet workspace"
+          subtitle={`${items.length} item${items.length === 1 ? '' : 's'} · ESC to close`}
+          onClose={() => setSheetFullscreen(false)}
+        >
+          <InventorySheet items={items} onChanged={() => void reloadRef.current()} />
+        </FullscreenWorkspace>
       )}
     </div>
   )

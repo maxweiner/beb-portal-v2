@@ -72,6 +72,26 @@ export default function AccountingQueue({ setNav }: Props) {
   const [rows, setRows] = useState<QueueRow[] | null>(null)
   const [err, setErr]   = useState<string | null>(null)
   const [refreshTick, setRefreshTick] = useState(0)
+  // Fullscreen workspace. AccountingQueue already has its own
+  // title + toolbar so we toggle the OUTER container's styling
+  // directly (position:fixed; inset:0) rather than wrapping in
+  // <FullscreenWorkspace /> — avoids a duplicate title bar.
+  const [fullscreen, setFullscreen] = useState(false)
+
+  // ESC dismiss + body scroll-lock while fullscreen.
+  useEffect(() => {
+    if (!fullscreen) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setFullscreen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    const priorOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = priorOverflow
+    }
+  }, [fullscreen])
 
   // Filters. Brand auto-scopes to the brand picker on first mount —
   // when the user is in Liberty mode, the queue shows Liberty reports
@@ -266,10 +286,33 @@ export default function AccountingQueue({ setNav }: Props) {
   }
 
   return (
-    <div style={{ padding: 24, maxWidth: 1400, margin: '0 auto' }}>
+    <div style={fullscreen
+      ? {
+          position: 'fixed', inset: 0, zIndex: 9000,
+          background: 'var(--cream)',
+          padding: 24, overflow: 'auto',
+        }
+      : { padding: 24, maxWidth: 1400, margin: '0 auto' }
+    }>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 900, margin: 0 }}>💼 Accounting Queue</h1>
-        <button onClick={() => setRefreshTick(t => t + 1)} className="btn-outline btn-sm">↻ Refresh</button>
+        <h1 style={{ fontSize: 22, fontWeight: 900, margin: 0 }}>
+          💼 Accounting Queue
+          {fullscreen && (
+            <span style={{ fontSize: 13, color: 'var(--mist)', fontWeight: 700, marginLeft: 8 }}>
+              · Fullscreen · ESC to close
+            </span>
+          )}
+        </h1>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => setFullscreen(f => !f)}
+            className="btn-outline btn-sm"
+            title={fullscreen ? 'Close fullscreen (ESC)' : 'Open in fullscreen — frees up ~280px from the sidebar'}
+          >
+            {fullscreen ? '✕ Close' : '⛶ Fullscreen'}
+          </button>
+          <button onClick={() => setRefreshTick(t => t + 1)} className="btn-outline btn-sm">↻ Refresh</button>
+        </div>
       </div>
 
       {/* KPIs */}
