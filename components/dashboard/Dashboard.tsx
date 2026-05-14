@@ -205,7 +205,8 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
           two-card split. No team-wide stats, no money figures. */}
       {isBuyer && (
         <BuyerHero
-          firstName={(user?.name || '').split(' ')[0] || ''}
+          user={user}
+          setNav={setNav}
           greeting={greeting}
           lastWeekRange={fmtRange(lastWeekStart, lastWeekEnd)}
           thisWeekRange={fmtRange(monday, sunday)}
@@ -658,10 +659,11 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
 
 /* ── BUYER HERO (Variant 2: balanced two-card split) ── */
 function BuyerHero({
-  firstName, greeting, lastWeekRange, thisWeekRange,
+  user, setNav, greeting, lastWeekRange, thisWeekRange,
   lastWeekEvents, thisWeekEvents, stores, onOpenEvents,
 }: {
-  firstName: string
+  user: any
+  setNav?: (n: NavPage) => void
   greeting: string
   lastWeekRange: string
   thisWeekRange: string
@@ -683,9 +685,9 @@ function BuyerHero({
           <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.8, textTransform: 'uppercase', letterSpacing: '.08em' }}>
             Good {greeting}
           </div>
-          <div style={{ fontSize: 22, fontWeight: 900, marginTop: 2 }}>
-            {firstName || 'there'}
-          </div>
+          {/* Clickable name → ProfileTrigger popover with "My upcoming
+              events" + Sign Out. Same component admins use in their hero. */}
+          <ProfileTrigger user={user} setNav={setNav} />
         </div>
         <div style={{ marginLeft: 'auto', fontSize: 12, opacity: 0.65 }}>
           {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}

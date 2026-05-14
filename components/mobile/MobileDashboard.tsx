@@ -128,9 +128,18 @@ export default function MobileDashboard({ setNav }: Props) {
               <div style={{ fontSize: 10, fontWeight: 700, opacity: 0.85, textTransform: 'uppercase', letterSpacing: '.08em' }}>
                 Good {greet}
               </div>
-              <div style={{ fontSize: 22, fontWeight: 900, marginTop: 2 }}>
+              {/* Clickable name → opens the same stats sheet admins
+                  use (myUpcomingEvents + tier + Days/Events/Rank + Sign
+                  Out). Keeps the buyer hero's compact 22px size. */}
+              <button onClick={() => setStatsOpen(true)} style={{
+                background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                color: '#fff', fontSize: 22, fontWeight: 900, marginTop: 2,
+                display: 'inline-flex', alignItems: 'baseline', gap: 6,
+                fontFamily: 'inherit', letterSpacing: '-.01em',
+              }}>
                 {user?.name?.split(' ')[0]}
-              </div>
+                <span aria-hidden style={{ fontSize: 12, opacity: .7, fontWeight: 500 }}>▾</span>
+              </button>
             </div>
             <div style={{ marginLeft: 'auto', fontSize: 11, opacity: 0.65 }}>
               {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
