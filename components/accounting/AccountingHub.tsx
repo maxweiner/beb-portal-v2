@@ -180,7 +180,12 @@ export default function AccountingHub({ setNav }: Props) {
       if (statusFilter === 'submitted_pending_review' && r.status !== 'submitted_pending_review') return false
       if (statusFilter === 'approved' && r.status !== 'approved') return false
       // 'all_incl_paid' is no-op — all statuses pass
-      if (brandFilter !== 'all' && r.brand !== brandFilter) return false
+      // Brand filter: brand=null rows pass through ANY brand
+      // selection. Those are sales-side reports (trunk shows /
+      // trade shows) — they aren't BEB-specific or Liberty-specific
+      // and should be visible regardless of which brand the
+      // accountant is currently looking at.
+      if (brandFilter !== 'all' && r.brand && r.brand !== brandFilter) return false
       if (ageFilter === 'overdue' && r.age_days < 7) return false
       if (ageFilter === 'recent'  && r.age_days >= 7) return false
       if (q) {
@@ -216,8 +221,11 @@ export default function AccountingHub({ setNav }: Props) {
   // show expense report — those don't carry a brand from the event
   // join).
   const kpis = useMemo(() => {
+    // Same brand-null pass-through as the list filter — keeps the
+    // tile count consistent with what's visible below. Sales-side
+    // reports (brand=null) count in every brand-scoped tile.
     const brandScoped = (rows || []).filter(r =>
-      brandFilter === 'all' || r.brand === brandFilter
+      brandFilter === 'all' || !r.brand || r.brand === brandFilter
     )
     const submitted = brandScoped.filter(r => r.status === 'submitted_pending_review')
     const approved  = brandScoped.filter(r => r.status === 'approved')
