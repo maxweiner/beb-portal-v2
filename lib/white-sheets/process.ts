@@ -28,6 +28,7 @@ import { ocrWhiteSheetPage, type WhiteSheetOcrResult } from './ocr'
 import { applyAutoCommitChecks } from './match'
 import { classifyBuyerInitials, type ClassifierResult } from './classifyInitials'
 import { dedupAndUpsertWhiteSheetCustomer } from './customerWrite'
+import { sendCompletionEmail } from './notify'
 import type { WhiteSheetReviewReason } from '@/types'
 
 let _admin: SupabaseClient | null = null
@@ -334,8 +335,24 @@ async function bumpUploadCounters(
 }
 
 async function finalizeIfDone(sb: SupabaseClient, uploadId: string) {
-  const { error } = await sb.rpc('finalize_white_sheet_upload_if_done', { upload_uuid: uploadId })
-  if (error) console.warn('[whiteSheets.process] finalize_if_done failed', uploadId, error.message)
+  // Phase 6: the RPC now returns a richer string so we can
+  // distinguish the transition (this call did the flip) from
+  // a no-op (upload was already complete on entry). Only fire
+  // the completion email on the transition — that's our
+  // exactly-once gate.
+  const { data, error } = await sb.rpc('finalize_white_sheet_upload_if_done', { upload_uuid: uploadId })
+  if (error) {
+    console.warn('[whiteSheets.process] finalize_if_done failed', uploadId, error.message)
+    return
+  }
+  if (data === 'just_finalized') {
+    // sendCompletionEmail handles its own errors + the
+    // notification_sent_at gating, so we can fire-and-forget.
+    // Awaited so a crash before the email send doesn't leave the
+    // worker tick in a weird half-state, but errors are swallowed
+    // inside sendCompletionEmail itself.
+    await sendCompletionEmail(uploadId)
+  }
 }
 
 async function markErrored(sb: SupabaseClient, page: ClaimedPage, message: string): Promise<ProcessOutcome> {
