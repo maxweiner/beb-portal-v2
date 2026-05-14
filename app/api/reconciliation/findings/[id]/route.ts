@@ -58,12 +58,24 @@ export async function PATCH(req: Request, ctx: { params: { id: string } }) {
   }
 
   const sb = admin()
+  // .maybeSingle() instead of .single() so a no-rows-matched
+  // UPDATE returns null instead of the cryptic PostgREST
+  // 'Cannot coerce the result to a single JSON object' error.
+  // No-rows-matched happens when the finding row was deleted
+  // out from under the open modal — typically by a re-import
+  // (reconciliation_findings is rebuilt on each fresh import).
+  // The maybeSingle path lets us return a clean 404 instead.
   const { data, error } = await sb
     .from('reconciliation_findings')
     .update(patch)
     .eq('id', id)
     .select('*')
-    .single()
+    .maybeSingle()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!data) {
+    return NextResponse.json({
+      error: 'Finding no longer exists. It may have been removed by a re-import — refresh the page to see the current list.',
+    }, { status: 404 })
+  }
   return NextResponse.json({ ok: true, finding: data })
 }
