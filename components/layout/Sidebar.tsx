@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import type { NavPage } from '@/app/page'
 import { usePendingApprovals } from '@/components/expenses/usePendingApprovals'
 import { useReconciliationAlerts } from '@/components/reconciliation/useReconciliationAlerts'
+import { useLeadFollowUpAlerts } from '@/components/sales/useLeadFollowUpAlerts'
 import { useRoleModules } from '@/lib/useRoleModules'
 import ViewAsSwitcher from '@/components/impersonation/ViewAsSwitcher'
 
@@ -157,6 +158,7 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
   // localStorage overrides if the user has manually toggled before.
   const { count: pendingApprovalCount } = usePendingApprovals()
   const { count: reconciliationAlertCount } = useReconciliationAlerts()
+  const { count: leadFollowUpCount } = useLeadFollowUpAlerts()
   const [collapsed, setCollapsed] = useState<Set<string>>(() => {
     // Seed with every section label closed; the active section is opened
     // below in a useEffect once nav + NAV_ITEMS are stable.
@@ -376,8 +378,10 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
             if (currentSection && !currentOpen) return null
             const showExpensesBadge = item.id === 'expenses' && pendingApprovalCount > 0
             const showReconBadge = item.id === 'reconciliation' && reconciliationAlertCount > 0
+            const showLeadsBadge = item.id === 'leads' && leadFollowUpCount > 0
             const badge = showExpensesBadge ? pendingApprovalCount
-              : showReconBadge ? reconciliationAlertCount : 0
+              : showReconBadge ? reconciliationAlertCount
+              : showLeadsBadge ? leadFollowUpCount : 0
             const navBtn = (
               <NavRow
                 label={item.label}
