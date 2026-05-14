@@ -92,7 +92,7 @@ The `white_sheets` row separately stores `id_number` (DL #) — never copied to 
 
 ### Auto-relink trigger (safety net)
 
-A BEFORE INSERT trigger on `buyer_checks` checks for orphan `white_sheet_pages` rows in `status='needs_review'` with reason `unmatched_form` and a matching `(event_id, buy_form_number)`. If found, automatically links them and re-runs the auto-commit checks. Handles the "I forgot to enter Smith's buy, let me add it now" case without operator action.
+An AFTER INSERT trigger on `buyer_checks` checks for orphan `white_sheet_pages` rows in `status='needs_review'` with reason `unmatched_form` and a matching `(event_id, buy_form_number)`. If found, automatically sets their `buyer_check_id` to `NEW.id`, removes `unmatched_form` from `review_reasons`, and (if that was the only flag) flips the page back to `status='pending'` so the worker re-runs the auto-commit checks. Handles the "I forgot to enter Smith's buy, let me add it now" case without operator action. (AFTER INSERT, not BEFORE INSERT — the orphan pages need `NEW.id` available to set their FK.)
 
 ## Background processing architecture
 
