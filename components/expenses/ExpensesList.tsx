@@ -520,9 +520,10 @@ export default function ExpensesList({ onOpen, effectiveUserId: effectiveUserIdP
             const canDelete = r.status === 'active' && (r.user_id === effectiveUserId || canSeeAll)
             const canDismiss = r.status === 'active' && (r.user_id === effectiveUserId || canSeeAll)
             const canReactivate = r.status === 'no_expenses' && (r.user_id === effectiveUserId || canSeeAll)
+            const hasActions = canDismiss || canDelete || canReactivate
             return (
               <div key={r.id} className="card" style={{
-                position: 'relative', padding: 12, background: '#fff',
+                padding: 12, background: '#fff',
               }}>
                 <button onClick={() => onOpen(r.id)} style={{
                   display: 'block', width: '100%', textAlign: 'left',
@@ -552,44 +553,55 @@ export default function ExpensesList({ onOpen, effectiveUserId: effectiveUserIdP
                     <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--green-dark)' }}>Open →</span>
                   </div>
                 </button>
-                <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4 }}>
-                  {canDismiss && (
-                    <button
-                      onClick={e => { e.stopPropagation(); markNoExpenses(r) }}
-                      title="Mark as already expensed (hide from list)"
-                      style={{
-                        background: 'transparent', border: '1px solid var(--cream2)',
-                        borderRadius: 6, padding: '2px 8px', cursor: 'pointer',
-                        color: 'var(--mist)', fontSize: 11, lineHeight: 1.3,
-                        fontFamily: 'inherit', whiteSpace: 'nowrap',
-                      }}
-                    >Already expensed</button>
-                  )}
-                  {canDelete && (
-                    <button
-                      onClick={e => { e.stopPropagation(); deleteReport(r) }}
-                      title="Delete this report"
-                      aria-label="Delete this report"
-                      style={{
-                        background: 'transparent', border: 'none',
-                        padding: 4, cursor: 'pointer', color: 'var(--mist)',
-                        fontSize: 16, lineHeight: 1,
-                      }}
-                    >×</button>
-                  )}
-                  {canReactivate && (
-                    <button
-                      onClick={e => { e.stopPropagation(); reactivateReport(r) }}
-                      title="Reopen as a draft (active) report"
-                      style={{
-                        background: 'transparent', border: '1px solid var(--cream2)',
-                        borderRadius: 6, padding: '2px 8px', cursor: 'pointer',
-                        color: 'var(--mist)', fontSize: 11, lineHeight: 1.3,
-                        fontFamily: 'inherit', whiteSpace: 'nowrap',
-                      }}
-                    >Reactivate</button>
-                  )}
-                </div>
+                {/* Action row — moved out of absolute positioning so it
+                    no longer overlaps the status badge at the top-right.
+                    Rendered only when at least one action is available
+                    to avoid an empty row. */}
+                {hasActions && (
+                  <div style={{
+                    display: 'flex', justifyContent: 'flex-end',
+                    gap: 6, marginTop: 10, paddingTop: 8,
+                    borderTop: '1px solid var(--cream2)',
+                  }}>
+                    {canDismiss && (
+                      <button
+                        onClick={e => { e.stopPropagation(); markNoExpenses(r) }}
+                        title="Mark as already expensed (hide from list)"
+                        style={{
+                          background: 'transparent', border: '1px solid var(--cream2)',
+                          borderRadius: 6, padding: '4px 10px', cursor: 'pointer',
+                          color: 'var(--mist)', fontSize: 11, lineHeight: 1.3,
+                          fontFamily: 'inherit', whiteSpace: 'nowrap',
+                        }}
+                      >Already expensed</button>
+                    )}
+                    {canDelete && (
+                      <button
+                        onClick={e => { e.stopPropagation(); deleteReport(r) }}
+                        title="Delete this report"
+                        aria-label="Delete this report"
+                        style={{
+                          background: 'transparent', border: '1px solid var(--cream2)',
+                          borderRadius: 6, padding: '4px 10px', cursor: 'pointer',
+                          color: 'var(--mist)', fontSize: 12, lineHeight: 1,
+                          fontFamily: 'inherit',
+                        }}
+                      >× Delete</button>
+                    )}
+                    {canReactivate && (
+                      <button
+                        onClick={e => { e.stopPropagation(); reactivateReport(r) }}
+                        title="Reopen as a draft (active) report"
+                        style={{
+                          background: 'transparent', border: '1px solid var(--cream2)',
+                          borderRadius: 6, padding: '4px 10px', cursor: 'pointer',
+                          color: 'var(--mist)', fontSize: 11, lineHeight: 1.3,
+                          fontFamily: 'inherit', whiteSpace: 'nowrap',
+                        }}
+                      >Reactivate</button>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })}
