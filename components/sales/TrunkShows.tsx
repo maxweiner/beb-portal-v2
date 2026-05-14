@@ -5,6 +5,7 @@
 // on special requests, customer appointment slots, and spiffs.
 
 import { useEffect, useMemo, useState } from 'react'
+import FullscreenWorkspace from '@/components/ui/FullscreenWorkspace'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import {
@@ -73,27 +74,11 @@ export default function TrunkShows({ setNav }: { setNav?: (n: import('@/app/page
   }
   useEffect(() => { void reload() }, [])
 
-  // ESC closes the fullscreen sheet workspace. Body scroll-lock
-  // while open so the underlying page can't accidentally scroll
-  // behind the modal.
-  useEffect(() => {
-    if (!sheetFullscreen) return
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setSheetFullscreen(false)
-    }
-    document.addEventListener('keydown', onKey)
-    const priorOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = priorOverflow
-    }
-  }, [sheetFullscreen])
-
   // Belt-and-suspenders: if the user switches AWAY from the sheet
   // view while the fullscreen modal is open, close the modal too.
   // (Can't normally happen because the trigger button is only
   // visible in sheet view, but defensive against state surprises.)
+  // (ESC handling + body-scroll-lock live inside FullscreenWorkspace.)
   useEffect(() => {
     if (view !== 'sheet' && sheetFullscreen) setSheetFullscreen(false)
   }, [view, sheetFullscreen])
@@ -333,45 +318,18 @@ export default function TrunkShows({ setNav }: { setNav?: (n: import('@/app/page
         />
       )}
 
-      {/* Fullscreen sheet workspace — only mounts when the user
-          opts in via the ⛶ toolbar button. Sits above the entire
-          portal chrome (sidebar + content). ESC + the ✕ button
-          close it; the ESC handler lives in a useEffect higher
-          in this component so it can also un-lock body scroll. */}
+      {/* Fullscreen sheet workspace — only mounts when the user opts
+          in via the ⛶ toolbar button. Sits above the entire portal
+          chrome (sidebar + content). FullscreenWorkspace owns ESC
+          + body scroll-lock. */}
       {sheetFullscreen && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9000,
-          background: 'var(--cream)',
-          display: 'flex', flexDirection: 'column',
-          fontFamily: 'inherit',
-        }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '10px 16px',
-            background: '#fff',
-            borderBottom: '1px solid var(--pearl)',
-            flexShrink: 0,
-          }}>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--ink)' }}>
-                📚 Trunk Shows · Sheet workspace
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 2 }}>
-                {filtered.length} of {rows.length} · ESC to close
-              </div>
-            </div>
-            <button
-              onClick={() => setSheetFullscreen(false)}
-              className="btn-outline btn-sm"
-              title="Close (ESC)"
-            >
-              ✕ Close
-            </button>
-          </div>
-          <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
-            <TrunkShowSheet shows={filtered} onChanged={() => void reload()} onOpen={setOpenId} />
-          </div>
-        </div>
+        <FullscreenWorkspace
+          title="📚 Trunk Shows · Sheet workspace"
+          subtitle={`${filtered.length} of ${rows.length} · ESC to close`}
+          onClose={() => setSheetFullscreen(false)}
+        >
+          <TrunkShowSheet shows={filtered} onChanged={() => void reload()} onOpen={setOpenId} />
+        </FullscreenWorkspace>
       )}
     </div>
   )

@@ -19,6 +19,7 @@ import DuringEventTab from './DuringEventTab'
 import PostEventTab from './PostEventTab'
 import CreateEventModal from './CreateEventModal'
 import BuyingEventSheet from './BuyingEventSheet'
+import FullscreenWorkspace from '@/components/ui/FullscreenWorkspace'
 
 type ViewMode = 'hub' | 'new' | 'slim' | 'legacy' | 'sheet'
 type Phase = 'pre' | 'during' | 'post'
@@ -43,6 +44,9 @@ export default function BuyingEventsView({ setNav }: { setNav?: (n: NavPage) => 
   })
   const [phase, setPhase] = useState<Phase>('pre')
   const [createMode, setCreateMode] = useState<'scheduled' | 'reserved' | null>(null)
+  // Fullscreen workspace for the Sheet view (sidebar covered).
+  // Only the sheet view exposes the ⛶ trigger.
+  const [sheetFullscreen, setSheetFullscreen] = useState(false)
 
   // Sync from DB pref (cross-device source of truth). Only fires when
   // the user's preferences object itself changes — NOT when local view
@@ -132,19 +136,38 @@ export default function BuyingEventsView({ setNav }: { setNav?: (n: NavPage) => 
               Edit many events at once — readiness, buyers needed, store, dates.
             </div>
           </div>
-          {isAdmin && (
-            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <button
+              onClick={() => setSheetFullscreen(true)}
+              className="btn-outline btn-sm"
+              title="Open the sheet in a fullscreen workspace (ESC to close)"
+            >
+              ⛶ Fullscreen
+            </button>
+            {isAdmin && (
               <button onClick={() => setCreateMode('reserved')} className="btn-outline btn-sm" title="Tentative date — Save the Date">
                 📌 Save the Date
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
-        <BuyingEventSheet events={events} />
+        {/* Skip inline render when fullscreen open so BuyingEventSheet
+            stays a single-instance mount. */}
+        {sheetFullscreen ? null : <BuyingEventSheet events={events} />}
 
         {createMode && (
           <CreateEventModal mode={createMode} onClose={() => setCreateMode(null)} />
+        )}
+
+        {sheetFullscreen && (
+          <FullscreenWorkspace
+            title="◆ Buying Events · Sheet workspace"
+            subtitle={`${events.length} event${events.length === 1 ? '' : 's'} · ESC to close`}
+            onClose={() => setSheetFullscreen(false)}
+          >
+            <BuyingEventSheet events={events} />
+          </FullscreenWorkspace>
         )}
       </div>
     )
