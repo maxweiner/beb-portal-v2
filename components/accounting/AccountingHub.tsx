@@ -203,19 +203,32 @@ export default function AccountingHub({ setNav }: Props) {
     return { submitted, approved, paid }
   }, [filtered])
 
-  // Header KPIs computed off the *unfiltered* rows so the header
-  // shows total exposure, not just what's matched by the filter.
+  // Header KPIs respect the brand filter (since brand is a 'scope'
+  // choice — if the user is looking at BEB-only, the queue counts
+  // should match what's BELOW the tiles). They deliberately IGNORE
+  // status / age / search filters — those narrow the list, but the
+  // KPI tiles ARE the status segmentation, the overdue tile has its
+  // own count rule, and search shouldn't change the summary.
+  //
+  // Without the brand pass-through, the user sees "6 to be paid"
+  // in the tile but only "5 awaiting payment" in the list when
+  // one of the reports is brand-null (e.g. a trunk-show or trade-
+  // show expense report — those don't carry a brand from the event
+  // join).
   const kpis = useMemo(() => {
-    const submitted = (rows || []).filter(r => r.status === 'submitted_pending_review')
-    const approved  = (rows || []).filter(r => r.status === 'approved')
+    const brandScoped = (rows || []).filter(r =>
+      brandFilter === 'all' || r.brand === brandFilter
+    )
+    const submitted = brandScoped.filter(r => r.status === 'submitted_pending_review')
+    const approved  = brandScoped.filter(r => r.status === 'approved')
     return {
       reviewCount: submitted.length,
       reviewSum:   submitted.reduce((s, r) => s + r.grand_total, 0),
       payCount:    approved.length,
       paySum:      approved.reduce((s, r) => s + r.grand_total, 0),
-      overdueCount: (rows || []).filter(r => r.age_days >= 7).length,
+      overdueCount: brandScoped.filter(r => r.age_days >= 7 && r.status !== 'paid').length,
     }
-  }, [rows])
+  }, [rows, brandFilter])
 
   const active = useMemo(
     () => rows?.find(r => r.id === activeId) || null,
