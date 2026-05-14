@@ -961,9 +961,11 @@ export interface WhiteSheetPage {
    *  review-pile queries don't need a two-hop join. */
   event_id: string
   page_number: number
-  /** Storage path of the per-page PNG render. May be null until the
-   *  splitter has rendered the page. */
-  image_path: string | null
+  /** Storage path of the per-page single-page PDF — sent verbatim to
+   *  Claude vision as a document block by the OCR worker, rendered
+   *  browser-side via pdfjs-dist for the review pile preview. May be
+   *  null until the splitter has written the page. */
+  page_pdf_path: string | null
 
   status: WhiteSheetPageStatus
   review_reasons: WhiteSheetReviewReason[]

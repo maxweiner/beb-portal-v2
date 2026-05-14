@@ -36,6 +36,7 @@ import { fetchManifestsForEvents } from '@/lib/shipping/manifests'
 import IntakeCaptureFlow from '@/components/intake/IntakeCaptureFlow'
 import IntakeWorksheet from '@/components/intake/IntakeWorksheet'
 import WaitlistPanel from './WaitlistPanel'
+import WhiteSheetUploadModal from '@/components/whitesheets/WhiteSheetUploadModal'
 import Checkbox from '@/components/ui/Checkbox'
 import { CALENDAR_COLORS } from '@/lib/calendarColors'
 
@@ -48,6 +49,7 @@ type LauncherKey =
   | 'day_entry' | 'buyers' | 'intake' | 'worksheet' | 'travel' | 'shipping'
   | 'manifest' | 'marketing' | 'appointments' | 'waitlist' | 'expenses'
   | 'brief' | 'notes' | 'assets' | 'checklist' | 'ad_spend' | 'promote' | 'cancel'
+  | 'white_sheets'
 
 interface LauncherDef {
   key: LauncherKey
@@ -81,6 +83,8 @@ const LAUNCHERS: LauncherDef[] = [
     sub: 'Inbound + outbound' },
   { key: 'manifest',  icon: '🗃️', label: 'Manifest',
     sub: 'Upload box photos' },
+  { key: 'white_sheets', icon: '📄', label: 'White Sheet Upload',
+    sub: 'OCR scanned invoices' },
   { key: 'marketing', icon: '📣', label: 'Marketing',
     sub: 'VDP, postcards, comms' },
   { key: 'appointments', icon: '📅', label: 'Appointments',
@@ -146,6 +150,7 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
   // from having to drill into the event-detail During tab where it
   // historically lived.
   const [waitlistEventId, setWaitlistEventId] = useState<string | null>(null)
+  const [whiteSheetEventId, setWhiteSheetEventId] = useState<string | null>(null)
   /** Existing box labels for the event whose manifest modal is currently open.
    *  Lazily fetched so we can drive the "replace?" warning + preset pills. */
   const [manifestExistingLabels, setManifestExistingLabels] = useState<string[]>([])
@@ -390,6 +395,7 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
                   }).catch(() => { /* leave labels empty if fetch fails */ })
                   break
                 }
+                case 'white_sheets': setWhiteSheetEventId(ev.id); break
                 case 'marketing': setNav?.('marketing'); break
                 case 'appointments': setNav?.('appointments'); break
                 case 'waitlist':  setWaitlistEventId(ev.id); break
@@ -492,6 +498,22 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
             existingBoxLabels={manifestExistingLabels}
             onClose={() => { setManifestEventId(null); setManifestExistingLabels([]) }}
             onUploaded={() => { setManifestEventId(null); setManifestExistingLabels([]) }}
+          />
+        )
+      })()}
+
+      {/* White Sheet Upload (Phase 2). Drops a PDF, kicks off the
+          background splitter. Live counter + review pile live in
+          later phases. */}
+      {whiteSheetEventId && (() => {
+        const ev = events.find(e => e.id === whiteSheetEventId)
+        if (!ev) return null
+        return (
+          <WhiteSheetUploadModal
+            eventId={ev.id}
+            brand={brand}
+            onClose={() => setWhiteSheetEventId(null)}
+            onSubmitted={() => { /* Phase 6 wires the live counter; no-op for now */ }}
           />
         )
       })()}
