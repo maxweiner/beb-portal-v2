@@ -70,9 +70,14 @@ export function LetterPdf(data: LetterPdfData) {
             <Text style={styles.brandSub}>Estate Trunk Show</Text>
           </View>
           <View style={styles.hRight}>
-            {COMPANY.phone ? <Text style={styles.hRightLine}>{COMPANY.phone}</Text> : null}
-            <Text style={styles.hRightLine}>{COMPANY.email}</Text>
-            <Text style={styles.hRightLine}>{COMPANY.website}</Text>
+            {/* Header contact info — the SENDER's direct line, not the
+                company catch-all. Recipients reply to the rep they're
+                working with; bumping the rep's email + phone to the
+                top makes that the obvious contact point. Falls back to
+                COMPANY values when the rep row is missing the field
+                (legacy templates, system-generated letters, etc.). */}
+            <Text style={styles.hRightLine}>{data.rep.email || COMPANY.email}</Text>
+            {data.rep.phone ? <Text style={styles.hRightLine}>{data.rep.phone}</Text> : <Text style={styles.hRightLine}>{COMPANY.website}</Text>}
           </View>
         </View>
 
