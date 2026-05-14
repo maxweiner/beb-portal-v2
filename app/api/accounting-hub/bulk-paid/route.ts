@@ -1,10 +1,14 @@
 // POST /api/accounting-hub/bulk-paid
 //
-// Body: { ids: string[], notify?: boolean }
+// Body: { ids: string[], notify?: boolean, paid_note?: string }
 //
 // Marks every listed report as paid (must currently be in 'approved'
 // status; submitted reports need approval first). Optionally notifies
 // the submitter that their report has been paid.
+//
+// paid_note is shared across every report in the batch — typically
+// "Check run 5/14", "Wire batch 2026-05-14", etc. Per-report notes
+// can still be edited individually via the single mark-paid route.
 //
 // Auth: accounting / admin / superadmin / partner.
 
@@ -58,6 +62,14 @@ export async function POST(req: Request) {
   if (cleanIds.length === 0) return NextResponse.json({ error: 'No valid ids' }, { status: 400 })
   const notify = body?.notify !== false   // default true
 
+  // Shared paid_note for the whole batch. Trim + clamp to 500 chars
+  // so a runaway paste can't bloat the rows.
+  let paidNote: string | null = null
+  if (typeof body?.paid_note === 'string') {
+    const trimmed = body.paid_note.trim().slice(0, 500)
+    paidNote = trimmed.length > 0 ? trimmed : null
+  }
+
   // Pull each report so we can validate status + collect submitter
   // emails for the optional notification.
   const { data: reports, error: fetchErr } = await sb
@@ -89,7 +101,7 @@ export async function POST(req: Request) {
   const nowIso = new Date().toISOString()
   const { error: updErr } = await sb
     .from('expense_reports')
-    .update({ status: 'paid', paid_at: nowIso, paid_by: me.id })
+    .update({ status: 'paid', paid_at: nowIso, paid_by: me.id, paid_note: paidNote })
     .in('id', eligibleIds)
   if (updErr) return NextResponse.json({ error: `Update failed: ${updErr.message}` }, { status: 500 })
 

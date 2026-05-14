@@ -24,7 +24,7 @@ import type { NavPage } from '@/app/page'
 
 interface QueueRow {
   id: string
-  status: 'submitted_pending_review' | 'approved'
+  status: 'submitted_pending_review' | 'approved' | 'paid'
   buyer_id: string
   buyer_name: string
   event_id: string | null
@@ -32,6 +32,13 @@ interface QueueRow {
   brand: string | null
   submitted_at: string | null
   approved_at: string | null
+  /** Payment audit fields. Populated when status='paid'. paid_note
+   *  is the free-text 'how it was paid' string the accountant
+   *  captured at mark-paid time (Check #1234, Wire 5/14, etc.). */
+  paid_at?: string | null
+  paid_by_user_id?: string | null
+  paid_by_name?: string | null
+  paid_note?: string | null
   age_days: number
   total_expenses: number
   total_compensation: number
@@ -46,7 +53,10 @@ interface QueueRow {
   exported_to_qb_format?: 'iif' | 'csv' | null
 }
 
-type StatusFilter = 'all' | 'submitted_pending_review' | 'approved'
+// 'paid' shows only paid reports in the lookback window.
+// 'all_incl_paid' shows active + paid (lookback'd). The default
+// 'all' keeps the historical behavior — active only, no payload bloat.
+type StatusFilter = 'all' | 'submitted_pending_review' | 'approved' | 'paid' | 'all_incl_paid'
 type BrandFilter  = 'all' | 'beb' | 'liberty'
 type AgeFilter    = 'all' | 'overdue' | 'recent'
 
@@ -124,13 +134,30 @@ export default function AccountingHub({ setNav }: Props) {
   // Single-row action busy state
   const [busyId, setBusyId] = useState<string | null>(null)
 
+  // Mark-Paid modal state. Used for both single-row and bulk paths
+  // so the note prompt is consistent. mode='single' fires the
+  // /mark-paid endpoint with the report id; mode='bulk' fires the
+  // /accounting-hub/bulk-paid endpoint with every picked id.
+  const [payModal, setPayModal] = useState<{
+    mode: 'single' | 'bulk'
+    ids: string[]
+    label: string
+  } | null>(null)
+
   useEffect(() => {
     if (!isAllowed) return
     let cancelled = false
     ;(async () => {
       setErr(null)
       try {
-        const r = await fetch('/api/accounting-hub', { headers: await authHeaders() })
+        // Only fetch paid rows when the user actually wants to see
+        // them — keeps the default payload lean. Server caps the
+        // lookback at 90 days unless we override.
+        const includePaid = statusFilter === 'paid' || statusFilter === 'all_incl_paid'
+        const url = includePaid
+          ? '/api/accounting-hub?include_paid=true&paid_lookback_days=90'
+          : '/api/accounting-hub'
+        const r = await fetch(url, { headers: await authHeaders() })
         const j = await r.json().catch(() => ({}))
         if (cancelled) return
         if (!r.ok) { setErr(j.error || `Load failed (${r.status})`); setRows([]); return }
@@ -140,18 +167,24 @@ export default function AccountingHub({ setNav }: Props) {
       }
     })()
     return () => { cancelled = true }
-  }, [isAllowed, refreshTick])
+  }, [isAllowed, refreshTick, statusFilter])
 
   const filtered = useMemo(() => {
     if (!rows) return []
     const q = search.trim().toLowerCase()
     return rows.filter(r => {
-      if (statusFilter !== 'all' && r.status !== statusFilter) return false
+      // 'all' = active only (back-compat); 'all_incl_paid' = active + paid.
+      // Specific filters match exact status.
+      if (statusFilter === 'all' && r.status === 'paid') return false
+      if (statusFilter === 'paid' && r.status !== 'paid') return false
+      if (statusFilter === 'submitted_pending_review' && r.status !== 'submitted_pending_review') return false
+      if (statusFilter === 'approved' && r.status !== 'approved') return false
+      // 'all_incl_paid' is no-op — all statuses pass
       if (brandFilter !== 'all' && r.brand !== brandFilter) return false
       if (ageFilter === 'overdue' && r.age_days < 7) return false
       if (ageFilter === 'recent'  && r.age_days >= 7) return false
       if (q) {
-        const hay = `${r.buyer_name} ${r.event_label || ''}`.toLowerCase()
+        const hay = `${r.buyer_name} ${r.event_label || ''} ${r.paid_note || ''}`.toLowerCase()
         if (!hay.includes(q)) return false
       }
       return true
@@ -163,7 +196,11 @@ export default function AccountingHub({ setNav }: Props) {
       .sort((a, b) => b.age_days - a.age_days)
     const approved  = filtered.filter(r => r.status === 'approved')
       .sort((a, b) => b.age_days - a.age_days)
-    return { submitted, approved }
+    // Paid rows: newest payment first (age_days for paid rows is
+    // days-since-paid, so ascending is "most recently paid first").
+    const paid = filtered.filter(r => r.status === 'paid')
+      .sort((a, b) => a.age_days - b.age_days)
+    return { submitted, approved, paid }
   }, [filtered])
 
   // Header KPIs computed off the *unfiltered* rows so the header
@@ -224,42 +261,92 @@ export default function AccountingHub({ setNav }: Props) {
     }
   }
 
-  async function markPaidOne(rowId: string) {
+  // Opens the Mark-Paid modal for one row. The actual API call
+  // happens in confirmPayModal once the operator enters the note
+  // (or skips it).
+  function openMarkPaidOne(row: QueueRow) {
+    setPayModal({
+      mode: 'single',
+      ids: [row.id],
+      label: `${row.buyer_name}${row.event_label ? ' · ' + row.event_label : ''}`,
+    })
+  }
+
+  // Bulk version — same modal, multiple ids.
+  function openBulkPay() {
+    const ids = pickedApproved.map(r => r.id)
+    if (ids.length === 0) { alert('Pick at least one Approved report.'); return }
+    setPayModal({
+      mode: 'bulk',
+      ids,
+      label: `${ids.length} report${ids.length === 1 ? '' : 's'}`,
+    })
+  }
+
+  // Modal Save handler — fires the right endpoint per mode.
+  async function confirmPayModal(paidNote: string) {
+    if (!payModal) return
+    const note = paidNote.trim()
+    if (payModal.mode === 'single') {
+      const rowId = payModal.ids[0]
+      setBusyId(rowId); setPayModal(null)
+      try {
+        const r = await fetch(`/api/expense-reports/${rowId}/mark-paid`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+          body: JSON.stringify(note ? { paid_note: note } : {}),
+        })
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}))
+          alert(`Mark Paid failed: ${j.error || r.statusText}`)
+          return
+        }
+        setRefreshTick(t => t + 1)
+      } finally {
+        setBusyId(null)
+      }
+    } else {
+      setPaying(true); setPayResult(null); setPayModal(null)
+      try {
+        const r = await fetch('/api/accounting-hub/bulk-paid', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+          body: JSON.stringify({
+            ids: payModal.ids,
+            notify: notifyOnPay,
+            ...(note ? { paid_note: note } : {}),
+          }),
+        })
+        const j = await r.json()
+        if (!r.ok) { alert(`Failed: ${j.error || r.statusText}`); return }
+        setPayResult({ paid: j.paid || 0, emails: j.emails_sent || 0, failed: j.emails_failed || 0 })
+        setPicked(new Set())
+        setRefreshTick(t => t + 1)
+      } finally {
+        setPaying(false)
+      }
+    }
+  }
+
+  // Unmark-paid action — for paid reports the operator wants to
+  // reset back to 'approved' (typo, payment bounced, need to
+  // re-mark with a corrected note).
+  async function unmarkPaid(rowId: string) {
+    if (!confirm('Unmark as paid? This drops the report back to Approved and clears the paid date / note. You can re-mark it whenever the payment is recorded again.')) return
     setBusyId(rowId)
     try {
-      const r = await fetch(`/api/expense-reports/${rowId}/mark-paid`, {
+      const r = await fetch(`/api/expense-reports/${rowId}/unmark-paid`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
       })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
-        alert(`Mark Paid failed: ${j.error || r.statusText}`)
+        alert(`Unmark Paid failed: ${j.error || r.statusText}`)
         return
       }
       setRefreshTick(t => t + 1)
     } finally {
       setBusyId(null)
-    }
-  }
-
-  async function bulkPay() {
-    const ids = pickedApproved.map(r => r.id)
-    if (ids.length === 0) { alert('Pick at least one Approved report.'); return }
-    if (!confirm(`Mark ${ids.length} report${ids.length === 1 ? '' : 's'} as paid?${notifyOnPay ? ' Submitter(s) will be emailed.' : ''}`)) return
-    setPaying(true); setPayResult(null)
-    try {
-      const r = await fetch('/api/accounting-hub/bulk-paid', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
-        body: JSON.stringify({ ids, notify: notifyOnPay }),
-      })
-      const j = await r.json()
-      if (!r.ok) { alert(`Failed: ${j.error || r.statusText}`); return }
-      setPayResult({ paid: j.paid || 0, emails: j.emails_sent || 0, failed: j.emails_failed || 0 })
-      setPicked(new Set())
-      setRefreshTick(t => t + 1)
-    } finally {
-      setPaying(false)
     }
   }
 
@@ -331,9 +418,11 @@ export default function AccountingHub({ setNav }: Props) {
         <div className="field" style={{ marginBottom: 0 }}>
           <label className="fl">Status</label>
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as StatusFilter)}>
-            <option value="all">All</option>
+            <option value="all">Active (default)</option>
             <option value="submitted_pending_review">Awaiting review</option>
             <option value="approved">Awaiting payment</option>
+            <option value="paid">Paid (last 90 days)</option>
+            <option value="all_incl_paid">All (incl. paid)</option>
           </select>
         </div>
         <div className="field" style={{ marginBottom: 0 }}>
@@ -377,7 +466,7 @@ export default function AccountingHub({ setNav }: Props) {
                   onChange={setNotifyOnPay}
                   label={<span style={{ fontSize: 12, color: 'var(--ash)' }}>Email submitters</span>}
                 />
-                <button onClick={bulkPay} disabled={paying} className="btn-primary btn-sm">
+                <button onClick={openBulkPay} disabled={paying} className="btn-primary btn-sm">
                   {paying ? 'Paying…' : `💰 Mark ${pickedApproved.length} Paid`}
                 </button>
               </div>
@@ -416,6 +505,18 @@ export default function AccountingHub({ setNav }: Props) {
                 picked={picked}
                 onTogglePick={togglePicked}
               />
+              {/* Paid group — rendered when the operator opted in via
+                  the status filter ('paid' or 'all_incl_paid'). Sorted
+                  most-recently-paid first. */}
+              <QueueGroup
+                title={`✅ Paid (${groupedFiltered.paid.length})`}
+                rows={groupedFiltered.paid}
+                showBulkSelect={false}
+                activeId={activeId}
+                onSelect={setActiveId}
+                picked={picked}
+                onTogglePick={togglePicked}
+              />
 
               {filtered.length === 0 && (
                 <div style={{ padding: 30, textAlign: 'center', color: 'var(--mist)', background: '#fff', border: '1px solid var(--pearl)', borderRadius: 8 }}>
@@ -433,13 +534,56 @@ export default function AccountingHub({ setNav }: Props) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
                 <div>
                   <div style={{ fontSize: 11, color: 'var(--mist)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '.04em' }}>
-                    {active.status === 'submitted_pending_review' ? 'Awaiting review' : 'Awaiting payment'}
+                    {active.status === 'submitted_pending_review'
+                      ? 'Awaiting review'
+                      : active.status === 'approved'
+                        ? 'Awaiting payment'
+                        : 'Paid'}
                   </div>
                   <div style={{ fontSize: 17, fontWeight: 900, marginTop: 2 }}>{active.buyer_name}</div>
                   <div style={{ fontSize: 13, color: 'var(--ash)', marginTop: 2 }}>{active.event_label || '(no event)'}</div>
                 </div>
-                <span style={{ ...ageBadgeStyle(ageColor(active.age_days)) }}>{active.age_days} day{active.age_days === 1 ? '' : 's'}</span>
+                {active.status === 'paid' ? (
+                  <span style={{
+                    display: 'inline-block', fontSize: 10, fontWeight: 800,
+                    padding: '2px 6px', borderRadius: 4,
+                    background: '#DCFCE7', color: '#166534',
+                    letterSpacing: '.02em',
+                  }}>
+                    Paid {active.age_days === 0 ? 'today' : `${active.age_days}d ago`}
+                  </span>
+                ) : (
+                  <span style={{ ...ageBadgeStyle(ageColor(active.age_days)) }}>{active.age_days} day{active.age_days === 1 ? '' : 's'}</span>
+                )}
               </div>
+
+              {/* Payment audit panel — only for paid reports. Shows
+                  WHO paid + WHEN + the free-text 'how it was paid'
+                  note (if any). */}
+              {active.status === 'paid' && (
+                <div style={{
+                  background: '#F0FDF4', border: '1px solid #BBF7D0',
+                  borderRadius: 8, padding: '10px 12px', marginBottom: 12,
+                }}>
+                  <div style={{ fontSize: 11, color: '#166534', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 4 }}>
+                    ✓ Payment recorded
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--ink)' }}>
+                    {active.paid_by_name && <>By <b>{active.paid_by_name}</b> · </>}
+                    {active.paid_at && new Date(active.paid_at).toLocaleDateString()}
+                  </div>
+                  {active.paid_note && (
+                    <div style={{
+                      marginTop: 6, padding: '6px 8px',
+                      background: '#fff', border: '1px solid #BBF7D0', borderRadius: 6,
+                      fontSize: 12, color: 'var(--ink)',
+                      whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                    }}>
+                      {active.paid_note}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginTop: 12, marginBottom: 14 }}>
                 <DetailRow label="Expenses" value={fmtMoney(active.total_expenses, { cents: true })} />
@@ -465,11 +609,20 @@ export default function AccountingHub({ setNav }: Props) {
                 )}
                 {active.status === 'approved' && (
                   <button
-                    onClick={() => markPaidOne(active.id)}
+                    onClick={() => openMarkPaidOne(active)}
                     disabled={busyId === active.id}
                     className="btn-primary"
                   >
-                    {busyId === active.id ? 'Marking…' : '💰 Mark Paid'}
+                    {busyId === active.id ? 'Marking…' : '💰 Mark Paid…'}
+                  </button>
+                )}
+                {active.status === 'paid' && (
+                  <button
+                    onClick={() => unmarkPaid(active.id)}
+                    disabled={busyId === active.id}
+                    className="btn-outline"
+                  >
+                    {busyId === active.id ? 'Unmarking…' : '↺ Unmark Paid'}
                   </button>
                 )}
                 <button onClick={() => openFullDetail(active.id)} className="btn-outline">
@@ -487,6 +640,7 @@ export default function AccountingHub({ setNav }: Props) {
               <div style={{ marginTop: 12, fontSize: 11, color: 'var(--mist)' }}>
                 {active.submitted_at && <>Submitted {new Date(active.submitted_at).toLocaleDateString()}</>}
                 {active.approved_at && <> · Approved {new Date(active.approved_at).toLocaleDateString()}</>}
+                {active.paid_at && <> · Paid {new Date(active.paid_at).toLocaleDateString()}</>}
               </div>
             </div>
           ) : (
@@ -494,6 +648,123 @@ export default function AccountingHub({ setNav }: Props) {
               ← Pick a report on the left to see the details and act on it.
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Mark-Paid modal — captures the optional 'how was it paid'
+          note for single + bulk paths. */}
+      {payModal && (
+        <MarkPaidModal
+          mode={payModal.mode}
+          label={payModal.label}
+          notifyOnPay={notifyOnPay}
+          onNotifyChange={setNotifyOnPay}
+          onCancel={() => setPayModal(null)}
+          onSave={confirmPayModal}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// Mark-Paid modal
+// ─────────────────────────────────────────────────────────────
+// Optional free-text note about HOW the report was paid. Same
+// modal serves the single-row and bulk paths. The bulk path also
+// shows the "email submitters" checkbox so it can be toggled at
+// the same moment.
+
+interface MarkPaidModalProps {
+  mode: 'single' | 'bulk'
+  label: string
+  notifyOnPay: boolean
+  onNotifyChange: (v: boolean) => void
+  onCancel: () => void
+  onSave: (note: string) => void
+}
+
+function MarkPaidModal({ mode, label, notifyOnPay, onNotifyChange, onCancel, onSave }: MarkPaidModalProps) {
+  const [note, setNote] = useState('')
+
+  // ESC dismiss for parity with the FullscreenWorkspace convention.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onCancel()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onCancel])
+
+  return (
+    <div
+      onClick={onCancel}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9100,
+        background: 'rgba(0,0,0,.45)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 16,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#fff', borderRadius: 12, padding: 20,
+          width: '100%', maxWidth: 480,
+          boxShadow: '0 12px 40px rgba(0,0,0,.25)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>💰 Mark Paid</h3>
+          <button onClick={onCancel} aria-label="Close" style={{
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            fontSize: 22, color: 'var(--mist)', lineHeight: 1,
+          }}>×</button>
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--ash)', marginBottom: 14 }}>
+          {mode === 'single' ? <>Marking <b>{label}</b> as paid.</> : <>Marking <b>{label}</b> as paid.</>}
+        </div>
+
+        <label style={{ display: 'block', marginBottom: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 4 }}>
+            How was it paid? <span style={{ fontWeight: 600, color: 'var(--mist)', textTransform: 'none' }}>(optional)</span>
+          </div>
+          <textarea
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            placeholder="e.g. Check #1234 · Wire 5/14 · Zelle to 330-555-0101 · ACH batch 2026-05-14"
+            rows={3}
+            maxLength={500}
+            style={{
+              width: '100%', padding: '8px 10px', fontSize: 13,
+              fontFamily: 'inherit',
+              border: '1px solid var(--pearl)', borderRadius: 6, background: '#fff',
+              resize: 'vertical',
+            }}
+            autoFocus
+          />
+          <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
+            {mode === 'bulk'
+              ? <>Applied to all selected reports. Per-report notes can still be edited individually after.</>
+              : <>Visible on the report's detail panel + payment audit trail.</>}
+          </div>
+        </label>
+
+        {mode === 'bulk' && (
+          <div style={{ marginBottom: 14 }}>
+            <Checkbox
+              checked={notifyOnPay}
+              onChange={onNotifyChange}
+              label={<span style={{ fontSize: 12, color: 'var(--ash)' }}>Email submitters that their report was paid</span>}
+            />
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={onCancel} className="btn-outline btn-sm">Cancel</button>
+          <button onClick={() => onSave(note)} className="btn-primary btn-sm">
+            💰 Mark Paid
+          </button>
         </div>
       </div>
     </div>

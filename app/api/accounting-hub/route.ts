@@ -6,6 +6,17 @@
 // receipt count, age in days, and a reference to the buyer's name
 // + event so the UI can render the queue without a second call.
 //
+// Optional query params:
+//   ?include_paid=true             — also return 'paid' reports,
+//                                     limited to the lookback window
+//                                     below (default 90 days). Useful
+//                                     for the "Paid (last N days)" or
+//                                     "All (incl. paid)" filters on
+//                                     the Hub.
+//   ?paid_lookback_days=N          — override the 90-day default for
+//                                     paid reports. Capped at 365 to
+//                                     avoid runaway result sizes.
+//
 // Auth: caller must hold the `accounting` role OR be admin /
 // superadmin / partner.
 
@@ -25,7 +36,7 @@ function admin() {
 
 interface QueueRow {
   id: string
-  status: 'submitted_pending_review' | 'approved'
+  status: 'submitted_pending_review' | 'approved' | 'paid'
   buyer_id: string
   buyer_name: string
   event_id: string | null
@@ -33,6 +44,13 @@ interface QueueRow {
   brand: string | null
   submitted_at: string | null
   approved_at: string | null
+  /** Payment audit fields. Populated when status='paid'; null
+   *  otherwise. paid_note is the free-text 'how it was paid'
+   *  string the accountant entered at mark-paid time. */
+  paid_at: string | null
+  paid_by_user_id: string | null
+  paid_by_name: string | null
+  paid_note: string | null
   age_days: number          // since submitted (or approved if no submit)
   total_expenses: number
   total_compensation: number
@@ -62,20 +80,62 @@ export async function GET(req: Request) {
     || !!caller?.is_partner
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  // Pull all reports in the two relevant statuses.
-  const { data: reports, error } = await sb
+  // ── Optional paid-lookback parsing ─────────────────────────
+  const url = new URL(req.url)
+  const includePaid = url.searchParams.get('include_paid') === 'true'
+  let paidLookbackDays = 90
+  const lookbackRaw = url.searchParams.get('paid_lookback_days')
+  if (lookbackRaw) {
+    const parsed = Number(lookbackRaw)
+    if (Number.isFinite(parsed) && parsed > 0) {
+      // Cap at one year — anything beyond that is more usefully
+      // served by the report-number search / export tooling.
+      paidLookbackDays = Math.min(parsed, 365)
+    }
+  }
+  const paidCutoff = new Date(Date.now() - paidLookbackDays * 24 * 60 * 60 * 1000).toISOString()
+
+  // ── Active reports (always returned) ───────────────────────
+  const { data: activeReports, error } = await sb
     .from('expense_reports')
     .select(`
       id, status, user_id, event_id,
-      submitted_at, approved_at,
+      submitted_at, approved_at, paid_at, paid_by, paid_note,
       total_expenses, total_compensation, bonus_amount, grand_total,
       report_number, exported_to_qb_at, exported_to_qb_format,
       user:users!user_id(name),
+      paid_by_user:users!paid_by(name),
       event:events(store_name, start_date, brand)
     `)
     .in('status', ['submitted_pending_review', 'approved'])
     .order('submitted_at', { ascending: true })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // ── Paid reports (opt-in via ?include_paid=true) ───────────
+  // Same shape as active so the response is uniform. Window-
+  // limited so the response stays small even on long-running
+  // installations.
+  let paidReports: any[] = []
+  if (includePaid) {
+    const { data, error: paidErr } = await sb
+      .from('expense_reports')
+      .select(`
+        id, status, user_id, event_id,
+        submitted_at, approved_at, paid_at, paid_by, paid_note,
+        total_expenses, total_compensation, bonus_amount, grand_total,
+        report_number, exported_to_qb_at, exported_to_qb_format,
+        user:users!user_id(name),
+        paid_by_user:users!paid_by(name),
+        event:events(store_name, start_date, brand)
+      `)
+      .eq('status', 'paid')
+      .gte('paid_at', paidCutoff)
+      .order('paid_at', { ascending: false })
+    if (paidErr) return NextResponse.json({ error: paidErr.message }, { status: 500 })
+    paidReports = data || []
+  }
+
+  const reports = [...(activeReports || []), ...paidReports]
 
   // Receipt counts per report — single roundtrip with .in().
   const ids = (reports || []).map(r => r.id)
@@ -94,7 +154,13 @@ export async function GET(req: Request) {
 
   const today = Date.now()
   const rows: QueueRow[] = (reports || []).map((r: any) => {
-    const stamp = r.submitted_at || r.approved_at
+    // For paid rows, age tracks days-since-paid so the UI can sort
+    // "most recently paid first" without a second pass. For active
+    // rows, it's days-since-submitted (the bucket the accountant
+    // cares about — how long has this been waiting).
+    const stamp = r.status === 'paid'
+      ? (r.paid_at || r.submitted_at || r.approved_at)
+      : (r.submitted_at || r.approved_at)
     const age = stamp ? Math.floor((today - new Date(stamp).getTime()) / 86400000) : 0
     const ev = r.event
     const evLabel = ev ? `${ev.store_name}${ev.start_date ? ' · ' + ev.start_date : ''}` : null
@@ -108,6 +174,10 @@ export async function GET(req: Request) {
       brand: ev?.brand ?? null,
       submitted_at: r.submitted_at,
       approved_at: r.approved_at,
+      paid_at: r.paid_at || null,
+      paid_by_user_id: r.paid_by || null,
+      paid_by_name: r.paid_by_user?.name || null,
+      paid_note: r.paid_note || null,
       age_days: age,
       total_expenses: Number(r.total_expenses) || 0,
       total_compensation: Number(r.total_compensation) || 0,
@@ -120,5 +190,5 @@ export async function GET(req: Request) {
     }
   })
 
-  return NextResponse.json({ rows })
+  return NextResponse.json({ rows, paid_lookback_days: includePaid ? paidLookbackDays : null })
 }
