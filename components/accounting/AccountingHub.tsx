@@ -24,7 +24,7 @@ import type { NavPage } from '@/app/page'
 
 interface QueueRow {
   id: string
-  status: 'submitted_pending_review' | 'approved' | 'paid'
+  status: 'submitted_pending_review' | 'approved' | 'partially_paid' | 'paid'
   buyer_id: string
   buyer_name: string
   event_id: string | null
@@ -32,9 +32,9 @@ interface QueueRow {
   brand: string | null
   submitted_at: string | null
   approved_at: string | null
-  /** Payment audit fields. Populated when status='paid'. paid_note
-   *  is the free-text 'how it was paid' string the accountant
-   *  captured at mark-paid time (Check #1234, Wire 5/14, etc.). */
+  /** Payment audit fields. Mirror the most-recent payment on the
+   *  underlying ledger (expense_report_payments). paid_note is the
+   *  reference_note from that most-recent payment. */
   paid_at?: string | null
   paid_by_user_id?: string | null
   paid_by_name?: string | null
@@ -44,6 +44,9 @@ interface QueueRow {
   total_compensation: number
   total_bonus: number
   grand_total: number
+  /** Sum of recorded payments. 0 on approved, partial on
+   *  partially_paid, == grand_total on paid. */
+  amount_paid?: number
   receipt_count: number
   /** Audit fields from the QuickBooks export feature. The detail
    *  panel surfaces these as the "Exported ✓" pill + a re-export
@@ -56,7 +59,19 @@ interface QueueRow {
 // 'paid' shows only paid reports in the lookback window.
 // 'all_incl_paid' shows active + paid (lookback'd). The default
 // 'all' keeps the historical behavior — active only, no payload bloat.
-type StatusFilter = 'all' | 'submitted_pending_review' | 'approved' | 'paid' | 'all_incl_paid'
+type StatusFilter = 'all' | 'submitted_pending_review' | 'approved' | 'partially_paid' | 'paid' | 'all_incl_paid'
+
+interface PaymentRow {
+  id: string
+  expense_report_id: string
+  amount: number
+  paid_at: string
+  payment_method: string
+  reference_note: string | null
+  paid_by_user_id: string | null
+  paid_by_name: string | null
+  created_at: string
+}
 type AgeFilter    = 'all' | 'overdue' | 'recent'
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -122,15 +137,75 @@ export default function AccountingHub({ setNav }: Props) {
   // Single-row action busy state
   const [busyId, setBusyId] = useState<string | null>(null)
 
-  // Mark-Paid modal state. Used for both single-row and bulk paths
-  // so the note prompt is consistent. mode='single' fires the
-  // /mark-paid endpoint with the report id; mode='bulk' fires the
-  // /accounting-hub/bulk-paid endpoint with every picked id.
+  // Add-Payment modal state. Used for both single-row and bulk
+  // paths so the inputs (amount, method, reference note) are
+  // consistent. mode='single' fires /api/expense-reports/[id]/payments
+  // with the operator-entered amount (defaults to remaining balance);
+  // mode='bulk' fires /api/accounting-hub/bulk-paid which records a
+  // full-balance payment per report.
   const [payModal, setPayModal] = useState<{
     mode: 'single' | 'bulk'
     ids: string[]
     label: string
+    /** Outstanding balance to pre-fill the amount input. Single-mode
+     *  only — bulk pays each report's remaining balance per server. */
+    remaining?: number
   } | null>(null)
+
+  // Payment-method dropdown options. Loaded once on mount; refresh
+  // happens when the operator picks "Add New" and the API confirms
+  // the new label was appended.
+  const [paymentMethods, setPaymentMethods] = useState<string[]>(['check', 'zelle', 'wire', 'ach'])
+  useEffect(() => {
+    if (!isAllowed) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const r = await fetch('/api/expense-payment-methods', { headers: await authHeaders() })
+        const j = await r.json().catch(() => ({}))
+        if (!cancelled && r.ok && Array.isArray(j.methods)) setPaymentMethods(j.methods)
+      } catch { /* keep defaults */ }
+    })()
+    return () => { cancelled = true }
+  }, [isAllowed])
+
+  // Per-report payment ledger. Lazy-loaded on detail-panel open;
+  // cached so a re-open doesn't re-fetch unless we know the report
+  // changed.
+  const [paymentsByReport, setPaymentsByReport] = useState<Record<string, PaymentRow[]>>({})
+  const [paymentsLoading, setPaymentsLoading] = useState<string | null>(null)
+  async function loadPayments(reportId: string) {
+    setPaymentsLoading(reportId)
+    try {
+      const r = await fetch(`/api/expense-reports/${reportId}/payments`, { headers: await authHeaders() })
+      const j = await r.json().catch(() => ({}))
+      if (r.ok && Array.isArray(j.payments)) {
+        setPaymentsByReport(prev => ({ ...prev, [reportId]: j.payments as PaymentRow[] }))
+      }
+    } finally {
+      setPaymentsLoading(null)
+    }
+  }
+  async function undoPayment(reportId: string, paymentId: string) {
+    if (!confirm('Undo this payment? The report\'s status will recalculate based on the remaining payments.')) return
+    setBusyId(reportId)
+    try {
+      const r = await fetch(`/api/expense-reports/${reportId}/payments/${paymentId}`, {
+        method: 'DELETE',
+        headers: await authHeaders(),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        alert(`Undo failed: ${j.error || r.statusText}`)
+        return
+      }
+      // Refresh both the ledger + the queue (status may have flipped).
+      await loadPayments(reportId)
+      setRefreshTick(t => t + 1)
+    } finally {
+      setBusyId(null)
+    }
+  }
 
   useEffect(() => {
     if (!isAllowed) return
@@ -177,6 +252,7 @@ export default function AccountingHub({ setNav }: Props) {
       if (statusFilter === 'paid' && r.status !== 'paid') return false
       if (statusFilter === 'submitted_pending_review' && r.status !== 'submitted_pending_review') return false
       if (statusFilter === 'approved' && r.status !== 'approved') return false
+      if (statusFilter === 'partially_paid' && r.status !== 'partially_paid') return false
       // 'all_incl_paid' is no-op — all statuses pass
       // No brand filter — server scoped the response by brand already.
       if (ageFilter === 'overdue' && r.age_days < 7) return false
@@ -194,11 +270,16 @@ export default function AccountingHub({ setNav }: Props) {
       .sort((a, b) => b.age_days - a.age_days)
     const approved  = filtered.filter(r => r.status === 'approved')
       .sort((a, b) => b.age_days - a.age_days)
+    // Partially-paid lands in its own group between Awaiting
+    // Payment and Paid. Sort by age_days desc so the oldest
+    // outstanding balance floats to the top.
+    const partial = filtered.filter(r => r.status === 'partially_paid')
+      .sort((a, b) => b.age_days - a.age_days)
     // Paid rows: newest payment first (age_days for paid rows is
     // days-since-paid, so ascending is "most recently paid first").
     const paid = filtered.filter(r => r.status === 'paid')
       .sort((a, b) => a.age_days - b.age_days)
-    return { submitted, approved, paid }
+    return { submitted, approved, partial, paid }
   }, [filtered])
 
   // Header KPIs deliberately IGNORE status / age / search filters
@@ -210,12 +291,21 @@ export default function AccountingHub({ setNav }: Props) {
   const kpis = useMemo(() => {
     const all = rows || []
     const submitted = all.filter(r => r.status === 'submitted_pending_review')
-    const approved  = all.filter(r => r.status === 'approved')
+    // 'Awaiting payment' rolls up BOTH fully-approved and
+    // partially-paid reports. The $ value sums REMAINING balance
+    // for partials (since the already-paid portion isn't a
+    // liability anymore) and full grand_total for approved.
+    const pending = all.filter(r => r.status === 'approved' || r.status === 'partially_paid')
+    const pendingSum = pending.reduce((s, r) => {
+      const paid = Number(r.amount_paid || 0)
+      const remaining = Math.max(0, r.grand_total - paid)
+      return s + remaining
+    }, 0)
     return {
       reviewCount: submitted.length,
       reviewSum:   submitted.reduce((s, r) => s + r.grand_total, 0),
-      payCount:    approved.length,
-      paySum:      approved.reduce((s, r) => s + r.grand_total, 0),
+      payCount:    pending.length,
+      paySum:      pendingSum,
       overdueCount: all.filter(r => r.age_days >= 7 && r.status !== 'paid').length,
     }
   }, [rows])
@@ -224,6 +314,18 @@ export default function AccountingHub({ setNav }: Props) {
     () => rows?.find(r => r.id === activeId) || null,
     [rows, activeId],
   )
+
+  // Lazy-load the payment ledger whenever the selected report
+  // changes. We only fetch when the report could plausibly have
+  // payments (approved already had a partial recorded → status
+  // would be partially_paid; paid reports always have ≥1).
+  useEffect(() => {
+    if (!active) return
+    if (active.status === 'partially_paid' || active.status === 'paid') {
+      if (!paymentsByReport[active.id]) loadPayments(active.id)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?.id, active?.status])
 
   const togglePicked = (id: string) => {
     setPicked(prev => {
@@ -264,18 +366,24 @@ export default function AccountingHub({ setNav }: Props) {
     }
   }
 
-  // Opens the Mark-Paid modal for one row. The actual API call
-  // happens in confirmPayModal once the operator enters the note
-  // (or skips it).
-  function openMarkPaidOne(row: QueueRow) {
+  // Opens the Add Payment modal for one row. Pre-fills the amount
+  // with the report's remaining balance (grand_total minus any
+  // payments already on file). Operator can override the amount
+  // for a partial payment.
+  function openAddPaymentOne(row: QueueRow) {
+    const paidSoFar = Number(row.amount_paid || 0)
+    const remaining = Math.max(0, row.grand_total - paidSoFar)
     setPayModal({
       mode: 'single',
       ids: [row.id],
       label: `${row.buyer_name}${row.event_label ? ' · ' + row.event_label : ''}`,
+      remaining,
     })
   }
 
-  // Bulk version — same modal, multiple ids.
+  // Bulk version — same modal, multiple ids. Server pays each
+  // report's remaining balance in full; the operator's amount
+  // input is ignored in bulk mode (we hide it client-side too).
   function openBulkPay() {
     const ids = pickedApproved.map(r => r.id)
     if (ids.length === 0) { alert('Pick at least one Approved report.'); return }
@@ -286,24 +394,48 @@ export default function AccountingHub({ setNav }: Props) {
     })
   }
 
-  // Modal Save handler — fires the right endpoint per mode.
-  async function confirmPayModal(paidNote: string) {
+  // Modal Save handler — accepts the full payment payload now.
+  async function confirmPayModal(payload: {
+    amount: number
+    paymentMethod: string
+    referenceNote: string
+    addMethodToSettings: boolean
+  }) {
     if (!payModal) return
-    const note = paidNote.trim()
     if (payModal.mode === 'single') {
       const rowId = payModal.ids[0]
       setBusyId(rowId); setPayModal(null)
       try {
-        const r = await fetch(`/api/expense-reports/${rowId}/mark-paid`, {
+        const r = await fetch(`/api/expense-reports/${rowId}/payments`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
-          body: JSON.stringify(note ? { paid_note: note } : {}),
+          body: JSON.stringify({
+            amount: payload.amount,
+            payment_method: payload.paymentMethod,
+            reference_note: payload.referenceNote.trim() || undefined,
+            add_method_to_settings: payload.addMethodToSettings || undefined,
+          }),
         })
         if (!r.ok) {
           const j = await r.json().catch(() => ({}))
-          alert(`Mark Paid failed: ${j.error || r.statusText}`)
+          alert(`Add Payment failed: ${j.error || r.statusText}`)
           return
         }
+        // Refresh the method list if we just appended a new one.
+        if (payload.addMethodToSettings) {
+          try {
+            const mr = await fetch('/api/expense-payment-methods', { headers: await authHeaders() })
+            const mj = await mr.json().catch(() => ({}))
+            if (mr.ok && Array.isArray(mj.methods)) setPaymentMethods(mj.methods)
+          } catch { /* noop */ }
+        }
+        // Drop the cached ledger so the detail panel refetches
+        // when the operator re-opens.
+        setPaymentsByReport(prev => {
+          const next = { ...prev }
+          delete next[rowId]
+          return next
+        })
         setRefreshTick(t => t + 1)
       } finally {
         setBusyId(null)
@@ -317,13 +449,20 @@ export default function AccountingHub({ setNav }: Props) {
           body: JSON.stringify({
             ids: payModal.ids,
             notify: notifyOnPay,
-            ...(note ? { paid_note: note } : {}),
+            payment_method: payload.paymentMethod,
+            ...(payload.referenceNote.trim() ? { paid_note: payload.referenceNote.trim() } : {}),
           }),
         })
         const j = await r.json()
         if (!r.ok) { alert(`Failed: ${j.error || r.statusText}`); return }
         setPayResult({ paid: j.paid || 0, emails: j.emails_sent || 0, failed: j.emails_failed || 0 })
         setPicked(new Set())
+        // Clear ledger cache for all bulk-paid reports.
+        setPaymentsByReport(prev => {
+          const next = { ...prev }
+          for (const id of payModal.ids) delete next[id]
+          return next
+        })
         setRefreshTick(t => t + 1)
       } finally {
         setPaying(false)
@@ -424,6 +563,7 @@ export default function AccountingHub({ setNav }: Props) {
             <option value="all">Active (default)</option>
             <option value="submitted_pending_review">Awaiting review</option>
             <option value="approved">Awaiting payment</option>
+            <option value="partially_paid">Partially paid</option>
             <option value="paid">Paid (last 90 days)</option>
             <option value="all_incl_paid">All (incl. paid)</option>
           </select>
@@ -503,6 +643,19 @@ export default function AccountingHub({ setNav }: Props) {
                 picked={picked}
                 onTogglePick={togglePicked}
               />
+              {/* Partially-paid group — a payment was recorded but the
+                  balance isn't fully settled yet. Operator can pay
+                  the remaining balance via the Add Payment modal in
+                  the detail panel. */}
+              <QueueGroup
+                title={`◐ Partially paid (${groupedFiltered.partial.length})`}
+                rows={groupedFiltered.partial}
+                showBulkSelect={false}
+                activeId={activeId}
+                onSelect={setActiveId}
+                picked={picked}
+                onTogglePick={togglePicked}
+              />
               {/* Paid group — rendered when the operator opted in via
                   the status filter ('paid' or 'all_incl_paid'). Sorted
                   most-recently-paid first. */}
@@ -536,7 +689,9 @@ export default function AccountingHub({ setNav }: Props) {
                       ? 'Awaiting review'
                       : active.status === 'approved'
                         ? 'Awaiting payment'
-                        : 'Paid'}
+                        : active.status === 'partially_paid'
+                          ? 'Partially paid'
+                          : 'Paid'}
                   </div>
                   <div style={{ fontSize: 17, fontWeight: 900, marginTop: 2 }}>{active.buyer_name}</div>
                   <div style={{ fontSize: 13, color: 'var(--ash)', marginTop: 2 }}>{active.event_label || '(no event)'}</div>
@@ -555,33 +710,76 @@ export default function AccountingHub({ setNav }: Props) {
                 )}
               </div>
 
-              {/* Payment audit panel — only for paid reports. Shows
-                  WHO paid + WHEN + the free-text 'how it was paid'
-                  note (if any). */}
-              {active.status === 'paid' && (
-                <div style={{
-                  background: '#F0FDF4', border: '1px solid #BBF7D0',
-                  borderRadius: 8, padding: '10px 12px', marginBottom: 12,
-                }}>
-                  <div style={{ fontSize: 11, color: '#166534', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 4 }}>
-                    ✓ Payment recorded
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--ink)' }}>
-                    {active.paid_by_name && <>By <b>{active.paid_by_name}</b> · </>}
-                    {active.paid_at && new Date(active.paid_at).toLocaleDateString()}
-                  </div>
-                  {active.paid_note && (
-                    <div style={{
-                      marginTop: 6, padding: '6px 8px',
-                      background: '#fff', border: '1px solid #BBF7D0', borderRadius: 6,
-                      fontSize: 12, color: 'var(--ink)',
-                      whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                    }}>
-                      {active.paid_note}
+              {/* Payment ledger — renders for partially_paid AND
+                  paid reports. One row per recorded payment, newest
+                  first, with an Undo button. */}
+              {(active.status === 'partially_paid' || active.status === 'paid') && (() => {
+                const ledger = paymentsByReport[active.id]
+                const loading = paymentsLoading === active.id
+                const paidTotal = Number(active.amount_paid || 0)
+                const remaining = Math.max(0, active.grand_total - paidTotal)
+                return (
+                  <div style={{
+                    background: '#F0FDF4', border: '1px solid #BBF7D0',
+                    borderRadius: 8, padding: '10px 12px', marginBottom: 12,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <div style={{ fontSize: 11, color: '#166534', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                        Payment ledger
+                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#166534' }}>
+                        Paid {fmtMoney(paidTotal, { cents: true })}
+                        {remaining > 0 && <> · {fmtMoney(remaining, { cents: true })} remaining</>}
+                      </div>
                     </div>
-                  )}
-                </div>
-              )}
+                    {loading && !ledger ? (
+                      <div style={{ fontSize: 12, color: 'var(--mist)' }}>Loading…</div>
+                    ) : !ledger || ledger.length === 0 ? (
+                      <div style={{ fontSize: 12, color: 'var(--mist)', fontStyle: 'italic' }}>No payments on file yet.</div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {ledger.map(p => (
+                          <div key={p.id} style={{
+                            display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+                            gap: 8, padding: '6px 8px',
+                            background: '#fff', border: '1px solid #BBF7D0', borderRadius: 6,
+                            fontSize: 12,
+                          }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontWeight: 800, color: 'var(--ink)' }}>
+                                {fmtMoney(p.amount, { cents: true })}
+                                <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--mist)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                                  {p.payment_method}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 1 }}>
+                                {new Date(p.paid_at).toLocaleDateString()}
+                                {p.paid_by_name && <> · {p.paid_by_name}</>}
+                              </div>
+                              {p.reference_note && (
+                                <div style={{ fontSize: 11, color: 'var(--ink)', marginTop: 3, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                  {p.reference_note}
+                                </div>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => undoPayment(active.id, p.id)}
+                              disabled={busyId === active.id}
+                              title="Undo this payment — soft-deletes it and recalculates the report's status"
+                              style={{
+                                background: 'transparent', border: '1px solid var(--pearl)',
+                                borderRadius: 6, padding: '2px 8px', cursor: 'pointer',
+                                fontSize: 11, color: 'var(--mist)', fontFamily: 'inherit',
+                                flexShrink: 0,
+                              }}
+                            >↺ Undo</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginTop: 12, marginBottom: 14 }}>
                 <DetailRow label="Expenses" value={fmtMoney(active.total_expenses, { cents: true })} />
@@ -605,24 +803,26 @@ export default function AccountingHub({ setNav }: Props) {
                     {busyId === active.id ? 'Approving…' : '✓ Approve'}
                   </button>
                 )}
-                {active.status === 'approved' && (
+                {/* Add Payment — covers BOTH 'approved' (first
+                    payment) and 'partially_paid' (pay remaining
+                    balance, or another partial). The modal pre-fills
+                    the amount to the remaining balance; operator can
+                    override for a partial. */}
+                {(active.status === 'approved' || active.status === 'partially_paid') && (
                   <button
-                    onClick={() => openMarkPaidOne(active)}
+                    onClick={() => openAddPaymentOne(active)}
                     disabled={busyId === active.id}
                     className="btn-primary"
                   >
-                    {busyId === active.id ? 'Marking…' : '💰 Mark Paid…'}
+                    {busyId === active.id
+                      ? 'Saving…'
+                      : active.status === 'partially_paid'
+                        ? '💰 Add Payment…'
+                        : '💰 Record Payment…'}
                   </button>
                 )}
-                {active.status === 'paid' && (
-                  <button
-                    onClick={() => unmarkPaid(active.id)}
-                    disabled={busyId === active.id}
-                    className="btn-outline"
-                  >
-                    {busyId === active.id ? 'Unmarking…' : '↺ Unmark Paid'}
-                  </button>
-                )}
+                {/* No top-level Unmark Paid button anymore — operators
+                    use the per-payment Undo in the ledger above. */}
                 <button onClick={() => openFullDetail(active.id)} className="btn-outline">
                   Open full report →
                 </button>
@@ -649,12 +849,16 @@ export default function AccountingHub({ setNav }: Props) {
         </div>
       </div>
 
-      {/* Mark-Paid modal — captures the optional 'how was it paid'
-          note for single + bulk paths. */}
+      {/* Add Payment modal — full payment OR partial. Single path
+          uses /api/expense-reports/[id]/payments; bulk path uses
+          /api/accounting-hub/bulk-paid (which records a full-balance
+          payment per report). */}
       {payModal && (
-        <MarkPaidModal
+        <AddPaymentModal
           mode={payModal.mode}
           label={payModal.label}
+          remaining={payModal.remaining}
+          methods={paymentMethods}
           notifyOnPay={notifyOnPay}
           onNotifyChange={setNotifyOnPay}
           onCancel={() => setPayModal(null)}
@@ -666,24 +870,45 @@ export default function AccountingHub({ setNav }: Props) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Mark-Paid modal
+// Add Payment modal
 // ─────────────────────────────────────────────────────────────
-// Optional free-text note about HOW the report was paid. Same
-// modal serves the single-row and bulk paths. The bulk path also
-// shows the "email submitters" checkbox so it can be toggled at
-// the same moment.
+// Single-mode: amount input pre-fills with remaining balance.
+// Operator can drop it to record a partial. Method dropdown reads
+// from settings.expense_payment_methods + has a "+ Add New" option
+// that prompts inline for a custom label and (on save) appends it
+// to the settings list so the dropdown remembers next time.
+//
+// Bulk-mode: amount input is hidden — the server pays each
+// selected report's full remaining balance using the shared
+// method + reference note.
 
-interface MarkPaidModalProps {
+interface AddPaymentModalProps {
   mode: 'single' | 'bulk'
   label: string
+  remaining?: number
+  methods: string[]
   notifyOnPay: boolean
   onNotifyChange: (v: boolean) => void
   onCancel: () => void
-  onSave: (note: string) => void
+  onSave: (payload: {
+    amount: number
+    paymentMethod: string
+    referenceNote: string
+    addMethodToSettings: boolean
+  }) => void
 }
 
-function MarkPaidModal({ mode, label, notifyOnPay, onNotifyChange, onCancel, onSave }: MarkPaidModalProps) {
+function AddPaymentModal({ mode, label, remaining, methods, notifyOnPay, onNotifyChange, onCancel, onSave }: AddPaymentModalProps) {
+  // Default values: amount = remaining balance (single only);
+  // method = first option ('check' on a fresh install).
+  const [amountInput, setAmountInput] = useState<string>(
+    mode === 'single' && remaining != null ? remaining.toFixed(2) : ''
+  )
+  const [methodChoice, setMethodChoice] = useState<string>(methods[0] || 'check')
+  // 'add_new' is the sentinel value for the inline "+ Add New" option.
+  const [customMethod, setCustomMethod] = useState<string>('')
   const [note, setNote] = useState('')
+  const [error, setError] = useState<string | null>(null)
 
   // ESC dismiss for parity with the FullscreenWorkspace convention.
   useEffect(() => {
@@ -693,6 +918,42 @@ function MarkPaidModal({ mode, label, notifyOnPay, onNotifyChange, onCancel, onS
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [onCancel])
+
+  function titleCase(s: string): string {
+    return s.replace(/\b\w/g, ch => ch.toUpperCase())
+  }
+
+  function handleSave() {
+    let amount: number
+    if (mode === 'single') {
+      const parsed = Number(amountInput)
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        setError('Amount must be a positive number.')
+        return
+      }
+      amount = Math.round(parsed * 100) / 100
+    } else {
+      // Bulk — server uses per-report remaining balance. Send a
+      // placeholder amount; the server route ignores it.
+      amount = 0
+    }
+    const isCustom = methodChoice === 'add_new'
+    const finalMethod = (isCustom ? customMethod : methodChoice).toLowerCase().trim()
+    if (!finalMethod) {
+      setError('Pick a payment method (or add one via "+ Add New").')
+      return
+    }
+    if (finalMethod.length > 50) {
+      setError('Payment method label is too long.')
+      return
+    }
+    onSave({
+      amount,
+      paymentMethod: finalMethod,
+      referenceNote: note,
+      addMethodToSettings: isCustom,
+    })
+  }
 
   return (
     <div
@@ -708,30 +969,109 @@ function MarkPaidModal({ mode, label, notifyOnPay, onNotifyChange, onCancel, onS
         onClick={e => e.stopPropagation()}
         style={{
           background: '#fff', borderRadius: 12, padding: 20,
-          width: '100%', maxWidth: 480,
+          width: '100%', maxWidth: 520,
           boxShadow: '0 12px 40px rgba(0,0,0,.25)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <h3 style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>💰 Mark Paid</h3>
+          <h3 style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>💰 {mode === 'bulk' ? 'Mark Paid in Bulk' : 'Add Payment'}</h3>
           <button onClick={onCancel} aria-label="Close" style={{
             background: 'transparent', border: 'none', cursor: 'pointer',
             fontSize: 22, color: 'var(--mist)', lineHeight: 1,
           }}>×</button>
         </div>
         <div style={{ fontSize: 13, color: 'var(--ash)', marginBottom: 14 }}>
-          {mode === 'single' ? <>Marking <b>{label}</b> as paid.</> : <>Marking <b>{label}</b> as paid.</>}
+          {mode === 'single'
+            ? <>Recording a payment on <b>{label}</b>.</>
+            : <>Marking <b>{label}</b> as paid in full.</>}
         </div>
 
+        {/* Amount — single-mode only. Hidden for bulk because the
+            server uses each report's individual remaining balance. */}
+        {mode === 'single' && (
+          <label style={{ display: 'block', marginBottom: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                Amount
+              </span>
+              {remaining != null && (
+                <button
+                  type="button"
+                  onClick={() => setAmountInput(remaining.toFixed(2))}
+                  style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    fontSize: 11, color: 'var(--green-dark)', fontWeight: 700,
+                    fontFamily: 'inherit', padding: 0,
+                  }}
+                >Remaining balance: ${remaining.toFixed(2)}</button>
+              )}
+            </div>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={amountInput}
+              onChange={e => setAmountInput(e.target.value)}
+              style={{
+                width: '100%', padding: '8px 10px', fontSize: 14,
+                fontFamily: 'inherit',
+                border: '1px solid var(--pearl)', borderRadius: 6, background: '#fff',
+              }}
+              autoFocus
+            />
+            <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
+              Enter less than the remaining balance to record a partial payment.
+              Status flips to <b>partially paid</b> until the balance is settled.
+            </div>
+          </label>
+        )}
+
+        {/* Payment method dropdown */}
         <label style={{ display: 'block', marginBottom: 12 }}>
           <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 4 }}>
-            How was it paid? <span style={{ fontWeight: 600, color: 'var(--mist)', textTransform: 'none' }}>(optional)</span>
+            Payment method
+          </div>
+          <select
+            value={methodChoice}
+            onChange={e => setMethodChoice(e.target.value)}
+            style={{
+              width: '100%', padding: '8px 10px', fontSize: 14,
+              fontFamily: 'inherit',
+              border: '1px solid var(--pearl)', borderRadius: 6, background: '#fff',
+            }}
+          >
+            {methods.map(m => (
+              <option key={m} value={m}>{titleCase(m)}</option>
+            ))}
+            <option value="add_new">+ Add New…</option>
+          </select>
+          {methodChoice === 'add_new' && (
+            <input
+              type="text"
+              value={customMethod}
+              onChange={e => setCustomMethod(e.target.value)}
+              placeholder="e.g. Cash · Venmo · Apple Pay"
+              maxLength={50}
+              style={{
+                marginTop: 8,
+                width: '100%', padding: '8px 10px', fontSize: 14,
+                fontFamily: 'inherit',
+                border: '1px solid var(--pearl)', borderRadius: 6, background: '#fff',
+              }}
+            />
+          )}
+        </label>
+
+        {/* Reference note */}
+        <label style={{ display: 'block', marginBottom: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 4 }}>
+            Reference note <span style={{ fontWeight: 600, color: 'var(--mist)', textTransform: 'none' }}>(optional)</span>
           </div>
           <textarea
             value={note}
             onChange={e => setNote(e.target.value)}
-            placeholder="e.g. Check #1234 · Wire 5/14 · Zelle to 330-555-0101 · ACH batch 2026-05-14"
-            rows={3}
+            placeholder="e.g. Check #1234 · Wire confirmation 5/14 · Zelle to 330-555-0101"
+            rows={2}
             maxLength={500}
             style={{
               width: '100%', padding: '8px 10px', fontSize: 13,
@@ -739,13 +1079,7 @@ function MarkPaidModal({ mode, label, notifyOnPay, onNotifyChange, onCancel, onS
               border: '1px solid var(--pearl)', borderRadius: 6, background: '#fff',
               resize: 'vertical',
             }}
-            autoFocus
           />
-          <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
-            {mode === 'bulk'
-              ? <>Applied to all selected reports. Per-report notes can still be edited individually after.</>
-              : <>Visible on the report's detail panel + payment audit trail.</>}
-          </div>
         </label>
 
         {mode === 'bulk' && (
@@ -758,10 +1092,17 @@ function MarkPaidModal({ mode, label, notifyOnPay, onNotifyChange, onCancel, onS
           </div>
         )}
 
+        {error && (
+          <div style={{
+            padding: '8px 10px', marginBottom: 12, borderRadius: 6,
+            background: '#FEE2E2', color: '#991B1B', fontSize: 12, fontWeight: 700,
+          }}>{error}</div>
+        )}
+
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={onCancel} className="btn-outline btn-sm">Cancel</button>
-          <button onClick={() => onSave(note)} className="btn-primary btn-sm">
-            💰 Mark Paid
+          <button onClick={handleSave} className="btn-primary btn-sm">
+            💰 {mode === 'bulk' ? 'Mark Paid' : 'Save Payment'}
           </button>
         </div>
       </div>
@@ -850,10 +1191,25 @@ function QueueGroup({ title, rows, showBulkSelect, allChecked, onToggleAll, acti
                   {/* No brand suffix — the whole view is one brand
                       now (server-scoped via the global brand picker). */}
                   {r.event_label || '—'}
+                  {/* Partial-payment progress subtitle. Only renders
+                      when status='partially_paid' so the operator
+                      sees "Paid $X of $Y" at a glance. */}
+                  {r.status === 'partially_paid' && r.amount_paid != null && (
+                    <span style={{ color: '#92400E', marginLeft: 6, fontWeight: 700 }}>
+                      · Paid {fmtMoney(r.amount_paid, { cents: false })} of {fmtMoney(r.grand_total, { cents: false })}
+                    </span>
+                  )}
                 </div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink)' }}>{fmtMoney(r.grand_total, { cents: false })}</div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink)' }}>
+                  {/* Show REMAINING balance on partially-paid rows so
+                      the right column communicates "what's still
+                      owed" — that's what the operator is acting on. */}
+                  {r.status === 'partially_paid' && r.amount_paid != null
+                    ? fmtMoney(Math.max(0, r.grand_total - r.amount_paid), { cents: false })
+                    : fmtMoney(r.grand_total, { cents: false })}
+                </div>
                 <div style={{ marginTop: 2 }}>
                   <span style={ageBadgeStyle(ag)}>{ag.label}</span>
                 </div>

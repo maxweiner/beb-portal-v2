@@ -1,15 +1,20 @@
 // POST /api/expense-reports/[id]/mark-paid
 //
-// Body (optional): { paid_note?: string }
+// Body (optional): {
+//   paid_note?:      string,
+//   payment_method?: string,   // 'check' (default) / 'zelle' / 'wire' / 'ach' / custom
+// }
 //
-// Transitions an approved report to paid. Per spec: "approved → partner
-// or user marks 'Paid' → paid". Allows the report owner, a partner, or
-// an accounting user (AP records the payment).
+// Marks a report as paid IN FULL. Internally this writes a single
+// expense_report_payments row for the report's grand_total; the
+// recompute trigger flips status='paid' + populates paid_at / paid_by
+// / paid_note + amount_paid_cached.
 //
-// paid_note is a free-text 'how was it paid' annotation
-// ("Check #1234", "Wire 5/14", "Zelle to 330-555-0101", etc.) that
-// surfaces on the Accounting Hub detail panel for paid reports. It is
-// stored verbatim — no parsing. Cleared on unmark-paid.
+// Kept as a back-compat shim around the partial-payments work so
+// older callers (the Hub's bulk-paid + single-row "Mark Paid"
+// button when not using the modal) keep working unchanged.
+//
+// For partial payments use POST /api/expense-reports/[id]/payments.
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -35,7 +40,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const sb = admin()
   const { data: report, error: rErr } = await sb
-    .from('expense_reports').select('id, user_id, status').eq('id', params.id).maybeSingle()
+    .from('expense_reports').select('id, user_id, status, grand_total, amount_paid_cached').eq('id', params.id).maybeSingle()
   if (rErr) return NextResponse.json({ error: rErr.message }, { status: 500 })
   if (!report) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -51,33 +56,52 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       { status: 403 },
     )
   }
-  if (report.status !== 'approved') {
+  // Allow mark-paid from approved OR partially_paid. The latter
+  // is the "pay off the remaining balance" case.
+  if (report.status !== 'approved' && report.status !== 'partially_paid') {
     return NextResponse.json(
-      { error: `Report is ${report.status}, not approved` },
+      { error: `Report is ${report.status}, not approved or partially paid` },
       { status: 409 },
     )
   }
 
-  // Optional paid_note from the body. Trim + clamp to a reasonable
-  // length so an over-eager paste can't bloat the row.
+  // Optional paid_note + payment_method from the body.
   let paidNote: string | null = null
+  let paymentMethod = 'check'  // sensible default for the legacy callers
   try {
     const body = await req.json().catch(() => ({}))
     if (typeof body?.paid_note === 'string') {
       const trimmed = body.paid_note.trim().slice(0, 500)
       paidNote = trimmed.length > 0 ? trimmed : null
     }
-  } catch { /* empty body is fine — paid_note stays null */ }
+    if (typeof body?.payment_method === 'string') {
+      const m = body.payment_method.toLowerCase().trim()
+      if (m.length > 0 && m.length <= 50) paymentMethod = m
+    }
+  } catch { /* empty body is fine */ }
 
-  const { error: upErr } = await sb.from('expense_reports')
-    .update({
-      status: 'paid',
-      paid_at: new Date().toISOString(),
+  // Write a single payment row for whatever's still owed. The
+  // trigger on expense_report_payments handles the status flip
+  // and amount_paid_cached recompute — no manual updates here.
+  const remaining = Math.max(
+    0,
+    Number(report.grand_total || 0) - Number((report as any).amount_paid_cached || 0),
+  )
+  if (remaining <= 0) {
+    // Already fully paid via partial payments. Just flip status.
+    return NextResponse.json({ ok: true, paid: true, already_settled: true })
+  }
+
+  const { error: insErr } = await sb
+    .from('expense_report_payments')
+    .insert({
+      expense_report_id: params.id,
+      amount: Math.round(remaining * 100) / 100,
+      payment_method: paymentMethod,
+      reference_note: paidNote,
       paid_by: me.id,
-      paid_note: paidNote,
     })
-    .eq('id', params.id)
-  if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 })
+  if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 })
 
-  return NextResponse.json({ ok: true, paid: true, paid_note: paidNote })
+  return NextResponse.json({ ok: true, paid: true, paid_note: paidNote, payment_method: paymentMethod })
 }
