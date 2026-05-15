@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { eventDisplayName } from '@/lib/eventName'
 import type { Event } from '@/types'
 import RecordChat from '@/components/chat/RecordChat'
+import NearbyAirports from './NearbyAirports'
 
 interface TravelFolder { id: string; event_id: string; name: string; sort_order: number }
 interface TravelItem { id: string; folder_id: string; event_id: string; type: 'note' | 'image'; content: string; image_url: string; file_name: string }
@@ -290,6 +291,20 @@ export default function Travel() {
 
             {tab === 'reservations' && <ReservationsView ev={selectedEvent} user={user} />}
             {tab === 'folders' && <FoldersView ev={selectedEvent} user={user} />}
+
+            {/* Nearby airports — bottom-of-page list of AA/DL/UA/JSX
+                airports within 100mi of the event's store. Origin
+                comes from stores.lat / stores.lng (populated via
+                Google Places when the store is saved). Renders an
+                explainer hint when the store hasn't been geocoded
+                yet. */}
+            {(() => {
+              const store = stores.find(s => s.id === selectedEvent.store_id)
+              const lat = (store as any)?.lat ?? null
+              const lng = (store as any)?.lng ?? null
+              const label = store ? [store.city, (store as any).state].filter(Boolean).join(', ') : null
+              return <NearbyAirports originLat={lat} originLng={lng} originLabel={label} />
+            })()}
           </div>
         ) : selectedTradeShow ? (
           <div style={{ padding: 24, maxWidth: 900, margin: '0 auto' }}>
