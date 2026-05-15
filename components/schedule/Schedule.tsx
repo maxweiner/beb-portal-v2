@@ -728,7 +728,7 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
                       return (
                         <div key={`bar-ev-${idx}`} style={{
                           gridColumn: `${s.startCol + 1} / span ${s.span}`,
-                          gridRow: trackRow, padding: '0 2px', zIndex: 1, position: 'relative',
+                          gridRow: trackRow, padding: '0 4px', zIndex: 1, position: 'relative',
                         }}>
                           <div
                             onClick={() => onSelect(ev)}
@@ -764,7 +764,7 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
                       return (
                         <div key={`bar-tr-${idx}`} style={{
                           gridColumn: `${s.startCol + 1} / span ${s.span}`,
-                          gridRow: trackRow, padding: '0 2px', zIndex: 1, position: 'relative',
+                          gridRow: trackRow, padding: '0 4px', zIndex: 1, position: 'relative',
                         }}>
                           <div
                             onClick={onOpenTradeShow ? (e) => { e.stopPropagation(); onOpenTradeShow(t.id) } : undefined}
@@ -799,7 +799,7 @@ function MonthView({ events, stores, users, vacations, currentUserId, onSelect, 
                     return (
                       <div key={`bar-ts-${idx}`} style={{
                         gridColumn: `${s.startCol + 1} / span ${s.span}`,
-                        gridRow: trackRow, padding: '0 2px', zIndex: 1, position: 'relative',
+                        gridRow: trackRow, padding: '0 4px', zIndex: 1, position: 'relative',
                       }}>
                         <div
                           onClick={onOpenTrunkShow ? (e) => { e.stopPropagation(); onOpenTrunkShow(t.id) } : undefined}
