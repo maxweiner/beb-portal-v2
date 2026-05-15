@@ -298,7 +298,11 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
     { id: 'trunk-show-stores', label: 'Trunk Show Stores',   icon: '🏬' },
     { id: 'leads',             label: 'Leads',               icon: '🎯' },
     { id: 'shipping',     label: 'Shipping',            icon: '📦' },
-    { id: 'wholesale',    label: 'Inventory',           icon: '💎' },
+    // Inventory / Wholesale is Liberty-only. BEB has no inventory
+    // module on its side, so the link is hidden when the active
+    // brand is BEB (mirrors the LIBERTY_NAV / BEB_NAV split on the
+    // desktop sidebar).
+    ...(isLiberty ? [{ id: 'wholesale' as NavPage, label: 'Inventory', icon: '💎' }] : []),
     { id: 'reports',      label: 'Reports',             icon: '📊' },
     { id: 'expenses',     label: 'Expenses',            icon: '🧾' },
     { id: 'financials',   label: 'Financials',          icon: '💼' },
