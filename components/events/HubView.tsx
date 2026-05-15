@@ -185,7 +185,31 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const [hidden, setHidden] = useState<Set<LauncherKey>>(initialHidden)
+  // Per-user launcher order. Lives in users.preferences.buying_events_hub_launcher_order
+  // as a string[] of LauncherKey values. Keys NOT in the saved order get
+  // appended in their default LAUNCHERS-array order so new launchers we add
+  // later still appear without the user having to re-customize.
+  const initialOrder = useMemo<LauncherKey[]>(() => {
+    const saved = (user?.preferences as any)?.buying_events_hub_launcher_order
+    const defaultOrder = LAUNCHERS.map(l => l.key)
+    if (!Array.isArray(saved)) return defaultOrder
+    const validSaved = saved.filter((k: string): k is LauncherKey =>
+      LAUNCHERS.some(l => l.key === k)
+    )
+    const seen = new Set(validSaved)
+    return [...validSaved, ...defaultOrder.filter(k => !seen.has(k))]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const [order, setOrder] = useState<LauncherKey[]>(initialOrder)
   const [saveError, setSaveError] = useState<string | null>(null)
+
+  // Authoritative LAUNCHERS list in the user's chosen order. Cards
+  // render in this order; the customize modal lists rows in this
+  // order too.
+  const orderedLaunchers = useMemo<LauncherDef[]>(() => {
+    const byKey = new Map(LAUNCHERS.map(l => [l.key, l]))
+    return order.map(k => byKey.get(k)!).filter(Boolean)
+  }, [order])
 
   // Fetch readiness data (mirrors PreEventTab).
   useEffect(() => {
@@ -306,6 +330,32 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
     void saveHidden(next)
   }
 
+  // Persist the user's preferred launcher order. Same pattern as
+  // saveHidden: optimistic local update, single users-row UPDATE
+  // through RLS (which checks auth.uid() against the row), no
+  // global reload() afterward.
+  async function saveOrder(nextOrder: LauncherKey[]) {
+    setOrder(nextOrder)
+    setSaveError(null)
+    if (!user?.id) return
+    const nextPrefs = { ...(user.preferences || {}), buying_events_hub_launcher_order: nextOrder }
+    const { error, data, status } = await supabase
+      .from('users')
+      .update({ preferences: nextPrefs })
+      .eq('id', user.id)
+      .select('preferences')
+    if (error) {
+      console.error('[HubView] save launcher order failed', { status, error })
+      setSaveError(error.message)
+      return
+    }
+    if (!data || data.length === 0) {
+      console.error('[HubView] save returned 0 rows — likely RLS rejection on users row', { userId: user.id })
+      setSaveError('Settings could not be saved (permission denied)')
+      return
+    }
+  }
+
   async function promoteEvent(ev: Event) {
     if (!confirm(`Promote ${eventDisplayName(ev, stores)} from Reserved → Booked?`)) return
     const { error } = await supabase.from('events').update({ status: 'scheduled' }).eq('id', ev.id)
@@ -423,6 +473,7 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
             isAdmin={isAdmin}
             canCancel={canCancel}
             hidden={hidden}
+            orderedLaunchers={orderedLaunchers}
             onLauncher={(key) => {
               switch (key) {
                 case 'day_entry': {
@@ -653,7 +704,9 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
       {customizeOpen && (
         <CustomizeModal
           hidden={hidden}
+          order={order}
           onToggle={toggleHidden}
+          onReorder={saveOrder}
           onClose={() => setCustomizeOpen(false)}
           saveError={saveError}
         />
@@ -666,7 +719,7 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
 
 function HubCard({
   ev, stores, campaigns, travel, acks,
-  isAdmin, canCancel, hidden, onLauncher,
+  isAdmin, canCancel, hidden, orderedLaunchers, onLauncher,
 }: {
   ev: Event
   stores: Store[]
@@ -676,6 +729,7 @@ function HubCard({
   isAdmin: boolean
   canCancel: boolean
   hidden: Set<LauncherKey>
+  orderedLaunchers: LauncherDef[]
   onLauncher: (k: LauncherKey) => void
 }) {
   const store = stores.find(s => s.id === ev.store_id)
@@ -779,12 +833,14 @@ function HubCard({
         />
       </div>
 
-      {/* Launcher grid */}
+      {/* Launcher grid — order comes from the user's customized
+          launcher order. Cards still hide based on the `hidden` set
+          and per-launcher gates (adminOnly / showWhen / canCancel). */}
       <div style={{
         display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
         gap: 8, padding: 14, background: '#fff',
       }}>
-        {LAUNCHERS.map(def => {
+        {orderedLaunchers.map(def => {
           if (hidden.has(def.key) && !def.locked) return null
           if (def.adminOnly && !isAdmin) return null
           if (def.key === 'cancel' && !canCancel) return null
@@ -908,14 +964,40 @@ function Launcher({
 // ── Customize-buttons modal ──────────────────────────────────
 
 function CustomizeModal({
-  hidden, onToggle, onClose, saveError,
+  hidden, order, onToggle, onReorder, onClose, saveError,
 }: {
   hidden: Set<LauncherKey>
+  order: LauncherKey[]
   onToggle: (k: LauncherKey) => void
+  onReorder: (next: LauncherKey[]) => void
   onClose: () => void
   saveError: string | null
 }) {
-  const hiddenCount = Array.from(hidden).length
+  const byKey = useMemo(() => new Map(LAUNCHERS.map(l => [l.key, l])), [])
+  const items = useMemo<LauncherDef[]>(
+    () => order.map(k => byKey.get(k)!).filter(Boolean),
+    [order, byKey],
+  )
+
+  // Native HTML5 drag-and-drop — vertical list, single source / target
+  // pattern. dragIndex tracks the row being moved; overIndex highlights
+  // the drop target. On drop we splice + commit. Locked launchers (Day
+  // Entry / Buyers / Promote) ARE reorderable — locked refers to
+  // visibility, not position.
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [overIndex, setOverIndex] = useState<number | null>(null)
+
+  function handleDrop(targetIdx: number) {
+    if (dragIndex == null || dragIndex === targetIdx) {
+      setDragIndex(null); setOverIndex(null); return
+    }
+    const next = [...order]
+    const [moved] = next.splice(dragIndex, 1)
+    next.splice(targetIdx, 0, moved)
+    setDragIndex(null); setOverIndex(null)
+    onReorder(next)
+  }
+
   return (
     <div
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
@@ -938,27 +1020,64 @@ function CustomizeModal({
         </div>
         <div style={{ padding: '18px 22px' }}>
           <p style={{ color: 'var(--ash)', fontSize: 13, margin: '0 0 14px', lineHeight: 1.5 }}>
-            Show or hide each launcher across every event card. Setting saves to your account so it
-            stays the same on every device.
+            Drag <span style={{ color: 'var(--ash)', fontWeight: 700 }}>⠿</span> to reorder.
+            Tick the box to show or hide. Settings save to your account, so they stay the same on every device.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {LAUNCHERS.map(l => {
+            {items.map((l, idx) => {
               const isVisible = !(hidden.has(l.key) && !l.locked)
+              const isDragging = dragIndex === idx
+              const isDropTarget = overIndex === idx && dragIndex !== null && dragIndex !== idx
               return (
                 <div
                   key={l.key}
+                  draggable
+                  onDragStart={(e) => {
+                    setDragIndex(idx)
+                    // Required for Firefox compatibility.
+                    e.dataTransfer.effectAllowed = 'move'
+                    try { e.dataTransfer.setData('text/plain', l.key) } catch {}
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = 'move'
+                    if (overIndex !== idx) setOverIndex(idx)
+                  }}
+                  onDragLeave={() => {
+                    if (overIndex === idx) setOverIndex(null)
+                  }}
+                  onDrop={(e) => { e.preventDefault(); handleDrop(idx) }}
+                  onDragEnd={() => { setDragIndex(null); setOverIndex(null) }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 12,
                     padding: '10px 12px', background: 'var(--cream)',
-                    border: '1px solid var(--pearl)', borderRadius: 8,
-                    opacity: l.locked ? 0.55 : 1,
+                    border: isDropTarget
+                      ? '1px solid var(--green-dark)'
+                      : '1px solid var(--pearl)',
+                    boxShadow: isDropTarget
+                      ? '0 0 0 3px rgba(29,107,68,.18)'
+                      : 'none',
+                    borderRadius: 8,
+                    opacity: isDragging ? 0.45 : 1,
+                    transition: 'box-shadow .12s ease, border-color .12s ease, opacity .12s ease',
                   }}
                 >
+                  {/* Drag handle. Cursor: grab. The whole row is
+                      draggable but the handle is the obvious affordance. */}
+                  <span
+                    title="Drag to reorder"
+                    aria-hidden
+                    style={{
+                      cursor: 'grab', userSelect: 'none',
+                      fontSize: 16, color: 'var(--mist)',
+                      padding: '0 2px', lineHeight: 1,
+                    }}
+                  >⠿</span>
                   <Checkbox
                     checked={isVisible}
                     disabled={l.locked}
                     onChange={() => !l.locked && onToggle(l.key)}
-                    labelStyle={{ flex: 1, gap: 12, cursor: l.locked ? 'not-allowed' : 'pointer' }}
+                    labelStyle={{ flex: 1, gap: 12, cursor: l.locked ? 'not-allowed' : 'pointer', opacity: l.locked ? 0.55 : 1 }}
                     label={
                       <span style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
                         <span style={{ fontSize: 18 }}>{l.icon}</span>
@@ -994,7 +1113,10 @@ function CustomizeModal({
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         }}>
           <span style={{ fontSize: 12, color: 'var(--mist)' }}>
-            {hiddenCount === 0 ? 'All buttons visible' : `${hiddenCount} button${hiddenCount === 1 ? '' : 's'} hidden`}
+            {(() => {
+              const hiddenCount = Array.from(hidden).filter(k => !byKey.get(k)?.locked).length
+              return hiddenCount === 0 ? 'All buttons visible' : `${hiddenCount} button${hiddenCount === 1 ? '' : 's'} hidden`
+            })()}
           </span>
           <button onClick={onClose} className="btn-primary btn-sm">Done</button>
         </div>
