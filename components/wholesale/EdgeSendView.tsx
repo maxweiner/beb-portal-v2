@@ -94,6 +94,57 @@ function ComposeTab() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [composeOpen, setComposeOpen] = useState(false)
   const [previewing, setPreviewing] = useState(false)
+  const [downloadingCsv, setDownloadingCsv] = useState(false)
+
+  // Download the same 84-column Edge CSV that 🚀 Send emails to
+  // Mary, but without inserting a batch row / copying photos /
+  // sending email. Useful when the operator wants to inspect or
+  // hand-deliver the CSV (e.g. while libertyestatebuyers.com is
+  // mid-verification in Resend and real sends 403). Photo cells
+  // are left blank — see /api/wholesale/edge/csv route header.
+  async function handleDownloadCsv() {
+    if (selected.size === 0) return
+    setDownloadingCsv(true)
+    try {
+      const token = await getAuthToken()
+      const res = await fetch('/api/wholesale/edge/csv', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          brand,
+          item_ids: Array.from(selected),
+        }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({} as any))
+        alert(j?.error || `CSV download failed (${res.status})`)
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      // Derive a friendly filename from the Content-Disposition
+      // header so the operator gets the same name the server
+      // chose. Fall back to a sensible default.
+      const cd = res.headers.get('Content-Disposition') || ''
+      const m = /filename="([^"]+)"/.exec(cd)
+      const filename = m?.[1] || `edge-${brand}-${selected.size}items.csv`
+
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (err: any) {
+      alert(err?.message || 'Could not download CSV.')
+    } finally {
+      setDownloadingCsv(false)
+    }
+  }
 
   // Build a server-rendered PDF preview of the currently-selected
   // items and open it in a new tab. No batch row is created and no
@@ -344,6 +395,15 @@ function ComposeTab() {
           title="Open a printable preview of the selected items — same data Edge will receive, no batch is created and no email is sent."
         >
           {previewing ? 'Building PDF…' : '📄 Preview PDF'}
+        </button>
+        <button
+          disabled={selected.size === 0 || downloadingCsv}
+          onClick={handleDownloadCsv}
+          className="btn-outline"
+          style={{ padding: '10px 18px', fontWeight: 700 }}
+          title="Download the 84-column Edge CSV for the selected items. No batch is created and no email is sent. Photo cells are left blank — use 🚀 Send to bundle photos."
+        >
+          {downloadingCsv ? 'Building CSV…' : '⬇️ Download CSV'}
         </button>
         <button
           disabled={selected.size === 0}
