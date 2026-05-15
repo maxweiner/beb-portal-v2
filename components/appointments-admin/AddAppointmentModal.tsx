@@ -137,8 +137,16 @@ export default function AddAppointmentModal({
   const [blocksForDay, setBlocksForDay] = useState<any[]>([])
 
   const [dateStr, setDateStr] = useState<string>('')
-  // Reset day + time whenever the event changes — no day pre-selected.
-  useEffect(() => { setDateStr(''); }, [eventId])
+  // When the event (or its derived day list) changes, default the day
+  // picker to today if it's a bookable day, otherwise the next enabled
+  // day. dayInfos is sorted by date asc and `enabled` already gates on
+  // (hours configured) AND (dateStr >= today), so the first enabled
+  // entry is exactly today or the next future booking day. Saves the
+  // staffer a tap.
+  useEffect(() => {
+    const firstEnabled = dayInfos.find(di => di.enabled)
+    setDateStr(firstEnabled?.dateStr ?? '')
+  }, [eventId, dayInfos])
 
   // Slot dropdown for the selected day (real availability via existing logic)
   const slots = useMemo(() => {

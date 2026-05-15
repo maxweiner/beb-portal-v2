@@ -118,7 +118,15 @@ export default function AddAppointmentForm({
     })
   }, [event, config, override])
 
-  const [formDate, setFormDate] = useState<string>('')
+  // Default the day picker to today if it's a bookable day, otherwise
+  // the next enabled day. Saves the customer a tap. dayInfos is sorted
+  // by date asc, and `enabled` already gates on (hours configured) AND
+  // (dateStr >= today), so the first enabled entry is exactly today or
+  // the next future booking day.
+  const [formDate, setFormDate] = useState<string>(() => {
+    const firstEnabled = dayInfos.find(d => d.enabled)
+    return firstEnabled?.dateStr ?? ''
+  })
   const [formTime, setFormTime] = useState<string>('')
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
