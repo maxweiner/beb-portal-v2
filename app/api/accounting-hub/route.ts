@@ -49,7 +49,7 @@ function admin() {
 
 interface QueueRow {
   id: string
-  status: 'submitted_pending_review' | 'approved' | 'paid'
+  status: 'submitted_pending_review' | 'approved' | 'partially_paid' | 'paid'
   buyer_id: string
   buyer_name: string
   event_id: string | null
@@ -69,6 +69,11 @@ interface QueueRow {
   total_compensation: number
   total_bonus: number
   grand_total: number
+  /** Sum of non-deleted expense_report_payments.amount for this
+   *  report. 0 when no payments yet. Drives the "Paid \$X of \$Y"
+   *  subtitle on partially_paid rows + the detail-panel remaining
+   *  balance. */
+  amount_paid: number
   receipt_count: number
   /** Audit fields surfaced to the queue UI for the "Exported ✓"
    *  pill + re-export warning. Null when never exported. */
@@ -136,11 +141,15 @@ export async function GET(req: Request) {
       trunk_show_id, trade_show_id,
       submitted_at, approved_at, paid_at, paid_by, paid_note,
       total_expenses, total_compensation, bonus_amount, grand_total,
+      amount_paid_cached,
       report_number, exported_to_qb_at, exported_to_qb_format,
       user:users!user_id(name),
       event:events(store_name, start_date, brand)
     `)
-    .in('status', ['submitted_pending_review', 'approved'])
+    // 'partially_paid' joins 'approved' in the active list — it's
+    // still in flight from the AP point of view, just with a non-zero
+    // amount already disbursed.
+    .in('status', ['submitted_pending_review', 'approved', 'partially_paid'])
     .order('submitted_at', { ascending: true })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
@@ -153,8 +162,10 @@ export async function GET(req: Request) {
       .from('expense_reports')
       .select(`
         id, status, user_id, event_id,
+        trunk_show_id, trade_show_id,
         submitted_at, approved_at, paid_at, paid_by, paid_note,
         total_expenses, total_compensation, bonus_amount, grand_total,
+        amount_paid_cached,
         report_number, exported_to_qb_at, exported_to_qb_format,
         user:users!user_id(name),
         event:events(store_name, start_date, brand)
@@ -248,6 +259,7 @@ export async function GET(req: Request) {
         total_compensation: Number(r.total_compensation) || 0,
         total_bonus: Number(r.bonus_amount) || 0,
         grand_total: Number(r.grand_total) || 0,
+        amount_paid: Number(r.amount_paid_cached) || 0,
         receipt_count: receiptCount.get(r.id) || 0,
         report_number: r.report_number || null,
         exported_to_qb_at: r.exported_to_qb_at || null,

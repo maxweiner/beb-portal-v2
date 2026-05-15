@@ -1,14 +1,20 @@
 // POST /api/accounting-hub/bulk-paid
 //
-// Body: { ids: string[], notify?: boolean, paid_note?: string }
+// Body: {
+//   ids:             string[],
+//   notify?:         boolean,
+//   paid_note?:      string,
+//   payment_method?: string   // defaults to 'check'
+// }
 //
-// Marks every listed report as paid (must currently be in 'approved'
-// status; submitted reports need approval first). Optionally notifies
-// the submitter that their report has been paid.
+// Marks every listed report as paid IN FULL via the partial-payment
+// ledger (one expense_report_payments row per report, amount =
+// remaining balance, method shared across the batch). Reports must
+// be in 'approved' OR 'partially_paid' status.
 //
 // paid_note is shared across every report in the batch — typically
-// "Check run 5/14", "Wire batch 2026-05-14", etc. Per-report notes
-// can still be edited individually via the single mark-paid route.
+// "Check run 5/14", "Wire batch 2026-05-14", etc. Per-report adjustments
+// can still happen individually via /api/expense-reports/[id]/payments.
 //
 // Auth: accounting / admin / superadmin / partner.
 
@@ -70,12 +76,19 @@ export async function POST(req: Request) {
     paidNote = trimmed.length > 0 ? trimmed : null
   }
 
+  // Shared payment_method (lowercased canonical form).
+  let paymentMethod = 'check'
+  if (typeof body?.payment_method === 'string') {
+    const m = body.payment_method.toLowerCase().trim()
+    if (m.length > 0 && m.length <= 50) paymentMethod = m
+  }
+
   // Pull each report so we can validate status + collect submitter
   // emails for the optional notification.
   const { data: reports, error: fetchErr } = await sb
     .from('expense_reports')
     .select(`
-      id, status, user_id, grand_total,
+      id, status, user_id, grand_total, amount_paid_cached,
       user:users!user_id(name, email),
       event:events(store_name, start_date)
     `)
@@ -85,8 +98,8 @@ export async function POST(req: Request) {
   const eligible: any[] = []
   const skipped: { id: string; reason: string }[] = []
   for (const r of (reports || [])) {
-    if (r.status !== 'approved') {
-      skipped.push({ id: r.id, reason: `status is ${r.status}, not approved` })
+    if (r.status !== 'approved' && r.status !== 'partially_paid') {
+      skipped.push({ id: r.id, reason: `status is ${r.status}, not approved or partially paid` })
       continue
     }
     eligible.push(r)
@@ -96,14 +109,35 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, paid: 0, skipped, emails_sent: 0, emails_failed: 0 })
   }
 
-  // Single bulk update for the eligible ids.
-  const eligibleIds = eligible.map(r => r.id)
-  const nowIso = new Date().toISOString()
-  const { error: updErr } = await sb
-    .from('expense_reports')
-    .update({ status: 'paid', paid_at: nowIso, paid_by: me.id, paid_note: paidNote })
-    .in('id', eligibleIds)
-  if (updErr) return NextResponse.json({ error: `Update failed: ${updErr.message}` }, { status: 500 })
+  // Insert one payment row per eligible report. Amount =
+  // remaining balance (grand_total minus what's already been
+  // paid). The recompute trigger handles status + cache updates.
+  // Reports with no remaining balance are silently skipped.
+  const paymentRows = eligible
+    .map(r => {
+      const remaining = Math.max(
+        0,
+        Number(r.grand_total || 0) - Number(r.amount_paid_cached || 0),
+      )
+      if (remaining <= 0) return null
+      return {
+        expense_report_id: r.id,
+        amount: Math.round(remaining * 100) / 100,
+        payment_method: paymentMethod,
+        reference_note: paidNote,
+        paid_by: me.id,
+      }
+    })
+    .filter(Boolean)
+  if (paymentRows.length === 0) {
+    return NextResponse.json({ ok: true, paid: 0, skipped, emails_sent: 0, emails_failed: 0 })
+  }
+  const { error: insErr } = await sb
+    .from('expense_report_payments')
+    .insert(paymentRows as any[])
+  if (insErr) return NextResponse.json({ error: `Payment insert failed: ${insErr.message}` }, { status: 500 })
+
+  const eligibleIds = paymentRows.map((p: any) => p.expense_report_id)
 
   // Optional email — one per submitter.
   let emailsSent = 0
