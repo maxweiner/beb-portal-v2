@@ -248,20 +248,21 @@ export default async function Page({
     .maybeSingle()
   if (!store) return <NotFound />
 
-  // 4. Fetch this store's events that are LIVE / RECENTLY-ENDED
-  //    (within 24h post-end) / UPCOMING. Past events older than that
-  //    window are hidden per user spec ("hide past").
+  // 4. Fetch this store's events — past + live + upcoming. We used to
+  //    cap the past window at 24h after end, but store owners want to
+  //    browse their historical events too (post-mortem KPIs / how-
+  //    heard / spend). We pull all events for the store with a
+  //    sensible lookback (24 months) so the picker stays manageable
+  //    even for stores that have been buying with us for years.
   //
-  //    Event window = start_date through start_date + 2 days (3-day
-  //    event). "Recently ended" window = up to 24h after the last
-  //    day, i.e. start_date + 3 days >= today.
-  const yesterdayIso = addDays(today, -3) // start_date >= yesterday-3 == start_date+3 >= today
+  //    Cancelled events stay filtered out.
+  const lookbackIso = addDays(today, -730) // ~24 months back
 
   const { data: evs } = await sb
     .from('events')
     .select('id, store_id, store_name, start_date, status, workers, brand')
     .eq('store_id', store.id)
-    .gte('start_date', yesterdayIso)
+    .gte('start_date', lookbackIso)
     .order('start_date', { ascending: true })
   const allEvents = (evs || []) as any[]
 
@@ -278,10 +279,12 @@ export default async function Page({
     )
   }
 
-  // 5. Default-event picker, rule (b):
-  //    (1) currently LIVE  → that event
-  //    (2) just ended ≤24h → that event (post-event recap)
-  //    (3) soonest upcoming → that event
+  // 5. Default-event picker, priority order:
+  //    (1) currently LIVE     → that event
+  //    (2) just ended ≤24h    → that event (post-event recap)
+  //    (3) soonest upcoming   → that event
+  //    (4) most recent past   → fallback when the store has only
+  //                             historical events
   const live = eligibleEvents.find(e => {
     if (!e.start_date) return false
     return e.start_date <= today && addDays(e.start_date, 2) >= today
@@ -295,7 +298,15 @@ export default async function Page({
   const soonestUpcoming = !live && !recentlyEnded
     ? eligibleEvents.find(e => e.start_date && e.start_date > today)
     : null
-  const defaultEvent = live || recentlyEnded || soonestUpcoming || eligibleEvents[0]
+  // Most recent past = last past event when sorted ASC, so we walk
+  // the array backwards to find it.
+  const mostRecentPast = !live && !recentlyEnded && !soonestUpcoming
+    ? [...eligibleEvents].reverse().find(e => {
+        if (!e.start_date) return false
+        return addDays(e.start_date, 2) < today
+      })
+    : null
+  const defaultEvent = live || recentlyEnded || soonestUpcoming || mostRecentPast || eligibleEvents[0]
 
   // 6. Honor ?ev=<id> override if present and valid.
   const requestedEventId = (searchParams?.ev || '').trim()
@@ -505,8 +516,11 @@ export default async function Page({
         {/* Event picker — visible whenever the store has >1 eligible
             event. Each option is a regular <a> so it survives the
             30-second auto-refresh + lands the user on the same event
-            on browser back/forward. Past events (>24h after end) are
-            already filtered out upstream per the "hide past" spec. */}
+            on browser back/forward.
+            Past events render as gray pills (still clickable so the
+            owner can drill into historical KPIs). Upcoming/live keep
+            the neutral pill; the selected event is the dark blue
+            "active" treatment regardless of past/upcoming. */}
         {eligibleEvents.length > 1 && (
           <div style={{
             background: '#fff', borderRadius: 10, padding: '10px 14px',
@@ -520,15 +534,23 @@ export default async function Page({
               {eligibleEvents.map((e: any) => {
                 const isSelected = e.id === ev.id
                 const pillStr = eventPickerLabel(e, today)
+                const eStart = e.start_date as string
+                const eEnd = addDays(eStart, 2)
+                const isPast = eEnd < today && e.status !== 'reserved'
+                // Selected wins all visual states; otherwise past
+                // events get a softer gray treatment so the active
+                // upcoming/live ones pop.
+                const bg = isSelected ? '#1e3a8a' : isPast ? '#E5E7EB' : '#F3F4F6'
+                const fg = isSelected ? '#fff' : isPast ? '#6B7280' : '#374151'
+                const border = isSelected ? '1px solid #1e3a8a' : isPast ? '1px solid #D1D5DB' : '1px solid #E5E7EB'
                 return (
                   <a key={e.id}
                     href={`/e/${token}?ev=${e.id}`}
+                    title={isPast ? 'Past event — click to view historical data' : undefined}
                     style={{
                       padding: '5px 10px', borderRadius: 6,
                       fontSize: 12, fontWeight: 700, textDecoration: 'none',
-                      background: isSelected ? '#1e3a8a' : '#F3F4F6',
-                      color: isSelected ? '#fff' : '#374151',
-                      border: isSelected ? '1px solid #1e3a8a' : '1px solid #E5E7EB',
+                      background: bg, color: fg, border,
                     }}>
                     {pillStr}
                   </a>
