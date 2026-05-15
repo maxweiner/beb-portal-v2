@@ -184,6 +184,9 @@ export async function PUT(req: Request, { params }: { params: { token: string } 
         customer_email: updates.customer_email ?? appt.customer_email,
         appointment_date,
         appointment_time: wantTime,
+        // Carry through the original opt-in. A reschedule doesn't
+        // re-consent — only the original booking flow does.
+        sms_opted_in: (appt as any).sms_opted_in === true,
       },
       store: {
         name: store.name, slug: store.slug,
@@ -247,6 +250,7 @@ export async function DELETE(_req: Request, { params }: { params: { token: strin
         customer_email: appt.customer_email,
         appointment_date: appt.appointment_date,
         appointment_time: appt.appointment_time,
+        sms_opted_in: (appt as any).sms_opted_in === true,
       },
       store: {
         name: store.name,

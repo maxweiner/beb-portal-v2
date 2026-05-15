@@ -76,10 +76,13 @@ export async function POST(req: Request, { params }: { params: { token: string }
   try { body = await req.json() }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
-  const { slotId, name, email, phone, notes } = body || {}
+  const { slotId, name, email, phone, notes, sms_opted_in } = body || {}
   if (!slotId || !name?.trim()) {
     return NextResponse.json({ error: 'Missing slot or name' }, { status: 400 })
   }
+  // Twilio-compliant explicit opt-in. Default false; only TRUE
+  // when the booker checked the consent box on the page.
+  const smsOpted = sms_opted_in === true
 
   const sb = admin()
   // Verify slot belongs to the same show + still available.
@@ -100,6 +103,7 @@ export async function POST(req: Request, { params }: { params: { token: string }
     booked_by_external_email: norm(email),
     booked_by_external_phone: norm(phone),
     notes: norm(notes),
+    sms_opted_in: smsOpted,
   }).eq('id', slot.id)
   if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 })
 

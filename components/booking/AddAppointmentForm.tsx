@@ -24,7 +24,7 @@
 import { useMemo, useState } from 'react'
 import PhoneInput from '@/components/ui/PhoneInput'
 import Checkbox from '@/components/ui/Checkbox'
-import SmsConsentNotice from '@/components/ui/SmsConsentNotice'
+import SmsConsentCheckbox from '@/components/ui/SmsConsentCheckbox'
 import { buildSlotsForDay, hoursForEventDay } from '@/lib/appointments/slots'
 
 export interface AddAppointmentFormStore {
@@ -129,6 +129,11 @@ export default function AddAppointmentForm({
   const [isWalkin, setIsWalkin] = useState(false)
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Twilio-compliant SMS opt-in: explicit, optional, unchecked-by-
+  // default checkbox. Threaded through to the server as
+  // sms_opted_in. SMS dispatch (lib/appointments/notifications.ts)
+  // refuses to text when this is false.
+  const [smsOptedIn, setSmsOptedIn] = useState(false)
 
   const formDay = dayInfos.find(d => d.dateStr === formDate) ?? null
 
@@ -192,6 +197,7 @@ export default function AddAppointmentForm({
             customer_name: name.trim(),
             customer_phone: phone.trim(),
             customer_email: email.trim() || 'noemail@placeholder.local',
+            sms_opted_in: smsOptedIn,
             items_bringing: itemsBringing.length ? itemsBringing : ['Not specified'],
             how_heard: mode === 'staff'
               ? (howHeard.length > 0 ? howHeard : ['The Store Told Me'])
@@ -306,7 +312,9 @@ export default function AddAppointmentForm({
                 paragraph doesn't get squeezed into a tall narrow column.
                 Only shown to customers (staff bookings are entered by
                 staff on behalf of a customer who consented elsewhere). */}
-            {mode === 'customer' && <SmsConsentNotice />}
+            {mode === 'customer' && (
+              <SmsConsentCheckbox checked={smsOptedIn} onChange={setSmsOptedIn} />
+            )}
             <div>
               <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Bringing</label>
               <input type="text" value={items} onChange={e => setItems(e.target.value)}

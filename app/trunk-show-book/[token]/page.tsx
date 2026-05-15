@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import SmsConsentNotice from '@/components/ui/SmsConsentNotice'
+import SmsConsentCheckbox from '@/components/ui/SmsConsentCheckbox'
 
 interface ShowInfo {
   id: string
@@ -41,6 +41,9 @@ export default function TrunkShowBookPage() {
   const [notes, setNotes] = useState('')
   const [busy, setBusy] = useState(false)
   const [bookedSlot, setBookedSlot] = useState<Slot | null>(null)
+  // Twilio-compliant SMS opt-in. Defaults false; server records on
+  // trunk_show_slot_bookings.sms_opted_in.
+  const [smsOptedIn, setSmsOptedIn] = useState(false)
   // Salesperson tagged on the booking link the customer landed on.
   // When set, we display "Booking with X" and skip the salesperson
   // input — the link itself attributes the booking.
@@ -76,6 +79,7 @@ export default function TrunkShowBookPage() {
           slotId: pickedSlotId,
           first_name: first, last_name: last,
           email, phone, salesperson, notes,
+          sms_opted_in: smsOptedIn,
         }),
       })
       const json = await res.json()
@@ -247,7 +251,7 @@ export default function TrunkShowBookPage() {
                   style={{ borderColor: 'var(--pearl, #e2e8f0)' }} />
               </div>
               {/* SMS opt-in disclosure (Twilio toll-free requirement). */}
-              <SmsConsentNotice />
+              <SmsConsentCheckbox checked={smsOptedIn} onChange={setSmsOptedIn} />
               {tokenSalesperson ? (
                 <div className="rounded-lg px-4 py-3 text-sm"
                   style={{ background: secondary, border: `1px solid ${primary}`, color: primary, fontWeight: 600 }}>

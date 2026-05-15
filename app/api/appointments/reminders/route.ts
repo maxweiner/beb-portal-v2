@@ -51,7 +51,7 @@ async function run(req: Request) {
 
   const { data: appts, error: apptErr } = await sb
     .from('appointments')
-    .select('id, cancel_token, customer_name, customer_phone, customer_email, appointment_date, appointment_time, store_id')
+    .select('id, cancel_token, customer_name, customer_phone, customer_email, appointment_date, appointment_time, store_id, sms_opted_in')
     .eq('status', 'confirmed')
     .gte('appointment_date', today)
     .lte('appointment_date', horizonDate)
@@ -106,6 +106,7 @@ async function run(req: Request) {
           customer_email: a.customer_email,
           appointment_date: a.appointment_date,
           appointment_time: a.appointment_time,
+          sms_opted_in: (a as any).sms_opted_in === true,
         },
         store: {
           name: store.name, slug: store.slug,
@@ -123,6 +124,7 @@ async function run(req: Request) {
           customer_email: a.customer_email,
           appointment_date: a.appointment_date,
           appointment_time: a.appointment_time,
+          sms_opted_in: (a as any).sms_opted_in === true,
         },
         store: {
           name: store.name, slug: store.slug,
