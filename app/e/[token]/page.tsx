@@ -25,6 +25,7 @@ import { headers } from 'next/headers'
 import { QRCodeSVG } from 'qrcode.react'
 import { initials } from '@/lib/initials'
 import AutoRefresh from './AutoRefresh'
+import EventPickerPills from './EventPickerPills'
 
 export const dynamic = 'force-dynamic'
 
@@ -514,51 +515,20 @@ export default async function Page({
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 16px' }}>
 
         {/* Event picker — visible whenever the store has >1 eligible
-            event. Each option is a regular <a> so it survives the
-            30-second auto-refresh + lands the user on the same event
-            on browser back/forward.
-            Past events render as gray pills (still clickable so the
-            owner can drill into historical KPIs). Upcoming/live keep
-            the neutral pill; the selected event is the dark blue
-            "active" treatment regardless of past/upcoming. */}
-        {eligibleEvents.length > 1 && (
-          <div style={{
-            background: '#fff', borderRadius: 10, padding: '10px 14px',
-            marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,.04)',
-            display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-          }}>
-            <span style={{ fontSize: 11, fontWeight: 800, color: '#6b7280', letterSpacing: '.05em', textTransform: 'uppercase' }}>
-              Event:
-            </span>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {eligibleEvents.map((e: any) => {
-                const isSelected = e.id === ev.id
-                const pillStr = eventPickerLabel(e, today)
-                const eStart = e.start_date as string
-                const eEnd = addDays(eStart, 2)
-                const isPast = eEnd < today && e.status !== 'reserved'
-                // Selected wins all visual states; otherwise past
-                // events get a softer gray treatment so the active
-                // upcoming/live ones pop.
-                const bg = isSelected ? '#1e3a8a' : isPast ? '#E5E7EB' : '#F3F4F6'
-                const fg = isSelected ? '#fff' : isPast ? '#6B7280' : '#374151'
-                const border = isSelected ? '1px solid #1e3a8a' : isPast ? '1px solid #D1D5DB' : '1px solid #E5E7EB'
-                return (
-                  <a key={e.id}
-                    href={`/e/${token}?ev=${e.id}`}
-                    title={isPast ? 'Past event — click to view historical data' : undefined}
-                    style={{
-                      padding: '5px 10px', borderRadius: 6,
-                      fontSize: 12, fontWeight: 700, textDecoration: 'none',
-                      background: bg, color: fg, border,
-                    }}>
-                    {pillStr}
-                  </a>
-                )
-              })}
-            </div>
-          </div>
-        )}
+            event. Past events render as gray pills (still clickable
+            so the owner can drill into historical KPIs); upcoming /
+            live keep the neutral pill; the selected event uses the
+            dark-blue "active" treatment regardless of past/upcoming.
+            Pills are a client component so the click triggers a
+            useTransition-wrapped router.push and a top-of-viewport
+            loading bar instead of a blank-page navigation. */}
+        <EventPickerPills
+          token={token}
+          events={eligibleEvents.map((e: any) => ({ id: e.id, start_date: e.start_date, status: e.status }))}
+          selectedEventId={ev.id}
+          today={today}
+        />
+
 
         {/* Header card */}
         <div style={{
