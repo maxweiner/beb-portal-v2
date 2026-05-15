@@ -116,6 +116,12 @@ export default function PreEventTab({ setNav, slim = false }: Props) {
       ])
       if (cancelled) return
       if (eventsRes.data) setEvents(eventsRes.data.map((e: any) => ({ ...e, days: e.days || [] })))
+      // Note: a follow-up useEffect below syncs `events` from the
+      // global AppContext whenever it changes (new event added,
+      // realtime update, etc.) so we don't go stale without this
+      // initial fetch — but the local fetch still runs once on
+      // mount so the `loading` gate flips with the readiness data
+      // (campaigns / travel / etc.) loaded together.
       if (campaignsRes.data) setCampaigns(campaignsRes.data as CampaignRow[])
       if (travelRes.data) setTravel(travelRes.data as TravelRow[])
       if (travelAcksRes.data) setTravelAcks(travelAcksRes.data as TravelAckRow[])
@@ -180,6 +186,18 @@ export default function PreEventTab({ setNav, slim = false }: Props) {
     })()
     return () => { cancelled = true }
   }, [brand])
+
+  // Sync local events from the global app context whenever the context
+  // changes. Context.reload() runs after every CreateEventModal insert
+  // (and via the events-table realtime subscription) — without this
+  // hook, a newly-created event wouldn't appear here until the user
+  // reloaded the page. Local state copy preserves the existing
+  // optimistic-update sites (promote / brief toggles).
+  useEffect(() => {
+    if (!ctxEvents) return
+    const scoped = ctxEvents.filter(e => !brand || (e as any).brand === brand)
+    setEvents(scoped.map((e: any) => ({ ...e, days: e.days || [] })))
+  }, [ctxEvents, brand])
 
   const upcoming = useMemo(() => {
     const todayIso = new Date().toISOString().slice(0, 10)
