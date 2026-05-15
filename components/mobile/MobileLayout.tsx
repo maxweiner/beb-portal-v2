@@ -298,6 +298,7 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
     { id: 'trunk-show-stores', label: 'Trunk Show Stores',   icon: '🏬' },
     { id: 'leads',             label: 'Leads',               icon: '🎯' },
     { id: 'shipping',     label: 'Shipping',            icon: '📦' },
+    { id: 'wholesale',    label: 'Inventory',           icon: '💎' },
     { id: 'reports',      label: 'Reports',             icon: '📊' },
     { id: 'expenses',     label: 'Expenses',            icon: '🧾' },
     { id: 'financials',   label: 'Financials',          icon: '💼' },
