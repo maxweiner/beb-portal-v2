@@ -21,7 +21,7 @@
 // caller — both surfaces have their own event-picker logic that already
 // works for in-flight events / multiple-events / sparse event_days.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import PhoneInput from '@/components/ui/PhoneInput'
 import Checkbox from '@/components/ui/Checkbox'
 import SmsConsentCheckbox from '@/components/ui/SmsConsentCheckbox'
@@ -142,6 +142,80 @@ export default function AddAppointmentForm({
   // sms_opted_in. SMS dispatch (lib/appointments/notifications.ts)
   // refuses to text when this is false.
   const [smsOptedIn, setSmsOptedIn] = useState(false)
+
+  // Phone-first autofill. When the booker types a phone that matches
+  // an existing customer in this store, we pre-fill the name field and
+  // surface a 🔁 Repeat-customer hint above the Name input. The server
+  // ALSO re-derives this independently at insert time — the lookup
+  // here is purely a UX nicety; the authoritative is_repeat_customer
+  // flag is set in /api/appointments POST, not from anything we POST.
+  type LookupResult =
+    | { state: 'idle' }
+    | { state: 'pending' }
+    | { state: 'miss' }
+    | { state: 'hit'; firstName: string; lastName: string }
+  const [lookup, setLookup] = useState<LookupResult>({ state: 'idle' })
+  // Tracks whether the user has touched the name field themselves —
+  // once they have, we stop overwriting it from the autofill, so we
+  // don't yank their typed-in name out from under them.
+  const nameWasAutofilled = useRef(false)
+  useEffect(() => {
+    // Strip to digits to detect 10/11-digit complete entry. Anything
+    // shorter, just clear any prior hit/miss state — the user is
+    // still typing.
+    const digits = phone.replace(/\D/g, '')
+    const normalized = digits.length === 11 && digits.startsWith('1')
+      ? digits.slice(1)
+      : digits.length === 10 ? digits : null
+    if (!normalized) {
+      if (lookup.state !== 'idle') setLookup({ state: 'idle' })
+      return
+    }
+    // Debounce ~300ms so we don't fire on every keystroke when the
+    // user is still typing area-code → exchange → line.
+    const ctrl = new AbortController()
+    const timer = setTimeout(async () => {
+      setLookup({ state: 'pending' })
+      try {
+        const res = await fetch('/api/customers/phone-lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slug, phone: normalized }),
+          signal: ctrl.signal,
+        })
+        const json = await res.json().catch(() => ({}))
+        if (ctrl.signal.aborted) return
+        if (json?.match) {
+          const fn = String(json.first_name || '').trim()
+          const ln = String(json.last_name || '').trim()
+          setLookup({ state: 'hit', firstName: fn, lastName: ln })
+          // Only autofill if the name field is empty or was previously
+          // autofilled — never stomp on typed-in input.
+          if (!name.trim() || nameWasAutofilled.current) {
+            setName([fn, ln].filter(Boolean).join(' '))
+            nameWasAutofilled.current = true
+          }
+        } else {
+          setLookup({ state: 'miss' })
+          // If the previous state was an autofilled name, clear it so
+          // a typo'd phone -> corrected phone doesn't leave a stale
+          // wrong name in the field.
+          if (nameWasAutofilled.current) {
+            setName('')
+            nameWasAutofilled.current = false
+          }
+        }
+      } catch (err: any) {
+        if (ctrl.signal.aborted) return
+        // Network blip — silently fall back to idle. Don't surface.
+        setLookup({ state: 'idle' })
+      }
+    }, 300)
+    return () => { ctrl.abort(); clearTimeout(timer) }
+    // We intentionally don't include `name` or `lookup.state` here —
+    // those would re-fire on every name keystroke or state transition.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phone, slug])
 
   const formDay = dayInfos.find(d => d.dateStr === formDate) ?? null
 
@@ -294,26 +368,45 @@ export default function AddAppointmentForm({
 
         {!isReschedule && (
           <>
+            {/* Phone first — the customer-DB lookup runs against the
+                normalized phone, autofills the name field on match,
+                and surfaces a 🔁 Repeat-customer hint just below. */}
             <div>
-              <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Customer name *</label>
-              <input type="text" required value={name} onChange={e => setName(e.target.value)}
+              <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Phone *</label>
+              <PhoneInput required value={phone} onChange={v => setPhone(v)}
                 style={{ fontSize: inputSize }}
                 className="w-full rounded-lg border border-gray-300 p-2" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Phone *</label>
-                <PhoneInput required value={phone} onChange={v => setPhone(v)}
-                  style={{ fontSize: inputSize }}
-                  className="w-full rounded-lg border border-gray-300 p-2" />
+            {lookup.state === 'hit' && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '6px 10px', borderRadius: 8,
+                background: '#FEF3C7', color: '#78350F',
+                fontSize: '0.857em', fontWeight: 700,
+              }}>
+                <span>🔁</span>
+                <span>
+                  Welcome back, {[lookup.firstName, lookup.lastName].filter(Boolean).join(' ') || 'returning customer'}!
+                </span>
               </div>
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Email</label>
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                  placeholder="(optional)"
-                  style={{ fontSize: inputSize }}
-                  className="w-full rounded-lg border border-gray-300 p-2" />
-              </div>
+            )}
+            <div>
+              <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Customer name *</label>
+              <input type="text" required value={name}
+                onChange={e => {
+                  setName(e.target.value)
+                  // User typed manually — stop overwriting from autofill.
+                  nameWasAutofilled.current = false
+                }}
+                style={{ fontSize: inputSize }}
+                className="w-full rounded-lg border border-gray-300 p-2" />
+            </div>
+            <div>
+              <label className="block font-semibold text-gray-700 mb-1" style={{ fontSize: labelSize }}>Email</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                placeholder="(optional)"
+                style={{ fontSize: inputSize }}
+                className="w-full rounded-lg border border-gray-300 p-2" />
             </div>
             {/* SMS opt-in disclosure — required for Twilio toll-free
                 verification. Rendered full-width below Phone+Email so the

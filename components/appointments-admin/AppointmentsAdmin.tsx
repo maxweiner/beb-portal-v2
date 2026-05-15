@@ -7,6 +7,7 @@ import type { Store, Event } from '@/types'
 import { formatPhoneDisplay } from '@/lib/phone'
 import AddAppointmentModal from './AddAppointmentModal'
 import AppointmentsDayPdfModal from './AppointmentsDayPdfModal'
+import RepeatCustomerChip from '@/components/appointments/RepeatCustomerChip'
 
 // ---------- types ----------
 
@@ -32,6 +33,7 @@ interface AppointmentRow {
   cancel_token?: string
   status?: string
   is_walkin?: boolean
+  is_repeat_customer?: boolean
   appointment_employee_id?: string | null
   appointment_employee_name?: string | null
   notes?: string | null
@@ -116,7 +118,7 @@ async function fetchPortalAppts(stores: Store[]): Promise<AppointmentRow[]> {
       id, store_id, appointment_date, appointment_time,
       customer_name, customer_phone, customer_email,
       items_bringing, how_heard, status, cancel_token,
-      is_walkin, appointment_employee_id, notes,
+      is_walkin, is_repeat_customer, appointment_employee_id, notes,
       appointment_employee:store_employees(name),
       store:stores(name)
     `)
@@ -141,6 +143,7 @@ async function fetchPortalAppts(stores: Store[]): Promise<AppointmentRow[]> {
       cancel_token: a.cancel_token,
       status: a.status,
       is_walkin: !!a.is_walkin,
+      is_repeat_customer: !!a.is_repeat_customer,
       appointment_employee_id: a.appointment_employee_id,
       appointment_employee_name: a.appointment_employee?.name ?? null,
       notes: a.notes,
@@ -517,6 +520,7 @@ function ApptRow({ row, isAdmin, onCancel }: {
           <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>
             {row.customer_name || '(no name)'}
           </span>
+          <RepeatCustomerChip isRepeat={row.is_repeat_customer} />
           <SourceBadge source={row.source} />
           {row.is_walkin && (
             <span style={{

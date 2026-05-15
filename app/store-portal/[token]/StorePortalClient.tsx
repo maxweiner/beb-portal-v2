@@ -28,6 +28,7 @@ interface FullAppt {
   items_bringing: string[] | null
   how_heard: string[] | null
   is_walkin: boolean
+  is_repeat_customer?: boolean
   appointment_employee_id: string | null
   booked_by: string
 }
@@ -290,6 +291,13 @@ export default function StorePortalClient({
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold">
                         {a.customer_name}
+                        {a.is_repeat_customer && (
+                          <span className="ml-2 text-[11px] font-extrabold px-2 py-0.5 rounded-full"
+                            title="Repeat customer — phone matched an existing customer record"
+                            style={{ background: '#FEF3C7', color: '#78350F' }}>
+                            🔁 Repeat
+                          </span>
+                        )}
                         {a.is_walkin && (
                           <span className="ml-2 text-[10px] uppercase tracking-wide font-bold px-2 py-0.5 rounded-full"
                             style={{ background: '#FEF3C7', color: '#92400E' }}>

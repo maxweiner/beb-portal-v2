@@ -329,7 +329,7 @@ export default async function Page({
   //      day-level totals + source breakdown from staff Day Entry)
   const [apptsRes, waitlistRes, buysRes, daysRes] = await Promise.all([
     sb.from('appointments')
-      .select('id, appointment_date, appointment_time, customer_name, items_bringing, status, is_walkin')
+      .select('id, appointment_date, appointment_time, customer_name, items_bringing, status, is_walkin, is_repeat_customer')
       .eq('event_id', ev.id)
       .neq('status', 'cancelled')
       .order('appointment_date', { ascending: true })
@@ -693,6 +693,14 @@ export default async function Page({
                           </td>
                           <td style={{ padding: '10px 6px', fontWeight: 600 }}>
                             {a.customer_name}
+                            {a.is_repeat_customer && (
+                              <span title="Repeat customer — phone matched an existing customer record"
+                                style={{
+                                  marginLeft: 6, padding: '1px 6px', borderRadius: 999,
+                                  fontSize: 10, fontWeight: 800,
+                                  background: '#FEF3C7', color: '#78350F',
+                                }}>🔁 Repeat</span>
+                            )}
                             {a.is_walkin && <span style={{ marginLeft: 6, fontSize: 10, color: '#1e40af', fontWeight: 700 }}>WALK-IN</span>}
                           </td>
                           <td style={{ padding: '10px 6px', color: '#6b7280', fontSize: 12 }}>
