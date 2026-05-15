@@ -268,7 +268,10 @@ export default function ExpenseReportDetail({
     if (upErr) { setSaveState('error'); setError(upErr.message); return }
     const next = expenses.map(e => e.id === id ? { ...e, ...patch } as Expense : e)
     setExpenses(next)
-    if ('amount' in patch) await recomputeTotals(next)
+    // Recompute when anything that affects the reimbursable total
+    // changes: the amount itself, or the paid-by-credit-card toggle
+    // (CC lines are excluded from the buyer's reimbursable total).
+    if ('amount' in patch || 'paid_by_credit_card' in patch) await recomputeTotals(next)
     flashSaved()
   }
 
