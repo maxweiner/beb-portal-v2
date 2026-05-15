@@ -26,6 +26,10 @@ export interface AppointmentForNotify {
   customer_email: string
   appointment_date: string
   appointment_time: string
+  /** Twilio-compliant explicit SMS consent. Only TRUE when the
+   *  booker checked the standalone consent checkbox at booking.
+   *  SMS dispatchers below refuse to text when this is false. */
+  sms_opted_in?: boolean
 }
 
 export interface StoreForNotify {
@@ -128,7 +132,11 @@ export async function sendConfirmation({ appt, store }: SendArgs) {
     date, time, manage_link: link,
   }
 
-  if (appt.customer_phone) {
+  // Twilio compliance: require explicit per-record consent.
+  // sms_opted_in is TRUE only when the booker checked the
+  // standalone consent box at booking. Without it, skip SMS
+  // entirely (email below still goes through).
+  if (appt.customer_phone && appt.sms_opted_in) {
     const tpl = await loadTemplate('sms_confirmation', { subject: null,
       body: `Hi {{customer_name}}, you're booked at {{store_name}} on {{date}} at {{time}}. Need to change or cancel? {{manage_link}} Reply STOP to opt out.` })
     try {
@@ -185,7 +193,8 @@ export async function sendCancellation({ appt, store, skipSms = false }: SendArg
     date, time, rebook_link: rebookLink,
   }
 
-  if (!skipSms && appt.customer_phone) {
+  // Twilio compliance gate — same as above.
+  if (!skipSms && appt.customer_phone && appt.sms_opted_in) {
     const tpl = await loadTemplate('sms_cancellation', { subject: null,
       body: `Your appointment at {{store_name}} on {{date}} at {{time}} has been cancelled.${rebookLink ? ' To rebook: {{rebook_link}}' : ''} Reply STOP to opt out.` })
     try {
@@ -246,7 +255,8 @@ export async function sendReminder({ appt, store, hours }: SendArgs & { hours: 2
   const smsType = hours === 24 ? 'sms_reminder_24h' : 'sms_reminder_2h'
   const emailType = hours === 24 ? 'email_reminder_24h' : 'email_reminder_2h'
 
-  if (appt.customer_phone) {
+  // Twilio compliance gate — same as confirmation.
+  if (appt.customer_phone && appt.sms_opted_in) {
     const tpl = await loadTemplate(smsType, { subject: null,
       body: `Reminder: your appointment at {{store_name}} is ${phrase} ({{date}} at {{time}}). Manage or cancel: {{manage_link}} Reply STOP to opt out.` })
     try {

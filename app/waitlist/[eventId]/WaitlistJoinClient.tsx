@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import SmsConsentNotice from '@/components/ui/SmsConsentNotice'
+import SmsConsentCheckbox from '@/components/ui/SmsConsentCheckbox'
 
 interface Props {
   eventId: string
@@ -21,6 +21,8 @@ export default function WaitlistJoinClient({ eventId, storeName, cityState, hear
   const [done, setDone] = useState(false)
   const [entryId, setEntryId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Twilio-compliant SMS opt-in (see SmsConsentCheckbox).
+  const [smsOptedIn, setSmsOptedIn] = useState(false)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -45,6 +47,7 @@ export default function WaitlistJoinClient({ eventId, storeName, cityState, hear
           item_count: items,
           how_heard: howHeard || null,
           notify_pref: notifyPref,
+          sms_opted_in: smsOptedIn,
         }),
       })
       const json = await res.json().catch(() => ({}))
@@ -91,7 +94,7 @@ export default function WaitlistJoinClient({ eventId, storeName, cityState, hear
             placeholder="(555) 123-4567"
             style={inp} />
           {/* SMS opt-in disclosure (Twilio toll-free requirement). */}
-          <SmsConsentNotice />
+          <SmsConsentCheckbox checked={smsOptedIn} onChange={setSmsOptedIn} />
         </Field>
         <Field label="How many items are you bringing?">
           <input value={itemCount} onChange={e => setItemCount(e.target.value)} required

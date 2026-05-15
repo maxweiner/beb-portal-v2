@@ -61,6 +61,10 @@ export async function POST(req: Request) {
     notes,
     // QR attribution from the customer page (?src=<code>)
     qr_code_id,
+    // Twilio-compliant explicit SMS opt-in. Defaults false. SMS
+    // dispatch (lib/appointments/notifications.ts) refuses to
+    // text unless this is TRUE.
+    sms_opted_in,
   } = body ?? {}
 
   if (!slug || !event_id || !appointment_date || !appointment_time) {
@@ -195,6 +199,10 @@ export async function POST(req: Request) {
       is_walkin: !!is_walkin,
       notes: notes ?? null,
       qr_code_id: resolvedQrCodeId,
+      // sms_opted_in: only TRUE if the booker explicitly checked
+      // the consent checkbox on the form. Coerce to boolean —
+      // never trust a stray truthy value from the client.
+      sms_opted_in: sms_opted_in === true,
     })
     .select('id, cancel_token')
     .single()
@@ -244,6 +252,9 @@ export async function POST(req: Request) {
       customer_email: customer_email.trim(),
       appointment_date,
       appointment_time: wantTime,
+      // Pass the opt-in through so the SMS branch knows whether
+      // to fire. Email always sends; SMS gated.
+      sms_opted_in: sms_opted_in === true,
     },
     store: {
       name: store.name,

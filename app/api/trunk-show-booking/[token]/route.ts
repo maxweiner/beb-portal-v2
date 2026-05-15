@@ -92,10 +92,12 @@ export async function POST(req: Request, { params }: { params: { token: string }
   try { body = await req.json() }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
-  const { slotId, first_name, last_name, email, phone, salesperson, notes } = body || {}
+  const { slotId, first_name, last_name, email, phone, salesperson, notes, sms_opted_in } = body || {}
   if (!slotId || !first_name?.trim()) {
     return NextResponse.json({ error: 'Missing slot or first name' }, { status: 400 })
   }
+  // Twilio-compliant explicit opt-in flag.
+  const smsOpted = sms_opted_in === true
 
   const sb = admin()
   const { data: slot } = await sb.from('trunk_show_appointment_slots')
@@ -127,6 +129,7 @@ export async function POST(req: Request, { params }: { params: { token: string }
     customer_phone:         norm(phone),
     store_salesperson_name: resolvedSalesperson,
     notes:                  norm(notes),
+    sms_opted_in:           smsOpted,
   })
   if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 })
 

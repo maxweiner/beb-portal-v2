@@ -81,6 +81,11 @@ export async function POST(req: Request, { params }: { params: { eventId: string
   const how_heard = body.how_heard ? String(body.how_heard).trim() : null
   const rawPref = String(body.notify_pref || 'wait')
   const notify_pref: 'sms' | 'wait' = rawPref === 'sms' ? 'sms' : 'wait'
+  // Twilio-compliant explicit opt-in. The signup checkbox is
+  // optional + unchecked-by-default; we only fire SMS when this
+  // is TRUE *AND* the older notify_pref selector landed on 'sms'.
+  // Coerce to boolean — never trust a stray truthy value.
+  const sms_opted_in = body.sms_opted_in === true
 
   if (!name) return NextResponse.json({ error: 'Name is required' }, { status: 400 })
   if (!phone) return NextResponse.json({ error: 'Phone is required' }, { status: 400 })
@@ -118,6 +123,7 @@ export async function POST(req: Request, { params }: { params: { eventId: string
     event_id: ev.id,
     name, phone, item_count, how_heard,
     notify_pref,
+    sms_opted_in,
     expires_at,
     // added_by_user_id stays NULL — public self-signup.
   }).select('id, name').maybeSingle()
@@ -129,7 +135,12 @@ export async function POST(req: Request, { params }: { params: { eventId: string
   // SMS confirmation (best-effort — failure to send doesn't roll
   // back the waitlist signup since the customer is already on the
   // list and we can text them when they're up).
-  if (notify_pref === 'sms') {
+  //
+  // Twilio compliance: require BOTH the legacy notify_pref='sms'
+  // selector AND the new explicit sms_opted_in checkbox. The
+  // checkbox is the audit-trail piece reviewers verify in the
+  // toll-free verification flow.
+  if (notify_pref === 'sms' && sms_opted_in) {
     try {
       const formatted = formatPhone(phone)
       await sendSMS(formatted, `You're on the waitlist for ${store?.name || 'this event'}. We'll text you when you're up.`)

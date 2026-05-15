@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
-import SmsConsentNotice from '@/components/ui/SmsConsentNotice'
+import SmsConsentCheckbox from '@/components/ui/SmsConsentCheckbox'
 
 interface ShowInfo {
   id: string
@@ -45,6 +45,9 @@ export default function TradeShowBookPage() {
   const [notes, setNotes] = useState('')
   const [busy, setBusy] = useState(false)
   const [bookedSlot, setBookedSlot] = useState<Slot | null>(null)
+  // Twilio-compliant SMS opt-in. Defaults false; server records
+  // the choice on the trade_show_appointments row.
+  const [smsOptedIn, setSmsOptedIn] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -103,7 +106,7 @@ export default function TradeShowBookPage() {
       const res = await fetch(`/api/trade-show-booking/${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slotId: pickedSlotId, name, email, phone, notes }),
+        body: JSON.stringify({ slotId: pickedSlotId, name, email, phone, notes, sms_opted_in: smsOptedIn }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json?.error || 'Could not book')
@@ -242,7 +245,7 @@ export default function TradeShowBookPage() {
                       style={{ borderColor: 'var(--pearl, #e2e8f0)' }} />
                   </div>
                   {/* SMS opt-in disclosure (Twilio toll-free requirement). */}
-                  <SmsConsentNotice />
+                  <SmsConsentCheckbox checked={smsOptedIn} onChange={setSmsOptedIn} />
                   <input value={notes} onChange={e => setNotes(e.target.value)}
                     placeholder="Anything we should know?"
                     className="w-full px-4 py-3 rounded-lg border text-base"
