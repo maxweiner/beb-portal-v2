@@ -848,8 +848,18 @@ function QueueGroup({ title, rows, showBulkSelect, allChecked, onToggleAll, acti
                 </div>
               )}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {r.buyer_name}
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                  <span>{r.buyer_name}</span>
+                  {/* ER number — small monospace chip so it's
+                      glance-readable next to the buyer name. Useful
+                      for cross-referencing with check stubs / QB
+                      exports / paid notes. */}
+                  {r.report_number && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, color: 'var(--mist)',
+                      fontFamily: 'monospace', letterSpacing: '.02em',
+                    }}>{r.report_number}</span>
+                  )}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--mist)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {r.event_label || '—'}{r.brand ? ` · ${r.brand.toUpperCase()}` : ''}
