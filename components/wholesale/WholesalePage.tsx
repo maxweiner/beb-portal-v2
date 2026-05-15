@@ -4,8 +4,10 @@
 // the sidebar nav id 'wholesale'. Internal sub-tabs for Inventory,
 // Memos, Invoices, Customers, Vendors, Reports, Admin Lists.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useApp } from '@/lib/context'
+import { isMobileDevice } from '@/lib/mobile'
+import MobileWholesale from '@/components/mobile/MobileWholesale'
 import InventoryView from './InventoryView'
 import MemosView from './MemosView'
 import InvoicesView from './InvoicesView'
@@ -40,6 +42,21 @@ export default function WholesalePage() {
   // surface.
   const isAllowed = user?.role === 'superadmin' || user?.role === 'admin' || user?.is_partner === true || user?.inventory_access === true
   const [tab, setTab] = useState<Tab>('inventory')
+
+  // Mobile rerouting — small-viewport devices get the streamlined
+  // 5-tab bottom-nav view. Desktop keeps the full tab strip + dense
+  // multi-pane layout. SSR-safe because isMobileDevice() returns
+  // false on the server; the post-mount re-render swaps in.
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    setIsMobile(isMobileDevice())
+    const onResize = () => setIsMobile(isMobileDevice())
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  if (isAllowed && isMobile) {
+    return <MobileWholesale />
+  }
 
   if (!isAllowed) {
     return (
