@@ -93,6 +93,47 @@ function ComposeTab() {
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [composeOpen, setComposeOpen] = useState(false)
+  const [previewing, setPreviewing] = useState(false)
+
+  // Build a server-rendered PDF preview of the currently-selected
+  // items and open it in a new tab. No batch row is created and no
+  // email is sent — purely a print review pass. Calls the preview
+  // route with the auth header pattern used by the Send button so
+  // the same wholesale-access gate applies.
+  async function handlePreview() {
+    if (selected.size === 0) return
+    setPreviewing(true)
+    try {
+      const token = await getAuthToken()
+      const res = await fetch('/api/wholesale/edge/preview', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          brand,
+          item_ids: Array.from(selected),
+        }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({} as any))
+        alert(j?.error || `Preview failed (${res.status})`)
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      // Open in a new tab so the current selection survives. Revoke
+      // after a delay — the new tab needs the URL to live long
+      // enough for the PDF viewer to fetch it.
+      window.open(url, '_blank', 'noopener,noreferrer')
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (err: any) {
+      alert(err?.message || 'Could not build preview PDF.')
+    } finally {
+      setPreviewing(false)
+    }
+  }
 
   useEffect(() => {
     if (!brand) return
@@ -284,7 +325,7 @@ function ComposeTab() {
       <div style={{
         position: 'sticky', bottom: 0, marginTop: 12,
         background: '#fff', borderTop: '2px solid var(--green-dark)',
-        padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+        padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
         borderRadius: 10, boxShadow: '0 -2px 8px rgba(0,0,0,.04)',
       }}>
         <div style={{ fontWeight: 700 }}>
@@ -295,6 +336,15 @@ function ComposeTab() {
           </>}
         </div>
         <div style={{ flex: 1 }} />
+        <button
+          disabled={selected.size === 0 || previewing}
+          onClick={handlePreview}
+          className="btn-outline"
+          style={{ padding: '10px 18px', fontWeight: 700 }}
+          title="Open a printable preview of the selected items — same data Edge will receive, no batch is created and no email is sent."
+        >
+          {previewing ? 'Building PDF…' : '📄 Preview PDF'}
+        </button>
         <button
           disabled={selected.size === 0}
           onClick={() => setComposeOpen(true)}
