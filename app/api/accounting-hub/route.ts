@@ -7,6 +7,19 @@
 // + event so the UI can render the queue without a second call.
 //
 // Optional query params:
+//   ?brand=beb|liberty             — strict brand isolation. When
+//                                     set, returns ONLY rows that
+//                                     belong to that brand:
+//                                       beb     → event.brand='beb'
+//                                                  OR sales-side
+//                                                  (trunk_show_id /
+//                                                  trade_show_id set)
+//                                       liberty → event.brand='liberty'
+//                                     Sales-side reports always count
+//                                     as BEB because Liberty doesn't
+//                                     run trunk shows / trade shows.
+//                                     When omitted, returns everything
+//                                     (admin / debug tooling).
 //   ?include_paid=true             — also return 'paid' reports,
 //                                     limited to the lookback window
 //                                     below (default 90 days). Useful
@@ -95,6 +108,17 @@ export async function GET(req: Request) {
   }
   const paidCutoff = new Date(Date.now() - paidLookbackDays * 24 * 60 * 60 * 1000).toISOString()
 
+  // ── Brand isolation ─────────────────────────────────────────
+  // Strict separation per ops: BEB and Liberty accounting queues
+  // never see each other's rows. Sales-side reports (trunk_show_id
+  // / trade_show_id) are BEB-only because Liberty doesn't run
+  // those workflows today. If you ever add Liberty trunk shows,
+  // give expense_reports its own brand column + flip the logic
+  // here to read it.
+  const brandParam = url.searchParams.get('brand')
+  const brandFilter: 'beb' | 'liberty' | null =
+    brandParam === 'beb' || brandParam === 'liberty' ? brandParam : null
+
   // ── Active reports (always returned) ───────────────────────
   // Deliberately ONE join to users (the submitter / owner). An
   // earlier attempt added `paid_by_user:users!paid_by(name)` here
@@ -109,6 +133,7 @@ export async function GET(req: Request) {
     .from('expense_reports')
     .select(`
       id, status, user_id, event_id,
+      trunk_show_id, trade_show_id,
       submitted_at, approved_at, paid_at, paid_by, paid_note,
       total_expenses, total_compensation, bonus_amount, grand_total,
       report_number, exported_to_qb_at, exported_to_qb_format,
@@ -176,43 +201,63 @@ export async function GET(req: Request) {
     }
   }
 
-  const today = Date.now()
-  const rows: QueueRow[] = (reports || []).map((r: any) => {
-    // For paid rows, age tracks days-since-paid so the UI can sort
-    // "most recently paid first" without a second pass. For active
-    // rows, it's days-since-submitted (the bucket the accountant
-    // cares about — how long has this been waiting).
-    const stamp = r.status === 'paid'
-      ? (r.paid_at || r.submitted_at || r.approved_at)
-      : (r.submitted_at || r.approved_at)
-    const age = stamp ? Math.floor((today - new Date(stamp).getTime()) / 86400000) : 0
-    const ev = r.event
-    const evLabel = ev ? `${ev.store_name}${ev.start_date ? ' · ' + ev.start_date : ''}` : null
-    return {
-      id: r.id,
-      status: r.status,
-      buyer_id: r.user_id,
-      buyer_name: r.user?.name || '(unknown)',
-      event_id: r.event_id,
-      event_label: evLabel,
-      brand: ev?.brand ?? null,
-      submitted_at: r.submitted_at,
-      approved_at: r.approved_at,
-      paid_at: r.paid_at || null,
-      paid_by_user_id: r.paid_by || null,
-      paid_by_name: r.paid_by ? (paidByNameById.get(r.paid_by) || null) : null,
-      paid_note: r.paid_note || null,
-      age_days: age,
-      total_expenses: Number(r.total_expenses) || 0,
-      total_compensation: Number(r.total_compensation) || 0,
-      total_bonus: Number(r.bonus_amount) || 0,
-      grand_total: Number(r.grand_total) || 0,
-      receipt_count: receiptCount.get(r.id) || 0,
-      report_number: r.report_number || null,
-      exported_to_qb_at: r.exported_to_qb_at || null,
-      exported_to_qb_format: r.exported_to_qb_format || null,
-    }
-  })
+  /** Effective brand for a report. Buying events get their brand
+   *  from the event join; sales-side reports (trunk_show_id /
+   *  trade_show_id set) are always BEB per Liberty-doesn't-do-this
+   *  rule. Reports without ANY parent (orphans) stay null — the
+   *  brand filter drops them unless brandParam is also null. */
+  function effectiveBrand(r: any): 'beb' | 'liberty' | null {
+    if (r.event?.brand === 'beb' || r.event?.brand === 'liberty') return r.event.brand
+    if (r.trunk_show_id || r.trade_show_id) return 'beb'
+    return null
+  }
 
-  return NextResponse.json({ rows, paid_lookback_days: includePaid ? paidLookbackDays : null })
+  const today = Date.now()
+  const rows: QueueRow[] = (reports || [])
+    .filter((r: any) => {
+      if (!brandFilter) return true  // admin / debug — no filter
+      return effectiveBrand(r) === brandFilter
+    })
+    .map((r: any) => {
+      // For paid rows, age tracks days-since-paid so the UI can sort
+      // "most recently paid first" without a second pass. For active
+      // rows, it's days-since-submitted (the bucket the accountant
+      // cares about — how long has this been waiting).
+      const stamp = r.status === 'paid'
+        ? (r.paid_at || r.submitted_at || r.approved_at)
+        : (r.submitted_at || r.approved_at)
+      const age = stamp ? Math.floor((today - new Date(stamp).getTime()) / 86400000) : 0
+      const ev = r.event
+      const evLabel = ev ? `${ev.store_name}${ev.start_date ? ' · ' + ev.start_date : ''}` : null
+      return {
+        id: r.id,
+        status: r.status,
+        buyer_id: r.user_id,
+        buyer_name: r.user?.name || '(unknown)',
+        event_id: r.event_id,
+        event_label: evLabel,
+        brand: effectiveBrand(r),
+        submitted_at: r.submitted_at,
+        approved_at: r.approved_at,
+        paid_at: r.paid_at || null,
+        paid_by_user_id: r.paid_by || null,
+        paid_by_name: r.paid_by ? (paidByNameById.get(r.paid_by) || null) : null,
+        paid_note: r.paid_note || null,
+        age_days: age,
+        total_expenses: Number(r.total_expenses) || 0,
+        total_compensation: Number(r.total_compensation) || 0,
+        total_bonus: Number(r.bonus_amount) || 0,
+        grand_total: Number(r.grand_total) || 0,
+        receipt_count: receiptCount.get(r.id) || 0,
+        report_number: r.report_number || null,
+        exported_to_qb_at: r.exported_to_qb_at || null,
+        exported_to_qb_format: r.exported_to_qb_format || null,
+      }
+    })
+
+  return NextResponse.json({
+    rows,
+    brand: brandFilter,
+    paid_lookback_days: includePaid ? paidLookbackDays : null,
+  })
 }
