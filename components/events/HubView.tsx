@@ -165,6 +165,11 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
   // Upcoming (default) vs Past time-window toggle.
   const [window, setWindow] = useState<'upcoming' | 'past'>('upcoming')
 
+  // Free-text search across store name, event name, and city. Helps
+  // when the upcoming list runs long — operators can jump straight
+  // to "sami" or "denver" instead of scrolling.
+  const [search, setSearch] = useState('')
+
   // Per-user hidden-launchers list. Lives in users.preferences.buying_events_hub_hidden_launchers.
   // Initialized from the DB once on mount; thereafter, the local state is the
   // source of truth for this session. Saves write through to the DB. We
@@ -215,18 +220,32 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
 
   const visibleEvents = useMemo(() => {
     const todayIso = new Date().toISOString().slice(0, 10)
-    if (window === 'past') {
-      return events
-        .filter(e => e.status !== 'cancelled')
-        .filter(e => !!e.start_date && eventEndIso(e.start_date) < todayIso)
-        // Most recent first.
-        .sort((a, b) => (b.start_date || '').localeCompare(a.start_date || ''))
-    }
-    return events
-      .filter(e => e.status !== 'cancelled')
-      .filter(e => !!e.start_date && eventEndIso(e.start_date) >= todayIso)
-      .sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''))
-  }, [events, window])
+    const base = window === 'past'
+      ? events
+          .filter(e => e.status !== 'cancelled')
+          .filter(e => !!e.start_date && eventEndIso(e.start_date) < todayIso)
+          // Most recent first.
+          .sort((a, b) => (b.start_date || '').localeCompare(a.start_date || ''))
+      : events
+          .filter(e => e.status !== 'cancelled')
+          .filter(e => !!e.start_date && eventEndIso(e.start_date) >= todayIso)
+          .sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''))
+
+    const q = search.trim().toLowerCase()
+    if (!q) return base
+    // Match against store name + city/state + the rendered event
+    // display name. Lowercased substring — fast + forgiving.
+    return base.filter(ev => {
+      const store = stores.find(s => s.id === ev.store_id)
+      const haystack = [
+        eventDisplayName(ev, stores),
+        store?.name,
+        store?.city,
+        store?.state,
+      ].filter(Boolean).join(' ').toLowerCase()
+      return haystack.includes(q)
+    })
+  }, [events, window, search, stores])
 
   const campaignsByEvent = useMemo(() => {
     const m = new Map<string, CampaignRow[]>()
@@ -318,28 +337,61 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         gap: 10, flexWrap: 'wrap', marginBottom: 14,
       }}>
-        {/* Upcoming / Past toggle */}
-        <div style={{
-          display: 'inline-flex', gap: 2, background: 'var(--cream2)',
-          padding: 2, borderRadius: 6,
-        }}>
-          {(['upcoming', 'past'] as const).map(w => {
-            const sel = window === w
-            return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {/* Upcoming / Past toggle */}
+          <div style={{
+            display: 'inline-flex', gap: 2, background: 'var(--cream2)',
+            padding: 2, borderRadius: 6,
+          }}>
+            {(['upcoming', 'past'] as const).map(w => {
+              const sel = window === w
+              return (
+                <button
+                  key={w}
+                  onClick={() => setWindow(w)}
+                  style={{
+                    fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
+                    padding: '5px 14px', border: 'none', borderRadius: 4,
+                    background: sel ? '#fff' : 'transparent',
+                    color: sel ? 'var(--green-dark)' : 'var(--mist)',
+                    cursor: 'pointer',
+                    boxShadow: sel ? '0 1px 2px rgba(0,0,0,.06)' : 'none',
+                    textTransform: 'capitalize',
+                  }}>{w}</button>
+              )
+            })}
+          </div>
+
+          {/* Free-text search — store / event / city */}
+          <div style={{ position: 'relative' }}>
+            <input
+              type="search"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="🔍 Search store, event, or city…"
+              style={{
+                fontFamily: 'inherit', fontSize: 12,
+                padding: '5px 28px 5px 10px', minWidth: 240,
+                border: '1px solid var(--cream2)', borderRadius: 6,
+                background: '#fff', color: 'var(--ink)',
+                outline: 'none',
+              }}
+            />
+            {search && (
               <button
-                key={w}
-                onClick={() => setWindow(w)}
+                type="button"
+                onClick={() => setSearch('')}
+                aria-label="Clear search"
                 style={{
-                  fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
-                  padding: '5px 14px', border: 'none', borderRadius: 4,
-                  background: sel ? '#fff' : 'transparent',
-                  color: sel ? 'var(--green-dark)' : 'var(--mist)',
-                  cursor: 'pointer',
-                  boxShadow: sel ? '0 1px 2px rgba(0,0,0,.06)' : 'none',
-                  textTransform: 'capitalize',
-                }}>{w}</button>
-            )
-          })}
+                  position: 'absolute', right: 6, top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'transparent', border: 'none',
+                  cursor: 'pointer', color: 'var(--mist)',
+                  fontSize: 14, lineHeight: 1, padding: '2px 4px',
+                }}
+              >✕</button>
+            )}
+          </div>
         </div>
         <button
           onClick={() => setCustomizeOpen(true)}
@@ -353,7 +405,9 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
           background: '#fff', border: '1px solid var(--cream2)', borderRadius: 10,
           padding: 32, textAlign: 'center', color: 'var(--mist)', fontSize: 14,
         }}>
-          {window === 'past' ? 'No past buying events.' : 'No upcoming buying events.'}
+          {search.trim()
+            ? `No ${window === 'past' ? 'past' : 'upcoming'} events match "${search.trim()}".`
+            : window === 'past' ? 'No past buying events.' : 'No upcoming buying events.'}
         </div>
       )}
 
