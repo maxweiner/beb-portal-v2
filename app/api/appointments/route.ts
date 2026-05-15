@@ -21,6 +21,7 @@ import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 import { buildSlotsForDay, hoursForEventDay } from '@/lib/appointments/slots'
 import { sendConfirmation } from '@/lib/appointments/notifications'
+import { normalizePhone } from '@/lib/customers/csv'
 
 export const dynamic = 'force-dynamic'
 
@@ -177,6 +178,43 @@ export async function POST(req: Request) {
     }
   }
 
+  // Repeat-customer detection. Match the entered phone against the
+  // per-store customers DB. If we find a row, flag the appointment +
+  // append 'Repeat Customer' to how_heard so attribution reports
+  // surface both the channel ('Small Postcard') AND the repeat flag
+  // ('Repeat Customer') side-by-side. Server-side ONLY — the client
+  // never sets these fields, so a tampered request can't pretend to
+  // be a repeat.
+  let isRepeatCustomer = false
+  let repeatCustomerId: string | null = null
+  const normalizedPhone = normalizePhone(customer_phone)
+  if (normalizedPhone) {
+    const { data: existingCustomer } = await sb
+      .from('customers')
+      .select('id')
+      .eq('store_id', store.id)
+      .eq('phone_normalized', normalizedPhone)
+      .limit(1)
+      .maybeSingle()
+    if (existingCustomer) {
+      isRepeatCustomer = true
+      repeatCustomerId = existingCustomer.id
+    }
+  }
+
+  // Compose the final how_heard. QR-derived value wins as the primary
+  // source; client-supplied how_heard is fallback. Append the
+  // 'Repeat Customer' marker so reports + the calendar chip have one
+  // canonical signal to read.
+  const baseHowHeard: string[] | null = qrHowHeard
+    ?? (Array.isArray(how_heard) ? how_heard : (how_heard ? [how_heard] : null))
+  const finalHowHeard: string[] | null = (() => {
+    if (!isRepeatCustomer) return baseHowHeard
+    const merged = [...(baseHowHeard ?? [])]
+    if (!merged.includes('Repeat Customer')) merged.push('Repeat Customer')
+    return merged
+  })()
+
   // Insert the appointment. cancel_token defaults via the schema.
   const validBookedBy = booked_by === 'store' || booked_by === 'admin' ? booked_by : 'customer'
 
@@ -192,7 +230,7 @@ export async function POST(req: Request) {
       customer_phone: customer_phone.trim(),
       customer_email: customer_email.trim(),
       items_bringing,
-      how_heard: qrHowHeard ?? how_heard ?? null,
+      how_heard: finalHowHeard,
       booked_by: validBookedBy,
       // Employee-portal explicit value wins; fall back to QR-derived employee.
       appointment_employee_id: appointment_employee_id || qrEmployeeId || null,
@@ -203,6 +241,8 @@ export async function POST(req: Request) {
       // the consent checkbox on the form. Coerce to boolean —
       // never trust a stray truthy value from the client.
       sms_opted_in: sms_opted_in === true,
+      is_repeat_customer: isRepeatCustomer,
+      repeat_customer_id: repeatCustomerId,
     })
     .select('id, cancel_token')
     .single()

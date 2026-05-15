@@ -39,13 +39,13 @@ export default async function Page({ params }: { params: { token: string } }) {
 
   const [apptsRes, cancelledRes, employeesRes] = await Promise.all([
     sb.from('appointments')
-      .select('id, cancel_token, status, appointment_date, appointment_time, customer_name, customer_phone, customer_email, items_bringing, how_heard, is_walkin, appointment_employee_id, booked_by')
+      .select('id, cancel_token, status, appointment_date, appointment_time, customer_name, customer_phone, customer_email, items_bringing, how_heard, is_walkin, is_repeat_customer, appointment_employee_id, booked_by')
       .in('event_id', eventIds)
       .neq('status', 'cancelled')
       .order('appointment_date', { ascending: true })
       .order('appointment_time', { ascending: true }),
     sb.from('appointments')
-      .select('id, cancel_token, status, appointment_date, appointment_time, customer_name, customer_phone, customer_email, items_bringing, how_heard, is_walkin, appointment_employee_id, booked_by')
+      .select('id, cancel_token, status, appointment_date, appointment_time, customer_name, customer_phone, customer_email, items_bringing, how_heard, is_walkin, is_repeat_customer, appointment_employee_id, booked_by')
       .in('event_id', eventIds)
       .eq('status', 'cancelled')
       .order('appointment_date', { ascending: false })
