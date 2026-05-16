@@ -16,12 +16,14 @@ import TemplateList from './TemplateList'
 import TemplateEditor from './TemplateEditor'
 import AiTemplateModal from './AiTemplateModal'
 import BuyingSendFlow from './BuyingSendFlow'
+import BuyingCommsLogPanel from './BuyingCommsLogPanel'
 import type { CommunicationTemplate } from '@/types'
 
 type View =
   | { kind: 'list' }
   | { kind: 'edit'; template: CommunicationTemplate | null }
   | { kind: 'send'; eventId?: string | null; templateId?: string | null }
+  | { kind: 'log' }
 
 export default function BuyingCommunications() {
   const { user } = useApp()
@@ -69,6 +71,18 @@ export default function BuyingCommunications() {
     )
   }
 
+  if (view.kind === 'log') {
+    return (
+      <div className="p-6" style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <button onClick={() => setView({ kind: 'list' })} className="btn-outline btn-xs">← Back</button>
+          <h1 style={{ fontSize: 20, fontWeight: 900, color: 'var(--ink)', margin: 0 }}>📨 Buying Communications Log — All events</h1>
+        </div>
+        <BuyingCommsLogPanel />
+      </div>
+    )
+  }
+
   return (
     <div className="p-6" style={{ maxWidth: 1100, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
@@ -80,6 +94,7 @@ export default function BuyingCommunications() {
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={() => setView({ kind: 'send' })} className="btn-primary btn-sm">📤 Send a letter</button>
+          <button onClick={() => setView({ kind: 'log' })} className="btn-outline btn-sm">📨 Log</button>
           <button
             onClick={() => setAiModal({ mode: 'new' })}
             className="btn-outline btn-sm"
