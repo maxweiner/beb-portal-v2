@@ -33,14 +33,18 @@ function isViewMode(v: unknown): v is ViewMode {
 export default function BuyingEventsView({ setNav }: { setNav?: (n: NavPage) => void }) {
   const { user, events } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || user?.is_partner === true
-  // No hardcoded default: lazy-init from localStorage so a returning user
-  // sees their last-used view immediately (no hub flash). Fall back to
-  // the original 'legacy' list for users with no preference saved at all.
+  // Lazy-init from localStorage so a returning user sees their
+  // last-used view immediately (no hub flash). Fall back to the
+  // Hub view for users with no preference saved at all — Hub has
+  // been the modern entry point since the launcher rebuild, and
+  // Legacy is being phased out (hidden from the view picker as of
+  // 2026-05-15; route handler kept for ~30 days in case anyone
+  // explicitly saved it).
   const [view, setView] = useState<ViewMode>(() => {
-    if (typeof window === 'undefined') return 'legacy'
+    if (typeof window === 'undefined') return 'hub'
     const saved = window.localStorage.getItem(STORAGE_KEY)
     if (isViewMode(saved) && saved !== 'sheet') return saved
-    return 'legacy'
+    return 'hub'
   })
   const [phase, setPhase] = useState<Phase>('pre')
   const [createMode, setCreateMode] = useState<'scheduled' | 'reserved' | null>(null)
@@ -291,14 +295,19 @@ function ViewChooser({ view, onChange }: { view: ViewMode; onChange: (v: ViewMod
         display: 'flex', gap: 2, background: 'var(--cream2)',
         padding: 2, borderRadius: 6,
       }}>
-        {(['hub', 'new', 'slim', 'sheet', 'legacy'] as ViewMode[]).map(v => {
+        {/* 'legacy' deliberately omitted — hidden 2026-05-15. The route
+            handler in this file still serves it for any user whose saved
+            preference is still 'legacy' (migration bumps them to 'hub')
+            but it's no longer reachable from the picker. Re-add the
+            chip here when / if Legacy comes back; or delete the route
+            handler altogether after the ~30-day hold-out period. */}
+        {(['hub', 'new', 'slim', 'sheet'] as ViewMode[]).map(v => {
           const sel = view === v
           const label =
             v === 'hub'    ? '🎯 Hub' :
             v === 'new'    ? '✨ New' :
             v === 'slim'   ? '📃 Slim' :
-            v === 'sheet'  ? '⊞ Sheet' :
-                             '🗂 Legacy'
+                             '⊞ Sheet'
           return (
             <button key={v} onClick={() => onChange(v)}
               style={{
