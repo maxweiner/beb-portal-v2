@@ -8,7 +8,7 @@ import type {
   WholesaleInvoiceTradeinLine, WholesaleCustomer, InventoryItem,
   InvoicePaymentStatus, InventoryCategory,
 } from '@/types/wholesale'
-import { fmtDate, fmtMoneyCents, dollarsToCents, centsToDollarsString } from '@/lib/wholesale/format'
+import { fmtDate, fmtMoneyCents, dollarsToCents, centsToDollarsString, dollarsToWholeCents, centsToWholeDollarsString } from '@/lib/wholesale/format'
 import { nextWholesaleNumber, prefixForCategory } from '@/lib/wholesale/numbers'
 import { logAudit } from '@/lib/wholesale/audit'
 import { loadAdminList } from '@/lib/wholesale/lists'
@@ -260,7 +260,8 @@ function InvoiceDetailModal({
     setBusy(false)
   }
   async function setLineSalePrice(line: WholesaleInvoiceLine, dollars: string) {
-    const cents = dollarsToCents(dollars) ?? 0
+    // Invoice line sale prices are whole dollars only as of 2026-05-15.
+    const cents = dollarsToWholeCents(dollars) ?? 0
     await supabase.from('wholesale_invoice_lines').update({ sale_price_cents: cents }).eq('id', line.id)
     await reload(); await recomputeTotals(); onChanged()
   }
@@ -378,7 +379,8 @@ function InvoiceDetailModal({
                 <td style={{ padding: '6px 8px', fontWeight: 700 }}>{l.item?.item_number || '—'}</td>
                 <td style={{ padding: '6px 8px' }}>{l.description}</td>
                 <td style={{ padding: '6px 8px' }}>
-                  <input type="number" step="0.01" defaultValue={centsToDollarsString(l.sale_price_cents)}
+                  {/* Whole dollars only (2026-05-15). */}
+                  <input type="number" step="1" min="0" defaultValue={centsToWholeDollarsString(l.sale_price_cents)}
                     onBlur={e => setLineSalePrice(l, e.target.value)}
                     style={{ width: 110, padding: '4px 6px', fontSize: 12 }} />
                 </td>
@@ -561,8 +563,18 @@ function AddTradeinModal({ onClose, onAdd }: {
             <option value="diamond">Diamond</option>
           </Select>
         </Field>
-        <Field label="Agreed price ($)">
-          <input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} />
+        <Field label="Agreed price ($, whole dollars)">
+          {/* Becomes the new inventory item's cost — which is whole
+              dollars only as of 2026-05-15. Round on blur so the
+              created item never has fractional cents. */}
+          <input type="number" step="1" min="0" value={amount}
+            onChange={e => setAmount(e.target.value)}
+            onBlur={e => {
+              const raw = e.target.value.trim()
+              if (raw === '') return
+              const n = Number.parseFloat(raw.replace(/[$,\s]/g, ''))
+              if (Number.isFinite(n)) setAmount(String(Math.round(n)))
+            }} />
         </Field>
       </Row>
       <Field label="Description">
