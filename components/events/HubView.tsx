@@ -14,7 +14,7 @@
 // Data fetching mirrors PreEventTab so KPIs and gate counts match
 // what the user sees on the existing New view.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import { eventEndIso, formatEventRange } from '@/lib/eventDates'
@@ -123,7 +123,15 @@ function initials(name: string): string {
 }
 
 // ── Component ────────────────────────────────────────────────
-export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
+export default function HubView({ setNav, customizeOpen: externalCustomizeOpen, onCustomizeOpenChange }: {
+  setNav?: (n: NavPage) => void
+  /** Controlled open-state for the Customize / reorder modal. Lets
+   *  the parent (BuyingEventsView) own the button — keeps page-level
+   *  actions grouped instead of split across rows. Optional: when
+   *  omitted, HubView falls back to its own internal state. */
+  customizeOpen?: boolean
+  onCustomizeOpenChange?: (open: boolean) => void
+}) {
   const ctx = useApp()
   const { stores, user, brand, users, setTravelIntent, setDayEntryIntent, events: ctxEvents } = ctx
 
@@ -160,7 +168,17 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
   /** Existing box labels for the event whose manifest modal is currently open.
    *  Lazily fetched so we can drive the "replace?" warning + preset pills. */
   const [manifestExistingLabels, setManifestExistingLabels] = useState<string[]>([])
-  const [customizeOpen, setCustomizeOpen] = useState(false)
+  // Customize-modal state: prefer the parent-controlled value when
+  // the parent passed both `customizeOpen` and `onCustomizeOpenChange`
+  // (the new layout where the trigger lives in the page header).
+  // Fall back to local state for any caller that doesn't pass them
+  // — keeps HubView usable in isolation (e.g. tests).
+  const [internalCustomizeOpen, setInternalCustomizeOpen] = useState(false)
+  const customizeOpen = externalCustomizeOpen ?? internalCustomizeOpen
+  const setCustomizeOpen = (next: boolean) => {
+    if (onCustomizeOpenChange) onCustomizeOpenChange(next)
+    else setInternalCustomizeOpen(next)
+  }
 
   // Upcoming (default) vs Past time-window toggle.
   const [window, setWindow] = useState<'upcoming' | 'past'>('upcoming')
@@ -202,6 +220,37 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
   }, [])
   const [order, setOrder] = useState<LauncherKey[]>(initialOrder)
   const [saveError, setSaveError] = useState<string | null>(null)
+
+  // Teaching tooltip — auto-appears for the first 3 visits to the Hub
+  // view, then disappears for good. Pure onboarding nudge for the new
+  // drag-to-reorder feature. Persisted per-user in users.preferences
+  // so the count survives across browsers and devices. Tapping 'Got
+  // it' bumps the count to 3 instantly.
+  //
+  // initialReorderTipSeen is read ONCE at mount — local state takes
+  // over after that so an in-session bump doesn't flicker the banner
+  // off mid-render.
+  const initialReorderTipSeen = useMemo<number>(() => {
+    const raw = (user?.preferences as any)?.buying_events_hub_reorder_tip_seen_count
+    const n = typeof raw === 'number' ? raw : 0
+    return Math.max(0, Math.min(3, n))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const [reorderTipSeen, setReorderTipSeen] = useState<number>(initialReorderTipSeen)
+  const reorderTipBumpedRef = useRef(false)
+
+  // On first mount, bump the seen-count by 1 — but only once per
+  // session so re-renders don't compound. Caps at 3 (banner hides at
+  // ≥ 3).
+  useEffect(() => {
+    if (reorderTipBumpedRef.current) return
+    if (initialReorderTipSeen >= 3) return
+    reorderTipBumpedRef.current = true
+    const next = Math.min(3, initialReorderTipSeen + 1)
+    setReorderTipSeen(next)
+    void saveReorderTipSeen(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Authoritative LAUNCHERS list in the user's chosen order. Cards
   // render in this order; the customize modal lists rows in this
@@ -373,6 +422,15 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
     }
   }
 
+  // Persist the teaching-tooltip seen count. Best-effort: failure
+  // doesn't surface to the user (the tooltip is just a nudge — losing
+  // a single increment is harmless and the next visit will re-try).
+  async function saveReorderTipSeen(next: number) {
+    if (!user?.id) return
+    const nextPrefs = { ...(user.preferences || {}), buying_events_hub_reorder_tip_seen_count: next }
+    await supabase.from('users').update({ preferences: nextPrefs }).eq('id', user.id)
+  }
+
   async function promoteEvent(ev: Event) {
     if (!confirm(`Promote ${eventDisplayName(ev, stores)} from Reserved → Booked?`)) return
     const { error } = await supabase.from('events').update({ status: 'scheduled' }).eq('id', ev.id)
@@ -460,12 +518,61 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
             )}
           </div>
         </div>
-        <button
-          onClick={() => setCustomizeOpen(true)}
-          className="btn-outline btn-sm"
-          title="Show or hide action-launcher buttons across every card"
-        >✏️ Customize buttons</button>
+        {/* Customize / reorder button was hoisted to the page header
+            in BuyingEventsView for cleaner layout. It still opens the
+            same modal via the customizeOpen prop wired below. When
+            HubView is used standalone (without the parent owning
+            customizeOpen), the local state takes over and there's no
+            visible trigger — that's fine for tests / isolation. */}
       </div>
+
+      {/* Teaching callout — auto-shows for the first 3 visits to the
+          Hub view, then disappears for good. Pure onboarding nudge
+          for the drag-to-reorder feature. The visit counter lives
+          in users.preferences.buying_events_hub_reorder_tip_seen_count
+          and increments once per mount (capped at 3). */}
+      {reorderTipSeen < 3 && (
+        <div
+          role="status"
+          style={{
+            display: 'flex', alignItems: 'flex-start', gap: 10,
+            background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 8,
+            padding: '10px 14px', marginBottom: 14,
+            fontSize: 13, color: '#78350F',
+          }}
+        >
+          <span style={{ fontSize: 18, lineHeight: 1.1 }} aria-hidden>💡</span>
+          <div style={{ flex: 1, lineHeight: 1.45 }}>
+            <strong>New: you can rearrange these buttons.</strong>{' '}
+            Tap <span style={{ background: '#fff', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>✏️ Customize / reorder</span> above, then drag the <span style={{ fontWeight: 700 }}>⠿</span> handle next to any launcher to set your own order — saved to your account.
+            <span style={{ display: 'block', fontSize: 11, color: '#92400E', marginTop: 4 }}>
+              {reorderTipSeen >= 1 && (
+                <>This tip auto-hides after {3 - reorderTipSeen} more visit{(3 - reorderTipSeen) === 1 ? '' : 's'} · </>
+              )}
+              <button
+                type="button"
+                onClick={() => { setReorderTipSeen(3); void saveReorderTipSeen(3) }}
+                style={{
+                  background: 'transparent', border: 0, padding: 0,
+                  color: '#92400E', textDecoration: 'underline',
+                  cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
+                }}
+              >
+                Got it — don't show again
+              </button>
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => { setReorderTipSeen(3); void saveReorderTipSeen(3) }}
+            aria-label="Dismiss tip"
+            style={{
+              background: 'transparent', border: 0, color: '#92400E',
+              fontSize: 16, cursor: 'pointer', padding: 2, lineHeight: 1,
+            }}
+          >✕</button>
+        </div>
+      )}
 
       {visibleEvents.length === 0 && (
         <div style={{
@@ -959,6 +1066,7 @@ function Launcher({
   return (
     <button
       onClick={onClick}
+      title={`${def.label} — click to open · ✏️ Customize / reorder in the header to rearrange or hide`}
       style={{
         background: primary ? 'var(--green-pale)' : 'var(--cream)',
         border: `1px solid ${primary ? 'var(--green3)' : 'var(--pearl)'}`,

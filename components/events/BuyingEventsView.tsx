@@ -51,6 +51,10 @@ export default function BuyingEventsView({ setNav }: { setNav?: (n: NavPage) => 
   // Fullscreen workspace for the Sheet view (sidebar covered).
   // Only the sheet view exposes the ⛶ trigger.
   const [sheetFullscreen, setSheetFullscreen] = useState(false)
+  // Hub-only: customize-launchers modal open state. Lives here so the
+  // trigger button can sit in the page header next to + New Event /
+  // Save the Date instead of in HubView's secondary toolbar.
+  const [hubCustomizeOpen, setHubCustomizeOpen] = useState(false)
 
   // Sync from DB pref (cross-device source of truth). Only fires when
   // the user's preferences object itself changes — NOT when local view
@@ -90,23 +94,42 @@ export default function BuyingEventsView({ setNav }: { setNav?: (n: NavPage) => 
       <div className="p-6" style={{ maxWidth: 1200, margin: '0 auto' }}>
         <ViewChooser view={view} onChange={changeView} />
 
+        {/* Page header — title + page-level actions on one row. The
+            Customize / reorder button used to live inside HubView's
+            secondary toolbar; we hoist it here so all three buttons
+            ('+ New Event' / 'Save the Date' / 'Customize') share one
+            row and the secondary toolbar (Upcoming / Past · Search)
+            stays clean. Customize is visible to everyone (it's a
+            personalization, not an admin action), so it sits OUTSIDE
+            the isAdmin gate. */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)', margin: '0 0 4px' }}>
               ◆ Buying Events <span style={{ fontSize: 13, color: 'var(--mist)', fontWeight: 700 }}>· Hub</span>
             </h1>
           </div>
-          {isAdmin && (
-            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-              <button onClick={() => setCreateMode('scheduled')} className="btn-primary btn-sm">+ New Event</button>
-              <button onClick={() => setCreateMode('reserved')} className="btn-outline btn-sm" title="Tentative date — Save the Date">
-                📌 Save the Date
-              </button>
-            </div>
-          )}
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
+            {isAdmin && (
+              <>
+                <button onClick={() => setCreateMode('scheduled')} className="btn-primary btn-sm">+ New Event</button>
+                <button onClick={() => setCreateMode('reserved')} className="btn-outline btn-sm" title="Tentative date — Save the Date">
+                  📌 Save the Date
+                </button>
+              </>
+            )}
+            <button
+              onClick={() => setHubCustomizeOpen(true)}
+              className="btn-outline btn-sm"
+              title="Show, hide, or drag-to-reorder the action-launcher buttons that appear on every event card. Saves to your account."
+            >✏️ Customize / reorder</button>
+          </div>
         </div>
 
-        <HubView setNav={setNav} />
+        <HubView
+          setNav={setNav}
+          customizeOpen={hubCustomizeOpen}
+          onCustomizeOpenChange={setHubCustomizeOpen}
+        />
 
         {createMode && (
           <CreateEventModal mode={createMode} onClose={() => setCreateMode(null)} />
