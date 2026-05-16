@@ -463,8 +463,8 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
         <button
           onClick={() => setCustomizeOpen(true)}
           className="btn-outline btn-sm"
-          title="Show or hide action-launcher buttons across every card"
-        >✏️ Customize buttons</button>
+          title="Show, hide, or drag-to-reorder the action-launcher buttons that appear on every event card. Saves to your account."
+        >✏️ Customize / reorder</button>
       </div>
 
       {visibleEvents.length === 0 && (
@@ -959,6 +959,7 @@ function Launcher({
   return (
     <button
       onClick={onClick}
+      title={`${def.label} — click to open · ✏️ Customize / reorder in the header to rearrange or hide`}
       style={{
         background: primary ? 'var(--green-pale)' : 'var(--cream)',
         border: `1px solid ${primary ? 'var(--green3)' : 'var(--pearl)'}`,
