@@ -576,6 +576,10 @@ export default function Settings() {
       {user?.role === 'superadmin' && (
         <GCalSyncSettings brand="liberty" />
       )}
+      {/* Trade Show GCal — single org-wide calendar (2026-05-16). */}
+      {user?.role === 'superadmin' && (
+        <TradeShowGcalSettings />
+      )}
       {/* Ad-hoc Google Calendar events (superadmin only) — one-off
           entries pushed directly into either a brand buying-events
           calendar or a trunk-rep's personal calendar. */}
@@ -1751,6 +1755,132 @@ function ActiveBrandNote() {
       <div style={{ fontSize: 12, color: 'var(--mist)', marginTop: 10 }}>
         🔗 This selection is synced across all your devices — when you switch on one device the others follow on next load.
       </div>
+    </CollapsibleCard>
+  )
+}
+
+// ── Trade Show GCal settings (org-wide single calendar) ──────
+// Mirrors GCalSyncSettings but simpler — one row in
+// trade_show_gcal_settings, no per-brand split. Companion to PR
+// shipped 2026-05-16. Service account is reused from the buying-
+// events GCal setup; user just shares one new calendar with it.
+function TradeShowGcalSettings() {
+  const [enabled, setEnabled] = useState(false)
+  const [calendarId, setCalendarId] = useState('')
+  const [lastSync, setLastSync] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [recent, setRecent] = useState<any[]>([])
+  const [failed, setFailed] = useState(0)
+
+  const reload = async () => {
+    const [{ data: settings }, { data: rows }, { count }] = await Promise.all([
+      supabase.from('trade_show_gcal_settings').select('*').eq('id', 1).maybeSingle(),
+      supabase.from('trade_show_gcal_sync_queue')
+        .select('id, action, status, last_error, created_at, processed_at, attempts')
+        .order('created_at', { ascending: false }).limit(10),
+      supabase.from('trade_show_gcal_sync_queue').select('id', { count: 'exact', head: true })
+        .eq('status', 'failed'),
+    ])
+    if (settings) {
+      setEnabled(!!settings.enabled)
+      setCalendarId(settings.calendar_id || '')
+      setLastSync(settings.last_full_sync_at || null)
+    }
+    setRecent((rows || []) as any[])
+    setFailed(count || 0)
+    setLoaded(true)
+  }
+  useEffect(() => { reload() /* eslint-disable-next-line */ }, [])
+
+  const save = async () => {
+    setSaving(true)
+    const { error } = await supabase.from('trade_show_gcal_settings').update({
+      enabled, calendar_id: calendarId.trim() || null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', 1)
+    setSaving(false)
+    if (error) { alert('Save failed: ' + error.message); return }
+    reload()
+  }
+
+  const backfill = async () => {
+    if (!confirm('Re-enqueue every live trade show to push to the org-wide calendar? The cron drains 25/minute.')) return
+    const { data: shows, error } = await supabase
+      .from('trade_shows').select('id').is('deleted_at', null)
+    if (error) { alert('Backfill query failed: ' + error.message); return }
+    const rows = (shows || []).map(s => ({ trade_show_id: (s as any).id, action: 'sync' as const }))
+    if (rows.length === 0) { alert('No live trade shows found.'); return }
+    const { error: insErr } = await supabase.from('trade_show_gcal_sync_queue').insert(rows)
+    if (insErr) { alert('Backfill enqueue failed: ' + insErr.message); return }
+    alert(`Enqueued ${rows.length} trade show${rows.length === 1 ? '' : 's'} — cron will drain over the next ${Math.ceil(rows.length / 25)} minute(s).`)
+    reload()
+  }
+
+  return (
+    <CollapsibleCard
+      storageKey="settings-trade-show-gcal"
+      title="📅 Trade Show GCal (org-wide)"
+      titleAccessory={loaded && failed > 0 ? <span style={{ fontSize: 11, fontWeight: 700, color: '#991B1B' }}>{failed} failed</span> : null}
+    >
+      <div style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 14, lineHeight: 1.5 }}>
+        Mirrors every trade show as an event on a single org-wide Google Calendar so everyone sees the same trade-show schedule.{' '}
+        <strong style={{ color: 'var(--ash)' }}>Setup:</strong> create a new Google Calendar (e.g. "BEB Trade Shows") → Calendar Settings → "Share with specific people" → add the BEB service-account email with permission <em>"Make changes to events"</em> → copy the Calendar ID from the same Settings page → paste below and enable.
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700 }}>
+          <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
+          Enabled
+        </label>
+        <span style={{ fontSize: 12, color: 'var(--mist)' }}>
+          When off, the queue still receives mutations but the cron no-ops them (won't push to Google).
+        </span>
+      </div>
+
+      <div className="field" style={{ marginBottom: 14 }}>
+        <label className="fl">Google Calendar ID</label>
+        <input
+          type="text"
+          value={calendarId}
+          onChange={e => setCalendarId(e.target.value)}
+          placeholder="abc123…@group.calendar.google.com"
+          style={{ width: '100%' }}
+        />
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+        <button onClick={save} disabled={saving} className="btn-primary btn-sm">
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+        <button onClick={backfill} disabled={!enabled || !calendarId.trim()} className="btn-outline btn-sm" title="Re-enqueue every live trade show. Use after the first time you enable + set the calendar ID.">
+          🔄 Backfill all live trade shows
+        </button>
+        {lastSync && (
+          <span style={{ fontSize: 11, color: 'var(--mist)', alignSelf: 'center' }}>
+            Last full sync {new Date(lastSync).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
+          </span>
+        )}
+      </div>
+
+      {recent.length > 0 && (
+        <details style={{ marginTop: 8 }}>
+          <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--mist)' }}>
+            Recent sync activity ({recent.length})
+          </summary>
+          <div style={{ marginTop: 8, fontSize: 11, fontFamily: 'monospace', color: 'var(--mist)' }}>
+            {recent.map((r: any) => (
+              <div key={r.id} style={{ padding: '2px 0' }}>
+                {new Date(r.created_at).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' })}
+                {' · '}{r.action}
+                {' · '}<span style={{ color: r.status === 'done' ? 'var(--green-dark)' : r.status === 'failed' ? '#991B1B' : r.status === 'pending' ? '#92400E' : 'var(--ash)' }}>{r.status}</span>
+                {r.attempts > 1 && ` · attempts ${r.attempts}`}
+                {r.last_error && ` · ${r.last_error.slice(0, 60)}`}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
     </CollapsibleCard>
   )
 }

@@ -25,6 +25,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/process-trade-show-gcal-sync?secret=bebportal2024",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/split-white-sheets?secret=bebportal2024",
       "schedule": "* * * * *"
     },
