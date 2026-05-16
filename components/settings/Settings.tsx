@@ -1806,15 +1806,28 @@ function TradeShowGcalSettings() {
 
   const backfill = async () => {
     if (!confirm('Re-enqueue every live trade show to push to the org-wide calendar? The cron drains 25/minute.')) return
-    const { data: shows, error } = await supabase
-      .from('trade_shows').select('id').is('deleted_at', null)
-    if (error) { alert('Backfill query failed: ' + error.message); return }
-    const rows = (shows || []).map(s => ({ trade_show_id: (s as any).id, action: 'sync' as const }))
-    if (rows.length === 0) { alert('No live trade shows found.'); return }
-    const { error: insErr } = await supabase.from('trade_show_gcal_sync_queue').insert(rows)
-    if (insErr) { alert('Backfill enqueue failed: ' + insErr.message); return }
-    alert(`Enqueued ${rows.length} trade show${rows.length === 1 ? '' : 's'} — cron will drain over the next ${Math.ceil(rows.length / 25)} minute(s).`)
-    reload()
+    // RLS on trade_show_gcal_sync_queue is read-only for admins — direct
+    // client INSERTs blow up with a policy violation. Server endpoint
+    // uses the service-role client to bypass.
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) { alert('Not authenticated'); return }
+      const res = await fetch('/api/admin/trade-show-gcal/backfill', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const json = await res.json().catch(() => ({} as any))
+      if (!res.ok) { alert('Backfill failed: ' + (json?.error || res.status)); return }
+      if (json?.enqueued === 0) {
+        alert(json.note || 'No live trade shows found.')
+      } else {
+        alert(`Enqueued ${json.enqueued} trade show${json.enqueued === 1 ? '' : 's'} — cron will drain over the next ${Math.ceil(json.enqueued / 25)} minute(s).`)
+      }
+      reload()
+    } catch (e: any) {
+      alert('Backfill failed: ' + (e?.message || 'unknown'))
+    }
   }
 
   return (
