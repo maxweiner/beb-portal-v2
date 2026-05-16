@@ -714,7 +714,7 @@ This section is a living rolling status. Update as work lands.
 
 **Brand-split morning report**
 - `users.notify_beb` / `users.notify_liberty` flags, backfilled from `notify=true → notify_beb=true`.
-- `daily-report` cron loops over both brands; each sends from its own from-address (`noreply@bebllp.com` / `noreply@libertyestatebuyers.com`) to its own opted-in recipient list.
+- `daily-report` cron loops over both brands; each sends from its own from-address (`noreply@bebllp.com` / `hello@libertyjewels.estate`) to its own opted-in recipient list.
 - `morning-briefing` POST takes a `brand` body field.
 - New superadmin-only **Report Recipients** admin tab with per-brand checkbox grid.
 

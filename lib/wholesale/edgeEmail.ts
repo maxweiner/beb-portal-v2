@@ -7,7 +7,7 @@
 import { pdfAdmin } from './pdfHelpers'
 
 const FROM_BY_BRAND: Record<string, { name: string; email: string }> = {
-  liberty: { name: 'Liberty Estate Buyers', email: 'noreply@libertyestatebuyers.com' },
+  liberty: { name: 'Liberty Estate Buyers', email: 'hello@libertyjewels.estate' },
   beb:     { name: 'BEB Portal',            email: 'noreply@updates.bebllp.com' },
 }
 

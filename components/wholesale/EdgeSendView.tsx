@@ -98,10 +98,8 @@ function ComposeTab() {
 
   // Download the same 84-column Edge CSV that 🚀 Send emails to
   // Mary, but without inserting a batch row / copying photos /
-  // sending email. Useful when the operator wants to inspect or
-  // hand-deliver the CSV (e.g. while libertyestatebuyers.com is
-  // mid-verification in Resend and real sends 403). Photo cells
-  // are left blank — see /api/wholesale/edge/csv route header.
+  // sending email. Useful for inspection or hand-delivery. Photo
+  // cells are left blank — see /api/wholesale/edge/csv route header.
   async function handleDownloadCsv() {
     if (selected.size === 0) return
     setDownloadingCsv(true)

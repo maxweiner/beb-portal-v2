@@ -30,7 +30,7 @@ export const BRAND_META: Record<Brand, BrandMeta> = {
   liberty: {
     label: 'Liberty Estate Buyers',
     fromName: 'Liberty Estate Buyers',
-    fromEmail: 'noreply@libertyestatebuyers.com',
+    fromEmail: 'hello@libertyjewels.estate',
     emoji: '🌅',
     footer: 'Liberty Buyer Portal · Daily Morning Report',
     notifyColumn: 'notify_liberty',
