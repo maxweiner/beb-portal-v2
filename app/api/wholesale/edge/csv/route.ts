@@ -11,10 +11,8 @@
 //   - send an email
 //
 // Use case: the operator wants to inspect / archive / hand-deliver
-// the CSV without triggering the full send pipeline. Useful while
-// the libertyestatebuyers.com domain is mid-verification in Resend
-// (the real send 403s until that's done) — you can still ship Mary
-// the CSV manually.
+// the CSV without triggering the full send pipeline (no batch row
+// minted, no photos copied, no email sent).
 //
 // Photo cells (Image 1-5 columns) are left BLANK in this CSV. The
 // photos are only bundled at real-send time when we mint a batch

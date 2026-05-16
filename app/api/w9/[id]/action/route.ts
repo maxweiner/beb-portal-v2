@@ -64,7 +64,7 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
     if (!apiKey) return NextResponse.json({ error: 'Resend API key missing in settings.email' }, { status: 500 })
 
     const FROM = w9.brand === 'liberty'
-      ? { name: 'Liberty Estate Buyers', email: 'noreply@libertyestatebuyers.com' }
+      ? { name: 'Liberty Estate Buyers', email: 'hello@libertyjewels.estate' }
       : { name: 'BEB Portal',            email: 'noreply@updates.bebllp.com' }
 
     const url = `${originFrom(req)}/w9/${w9.token}`

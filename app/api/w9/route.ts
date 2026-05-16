@@ -163,7 +163,7 @@ async function emailW9Link({
   // flat value), so emails appeared as "no API key" even when one
   // was configured.
   const fromAddr = brand === 'liberty'
-    ? 'Liberty Estate Buyers <noreply@libertyestatebuyers.com>'
+    ? 'Liberty Estate Buyers <hello@libertyjewels.estate>'
     : 'BEB Portal <noreply@updates.bebllp.com>'
 
   const subject = 'Please complete a W-9 tax form'

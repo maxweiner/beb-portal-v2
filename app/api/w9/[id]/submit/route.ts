@@ -199,7 +199,7 @@ async function emailW9ToAccountant({
   // failed once the canonical key was set. Now both create + submit
   // routes participate in the same config + dev-recipient logic.
   const fromAddr = brand === 'liberty'
-    ? 'Liberty Estate Buyers <noreply@libertyestatebuyers.com>'
+    ? 'Liberty Estate Buyers <hello@libertyjewels.estate>'
     : 'BEB Portal <noreply@updates.bebllp.com>'
 
   const greeting = toName ? `Hi ${escapeHtml(toName)},` : 'Hi,'

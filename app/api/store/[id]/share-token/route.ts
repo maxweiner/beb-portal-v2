@@ -141,7 +141,7 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
 
       const brand: string = (store as any).brand || 'beb'
       const FROM = brand === 'liberty'
-        ? { name: 'Liberty Estate Buyers', email: 'noreply@libertyestatebuyers.com' }
+        ? { name: 'Liberty Estate Buyers', email: 'hello@libertyjewels.estate' }
         : { name: 'BEB Portal', email: 'noreply@updates.bebllp.com' }
 
       const origin = originFrom(req)

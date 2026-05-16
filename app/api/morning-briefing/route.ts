@@ -216,7 +216,7 @@ const BRAND_FROM: Record<Brand, { fromName: string; fromEmail: string; notifyCol
   },
   liberty: {
     fromName: 'Liberty Estate Buyers',
-    fromEmail: 'noreply@libertyestatebuyers.com',
+    fromEmail: 'hello@libertyjewels.estate',
     notifyColumn: 'notify_liberty',
   },
 }

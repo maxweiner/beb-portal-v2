@@ -18,7 +18,7 @@ const BRANDS = {
   },
   liberty: {
     label: 'Liberty Estate Buyers',
-    fromAddress: 'noreply@libertyestatebuyers.com',
+    fromAddress: 'hello@libertyjewels.estate',
     fromName: 'Liberty Estate Buyers',
     accent: '#1E3A8A',
     accentDark: '#1E3A8A',
