@@ -262,6 +262,15 @@ export default function Home() {
           {nav === 'buying-event-stores' && <ModuleGuard moduleId="buying-event-stores"><ModuleWriteGate moduleId="buying-event-stores"><Stores key={navKey} /></ModuleWriteGate></ModuleGuard>}
           {nav === 'trunk-show-stores' && <ModuleGuard moduleId="trunk-show-stores"><ModuleWriteGate moduleId="trunk-show-stores"><TrunkShowStores key={navKey} /></ModuleWriteGate></ModuleGuard>}
           {nav === 'customers' && <ModuleGuard moduleId="customers"><ModuleWriteGate moduleId="customers"><Customers key={navKey} /></ModuleWriteGate></ModuleGuard>}
+          {/* The next three pages are reachable from the mobile
+              slide-out menu (see MobileLayout.tsx ALL_PAGES) but were
+              missing here, so tapping them set `nav` correctly while
+              nothing matched and the body rendered blank. Routes
+              mirror the desktop branch below; each component handles
+              its own mobile rendering internally where applicable. */}
+          {nav === 'buy-intake'    && <IntakePage  key={navKey} />}
+          {nav === 'intake-lookup' && <IntakeLookup key={navKey} />}
+          {nav === 'wholesale'     && <ModuleGuard moduleId="wholesale"><ModuleWriteGate moduleId="wholesale"><WholesalePage key={navKey} /></ModuleWriteGate></ModuleGuard>}
         </MobileLayout>
       </>
     )
