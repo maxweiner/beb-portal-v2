@@ -123,7 +123,15 @@ function initials(name: string): string {
 }
 
 // ── Component ────────────────────────────────────────────────
-export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
+export default function HubView({ setNav, customizeOpen: externalCustomizeOpen, onCustomizeOpenChange }: {
+  setNav?: (n: NavPage) => void
+  /** Controlled open-state for the Customize / reorder modal. Lets
+   *  the parent (BuyingEventsView) own the button — keeps page-level
+   *  actions grouped instead of split across rows. Optional: when
+   *  omitted, HubView falls back to its own internal state. */
+  customizeOpen?: boolean
+  onCustomizeOpenChange?: (open: boolean) => void
+}) {
   const ctx = useApp()
   const { stores, user, brand, users, setTravelIntent, setDayEntryIntent, events: ctxEvents } = ctx
 
@@ -160,7 +168,17 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
   /** Existing box labels for the event whose manifest modal is currently open.
    *  Lazily fetched so we can drive the "replace?" warning + preset pills. */
   const [manifestExistingLabels, setManifestExistingLabels] = useState<string[]>([])
-  const [customizeOpen, setCustomizeOpen] = useState(false)
+  // Customize-modal state: prefer the parent-controlled value when
+  // the parent passed both `customizeOpen` and `onCustomizeOpenChange`
+  // (the new layout where the trigger lives in the page header).
+  // Fall back to local state for any caller that doesn't pass them
+  // — keeps HubView usable in isolation (e.g. tests).
+  const [internalCustomizeOpen, setInternalCustomizeOpen] = useState(false)
+  const customizeOpen = externalCustomizeOpen ?? internalCustomizeOpen
+  const setCustomizeOpen = (next: boolean) => {
+    if (onCustomizeOpenChange) onCustomizeOpenChange(next)
+    else setInternalCustomizeOpen(next)
+  }
 
   // Upcoming (default) vs Past time-window toggle.
   const [window, setWindow] = useState<'upcoming' | 'past'>('upcoming')
@@ -500,11 +518,12 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
             )}
           </div>
         </div>
-        <button
-          onClick={() => setCustomizeOpen(true)}
-          className="btn-outline btn-sm"
-          title="Show, hide, or drag-to-reorder the action-launcher buttons that appear on every event card. Saves to your account."
-        >✏️ Customize / reorder</button>
+        {/* Customize / reorder button was hoisted to the page header
+            in BuyingEventsView for cleaner layout. It still opens the
+            same modal via the customizeOpen prop wired below. When
+            HubView is used standalone (without the parent owning
+            customizeOpen), the local state takes over and there's no
+            visible trigger — that's fine for tests / isolation. */}
       </div>
 
       {/* Teaching callout — auto-shows for the first 3 visits to the
