@@ -53,6 +53,13 @@ export default function BuyingSendFlow({
   const [autoFilled, setAutoFilled] = useState(false)
   const [eventSearch, setEventSearch] = useState('')
   const [showCcPicker, setShowCcPicker] = useState(false)
+  // Schedule-send modal — pre-fills to next Monday 9 AM local;
+  // user can edit. Submit POSTs to /api/buying-communications/
+  // schedule which inserts a delivery_status='scheduled' row;
+  // the every-15-min cron fires it at scheduled_for.
+  const [scheduleOpen, setScheduleOpen] = useState(false)
+  const [scheduleDt, setScheduleDt] = useState<string>(() => nextMondayNineAm())
+  const [scheduling, setScheduling] = useState(false)
 
   // Active buying events for the current brand. Past events are
   // hidden — buying-comms is forward-looking. Cancelled excluded.
@@ -370,14 +377,114 @@ export default function BuyingSendFlow({
           <span style={{ color: 'var(--mist)' }}>&lt;{user?.email}&gt;</span>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onClose} className="btn-outline btn-sm" disabled={sending}>Cancel</button>
+          <button onClick={onClose} className="btn-outline btn-sm" disabled={sending || scheduling}>Cancel</button>
+          <button
+            onClick={() => { setScheduleDt(nextMondayNineAm()); setScheduleOpen(true) }}
+            disabled={!canSend || sending}
+            className="btn-outline btn-sm"
+            title="Schedule this letter to fire automatically at a future date/time"
+          >📅 Schedule</button>
           <button onClick={send} disabled={!canSend || sending} className="btn-primary btn-sm">
             {sending ? 'Sending…' : '📤 Send letter'}
           </button>
         </div>
       </div>
+
+      {scheduleOpen && (
+        <div
+          onClick={e => { if (e.target === e.currentTarget) setScheduleOpen(false) }}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1100,
+            display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 16,
+          }}
+        >
+          <div style={{ background: '#fff', borderRadius: 12, padding: 20, maxWidth: 480, width: '100%', marginTop: 80 }}>
+            <h3 style={{ margin: '0 0 10px', fontSize: 17 }}>📅 Schedule this letter</h3>
+            <p style={{ fontSize: 13, color: 'var(--mist)', margin: '0 0 14px', lineHeight: 1.5 }}>
+              The letter will fire at the date and time you choose. The cron runs every 15 minutes, so a 9:00 AM schedule actually fires somewhere between 9:00 and 9:14. You can cancel or edit from the 📨 Log.
+            </p>
+            <div className="field" style={{ marginBottom: 14 }}>
+              <label className="fl">Fire at</label>
+              <input
+                type="datetime-local"
+                value={scheduleDt}
+                onChange={e => setScheduleDt(e.target.value)}
+                style={{ width: '100%' }}
+              />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button onClick={() => setScheduleOpen(false)} className="btn-outline btn-sm" disabled={scheduling}>
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!scheduleDt) { setError('Pick a date + time.'); return }
+                  const when = new Date(scheduleDt)
+                  if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) {
+                    setError('Schedule must be in the future.'); return
+                  }
+                  setScheduling(true); setError(null)
+                  try {
+                    const { data: { session } } = await supabase.auth.getSession()
+                    const token = session?.access_token
+                    const res = await fetch('/api/buying-communications/schedule', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                      },
+                      body: JSON.stringify({
+                        event_id: eventId,
+                        template_id: templateId,
+                        subject, body,
+                        to_email: toEmail,
+                        to_name: toName || null,
+                        cc_user_ids: ccUserIds,
+                        scheduled_for: when.toISOString(),
+                      }),
+                    })
+                    const json = await res.json().catch(() => ({}))
+                    if (!res.ok) {
+                      setError(json?.error || `Schedule failed (${res.status})`)
+                      return
+                    }
+                    setScheduleOpen(false)
+                    alert(`✅ Scheduled to fire ${new Date(json.scheduled_for).toLocaleString()}.`)
+                    onSent(json.send_id)
+                  } catch (e: any) {
+                    setError(e?.message || 'Network error')
+                  } finally {
+                    setScheduling(false)
+                  }
+                }}
+                className="btn-primary btn-sm"
+                disabled={scheduling}
+              >
+                {scheduling ? 'Scheduling…' : 'Schedule'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
+}
+
+/** Pick next Monday at 9 AM local time, formatted for a
+ *  <input type="datetime-local"> value (YYYY-MM-DDTHH:mm). */
+function nextMondayNineAm(): string {
+  const d = new Date()
+  d.setHours(9, 0, 0, 0)
+  const dayOfWeek = d.getDay()           // 0=Sun ... 6=Sat
+  const daysUntilMonday = (8 - dayOfWeek) % 7 || 7
+  // If it's currently Monday before 9 AM, fire today; otherwise next Monday.
+  if (dayOfWeek === 1 && Date.now() < d.getTime()) {
+    // keep today
+  } else {
+    d.setDate(d.getDate() + daysUntilMonday)
+  }
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 // ─── Helpers ───
