@@ -14,7 +14,7 @@
 // Data fetching mirrors PreEventTab so KPIs and gate counts match
 // what the user sees on the existing New view.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import { eventEndIso, formatEventRange } from '@/lib/eventDates'
@@ -203,6 +203,37 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
   const [order, setOrder] = useState<LauncherKey[]>(initialOrder)
   const [saveError, setSaveError] = useState<string | null>(null)
 
+  // Teaching tooltip — auto-appears for the first 3 visits to the Hub
+  // view, then disappears for good. Pure onboarding nudge for the new
+  // drag-to-reorder feature. Persisted per-user in users.preferences
+  // so the count survives across browsers and devices. Tapping 'Got
+  // it' bumps the count to 3 instantly.
+  //
+  // initialReorderTipSeen is read ONCE at mount — local state takes
+  // over after that so an in-session bump doesn't flicker the banner
+  // off mid-render.
+  const initialReorderTipSeen = useMemo<number>(() => {
+    const raw = (user?.preferences as any)?.buying_events_hub_reorder_tip_seen_count
+    const n = typeof raw === 'number' ? raw : 0
+    return Math.max(0, Math.min(3, n))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const [reorderTipSeen, setReorderTipSeen] = useState<number>(initialReorderTipSeen)
+  const reorderTipBumpedRef = useRef(false)
+
+  // On first mount, bump the seen-count by 1 — but only once per
+  // session so re-renders don't compound. Caps at 3 (banner hides at
+  // ≥ 3).
+  useEffect(() => {
+    if (reorderTipBumpedRef.current) return
+    if (initialReorderTipSeen >= 3) return
+    reorderTipBumpedRef.current = true
+    const next = Math.min(3, initialReorderTipSeen + 1)
+    setReorderTipSeen(next)
+    void saveReorderTipSeen(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Authoritative LAUNCHERS list in the user's chosen order. Cards
   // render in this order; the customize modal lists rows in this
   // order too.
@@ -373,6 +404,15 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
     }
   }
 
+  // Persist the teaching-tooltip seen count. Best-effort: failure
+  // doesn't surface to the user (the tooltip is just a nudge — losing
+  // a single increment is harmless and the next visit will re-try).
+  async function saveReorderTipSeen(next: number) {
+    if (!user?.id) return
+    const nextPrefs = { ...(user.preferences || {}), buying_events_hub_reorder_tip_seen_count: next }
+    await supabase.from('users').update({ preferences: nextPrefs }).eq('id', user.id)
+  }
+
   async function promoteEvent(ev: Event) {
     if (!confirm(`Promote ${eventDisplayName(ev, stores)} from Reserved → Booked?`)) return
     const { error } = await supabase.from('events').update({ status: 'scheduled' }).eq('id', ev.id)
@@ -466,6 +506,54 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
           title="Show, hide, or drag-to-reorder the action-launcher buttons that appear on every event card. Saves to your account."
         >✏️ Customize / reorder</button>
       </div>
+
+      {/* Teaching callout — auto-shows for the first 3 visits to the
+          Hub view, then disappears for good. Pure onboarding nudge
+          for the drag-to-reorder feature. The visit counter lives
+          in users.preferences.buying_events_hub_reorder_tip_seen_count
+          and increments once per mount (capped at 3). */}
+      {reorderTipSeen < 3 && (
+        <div
+          role="status"
+          style={{
+            display: 'flex', alignItems: 'flex-start', gap: 10,
+            background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 8,
+            padding: '10px 14px', marginBottom: 14,
+            fontSize: 13, color: '#78350F',
+          }}
+        >
+          <span style={{ fontSize: 18, lineHeight: 1.1 }} aria-hidden>💡</span>
+          <div style={{ flex: 1, lineHeight: 1.45 }}>
+            <strong>New: you can rearrange these buttons.</strong>{' '}
+            Tap <span style={{ background: '#fff', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>✏️ Customize / reorder</span> above, then drag the <span style={{ fontWeight: 700 }}>⠿</span> handle next to any launcher to set your own order — saved to your account.
+            <span style={{ display: 'block', fontSize: 11, color: '#92400E', marginTop: 4 }}>
+              {reorderTipSeen >= 1 && (
+                <>This tip auto-hides after {3 - reorderTipSeen} more visit{(3 - reorderTipSeen) === 1 ? '' : 's'} · </>
+              )}
+              <button
+                type="button"
+                onClick={() => { setReorderTipSeen(3); void saveReorderTipSeen(3) }}
+                style={{
+                  background: 'transparent', border: 0, padding: 0,
+                  color: '#92400E', textDecoration: 'underline',
+                  cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
+                }}
+              >
+                Got it — don't show again
+              </button>
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => { setReorderTipSeen(3); void saveReorderTipSeen(3) }}
+            aria-label="Dismiss tip"
+            style={{
+              background: 'transparent', border: 0, color: '#92400E',
+              fontSize: 16, cursor: 'pointer', padding: 2, lineHeight: 1,
+            }}
+          >✕</button>
+        </div>
+      )}
 
       {visibleEvents.length === 0 && (
         <div style={{
