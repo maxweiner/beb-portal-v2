@@ -69,6 +69,7 @@ export default async function EdgePublicBatchPage({ params }: PageProps) {
       batch={batch}
       items={itemsWithUrls}
       csvUrl={csvUrl}
+      zipUrl={`/api/wholesale/edge/public/${token}/zip`}
     />
   )
 }
