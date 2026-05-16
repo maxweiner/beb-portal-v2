@@ -36,6 +36,18 @@ interface Props {
   onClose: () => void
   /** Called after a successful save. Parent reloads the template list. */
   onSaved: (savedId: string) => void
+  /** Which template registry + API namespace to use. Defaults to
+   *  'trunk' so the existing Trunk Communications module keeps
+   *  working without changes; the Buying Communications shell
+   *  passes 'buying'. */
+  domain?: 'trunk' | 'buying'
+}
+
+function apiBaseFor(domain: 'trunk' | 'buying' = 'trunk'): string {
+  return domain === 'buying' ? '/api/buying-communications' : '/api/trunk-communications'
+}
+function tableFor(domain: 'trunk' | 'buying' = 'trunk'): string {
+  return domain === 'buying' ? 'buying_communication_templates' : 'communication_templates'
 }
 
 interface Generated {
@@ -49,7 +61,9 @@ async function getAuthToken(): Promise<string> {
   return session.data.session?.access_token || ''
 }
 
-export default function AiTemplateModal({ mode, existing, onClose, onSaved }: Props) {
+export default function AiTemplateModal({ mode, existing, onClose, onSaved, domain = 'trunk' }: Props) {
+  const apiBase = apiBaseFor(domain)
+  const tableName = tableFor(domain)
   const [prompt, setPrompt] = useState('')
   const [generated, setGenerated] = useState<Generated | null>(null)
   const [busy, setBusy] = useState(false)
@@ -64,7 +78,7 @@ export default function AiTemplateModal({ mode, existing, onClose, onSaved }: Pr
     setBusy(true); setError(null); setPdfViewed(false)
     try {
       const token = await getAuthToken()
-      const res = await fetch('/api/trunk-communications/templates/generate', {
+      const res = await fetch(`${apiBase}/templates/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
@@ -94,7 +108,7 @@ export default function AiTemplateModal({ mode, existing, onClose, onSaved }: Pr
     setBusy(true); setError(null)
     try {
       const token = await getAuthToken()
-      const res = await fetch('/api/trunk-communications/templates/pdf', {
+      const res = await fetch(`${apiBase}/templates/pdf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
@@ -138,7 +152,7 @@ export default function AiTemplateModal({ mode, existing, onClose, onSaved }: Pr
       let result: any
       if (mode === 'refine' && existing?.id) {
         const { data, error: e } = await supabase
-          .from('communication_templates')
+          .from(tableName)
           .update(payload)
           .eq('id', existing.id)
           .select('id')
@@ -147,7 +161,7 @@ export default function AiTemplateModal({ mode, existing, onClose, onSaved }: Pr
         result = data
       } else {
         const { data, error: e } = await supabase
-          .from('communication_templates')
+          .from(tableName)
           .insert(payload)
           .select('id')
           .single()

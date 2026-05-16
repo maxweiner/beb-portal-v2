@@ -9,6 +9,12 @@ import {
   applyMergeFields,
   findUnknownMergeFields,
 } from '@/lib/communications/mergeFields'
+import {
+  BUYING_MERGE_FIELDS,
+  BUYING_SAMPLE_FIXTURE,
+  applyBuyingMergeFields,
+  findUnknownBuyingMergeFields,
+} from '@/lib/communications/buyingMergeFields'
 import type { CommunicationTemplate } from '@/types'
 import Checkbox from '@/components/ui/Checkbox'
 
@@ -16,9 +22,25 @@ interface Props {
   template: CommunicationTemplate | null
   canEdit: boolean
   onClose: () => void
+  /** Which template registry to read/write. Defaults to 'trunk' so
+   *  the existing Trunk Communications module keeps working without
+   *  changes. */
+  domain?: 'trunk' | 'buying'
 }
 
-export default function TemplateEditor({ template, canEdit, onClose }: Props) {
+function tableFor(domain: 'trunk' | 'buying' = 'trunk'): string {
+  return domain === 'buying' ? 'buying_communication_templates' : 'communication_templates'
+}
+
+export default function TemplateEditor({ template, canEdit, onClose, domain = 'trunk' }: Props) {
+  // Resolve per-domain merge-field set + applier + unknown-checker.
+  // The hooks below memoize against `subject` / `body`; domain is
+  // captured at mount and doesn't change per-instance.
+  const MF = domain === 'buying' ? BUYING_MERGE_FIELDS : MERGE_FIELDS
+  const FIXTURE = domain === 'buying' ? BUYING_SAMPLE_FIXTURE : SAMPLE_FIXTURE
+  const apply = domain === 'buying' ? applyBuyingMergeFields : applyMergeFields
+  const findUnknown = domain === 'buying' ? findUnknownBuyingMergeFields : findUnknownMergeFields
+  const tableName = tableFor(domain)
   const { user } = useApp()
   const [name, setName] = useState(template?.name || '')
   const [subject, setSubject] = useState(template?.subject_line || '')
@@ -35,10 +57,10 @@ export default function TemplateEditor({ template, canEdit, onClose }: Props) {
   const bodyRef    = useRef<HTMLTextAreaElement | null>(null)
   const lastFocused = useRef<'subject' | 'body'>('body')
 
-  const previewSubject = useMemo(() => applyMergeFields(subject, SAMPLE_FIXTURE), [subject])
-  const previewBody    = useMemo(() => applyMergeFields(body, SAMPLE_FIXTURE), [body])
+  const previewSubject = useMemo(() => apply(subject, FIXTURE), [subject])
+  const previewBody    = useMemo(() => apply(body, FIXTURE), [body])
   const unknownFields  = useMemo(
-    () => Array.from(new Set([...findUnknownMergeFields(subject), ...findUnknownMergeFields(body)])),
+    () => Array.from(new Set([...findUnknown(subject), ...findUnknown(body)])),
     [subject, body]
   )
 
@@ -88,7 +110,7 @@ export default function TemplateEditor({ template, canEdit, onClose }: Props) {
     try {
       if (template) {
         const { error } = await supabase
-          .from('communication_templates')
+          .from(tableName)
           .update({
             name: name.trim(),
             subject_line: subject,
@@ -99,7 +121,7 @@ export default function TemplateEditor({ template, canEdit, onClose }: Props) {
         if (error) throw error
       } else {
         const { error } = await supabase
-          .from('communication_templates')
+          .from(tableName)
           .insert({
             name: name.trim(),
             subject_line: subject,
@@ -201,7 +223,7 @@ export default function TemplateEditor({ template, canEdit, onClose }: Props) {
             {canEdit ? 'Click to insert at cursor.' : 'Click to copy.'}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {MERGE_FIELDS.map(f => (
+            {MF.map(f => (
               <button
                 key={f.name}
                 onClick={() => canEdit ? insertAtCursor(f.name) : navigator.clipboard.writeText(`{${f.name}}`)}
@@ -306,7 +328,7 @@ export default function TemplateEditor({ template, canEdit, onClose }: Props) {
                     setDeleting(true)
                     try {
                       const { error } = await supabase
-                        .from('communication_templates')
+                        .from(tableName)
                         .delete()
                         .eq('id', template.id)
                       if (error) {
