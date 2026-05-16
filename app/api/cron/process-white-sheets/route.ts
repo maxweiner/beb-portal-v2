@@ -35,11 +35,18 @@ export const dynamic = 'force-dynamic'
 // lane open.
 export const maxDuration = 300
 
-// Batch size per cron tick. Spec calls for 8 in parallel.
-//   - balances Anthropic rate limits against drain speed
-//   - 100-page upload finishes in ~13 ticks (≈13 minutes at 1/min)
-//   - if we add a second cron parallelism, raise to 16 here.
-const BATCH_SIZE = 8
+// Batch size per cron tick. Originally 8 per the spec, dropped to
+// 3 on 2026-05-15 after hitting Anthropic's 30,000-input-tokens/min
+// org cap on Sonnet 4 (8 pages × ~4K tokens = ~32K → every page
+// 429'd). 3 in parallel ≈ 12K tokens/min — well under the cap with
+// headroom for the dedup classifier call that fires on a subset of
+// pages too.
+//
+// 100-page upload now finishes in ~34 ticks (≈34 minutes at 1/min)
+// vs. ~13 minutes before. Trade-off accepted: slower drain beats
+// every page erroring. Raise this if the org rate limit goes up
+// (https://console.anthropic.com/settings/limits).
+const BATCH_SIZE = 3
 
 function admin() {
   return createClient(

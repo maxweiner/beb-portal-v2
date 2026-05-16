@@ -134,7 +134,31 @@ export async function processWhiteSheetPage(
   try {
     ocr = await ocrWhiteSheetPage(page.page_pdf_path)
   } catch (e: any) {
-    return markErrored(sb, page, e?.message || 'ocr_failed')
+    const message = e?.message || 'ocr_failed'
+    // Anthropic 429 (org token-per-minute cap exceeded) is a
+    // transient failure — the next cron tick should succeed once
+    // the minute window rolls over. Instead of permanently
+    // erroring the page (forcing manual reset), flip it back to
+    // 'pending' so the cron re-claims it.
+    //
+    // We cap retries at MAX_429_ATTEMPTS so a sustained Anthropic
+    // outage / billing freeze eventually surfaces as a real error
+    // rather than looping forever.
+    const MAX_429_ATTEMPTS = 10
+    const isRateLimit = /429|rate_limit_error/i.test(message)
+    if (isRateLimit && page.attempts < MAX_429_ATTEMPTS) {
+      await updatePageRow(sb, page.id, {
+        status: 'pending',
+        last_error: `transient: ${message.slice(0, 200)}`,
+      })
+      return {
+        page_id: page.id,
+        status: 'errored',  // outcome label for the cron-summary log
+        review_reasons: [],
+        error: 'rate_limited_retry',
+      }
+    }
+    return markErrored(sb, page, message)
   }
 
   // Unparseable page (scanner separator, blank, etc.) — route to
@@ -268,8 +292,11 @@ export async function processWhiteSheetPage(
 // ─────────────────────────────────────────────────────────────
 
 interface UpdatePageRowPatch {
-  status: 'auto_committed' | 'needs_review' | 'errored'
-  review_reasons: WhiteSheetReviewReason[]
+  // 'pending' is only valid for the 429-retry path — pushes the row
+  // back into the cron's claim queue. Every other call site must
+  // pick a terminal status.
+  status: 'auto_committed' | 'needs_review' | 'errored' | 'pending'
+  review_reasons?: WhiteSheetReviewReason[]
   ocr_raw?: Record<string, unknown> | null
   buy_form_number_ocr?: string | null
   check_number_ocr?: string | null
@@ -281,7 +308,7 @@ interface UpdatePageRowPatch {
   buyer_user_id?: string | null
   initials_classifier_confidence?: number | null
   last_error?: string | null
-  processed_at: string
+  processed_at?: string
 }
 
 async function updatePageRow(sb: SupabaseClient, pageId: string, patch: UpdatePageRowPatch) {
