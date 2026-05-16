@@ -49,9 +49,8 @@ export default function LegacyShipmentsTab() {
   }
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-black mb-6" style={{ color: 'var(--ink)' }}>Shipping Log</h1>
-
+    // Page header lives in the parent Shipping.tsx shell now.
+    <div className="max-w-3xl mx-auto">
       {/* Add form */}
       <div className="rounded-xl p-5 mb-6" style={{ background: 'var(--card-bg)', border: '1px solid var(--pearl)' }}>
         <h3 className="font-black text-sm mb-4 uppercase tracking-wide" style={{ color: 'var(--mist)' }}>Log a Shipment</h3>
