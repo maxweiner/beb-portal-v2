@@ -60,6 +60,20 @@ import { shouldUseMobile, setMobilePreference } from '@/lib/mobile'
 //   libertyadmin → liberty-admin
 export type NavPage = 'dashboard' | 'appointments' | 'buying-events' | 'calendar' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'buying-event-stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'liberty-admin' | 'recipients' | 'notification-templates' | 'data-research' | 'expenses' | 'financials' | 'customers' | 'trade-shows' | 'trunk-shows' | 'trunk-show-stores' | 'leads' | 'trunk-communications' | 'accounting-hub' | 'broadcast' | 'intake-lookup' | 'buy-intake' | 'reconciliation' | 'wholesale'
 
+// Allow-list for the ?nav= URL deep-link. Mirrors the NavPage type
+// at runtime so we can validate URL params before routing. Keep in
+// sync with the NavPage union above — TypeScript can't reflect a
+// string-literal union to a Set at runtime.
+const KNOWN_NAVS = new Set<NavPage>([
+  'dashboard', 'appointments', 'buying-events', 'calendar', 'travel',
+  'dayentry', 'staff', 'admin', 'buying-event-stores', 'marketing',
+  'shipping', 'reports', 'settings', 'liberty-admin', 'recipients',
+  'notification-templates', 'data-research', 'expenses', 'financials',
+  'customers', 'trade-shows', 'trunk-shows', 'trunk-show-stores',
+  'leads', 'trunk-communications', 'accounting-hub', 'broadcast',
+  'intake-lookup', 'buy-intake', 'reconciliation', 'wholesale',
+])
+
 export default function Home() {
   const { user, loading, connectionError, reload } = useApp()
   const [navKey, setNavKey] = useState(0)
@@ -84,9 +98,31 @@ export default function Home() {
   ]
   useEffect(() => {
     if (!user || !modulesLoaded || initialRoutedRef.current) return
-    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('report')) {
-      initialRoutedRef.current = true
-      return
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      // Email deep-link: `?report=<id>` is handled in a separate
+      // effect below — leave nav untouched here so the dedicated
+      // Expenses handler can do its thing.
+      if (params.has('report')) {
+        initialRoutedRef.current = true
+        return
+      }
+      // Email deep-link: `?nav=<page>` — every marketing notification
+      // email lands here (proof requests, payment requests, escalations,
+      // edit-zips). Honor the URL's nav if it's a real NavPage and the
+      // user has access. Strip ?nav from the URL after consuming so a
+      // browser refresh doesn't keep re-routing — but LEAVE ?campaign
+      // intact so CampaignsList can read it (PR #701).
+      const navParam = params.get('nav') as NavPage | null
+      if (navParam && KNOWN_NAVS.has(navParam) && grantedModules.has(navParam)) {
+        initialRoutedRef.current = true
+        rawSetNav(navParam)
+        params.delete('nav')
+        const newSearch = params.toString()
+        const newUrl = window.location.pathname + (newSearch ? '?' + newSearch : '') + window.location.hash
+        window.history.replaceState({}, '', newUrl)
+        return
+      }
     }
     initialRoutedRef.current = true
     const next = FALLBACK_ORDER.find(p => grantedModules.has(p)) ?? 'dashboard'
