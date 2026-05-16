@@ -26,6 +26,11 @@ interface VdpDetails {
   last_review_comment: string | null
   last_review_comment_at: string | null
   last_review_by: string | null
+  /** Stamped by /api/marketing/campaigns/[id]/edit-zips when an
+   *  operator edits the zip list AFTER approval. NULL means the
+   *  original approved list is still in place. */
+  zips_last_edited_at?: string | null
+  zips_last_edited_by?: string | null
 }
 
 interface ZipRow { zip_code: string }
@@ -52,6 +57,14 @@ export default function VDPPlanningSection({ campaign, onChanged }: {
   const [prefilledFromPriorAt, setPrefilledFromPriorAt] = useState<string | null>(null)
   const [csvImportInfo, setCsvImportInfo] = useState<string | null>(null)
   const csvFileRef = useRef<HTMLInputElement>(null)
+  // Post-approval zip editing — operators sometimes need to add/drop
+  // zips after approval. When `editingZips` is true the read-only
+  // chip strip swaps to an editable textarea. Save POSTs to
+  // /api/marketing/campaigns/[id]/edit-zips which replaces the row
+  // set and emails every superadmin a diff.
+  const [editingZips, setEditingZips] = useState(false)
+  const [editZipInput, setEditZipInput] = useState('')
+  const [editedByName, setEditedByName] = useState<string | null>(null)
 
   // Load details + zips + approver status + prefill source
   useEffect(() => {
@@ -161,6 +174,50 @@ export default function VDPPlanningSection({ campaign, onChanged }: {
       setError(`CSV parse failed: ${err?.message || 'unknown'}`)
     }
   }
+
+  // Save edited zip list. POST replaces the row set + emails every
+  // superadmin a diff. On success we mirror the new list locally and
+  // close edit mode.
+  async function saveEditedZips() {
+    setBusy(true); setError(null)
+    const parsed = parseZips(editZipInput)
+    if (parsed.length === 0) {
+      setBusy(false); setError('At least one valid 5-digit zip code is required.'); return
+    }
+    try {
+      const res = await authedFetch(`/api/marketing/campaigns/${campaign.id}/edit-zips`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ zip_codes: parsed }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) { setError(json.error || `Failed (${res.status})`); setBusy(false); return }
+      setZips(parsed)
+      setZipInput(parsed.join(', '))
+      setEditingZips(false)
+      // Refresh the details row so the new last_edited_at chip renders.
+      const { data: det } = await supabase.from('vdp_campaign_details')
+        .select('*').eq('campaign_id', campaign.id).maybeSingle()
+      if (det) setDetails(det as VdpDetails)
+    } catch (e: any) {
+      setError(e?.message || 'Network error')
+    }
+    setBusy(false)
+  }
+
+  // Resolve the editor's display name whenever zips_last_edited_by
+  // changes. Falls back to email if no name is set.
+  useEffect(() => {
+    const editorId = details?.zips_last_edited_by
+    if (!editorId) { setEditedByName(null); return }
+    let cancelled = false
+    ;(async () => {
+      const { data: u } = await supabase.from('users')
+        .select('name, email').eq('id', editorId).maybeSingle()
+      if (cancelled) return
+      setEditedByName(((u as any)?.name || (u as any)?.email) ?? null)
+    })()
+    return () => { cancelled = true }
+  }, [details?.zips_last_edited_by])
 
   async function review(decision: 'approve' | 'request_changes') {
     if (decision === 'request_changes' && !reviewComment.trim()) {
@@ -277,12 +334,75 @@ export default function VDPPlanningSection({ campaign, onChanged }: {
         </>
       )}
 
-      {/* AWAITING + APPROVED — read-only summary */}
+      {/* AWAITING + APPROVED — read-only summary, plus a post-
+          approval Edit-zips affordance. Edit isn't allowed while a
+          review is still in flight (would race the approver's
+          decision) — that's why the affordance is gated on
+          isApproved only. Every edit POSTs to /edit-zips which
+          replaces the row set + emails every superadmin a diff. */}
       {(isAwaitingApproval || isApproved) && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: isAwaitingApproval ? 14 : 0 }}>
           <SummaryRow label="VDPs to mail" value={details?.vdp_count != null ? details.vdp_count.toLocaleString('en-US') : '—'} />
-          <SummaryRow label="Zip codes" value={`${zips.length} zip code${zips.length === 1 ? '' : 's'}`} />
-          {zips.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <SummaryRow label="Zip codes" value={`${zips.length} zip code${zips.length === 1 ? '' : 's'}`} />
+            {isApproved && !editingZips && (
+              <button
+                type="button"
+                onClick={() => { setEditZipInput(zips.join(', ')); setEditingZips(true); setError(null) }}
+                className="btn-outline btn-xs"
+                style={{ flexShrink: 0 }}
+                title="Edit the zip list. Every edit notifies all superadmins by email."
+              >
+                ✏️ Edit zips
+              </button>
+            )}
+          </div>
+
+          {/* EDIT MODE — textarea + Save / Cancel. Pre-fills with the
+              current zip list, comma-separated. */}
+          {editingZips ? (
+            <div style={{
+              background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 8,
+              padding: 12,
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: '#92400E', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>
+                Editing zip codes
+              </div>
+              <textarea
+                rows={5}
+                value={editZipInput}
+                onChange={e => setEditZipInput(e.target.value)}
+                placeholder="85268, 85258, 85260…"
+                style={{
+                  width: '100%', resize: 'vertical', fontFamily: 'inherit', fontSize: 13,
+                  padding: 8, borderRadius: 6, border: '1px solid var(--pearl)',
+                  background: '#fff',
+                }}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, color: '#92400E' }}>
+                  {parseZips(editZipInput).length} valid 5-digit zip{parseZips(editZipInput).length === 1 ? '' : 's'} · saving emails all superadmins a diff
+                </span>
+                <div style={{ flex: 1 }} />
+                <button
+                  type="button"
+                  onClick={() => { setEditingZips(false); setError(null) }}
+                  className="btn-outline btn-xs"
+                  disabled={busy}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={saveEditedZips}
+                  className="btn-primary btn-xs"
+                  disabled={busy || parseZips(editZipInput).length === 0}
+                >
+                  {busy ? 'Saving…' : '💾 Save zip list'}
+                </button>
+              </div>
+            </div>
+          ) : zips.length > 0 && (
             <div style={{
               background: 'var(--cream)', border: '1px solid var(--pearl)', borderRadius: 8,
               padding: 10, fontSize: 12, color: 'var(--ash)',
@@ -297,6 +417,7 @@ export default function VDPPlanningSection({ campaign, onChanged }: {
               ))}
             </div>
           )}
+
           {details?.submitted_at && (
             <div style={{ fontSize: 11, color: 'var(--mist)' }}>
               Submitted {new Date(details.submitted_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
@@ -305,6 +426,14 @@ export default function VDPPlanningSection({ campaign, onChanged }: {
           {isApproved && details?.approved_at && (
             <div style={{ fontSize: 11, color: 'var(--green-dark)', fontWeight: 700 }}>
               ✓ Approved {new Date(details.approved_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
+            </div>
+          )}
+          {/* Last-edited-by chip — only renders when someone has
+              edited the list after approval. */}
+          {isApproved && details?.zips_last_edited_at && (
+            <div style={{ fontSize: 11, color: '#92400E', fontWeight: 700 }}>
+              ✏️ Zips last edited {new Date(details.zips_last_edited_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
+              {editedByName ? ` by ${editedByName}` : ''}
             </div>
           )}
         </div>
