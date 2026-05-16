@@ -17,6 +17,7 @@ import TemplateEditor from './TemplateEditor'
 import AiTemplateModal from './AiTemplateModal'
 import BuyingSendFlow from './BuyingSendFlow'
 import BuyingCommsLogPanel from './BuyingCommsLogPanel'
+import BuyingMasterChecklist from './BuyingMasterChecklist'
 import type { CommunicationTemplate } from '@/types'
 
 type View =
@@ -24,6 +25,7 @@ type View =
   | { kind: 'edit'; template: CommunicationTemplate | null }
   | { kind: 'send'; eventId?: string | null; templateId?: string | null }
   | { kind: 'log' }
+  | { kind: 'master' }
 
 export default function BuyingCommunications() {
   const { user } = useApp()
@@ -83,6 +85,15 @@ export default function BuyingCommunications() {
     )
   }
 
+  if (view.kind === 'master') {
+    return (
+      <BuyingMasterChecklist
+        canEdit={isAdmin}
+        onClose={() => setView({ kind: 'list' })}
+      />
+    )
+  }
+
   return (
     <div className="p-6" style={{ maxWidth: 1100, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
@@ -95,6 +106,7 @@ export default function BuyingCommunications() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={() => setView({ kind: 'send' })} className="btn-primary btn-sm">📤 Send a letter</button>
           <button onClick={() => setView({ kind: 'log' })} className="btn-outline btn-sm">📨 Log</button>
+          <button onClick={() => setView({ kind: 'master' })} className="btn-outline btn-sm">🗒 Master Checklist</button>
           <button
             onClick={() => setAiModal({ mode: 'new' })}
             className="btn-outline btn-sm"

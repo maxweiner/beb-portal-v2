@@ -191,5 +191,21 @@ export async function POST(req: Request) {
     }, { status: 500 })
   }
 
+  // Auto-check linked checklist items for this (event, template).
+  // Mirrors the trunk-side behavior: any open checklist item with
+  // matching linked_template_id on this event flips to completed.
+  // Multiple items can match (e.g. master + ad-hoc); check them all.
+  await sb
+    .from('buying_event_checklist_items')
+    .update({
+      is_completed: true,
+      completed_at: new Date().toISOString(),
+      completed_by_user_id: me.id,
+      linked_send_id: row.id,
+    })
+    .eq('event_id', event_id)
+    .eq('linked_template_id', template_id)
+    .eq('is_completed', false)
+
   return NextResponse.json({ ok: true, send_id: row.id, message_id: messageId })
 }
