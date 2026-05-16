@@ -12,9 +12,18 @@ interface Props {
    *  the AI generation modal pre-loaded with this template. Only
    *  admins / partners pass this in. */
   onRefineWithAi?: (t: CommunicationTemplate) => void
+  /** Which template registry to query. Defaults to 'trunk' so the
+   *  Trunk Communications module keeps working without changes;
+   *  the Buying Communications shell passes 'buying' to point at
+   *  the parallel buying_communication_templates table. */
+  domain?: 'trunk' | 'buying'
 }
 
-export default function TemplateList({ canEdit, onOpen, onRefineWithAi }: Props) {
+function tableFor(domain: 'trunk' | 'buying' = 'trunk'): string {
+  return domain === 'buying' ? 'buying_communication_templates' : 'communication_templates'
+}
+
+export default function TemplateList({ canEdit, onOpen, onRefineWithAi, domain = 'trunk' }: Props) {
   const [rows, setRows] = useState<CommunicationTemplate[]>([])
   const [showArchived, setShowArchived] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -22,13 +31,13 @@ export default function TemplateList({ canEdit, onOpen, onRefineWithAi }: Props)
   async function reload() {
     setLoading(true)
     const { data } = await supabase
-      .from('communication_templates')
+      .from(tableFor(domain))
       .select('*')
       .order('updated_at', { ascending: false })
     setRows((data || []) as CommunicationTemplate[])
     setLoading(false)
   }
-  useEffect(() => { reload() }, [])
+  useEffect(() => { reload() /* eslint-disable-next-line */ }, [domain])
 
 
   const visible = rows.filter(r => showArchived || r.is_active)

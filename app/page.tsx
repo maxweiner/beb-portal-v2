@@ -38,6 +38,7 @@ import TradeShows from '@/components/sales/TradeShows'
 import TrunkShows from '@/components/sales/TrunkShows'
 import Leads from '@/components/sales/Leads'
 import TrunkCommunications from '@/components/communications/TrunkCommunications'
+import BuyingCommunications from '@/components/communications/BuyingCommunications'
 import { useState, useEffect, useRef } from 'react'
 import MobileLayout from '@/components/mobile/MobileLayout'
 import MobileDashboard from '@/components/mobile/MobileDashboard'
@@ -58,7 +59,7 @@ import { shouldUseMobile, setMobilePreference } from '@/lib/mobile'
 //   schedule     → calendar         (time-off + event calendar)
 //   events       → buying-events
 //   libertyadmin → liberty-admin
-export type NavPage = 'dashboard' | 'appointments' | 'buying-events' | 'calendar' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'buying-event-stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'liberty-admin' | 'recipients' | 'notification-templates' | 'data-research' | 'expenses' | 'financials' | 'customers' | 'trade-shows' | 'trunk-shows' | 'trunk-show-stores' | 'leads' | 'trunk-communications' | 'accounting-hub' | 'broadcast' | 'intake-lookup' | 'buy-intake' | 'reconciliation' | 'wholesale'
+export type NavPage = 'dashboard' | 'appointments' | 'buying-events' | 'calendar' | 'travel' | 'dayentry' | 'staff' | 'admin' | 'buying-event-stores' | 'marketing' | 'shipping' | 'reports' | 'settings' | 'liberty-admin' | 'recipients' | 'notification-templates' | 'data-research' | 'expenses' | 'financials' | 'customers' | 'trade-shows' | 'trunk-shows' | 'trunk-show-stores' | 'leads' | 'trunk-communications' | 'buying-communications' | 'accounting-hub' | 'broadcast' | 'intake-lookup' | 'buy-intake' | 'reconciliation' | 'wholesale'
 
 // Allow-list for the ?nav= URL deep-link. Mirrors the NavPage type
 // at runtime so we can validate URL params before routing. Keep in
@@ -70,7 +71,7 @@ const KNOWN_NAVS = new Set<NavPage>([
   'shipping', 'reports', 'settings', 'liberty-admin', 'recipients',
   'notification-templates', 'data-research', 'expenses', 'financials',
   'customers', 'trade-shows', 'trunk-shows', 'trunk-show-stores',
-  'leads', 'trunk-communications', 'accounting-hub', 'broadcast',
+  'leads', 'trunk-communications', 'buying-communications', 'accounting-hub', 'broadcast',
   'intake-lookup', 'buy-intake', 'reconciliation', 'wholesale',
 ])
 
@@ -239,6 +240,7 @@ export default function Home() {
           {nav === 'trade-shows' && <ModuleWriteGate moduleId="trade-shows"><TradeShows key={navKey} /></ModuleWriteGate>}
           {nav === 'trunk-shows' && <ModuleWriteGate moduleId="trunk-shows"><TrunkShows key={navKey} setNav={setNav} /></ModuleWriteGate>}
           {nav === 'trunk-communications' && <TrunkCommunications key={navKey} />}
+          {nav === 'buying-communications' && <BuyingCommunications key={navKey} />}
           {nav === 'leads'       && <ModuleWriteGate moduleId="leads"><Leads key={navKey} setNav={setNav} /></ModuleWriteGate>}
           {nav === 'dayentry'  && <ModuleWriteGate moduleId="dayentry"><MobileDayEntry key={navKey} /></ModuleWriteGate>}
           {nav === 'buying-events' && <ModuleWriteGate moduleId="buying-events"><BuyingEventsView key={navKey} setNav={setNav} /></ModuleWriteGate>}
@@ -299,6 +301,7 @@ export default function Home() {
         {nav === 'trade-shows' && <ModuleWriteGate moduleId="trade-shows"><TradeShows key={navKey} /></ModuleWriteGate>}
         {nav === 'trunk-shows' && <ModuleWriteGate moduleId="trunk-shows"><TrunkShows key={navKey} setNav={setNav} /></ModuleWriteGate>}
         {nav === 'trunk-communications' && <TrunkCommunications key={navKey} />}
+        {nav === 'buying-communications' && <BuyingCommunications key={navKey} />}
         {nav === 'leads'       && <ModuleWriteGate moduleId="leads"><Leads key={navKey} setNav={setNav} /></ModuleWriteGate>}
         {nav === 'appointments'  && <ModuleWriteGate moduleId="appointments"><AppointmentsAdmin key={navKey} /></ModuleWriteGate>}
         {nav === 'buying-events' && <ModuleWriteGate moduleId="buying-events"><BuyingEventsView key={navKey} setNav={setNav} /></ModuleWriteGate>}
