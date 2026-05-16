@@ -1,0 +1,204 @@
+'use client'
+
+// Buying Communications — sends log panel. Parallel to trunk
+// CommsLogPanel but simpler (no schedule-cancel / reschedule yet —
+// auto-schedules land in phase 3c).
+//
+// Reused in two places:
+//   - The 📨 Log tab inside BuyingCommunications module (every
+//     send across every event).
+//   - Per-event drill-in: pass eventId to scope to a single
+//     buying event.
+
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import { useApp } from '@/lib/context'
+import type { NavPage } from '@/app/page'
+
+interface BuyingSend {
+  id: string
+  event_id: string
+  template_id: string | null
+  delivery_status: 'sent' | 'delivered' | 'bounced' | 'failed' | 'cancelled'
+  subject_line_rendered: string
+  to_email: string
+  to_name: string | null
+  cc_emails: string[]
+  from_name: string
+  from_email: string
+  sent_at: string | null
+  resend_message_id: string | null
+  // From the FK join below.
+  event?: { id: string; store_id: string; start_date: string | null; store_name?: string | null } | null
+}
+
+const STATUS_LABEL: Record<BuyingSend['delivery_status'], string> = {
+  sent: 'Sent', delivered: 'Delivered', bounced: 'Bounced', failed: 'Failed', cancelled: 'Cancelled',
+}
+const STATUS_COLOR: Record<BuyingSend['delivery_status'], { bg: string; fg: string }> = {
+  sent:      { bg: '#DBEAFE', fg: '#1E40AF' },
+  delivered: { bg: '#D1FAE5', fg: '#065F46' },
+  bounced:   { bg: '#FEE2E2', fg: '#991B1B' },
+  failed:    { bg: '#FEE2E2', fg: '#991B1B' },
+  cancelled: { bg: '#E5E7EB', fg: '#374151' },
+}
+
+interface Props {
+  /** When set, scope to this buying event. Omit for the global view. */
+  eventId?: string
+  title?: string
+  setNav?: (n: NavPage) => void
+}
+
+export default function BuyingCommsLogPanel({ eventId, title = '📨 Buying Communications Log', setNav }: Props) {
+  const { stores } = useApp()
+  const [rows, setRows] = useState<BuyingSend[]>([])
+  const [loaded, setLoaded] = useState(false)
+  const [expanded, setExpanded] = useState<string | null>(null)
+
+  async function load() {
+    let q: any = supabase
+      .from('buying_communication_sends')
+      .select(`id, event_id, template_id, delivery_status,
+               subject_line_rendered, to_email, to_name, cc_emails,
+               from_name, from_email, sent_at, resend_message_id,
+               event:events(id, store_id, start_date, store_name)`)
+    if (eventId) q = q.eq('event_id', eventId)
+    const { data, error } = await q.order('sent_at', { ascending: false, nullsFirst: false })
+    if (error) {
+      console.error('[BuyingCommsLogPanel] load failed', error)
+    }
+    setRows(((data || []) as unknown) as BuyingSend[])
+    setLoaded(true)
+  }
+
+  useEffect(() => { void load() }, [eventId])
+
+  if (!loaded) {
+    return <div style={{ padding: 24, color: 'var(--mist)', fontSize: 13 }}>Loading log…</div>
+  }
+  if (rows.length === 0) {
+    return (
+      <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--mist)', fontSize: 13 }}>
+        {eventId ? 'No letters sent for this event yet.' : 'No buying-comm letters have been sent yet.'}
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div style={{ marginBottom: 10, fontSize: 12, color: 'var(--mist)' }}>
+        {rows.length} send{rows.length === 1 ? '' : 's'}{eventId ? ' for this event' : ''}
+      </div>
+      <div style={{ background: '#fff', border: '1px solid var(--cream2)', borderRadius: 10, overflow: 'hidden' }}>
+        <div style={{
+          display: 'grid', gridTemplateColumns: eventId ? '1.5fr 2fr 100px 90px 40px' : '1.5fr 1.5fr 1.5fr 100px 90px 40px',
+          background: 'var(--cream2)', padding: '8px 14px',
+          fontSize: 11, fontWeight: 700, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.04em',
+        }}>
+          <div>Subject</div>
+          {!eventId && <div>Event</div>}
+          <div>To</div>
+          <div>Sent</div>
+          <div>Status</div>
+          <div></div>
+        </div>
+        {rows.map(r => {
+          const isOpen = expanded === r.id
+          const eventLabel = r.event
+            ? `${r.event.store_name || stores.find(s => s.id === r.event!.store_id)?.name || 'Event'}${r.event.start_date ? ` · ${fmtDateShort(r.event.start_date)}` : ''}`
+            : '—'
+          const status = r.delivery_status || 'sent'
+          const sc = STATUS_COLOR[status]
+          return (
+            <div key={r.id} style={{ borderTop: '1px solid var(--cream2)' }}>
+              <div
+                onClick={() => setExpanded(isOpen ? null : r.id)}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: eventId ? '1.5fr 2fr 100px 90px 40px' : '1.5fr 1.5fr 1.5fr 100px 90px 40px',
+                  padding: '10px 14px', alignItems: 'center',
+                  fontSize: 13, cursor: 'pointer',
+                }}
+              >
+                <div style={{ fontWeight: 700, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {r.subject_line_rendered}
+                </div>
+                {!eventId && (
+                  <div style={{ color: 'var(--ash)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {eventLabel}
+                  </div>
+                )}
+                <div style={{ color: 'var(--ash)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {r.to_name ? `${r.to_name} <${r.to_email}>` : r.to_email}
+                </div>
+                <div style={{ color: 'var(--mist)', fontSize: 12 }}>
+                  {r.sent_at ? fmtDateTime(r.sent_at) : '—'}
+                </div>
+                <div>
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
+                    background: sc.bg, color: sc.fg,
+                  }}>{STATUS_LABEL[status]}</span>
+                </div>
+                <div style={{ color: 'var(--mist)' }}>{isOpen ? '▾' : '▸'}</div>
+              </div>
+              {isOpen && (
+                <div style={{ background: 'var(--cream)', padding: '12px 18px', borderTop: '1px solid var(--cream2)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--mist)', marginBottom: 6 }}>
+                    From: <strong>{r.from_name}</strong> &lt;{r.from_email}&gt;
+                  </div>
+                  {r.cc_emails && r.cc_emails.length > 0 && (
+                    <div style={{ fontSize: 11, color: 'var(--mist)', marginBottom: 6 }}>
+                      CC: {r.cc_emails.join(', ')}
+                    </div>
+                  )}
+                  {r.resend_message_id && (
+                    <div style={{ fontSize: 11, color: 'var(--mist)', marginBottom: 6, fontFamily: 'monospace' }}>
+                      Resend id: {r.resend_message_id}
+                    </div>
+                  )}
+                  <div style={{
+                    marginTop: 10, padding: 12,
+                    background: '#fff', border: '1px solid var(--pearl)', borderRadius: 6,
+                    fontSize: 12, lineHeight: 1.55, whiteSpace: 'pre-wrap', color: 'var(--ink)',
+                    maxHeight: 280, overflowY: 'auto',
+                  }}>
+                    <FullBody id={r.id} />
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+/** Lazy-load the body_rendered for an expanded row — the list
+ *  query skips it to keep the initial payload small. */
+function FullBody({ id }: { id: string }) {
+  const [body, setBody] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const { data } = await supabase.from('buying_communication_sends')
+        .select('body_rendered').eq('id', id).maybeSingle()
+      if (!cancelled) setBody((data as any)?.body_rendered || '(body unavailable)')
+    })()
+    return () => { cancelled = true }
+  }, [id])
+  if (body === null) return <span style={{ color: 'var(--mist)' }}>Loading body…</span>
+  return <>{body}</>
+}
+
+function fmtDateShort(iso: string): string {
+  const d = new Date(iso + 'T12:00:00')
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+function fmtDateTime(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    + ' · ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+}
