@@ -13,6 +13,14 @@ const nextConfig = {
       '/api/expense-reports/**/*': ['./public/beb-wordmark.png'],
       '/api/expenses/**/*': ['./public/beb-wordmark.png'],
     },
+    // archiver (and its lazystream sub-dep) ship a malformed
+    // `exports` field that Webpack 5 chokes on with "Default
+    // condition should be last one" during the prod build.
+    // Marking it server-external skips webpack bundling and loads
+    // it from node_modules at runtime — standard fix per
+    // https://github.com/vercel/next.js/issues/40647. Used by the
+    // Edge batch ZIP endpoints (/api/wholesale/edge/.../zip).
+    serverComponentsExternalPackages: ['archiver'],
   },
 }
 
