@@ -9,6 +9,7 @@ import { useReconciliationAlerts } from '@/components/reconciliation/useReconcil
 import { useLeadFollowUpAlerts } from '@/components/sales/useLeadFollowUpAlerts'
 import { useRoleModules } from '@/lib/useRoleModules'
 import ViewAsSwitcher from '@/components/impersonation/ViewAsSwitcher'
+import { BEB_NAV, LIBERTY_NAV, ALWAYS_VISIBLE_NAV } from '@/lib/sidebarNav'
 
 const COLLAPSE_KEY = 'beb-sidebar-collapsed'
 
@@ -37,80 +38,8 @@ const ICONS: Record<string, JSX.Element> = {
   leads:     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/><circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.5"/><circle cx="8" cy="8" r="1" fill="currentColor"/></svg>,
 }
 
-interface NavItem {
-  id?: NavPage
-  label: string
-  iconKey?: string
-  section?: boolean
-}
-
-// Dashboard sits above the four section groups (Buying / Selling /
-// Operations / Admin) since it's the home landing — items with no
-// section header preceding them render unconditionally per the
-// loop in the render block.
-const BEB_NAV: NavItem[] = [
-  { id: 'dashboard',     label: 'Dashboard',         iconKey: 'dashboard' },
-  { id: 'calendar',      label: 'Calendar',          iconKey: 'schedule' },
-  { label: 'Buying', section: true },
-  // Nav id renames (2026-05-06): the buyer appointment-schedule page
-  // moved from id 'calendar' → 'appointments' so that 'calendar' could
-  // become the buyer time-off + event calendar (formerly id 'schedule').
-  // Together with 'events' → 'buying-events' and 'libertyadmin' →
-  // 'liberty-admin'. See supabase-migration-rename-nav-ids.sql.
-  { id: 'appointments',        label: 'Appointments',        iconKey: 'calendar' },
-  { id: 'buying-events',       label: 'Buying Events',       iconKey: 'events' },
-  { id: 'buying-event-stores', label: 'Buying Event Stores', iconKey: 'stores' },
-  { id: 'travel',              label: 'Travel Share',        iconKey: 'travel' },
-  { id: 'dayentry',            label: 'Enter Buying Data',   iconKey: 'dayentry' },
-  { id: 'buy-intake',          label: '🪪 Buy Intake',       iconKey: 'dayentry' },
-  { id: 'intake-lookup',       label: 'Buy Form Lookup',     iconKey: 'reports' },
-  { id: 'buying-communications', label: 'Buying Communications', iconKey: 'marketing' },
-  { label: 'Selling', section: true },
-  { id: 'trade-shows',       label: 'Trade Shows',       iconKey: 'tradeshows' },
-  { id: 'trunk-shows',       label: 'Trunk Shows',       iconKey: 'trunkshows' },
-  { id: 'trunk-show-stores', label: 'Trunk Show Stores', iconKey: 'stores' },
-  { id: 'trunk-communications', label: 'Trunk Communications', iconKey: 'marketing' },
-  { id: 'leads',             label: 'Leads',             iconKey: 'leads' },
-  { label: 'Operations', section: true },
-  { id: 'marketing',         label: 'Marketing',         iconKey: 'marketing' },
-  { id: 'shipping',          label: 'Shipping',          iconKey: 'shipping' },
-  { id: 'expenses',          label: 'Expenses',          iconKey: 'expenses' },
-  { id: 'accounting-hub',    label: 'Accounting Hub',    iconKey: 'expenses' },
-  { id: 'reconciliation',    label: 'Reconciliation',    iconKey: 'financials' },
-  { id: 'broadcast',         label: '📣 Broadcast',      iconKey: 'marketing' },
-  { id: 'customers',         label: 'Customers',         iconKey: 'staff' },
-  { label: 'Admin', section: true },
-  { id: 'admin',         label: 'Admin Panel',       iconKey: 'admin' },
-  { id: 'reports',       label: 'Reports',           iconKey: 'reports' },
-  { id: 'staff',         label: 'Staff',             iconKey: 'staff' },
-  { id: 'data-research', label: 'Data Research',     iconKey: 'reports' },
-  { id: 'financials',    label: 'Financials',        iconKey: 'financials' },
-]
-
-const LIBERTY_NAV: NavItem[] = [
-  { id: 'dashboard',     label: 'Dashboard',         iconKey: 'dashboard' },
-  { id: 'calendar',      label: 'Calendar',          iconKey: 'schedule' },
-  { label: 'Buying', section: true },
-  { id: 'appointments',        label: 'Appointments',        iconKey: 'calendar' },
-  { id: 'buying-events',       label: 'Buying Events',       iconKey: 'events' },
-  { id: 'buying-event-stores', label: 'Buying Event Stores', iconKey: 'stores' },
-  { id: 'travel',              label: 'Travel Share',        iconKey: 'travel' },
-  { id: 'dayentry',            label: 'Enter Buying Data',   iconKey: 'dayentry' },
-  { label: 'Operations', section: true },
-  { id: 'marketing',    label: 'Marketing',      iconKey: 'marketing' },
-  { id: 'shipping',     label: 'Shipping',       iconKey: 'shipping' },
-  { id: 'expenses',     label: 'Expenses',       iconKey: 'expenses' },
-  { id: 'accounting-hub', label: 'Accounting Hub', iconKey: 'expenses' },
-  { id: 'reconciliation', label: 'Reconciliation', iconKey: 'financials' },
-  { id: 'customers',    label: 'Customers',      iconKey: 'staff' },
-  { label: 'Admin', section: true },
-  { id: 'wholesale',     label: 'Inventory POS',        iconKey: 'stores' },
-  { id: 'liberty-admin', label: 'Liberty Admin Panel', iconKey: 'admin' },
-  { id: 'reports',       label: 'Reports',             iconKey: 'reports' },
-  { id: 'staff',         label: 'Staff',               iconKey: 'staff' },
-  { id: 'data-research', label: 'Data Research',       iconKey: 'reports' },
-  { id: 'financials',    label: 'Financials',          iconKey: 'financials' },
-]
+// Sidebar nav lists + always-visible IDs moved to lib/sidebarNav.ts
+// so the Settings → 🧭 Sidebar Items panel can read the same source.
 
 interface SidebarProps {
   nav: NavPage
@@ -131,6 +60,63 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
   // only include those few entries.
   const { modules: grantedModules, loaded: modulesLoaded } = useRoleModules()
   const NAV_ITEMS = isLiberty ? LIBERTY_NAV : BEB_NAV
+
+  // Per-user sidebar visibility. Lives in users.preferences.
+  //   .sidebar_hidden_modules: {
+  //     desktop: { beb: string[], liberty: string[] },
+  //     mobile:  { beb: string[], liberty: string[] },
+  //   } — NavPage ids the user has elected to hide. The shape is
+  //   per-surface + per-brand so a user can keep a module visible
+  //   on desktop but hide it on mobile (or vice-versa) and configure
+  //   the two brands independently. Dashboard is hard-pinned via
+  //   ALWAYS_VISIBLE_NAV so users can't lock themselves out.
+  //   .sidebar_visibility_tip_seen_count: number — how many times
+  //     the teaching banner has been auto-shown. Stops at 3
+  //     (pattern from buying-events Hub reorder banner).
+  // This Sidebar component is the DESKTOP surface; MobileLayout
+  // reads the .mobile.<brand> slot independently with the same shape.
+  const hiddenModules = useMemo<Set<NavPage>>(() => {
+    const root = (user?.preferences as any)?.sidebar_hidden_modules
+    const arr = root?.desktop?.[brand as 'beb' | 'liberty']
+    if (!Array.isArray(arr)) return new Set()
+    return new Set(arr as NavPage[])
+  }, [user?.preferences, brand])
+  function isHiddenByUser(id?: NavPage): boolean {
+    if (!id) return false
+    if (ALWAYS_VISIBLE_NAV.includes(id)) return false
+    return hiddenModules.has(id)
+  }
+
+  // 3-visit teaching banner — once the user has seen this come up 3
+  // times we stop showing it. Same shape as the buying-events Hub
+  // reorder-tip banner. Setting the dismissed flag persists.
+  const TIP_LIMIT = 3
+  const [tipSeenCount, setTipSeenCount] = useState<number>(() => {
+    const raw = (user?.preferences as any)?.sidebar_visibility_tip_seen_count
+    return typeof raw === 'number' ? raw : 0
+  })
+  const [tipDismissedNow, setTipDismissedNow] = useState(false)
+  useEffect(() => {
+    // Re-sync if the user object changes (login / brand switch).
+    const raw = (user?.preferences as any)?.sidebar_visibility_tip_seen_count
+    if (typeof raw === 'number') setTipSeenCount(raw)
+  }, [user?.id, user?.preferences])
+  // Bump the seen counter once per mount (debounced via a ref so React
+  // strict-mode double-mount doesn't double-count). Best-effort write.
+  const bumpedRef = useRef(false)
+  useEffect(() => {
+    if (!user || bumpedRef.current) return
+    if (tipSeenCount >= TIP_LIMIT) return
+    bumpedRef.current = true
+    const next = tipSeenCount + 1
+    const nextPrefs = { ...(user.preferences || {}), sidebar_visibility_tip_seen_count: next }
+    supabase.from('users').update({ preferences: nextPrefs }).eq('id', user.id).then(() => {
+      // No need to refresh user — local count is what gates the
+      // banner this session.
+    })
+    setTipSeenCount(next)
+  }, [user, tipSeenCount])
+  const showTeachingBanner = !tipDismissedNow && tipSeenCount <= TIP_LIMIT && modulesLoaded
 
   // Lookup: nav id → its (label, iconKey) so the Pinned section can
   // render rows that match what they look like in the regular sections.
@@ -291,6 +277,57 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
         <span className="app-sub">{isLiberty ? 'Liberty Portal' : 'Buyer Portal'}</span>
       </div>
 
+      {/* 3-visit teaching banner — discoverability for Settings →
+          🧭 Sidebar Items. Auto-shown the first 3 page loads; can
+          be dismissed permanently with the × button. */}
+      {showTeachingBanner && (
+        <div style={{
+          margin: '8px 10px 0',
+          padding: '8px 10px',
+          background: 'rgba(126, 200, 160, 0.12)',
+          border: '1px solid rgba(126, 200, 160, 0.3)',
+          borderRadius: 8,
+          fontSize: 11,
+          color: 'rgba(255,255,255,.85)',
+          lineHeight: 1.4,
+          display: 'flex',
+          gap: 8,
+          alignItems: 'flex-start',
+        }}>
+          <span style={{ fontSize: 14, flexShrink: 0, marginTop: 1 }}>🧭</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, color: '#fff' }}>Customize your sidebar</div>
+            <div style={{ marginTop: 2 }}>
+              Hide modules you don't use in <button
+                type="button"
+                onClick={() => setNav('settings')}
+                style={{
+                  background: 'transparent', border: 'none', padding: 0,
+                  color: '#7EC8A0', fontWeight: 700, textDecoration: 'underline',
+                  cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit',
+                }}
+              >Settings → 🧭 Sidebar Items</button>.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={async () => {
+              setTipDismissedNow(true)
+              if (user) {
+                const nextPrefs = { ...(user.preferences || {}), sidebar_visibility_tip_seen_count: TIP_LIMIT + 1 }
+                await supabase.from('users').update({ preferences: nextPrefs }).eq('id', user.id)
+              }
+            }}
+            aria-label="Dismiss tip"
+            style={{
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              color: 'rgba(255,255,255,.5)', fontSize: 14, lineHeight: 1,
+              padding: 0, flexShrink: 0,
+            }}
+          >×</button>
+        </div>
+      )}
+
       {/* Nav */}
       <nav className="sidebar-nav">
         {/* ★ Pinned section — only renders when the user has any pins.
@@ -303,7 +340,7 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
               PINNED
             </div>
             {pinnedPages
-              .filter(pid => grantedModules.has(pid))
+              .filter(pid => grantedModules.has(pid) && !isHiddenByUser(pid))
               .map(pid => {
                 const meta = navItemById.get(pid)
                 if (!meta) return null
@@ -336,7 +373,7 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
             let cur: string | null = null
             for (const it of NAV_ITEMS) {
               if (it.section) { cur = it.label; continue }
-              if (cur && it.id && grantedModules.has(it.id)) {
+              if (cur && it.id && grantedModules.has(it.id) && !isHiddenByUser(it.id)) {
                 sectionsWithGrants.add(cur)
               }
             }
@@ -376,6 +413,7 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
             // have loaded so we don't briefly flash the full nav list.
             if (!modulesLoaded) return null
             if (item.id && !grantedModules.has(item.id)) return null
+            if (isHiddenByUser(item.id)) return null
             if (currentSection && !currentOpen) return null
             const showExpensesBadge = item.id === 'expenses' && pendingApprovalCount > 0
             const showReconBadge = item.id === 'reconciliation' && reconciliationAlertCount > 0
@@ -434,7 +472,7 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
             type="button"
             onClick={() => setNav('settings')}
             aria-label="Settings"
-            title="Settings"
+            title="Settings — customize the sidebar under 🧭 Sidebar Items"
             style={{
               flexShrink: 0,
               width: 28, height: 28, padding: 0,
