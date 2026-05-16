@@ -6,7 +6,7 @@
 // modal. Empty state suggests a quick-start for the most recent
 // upcoming event.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { MarketingCampaign, MarketingFlowType, MarketingStatus, Event } from '@/types'
@@ -76,6 +76,40 @@ export default function CampaignsList() {
     setLoading(false)
   }
   useEffect(() => { load() }, [])
+
+  // Deep-link: email notifications (proof requests, payment
+  // requests, escalations) point at /?nav=marketing&campaign=<id>
+  // — open that campaign's detail automatically when the user
+  // lands. The detail panel already surfaces the current status
+  // (approved / paid / etc), so a clicker who arrives after the
+  // ask was already satisfied sees the resolved state inline
+  // without us having to render a separate 'already done' page.
+  //
+  // Reads the param once per mount via window.location so we
+  // don't pull in next/navigation just for a one-off (this
+  // component is already client-rendered). Strips the param from
+  // the URL after consuming so a refresh or share-back doesn't
+  // re-pop the detail unexpectedly.
+  const deepLinkAppliedRef = useRef(false)
+  useEffect(() => {
+    if (deepLinkAppliedRef.current) return
+    if (loading) return
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const targetId = params.get('campaign')
+    if (!targetId) { deepLinkAppliedRef.current = true; return }
+    const hit = campaigns.find(c => c.id === targetId)
+    if (hit) {
+      setOpenId(targetId)
+    }
+    deepLinkAppliedRef.current = true
+    // Scrub the param so the URL doesn't keep re-opening the
+    // detail on refresh — caller's intent has been satisfied.
+    params.delete('campaign')
+    const newSearch = params.toString()
+    const newUrl = window.location.pathname + (newSearch ? '?' + newSearch : '') + window.location.hash
+    window.history.replaceState({}, '', newUrl)
+  }, [loading, campaigns])
 
   const eventById = useMemo(() => new Map(events.map(e => [e.id, e])), [events])
   const storeById = useMemo(() => new Map(stores.map(s => [s.id, s])), [stores])
