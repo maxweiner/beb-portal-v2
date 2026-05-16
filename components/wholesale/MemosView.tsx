@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import type {
   WholesaleMemo, WholesaleMemoLine, WholesaleCustomer, InventoryItem, MemoStatus, MemoLineStatus,
 } from '@/types/wholesale'
-import { fmtDate, fmtMoneyCents, dollarsToCents, centsToDollarsString } from '@/lib/wholesale/format'
+import { fmtDate, fmtMoneyCents, dollarsToCents, centsToDollarsString, dollarsToWholeCents, centsToWholeDollarsString } from '@/lib/wholesale/format'
 import { nextWholesaleNumber } from '@/lib/wholesale/numbers'
 import { logAudit } from '@/lib/wholesale/audit'
 import { Modal, Section, Row, Field, Select } from './InventoryView'
@@ -214,7 +214,8 @@ function MemoDetailModal({
     setBusy(false)
   }
   async function setLinePrice(line: WholesaleMemoLine, dollars: string) {
-    const cents = dollarsToCents(dollars) ?? 0
+    // Memo prices are whole dollars only as of 2026-05-15.
+    const cents = dollarsToWholeCents(dollars) ?? 0
     await supabase.from('wholesale_memo_lines').update({ memo_price_cents: cents }).eq('id', line.id)
     await reload(); onChanged()
   }
@@ -383,7 +384,8 @@ function MemoDetailModal({
                   <td style={{ padding: '6px 8px', fontWeight: 700 }}>{l.item?.item_number || '—'}</td>
                   <td style={{ padding: '6px 8px' }}>{l.item?.public_notes || l.item?.jewelry_type || l.item?.watch_brand || l.item?.diamond_report_number || '—'}</td>
                   <td style={{ padding: '6px 8px' }}>
-                    <input type="number" step="0.01" defaultValue={centsToDollarsString(l.memo_price_cents)}
+                    {/* Whole dollars only (2026-05-15). */}
+                    <input type="number" step="1" min="0" defaultValue={centsToWholeDollarsString(l.memo_price_cents)}
                       onBlur={e => setLinePrice(l, e.target.value)}
                       disabled={l.line_status !== 'out'}
                       style={{ width: 90, padding: '4px 6px', fontSize: 12 }} />

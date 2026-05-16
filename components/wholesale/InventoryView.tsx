@@ -1193,12 +1193,13 @@ function ItemForm({
     if (savedFadeTimerRef.current) clearTimeout(savedFadeTimerRef.current)
   }, [])
 
-  // Cost is whole dollars only (2026-05-15). Other money fields
-  // (wholesale / retail / edge) still permit cents.
+  // All five money fields on inventory items are whole dollars only
+  // as of 2026-05-15 (cost first, then wholesale/retail/edge in the
+  // follow-up). See lib/wholesale/format.ts.
   const costCents = dollarsToWholeCents(cost)
-  const wholesaleCents = dollarsToCents(wholesale)
-  const retailCents = dollarsToCents(retail)
-  const edgeCents = dollarsToCents(edge)
+  const wholesaleCents = dollarsToWholeCents(wholesale)
+  const retailCents = dollarsToWholeCents(retail)
+  const edgeCents = dollarsToWholeCents(edge)
   const wholesaleMargin = marginPct(costCents, wholesaleCents)
   const retailMargin    = marginPct(costCents, retailCents)
   const edgeMargin      = marginPct(costCents, edgeCents)
@@ -1255,12 +1256,13 @@ function ItemForm({
 
       const payload: any = {
         brand, category, item_number: itemNumber, status,
-        // Cost is whole dollars only (2026-05-15) — see format.ts.
+        // All inventory money fields are whole-dollar only as of
+        // 2026-05-15 — see lib/wholesale/format.ts.
         cost_cents: dollarsToWholeCents(cost),
-        wholesale_price_cents: dollarsToCents(wholesale),
-        retail_price_cents: dollarsToCents(retail),
+        wholesale_price_cents: dollarsToWholeCents(wholesale),
+        retail_price_cents: dollarsToWholeCents(retail),
         insurance_value_cents: dollarsToCents(insurance),
-        edge_price_cents: dollarsToCents(edge),
+        edge_price_cents: dollarsToWholeCents(edge),
         public_notes: public_notes.trim() || null,
         internal_notes: internal_notes.trim() || null,
         vendor_id: vendor_id || null,
@@ -1559,15 +1561,35 @@ function ItemForm({
               }} />
           </Field>
           <Field label={`Wholesale ($)${wholesaleMargin != null ? ` · ${wholesaleMargin.toFixed(0)}% margin` : ''}`} warn={wholesaleBelowCost}>
-            <input type="number" step="0.01" value={wholesale} onChange={e => setWholesale(e.target.value)} />
+            {/* Whole dollars only (2026-05-15). Same step=1 +
+                onBlur-round pattern as Cost above. */}
+            <input type="number" step="1" min="0" value={wholesale} onChange={e => setWholesale(e.target.value)}
+              onBlur={e => {
+                const raw = e.target.value.trim()
+                if (raw === '') return
+                const n = Number.parseFloat(raw.replace(/[$,\s]/g, ''))
+                if (Number.isFinite(n)) setWholesale(String(Math.round(n)))
+              }} />
             {wholesaleBelowCost && <Hint>⚠ Below cost</Hint>}
           </Field>
           <Field label={`Retail ($)${retailMargin != null ? ` · ${retailMargin.toFixed(0)}% margin` : ''}`} warn={retailBelowCost}>
-            <input type="number" step="0.01" value={retail} onChange={e => setRetail(e.target.value)} />
+            <input type="number" step="1" min="0" value={retail} onChange={e => setRetail(e.target.value)}
+              onBlur={e => {
+                const raw = e.target.value.trim()
+                if (raw === '') return
+                const n = Number.parseFloat(raw.replace(/[$,\s]/g, ''))
+                if (Number.isFinite(n)) setRetail(String(Math.round(n)))
+              }} />
             {retailBelowCost && <Hint>⚠ Below cost</Hint>}
           </Field>
           <Field label={`Edge ($)${edgeMargin != null ? ` · ${edgeMargin.toFixed(0)}% margin` : ''}`} warn={edgeBelowCost}>
-            <input type="number" step="0.01" value={edge} onChange={e => setEdge(e.target.value)}
+            <input type="number" step="1" min="0" value={edge} onChange={e => setEdge(e.target.value)}
+              onBlur={e => {
+                const raw = e.target.value.trim()
+                if (raw === '') return
+                const n = Number.parseFloat(raw.replace(/[$,\s]/g, ''))
+                if (Number.isFinite(n)) setEdge(String(Math.round(n)))
+              }}
               placeholder="(blank = not for Edge)" />
             {edgeBelowCost && <Hint>⚠ Below cost</Hint>}
             {!edgeBelowCost && edge.trim() !== '' && (

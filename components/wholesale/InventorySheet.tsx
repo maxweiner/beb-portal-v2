@@ -191,24 +191,25 @@ const ALL_COLUMNS: ColumnDef[] = [
     ),
   },
   {
-    id: 'wholesale_price_cents', label: 'Wholesale', group: 'pricing', defaultOn: false, width: 100,
+    // Whole dollars only (2026-05-15) — see lib/wholesale/format.ts.
+    id: 'wholesale_price_cents', label: 'Wholesale ($)', group: 'pricing', defaultOn: false, width: 100,
     render: ({ item, save }) => (
-      <input type="text" inputMode="decimal" defaultValue={centsToDollarsString(item.wholesale_price_cents)}
+      <input type="text" inputMode="numeric" defaultValue={centsToWholeDollarsString(item.wholesale_price_cents)}
         placeholder="—"
         onBlur={e => {
-          const cents = e.target.value.trim() === '' ? null : dollarsToCents(e.target.value)
+          const cents = e.target.value.trim() === '' ? null : dollarsToWholeCents(e.target.value)
           if (cents !== (item.wholesale_price_cents ?? null)) save({ wholesale_price_cents: cents as any })
         }}
         style={{ ...cellInput(90), textAlign: 'right' }} />
     ),
   },
   {
-    id: 'retail_price_cents', label: 'Retail', group: 'pricing', defaultOn: true, width: 100,
+    id: 'retail_price_cents', label: 'Retail ($)', group: 'pricing', defaultOn: true, width: 100,
     render: ({ item, save }) => (
-      <input type="text" inputMode="decimal" defaultValue={centsToDollarsString(item.retail_price_cents)}
+      <input type="text" inputMode="numeric" defaultValue={centsToWholeDollarsString(item.retail_price_cents)}
         placeholder="—"
         onBlur={e => {
-          const cents = e.target.value.trim() === '' ? null : dollarsToCents(e.target.value)
+          const cents = e.target.value.trim() === '' ? null : dollarsToWholeCents(e.target.value)
           if (cents !== (item.retail_price_cents ?? null)) save({ retail_price_cents: cents as any })
         }}
         style={{ ...cellInput(90), textAlign: 'right' }} />
@@ -219,7 +220,7 @@ const ALL_COLUMNS: ColumnDef[] = [
     // marks the item as ready to send via the Send-to-Edge view. NULL
     // means "not ready". Background tint flags items that would lose
     // money (Edge < cost) so the buyer catches accidental underprices.
-    id: 'edge_price_cents', label: 'Edge', group: 'pricing', defaultOn: true, width: 100,
+    id: 'edge_price_cents', label: 'Edge ($)', group: 'pricing', defaultOn: true, width: 100,
     render: ({ item, save }) => {
       const cost = item.cost_cents ?? null
       const edge = item.edge_price_cents ?? null
@@ -229,10 +230,10 @@ const ALL_COLUMNS: ColumnDef[] = [
         : (cost != null && edge < cost * 1.1) ? '#fef3c7'  // thin margin — amber
         : '#dcfce7'                                         // healthy — green
       return (
-        <input type="text" inputMode="decimal" defaultValue={centsToDollarsString(item.edge_price_cents)}
+        <input type="text" inputMode="numeric" defaultValue={centsToWholeDollarsString(item.edge_price_cents)}
           placeholder="—"
           onBlur={e => {
-            const cents = e.target.value.trim() === '' ? null : dollarsToCents(e.target.value)
+            const cents = e.target.value.trim() === '' ? null : dollarsToWholeCents(e.target.value)
             if (cents !== (item.edge_price_cents ?? null)) save({ edge_price_cents: cents as any })
           }}
           style={{ ...cellInput(90), textAlign: 'right', background: tint }} />
