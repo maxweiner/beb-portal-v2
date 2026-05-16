@@ -85,6 +85,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cron/buying-comms-autoschedule-from-checklist?secret=bebportal2024",
+      "schedule": "7 * * * *"
+    },
+    {
       "path": "/api/cron/promote-events-completed?secret=bebportal2024",
       "schedule": "37 6 * * *"
     }
