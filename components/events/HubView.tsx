@@ -125,7 +125,7 @@ function initials(name: string): string {
 // ── Component ────────────────────────────────────────────────
 export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
   const ctx = useApp()
-  const { stores, user, brand, users, setTravelIntent, setDayEntryIntent } = ctx
+  const { stores, user, brand, users, setTravelIntent, setDayEntryIntent, events: ctxEvents } = ctx
 
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || user?.is_partner === true
   const canCancel = user?.role === 'superadmin' || user?.is_partner === true
@@ -241,6 +241,23 @@ export default function HubView({ setNav }: { setNav?: (n: NavPage) => void }) {
     })()
     return () => { cancelled = true }
   }, [brand])
+
+  // Sync local events from the global app context whenever the context
+  // changes. Context.reload() runs after every CreateEventModal insert
+  // (and via a realtime subscription on the events table), so this hook
+  // is how a freshly-created event lights up in the hub WITHOUT a
+  // browser refresh. Keeping a local state copy (rather than reading
+  // ctxEvents directly) preserves the existing optimistic-update sites
+  // — e.g. promoteEvent / toggleBriefed use setEvents(es => ...) to
+  // reflect the change instantly while realtime catches up in the
+  // background.
+  useEffect(() => {
+    if (!ctxEvents) return
+    // Brand-scope: context holds events for the active brand only, but
+    // defensive-filter in case the brand swap is in flight.
+    const scoped = ctxEvents.filter(e => !brand || (e as any).brand === brand)
+    setEvents(scoped.map((e: any) => ({ ...e, days: e.days || [] })))
+  }, [ctxEvents, brand])
 
   const visibleEvents = useMemo(() => {
     const todayIso = new Date().toISOString().slice(0, 10)
