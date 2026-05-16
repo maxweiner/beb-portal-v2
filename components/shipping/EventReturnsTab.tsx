@@ -155,9 +155,11 @@ export default function EventReturnsTab() {
   }, [rows])
 
   return (
-    <div className="p-6" style={{ maxWidth: 1280, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)' }}>📦 Shipping Portal</h1>
+    <div>
+      {/* Page header lives in the parent Shipping.tsx shell now —
+          this tab only renders its own content. Counter chip on the
+          right replaces the inline title row. */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 10 }}>
         <div style={{ fontSize: 12, color: 'var(--mist)' }}>{filtered.length} of {rows.length} shipments</div>
       </div>
 
