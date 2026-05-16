@@ -74,21 +74,30 @@ function buildRow(r: RowInput): string[] {
   return [
     csvField(centsToDollars(s.edge_price_cents)),                  // Cost
     csvField(s.description),                                       // Description
-    csvField(s.vendor_stock_number),                               // Vendor Style Code
+    // ── Vendor info intentionally NOT exported (spec 2026-05-15) ──
+    // Edge's importer treats blank Vendor Style Code / Item Key /
+    // Category as "no vendor metadata" — fine for our use case
+    // (Mary doesn't resell by our vendor; the line just gets
+    // associated to The Edge's own vendor record on import).
+    csvField(null),                                                // Vendor Style Code (was s.vendor_stock_number; scrubbed)
     csvField(null),                                                // Vendor Syb Style Code (n/a)
-    csvField(s.item_number),                                       // Vendor Item Key
-    csvField(s.category ? EDGE_CATEGORY[s.category] : null),       // Edge Category
-    csvField(s.category),                                          // Vendor Category
+    csvField(null),                                                // Vendor Item Key (was s.item_number; scrubbed — Master Item below still carries it for import identity)
+    csvField(s.category ? EDGE_CATEGORY[s.category] : null),       // Edge Category (kept — Edge's own taxonomy)
+    csvField(null),                                                // Vendor Category (was s.category; scrubbed)
     csvField(null),                                                // Lead Time (n/a)
     csvField(s.memo_in ? 'Yes' : 'No'),                            // Memo Item
     csvField(buildNotes(s)),                                       // Notes
-    csvField(centsToDollars(s.retail_price_cents)),                // Retail Price
+    // Retail Price intentionally NOT exported (spec 2026-05-15) —
+    // Mary sets her own retail downstream.
+    csvField(null),                                                // Retail Price (was s.retail_price_cents; scrubbed)
     csvField(null),                                                // Vendor Barcode (n/a)
-    csvField(s.item_number),                                       // Master Item
+    csvField(s.item_number),                                       // Master Item (kept — Edge's import identity)
     csvField(s.gender ? humanGender(s.gender) : null),             // Variation Name
     csvField(s.item_style),                                        // Item Style
     csvField(s.length),                                            // Length
-    csvField(s.designer || s.watch_brand || s.vendor_name),        // Manufacture
+    // Manufacture drops the vendor_name fallback per the vendor-info
+    // scrub. Falls back to blank if no designer / watch brand.
+    csvField(s.designer || s.watch_brand),                         // Manufacture
     csvField(null),                                                // Millimeter Width (n/a)
     csvField(s.metal_color),                                       // Metal Color
     csvField(null),                                                // Metal Finish (n/a)
