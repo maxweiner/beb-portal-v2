@@ -15,11 +15,13 @@ import { useApp } from '@/lib/context'
 import TemplateList from './TemplateList'
 import TemplateEditor from './TemplateEditor'
 import AiTemplateModal from './AiTemplateModal'
+import BuyingSendFlow from './BuyingSendFlow'
 import type { CommunicationTemplate } from '@/types'
 
 type View =
   | { kind: 'list' }
   | { kind: 'edit'; template: CommunicationTemplate | null }
+  | { kind: 'send'; eventId?: string | null; templateId?: string | null }
 
 export default function BuyingCommunications() {
   const { user } = useApp()
@@ -53,6 +55,20 @@ export default function BuyingCommunications() {
     )
   }
 
+  if (view.kind === 'send') {
+    return (
+      <BuyingSendFlow
+        initialEventId={view.eventId}
+        initialTemplateId={view.templateId}
+        onClose={() => setView({ kind: 'list' })}
+        onSent={() => {
+          alert('Letter sent — log entry recorded.')
+          setView({ kind: 'list' })
+        }}
+      />
+    )
+  }
+
   return (
     <div className="p-6" style={{ maxWidth: 1100, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
@@ -63,6 +79,7 @@ export default function BuyingCommunications() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={() => setView({ kind: 'send' })} className="btn-primary btn-sm">📤 Send a letter</button>
           <button
             onClick={() => setAiModal({ mode: 'new' })}
             className="btn-outline btn-sm"
@@ -98,8 +115,10 @@ export default function BuyingCommunications() {
         borderRadius: 8, fontSize: 12, color: 'var(--mist)',
       }}>
         <strong style={{ color: 'var(--ash)' }}>Coming in later phases:</strong>{' '}
-        send flow (admin clicks Send to fire a letter at a buying event&apos;s store contact) ·
         per-event communications log · master checklist · auto-send schedules tied to event dates.
+        <br />
+        <strong style={{ color: 'var(--ash)' }}>Sends are gated</strong> behind a kill switch — an admin must enable
+        them in Settings → Buying Comms → Sending enabled before the Send button actually fires.
       </div>
     </div>
   )
