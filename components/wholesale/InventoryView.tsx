@@ -15,7 +15,7 @@ import type {
   WholesaleVendor, WholesaleCustomer, InventoryLocation, InventoryPhoto, InventoryDocument,
   InventoryItemStone, WholesaleAuditLogEntry,
 } from '@/types/wholesale'
-import { fmtMoneyCents, dollarsToCents, centsToDollarsString, fmtDate, fmtDateTime, marginPct } from '@/lib/wholesale/format'
+import { fmtMoneyCents, dollarsToCents, centsToDollarsString, fmtDate, fmtDateTime, marginPct, dollarsToWholeCents } from '@/lib/wholesale/format'
 import { nextWholesaleNumber, prefixForCategory } from '@/lib/wholesale/numbers'
 import { logAudit, diffFields, fetchItemHistory } from '@/lib/wholesale/audit'
 import { loadAdminLists } from '@/lib/wholesale/lists'
@@ -1193,7 +1193,9 @@ function ItemForm({
     if (savedFadeTimerRef.current) clearTimeout(savedFadeTimerRef.current)
   }, [])
 
-  const costCents = dollarsToCents(cost)
+  // Cost is whole dollars only (2026-05-15). Other money fields
+  // (wholesale / retail / edge) still permit cents.
+  const costCents = dollarsToWholeCents(cost)
   const wholesaleCents = dollarsToCents(wholesale)
   const retailCents = dollarsToCents(retail)
   const edgeCents = dollarsToCents(edge)
@@ -1253,7 +1255,8 @@ function ItemForm({
 
       const payload: any = {
         brand, category, item_number: itemNumber, status,
-        cost_cents: dollarsToCents(cost),
+        // Cost is whole dollars only (2026-05-15) — see format.ts.
+        cost_cents: dollarsToWholeCents(cost),
         wholesale_price_cents: dollarsToCents(wholesale),
         retail_price_cents: dollarsToCents(retail),
         insurance_value_cents: dollarsToCents(insurance),
@@ -1543,8 +1546,17 @@ function ItemForm({
 
       <Section title="Pricing">
         <Row>
-          <Field label="Cost ($)">
-            <input type="number" step="0.01" value={cost} onChange={e => setCost(e.target.value)} />
+          <Field label="Cost ($, whole dollars)">
+            {/* Cost is whole dollars only — no cents — per spec
+                2026-05-15. step=1 makes the up/down spinner integer-
+                only; the save path also rounds defensively. */}
+            <input type="number" step="1" min="0" value={cost} onChange={e => setCost(e.target.value)}
+              onBlur={e => {
+                const raw = e.target.value.trim()
+                if (raw === '') return
+                const n = Number.parseFloat(raw.replace(/[$,\s]/g, ''))
+                if (Number.isFinite(n)) setCost(String(Math.round(n)))
+              }} />
           </Field>
           <Field label={`Wholesale ($)${wholesaleMargin != null ? ` · ${wholesaleMargin.toFixed(0)}% margin` : ''}`} warn={wholesaleBelowCost}>
             <input type="number" step="0.01" value={wholesale} onChange={e => setWholesale(e.target.value)} />

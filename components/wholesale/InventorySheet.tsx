@@ -11,7 +11,7 @@ import type {
   InventoryItem, InventoryCategory, InventoryStatus,
   WholesaleVendor, InventoryLocation,
 } from '@/types/wholesale'
-import { fmtMoneyCents, fmtDate, dollarsToCents, centsToDollarsString } from '@/lib/wholesale/format'
+import { fmtMoneyCents, fmtDate, dollarsToCents, centsToDollarsString, dollarsToWholeCents, centsToWholeDollarsString } from '@/lib/wholesale/format'
 import { logAudit } from '@/lib/wholesale/audit'
 import { loadAdminLists } from '@/lib/wholesale/lists'
 import Checkbox from '@/components/ui/Checkbox'
@@ -176,12 +176,15 @@ const ALL_COLUMNS: ColumnDef[] = [
   },
   // PRICING
   {
-    id: 'cost_cents', label: 'Cost', group: 'pricing', defaultOn: true, width: 90,
+    // Cost is whole dollars only — no cents — by spec (2026-05-15).
+    // Uses centsToWholeDollarsString + dollarsToWholeCents so any
+    // decimal the operator types in gets rounded on save.
+    id: 'cost_cents', label: 'Cost ($)', group: 'pricing', defaultOn: true, width: 90,
     render: ({ item, save }) => (
-      <input type="text" inputMode="decimal" defaultValue={centsToDollarsString(item.cost_cents)}
+      <input type="text" inputMode="numeric" defaultValue={centsToWholeDollarsString(item.cost_cents)}
         placeholder="—"
         onBlur={e => {
-          const cents = e.target.value.trim() === '' ? null : dollarsToCents(e.target.value)
+          const cents = e.target.value.trim() === '' ? null : dollarsToWholeCents(e.target.value)
           if (cents !== (item.cost_cents ?? null)) save({ cost_cents: cents as any }, true)
         }}
         style={{ ...cellInput(80), textAlign: 'right' }} />

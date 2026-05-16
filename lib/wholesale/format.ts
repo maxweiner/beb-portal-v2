@@ -14,9 +14,28 @@ export function dollarsToCents(input: string | number | null | undefined): numbe
   return Math.round(n * 100)
 }
 
+/** Whole-dollar variant of dollarsToCents — rounds to the nearest
+ *  whole DOLLAR before converting to cents, so the resulting value
+ *  is always a multiple of 100. Use for inventory_items.cost_cents
+ *  (per-spec, cost is tracked in whole dollars — no cents). */
+export function dollarsToWholeCents(input: string | number | null | undefined): number | null {
+  if (input == null || input === '') return null
+  const n = typeof input === 'number' ? input : Number.parseFloat(String(input).replace(/[$,\s]/g, ''))
+  if (!Number.isFinite(n)) return null
+  return Math.round(n) * 100
+}
+
 export function centsToDollarsString(cents: number | null | undefined): string {
   if (cents == null) return ''
   return (cents / 100).toFixed(2)
+}
+
+/** Whole-dollar variant of centsToDollarsString — emits the
+ *  integer dollar count with no decimal point. Pairs with
+ *  dollarsToWholeCents for cost inputs. */
+export function centsToWholeDollarsString(cents: number | null | undefined): string {
+  if (cents == null) return ''
+  return String(Math.round(cents / 100))
 }
 
 export function fmtDate(iso: string | null | undefined): string {

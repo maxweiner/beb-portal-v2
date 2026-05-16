@@ -1033,7 +1033,11 @@ function FindingDetailModal({
     const row = writtenChecks.find(w => w.source_id === source_id && w.source_table === source_table)
     if (!row) { setErr('Row not found'); return }
 
-    const v = Number(editValue)
+    // Whole-dollar enforcement (2026-05-15). Round defensively in
+    // case the user pasted '1234.56' bypassing the onBlur input
+    // guard. fmtMoney's two-decimal display still works fine on
+    // integer dollars — '$1,235.00' renders identically.
+    const v = Math.round(Number(editValue))
     if (!Number.isFinite(v) || v < 0) { setErr('Enter a non-negative number'); return }
     const trimmedCheck = editCheck.trim()
     if (trimmedCheck.length === 0) { setErr('Check # cannot be empty'); return }
@@ -1300,8 +1304,17 @@ function FindingDetailModal({
                           </td>
                           <td style={{ padding: 6, whiteSpace: 'nowrap' }}>
                             {isEditing ? (
-                              <input type="number" min={0} step="0.01" value={editValue}
+                              // Checks are whole dollars only — no cents — per spec
+                              // 2026-05-15. step=1 disables the .01 decimal spinner;
+                              // onBlur rounds anything the user typed manually.
+                              <input type="number" min={0} step={1} value={editValue}
                                 onChange={e => setEditValue(e.target.value)}
+                                onBlur={e => {
+                                  const v = e.target.value.trim()
+                                  if (v === '') return
+                                  const n = Number.parseFloat(v.replace(/[$,\s]/g, ''))
+                                  if (Number.isFinite(n)) setEditValue(String(Math.round(n)))
+                                }}
                                 autoFocus
                                 style={{ width: 100, padding: '4px 6px', fontSize: 12, border: '1px solid var(--pearl)', borderRadius: 4 }} />
                             ) : (
@@ -1322,7 +1335,12 @@ function FindingDetailModal({
                                 <button
                                   onClick={() => {
                                     setEditingId(w.source_id)
-                                    setEditValue(w.amount.toFixed(2))
+                                    // Edit starts in whole-dollar mode — see spec
+                                    // 2026-05-15. Any existing fractional cents
+                                    // round to the nearest dollar on display so
+                                    // the user can't accidentally re-introduce
+                                    // them.
+                                    setEditValue(String(Math.round(w.amount)))
                                     setEditCheck(finding?.check_number || '')
                                   }}
                                   disabled={busy}
