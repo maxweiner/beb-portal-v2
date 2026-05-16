@@ -587,6 +587,44 @@ function HistoryTab() {
   const [batches, setBatches] = useState<EdgeBatch[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Per-row download spinner state so two simultaneous ZIPs from
+  // different rows don't confuse the UI.
+  const [busyRow, setBusyRow] = useState<{ id: string; kind: 'csv' | 'zip' } | null>(null)
+
+  // Authed download helper. <a href> can't carry a Bearer token,
+  // so we fetch the bytes (passing the token), blob-convert, then
+  // trigger a synthetic <a download> click. Same pattern as the
+  // Compose footer's Preview PDF + Download CSV buttons.
+  async function downloadFromUrl(batchId: string, kind: 'csv' | 'zip', filenameFallback: string) {
+    setBusyRow({ id: batchId, kind })
+    try {
+      const token = await getAuthToken()
+      const res = await fetch(`/api/wholesale/edge/batch/${batchId}/${kind}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({} as any))
+        alert(j?.error || `${kind.toUpperCase()} download failed (${res.status})`)
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const cd = res.headers.get('Content-Disposition') || ''
+      const m = /filename="([^"]+)"/.exec(cd)
+      const filename = m?.[1] || filenameFallback
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (e: any) {
+      alert(e?.message || `Could not download ${kind.toUpperCase()}.`)
+    } finally {
+      setBusyRow(null)
+    }
+  }
 
   useEffect(() => {
     if (!brand) return
@@ -621,12 +659,15 @@ function HistoryTab() {
             <Th>Recipient</Th>
             <Th>Items / Photos</Th>
             <Th>Status</Th>
-            <Th>Link</Th>
+            <Th>Downloads</Th>
+            <Th>Share link</Th>
           </tr>
         </thead>
         <tbody>
           {batches.map(b => {
             const url = typeof window !== 'undefined' ? `${window.location.origin}/edge/${b.public_token}` : `/edge/${b.public_token}`
+            const isCsvBusy = busyRow?.id === b.id && busyRow.kind === 'csv'
+            const isZipBusy = busyRow?.id === b.id && busyRow.kind === 'zip'
             return (
               <tr key={b.id} style={{ borderTop: '1px solid #eee' }}>
                 <td style={td}><span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{b.batch_code}</span></td>
@@ -634,6 +675,25 @@ function HistoryTab() {
                 <td style={td}>{b.recipient_name || ''} <span style={{ color: '#6b7280' }}>&lt;{b.recipient_email}&gt;</span></td>
                 <td style={td}>{b.item_count} / {b.photo_count}</td>
                 <td style={td}><StatusPill status={b.status} /></td>
+                <td style={td}>
+                  {/* CSV + ZIP downloads through the authed routes
+                      so this History tab works inside the portal.
+                      The ZIP bundles every photo + the CSV — same
+                      shape Mary gets from the public share URL. */}
+                  <button
+                    onClick={() => downloadFromUrl(b.id, 'csv', `${b.batch_code}.csv`)}
+                    disabled={!!busyRow}
+                    className="btn-outline btn-xs"
+                    title="84-column Edge CSV (same one emailed to the recipient)"
+                  >{isCsvBusy ? '…' : '⬇️ CSV'}</button>
+                  {' '}
+                  <button
+                    onClick={() => downloadFromUrl(b.id, 'zip', `${b.batch_code}.zip`)}
+                    disabled={!!busyRow}
+                    className="btn-outline btn-xs"
+                    title="ZIP of every photo + the CSV (streamed — large batches take ~30-60s)"
+                  >{isZipBusy ? 'Zipping…' : '⬇️ ZIP'}</button>
+                </td>
                 <td style={td}>
                   <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: '#1D6B44', fontWeight: 700 }}>Open</a>
                   {' · '}

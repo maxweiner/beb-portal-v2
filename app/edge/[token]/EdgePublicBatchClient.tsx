@@ -32,20 +32,39 @@ interface Props {
   batch: PublicBatch
   items: PublicItem[]
   csvUrl: string | null
+  /** Public ZIP download URL — /api/wholesale/edge/public/[token]/zip.
+   *  Bundles CSV + every photo in one streamed download. Replaces
+   *  the cascade-of-individual-downloads approach (which Mary kept
+   *  hitting browser throttling on for 100+ photo batches). */
+  zipUrl: string
 }
 
-export default function EdgePublicBatchClient({ batch, items, csvUrl }: Props) {
+export default function EdgePublicBatchClient({ batch, items, csvUrl, zipUrl }: Props) {
+  const [zipStarted, setZipStarted] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const allPhotos = items.flatMap(it => it.photoLinks)
 
-  async function downloadAll() {
+  // Streamed-ZIP path (preferred). Just navigates to the public ZIP
+  // endpoint — the server pipes archiver → response, no JS work on
+  // the client side besides setting a 'starting...' flag for UX.
+  function downloadZip() {
+    setZipStarted(true)
+    window.location.href = zipUrl
+    // Re-enable the button after a few seconds so re-tries work if
+    // the connection dropped mid-stream.
+    setTimeout(() => setZipStarted(false), 5_000)
+  }
+
+  // Legacy individual-cascade fallback. Kept behind a small link so
+  // anyone whose browser blocks the streamed download still has a
+  // path. Spaces downloads 180ms apart to avoid Chrome/Safari
+  // throttling.
+  async function downloadAllIndividually() {
     if (downloading) return
     setDownloading(true)
     try {
       for (const p of allPhotos) {
         triggerDownload(p.url, p.filename)
-        // Browsers throttle/cancel rapid back-to-back downloads. 180ms
-        // is plenty to keep the queue alive without bunching.
         await new Promise(r => setTimeout(r, 180))
       }
     } finally {
@@ -70,14 +89,17 @@ export default function EdgePublicBatchClient({ batch, items, csvUrl }: Props) {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {/* Primary action — single ZIP with CSV + every photo.
+                  Streamed server-side so a 200-photo batch doesn't
+                  fight the browser's parallel-download limit. */}
+              {allPhotos.length > 0 && (
+                <button onClick={downloadZip} disabled={zipStarted} style={primaryBtn}>
+                  {zipStarted ? 'Preparing ZIP…' : `📦 Download everything (ZIP, ${batch.photo_count} photo${batch.photo_count === 1 ? '' : 's'} + CSV)`}
+                </button>
+              )}
               {csvUrl && (
                 <a href={csvUrl} download={`${batch.batch_code}.csv`}
-                  style={primaryBtn}>📄 Download CSV</a>
-              )}
-              {allPhotos.length > 0 && (
-                <button onClick={downloadAll} disabled={downloading} style={primaryBtn}>
-                  {downloading ? 'Starting downloads…' : `📸 Download all ${allPhotos.length} photos`}
-                </button>
+                  style={secondaryBtn}>📄 CSV only</a>
               )}
             </div>
           </div>
@@ -186,6 +208,20 @@ const primaryBtn: React.CSSProperties = {
   fontWeight: 700,
   fontSize: 13,
   border: 'none',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+}
+
+const secondaryBtn: React.CSSProperties = {
+  display: 'inline-block',
+  background: '#fff',
+  color: '#1D6B44',
+  padding: '10px 18px',
+  borderRadius: 8,
+  textDecoration: 'none',
+  fontWeight: 700,
+  fontSize: 13,
+  border: '1px solid #1D6B44',
   cursor: 'pointer',
   fontFamily: 'inherit',
 }

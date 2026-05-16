@@ -22,9 +22,14 @@ interface SendBatchEmailInput {
   photoCount: number
   batchUrl: string
   notes?: string | null
-  csv: string
-  /** Filename for the attached CSV (e.g. EDGE-20260512-A4F2.csv). */
-  csvFilename: string
+  // CSV used to be sent as an attachment. As of 2026-05-16 the
+  // recipient downloads CSV + photos together as a single ZIP from
+  // the batchUrl share page — keeps emails light, no 25MB cap fight
+  // on big batches. Fields kept on the interface (optional) for
+  // backwards compatibility with any caller that still passes them;
+  // they're ignored by the send function.
+  csv?: string
+  csvFilename?: string
 }
 
 export interface SendBatchEmailResult {
@@ -50,19 +55,13 @@ export async function sendBatchEmail(input: SendBatchEmailInput): Promise<SendBa
   const subject = `New inventory from ${from.name} — ${input.batchCode} (${input.itemCount} item${input.itemCount === 1 ? '' : 's'})`
   const html = buildHtml(input)
 
-  // Resend accepts attachments as either url or base64 content. Base64
-  // works for everything; cap CSV size sanity-check just in case (real
-  // batches are < a few KB).
-  const csvBase64 = Buffer.from(input.csv, 'utf8').toString('base64')
-
+  // No attachments — recipient grabs CSV + photos as one ZIP from
+  // the batchUrl share page. See spec 2026-05-16.
   const body: any = {
     from: fromHeader,
     to: [input.to],
     subject,
     html,
-    attachments: [
-      { filename: input.csvFilename, content: csvBase64 },
-    ],
   }
   if (input.cc && input.cc.length) body.cc = input.cc
   if (input.bcc && input.bcc.length) body.bcc = input.bcc
@@ -91,17 +90,19 @@ function buildHtml(input: SendBatchEmailInput): string {
   return `<!DOCTYPE html>
 <html><body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; color: #1f2937; max-width: 600px; margin: 0 auto; padding: 24px;">
   <p style="margin: 0 0 12px;">${greeting}</p>
-  <p style="margin: 0 0 16px;">A new inventory batch is ready for review — <strong>${input.itemCount} item${input.itemCount === 1 ? '' : 's'}</strong>, <strong>${input.photoCount} photo${input.photoCount === 1 ? '' : 's'}</strong>.</p>
+  <p style="margin: 0 0 16px;">A new inventory batch is ready for you — <strong>${input.itemCount} item${input.itemCount === 1 ? '' : 's'}</strong>, <strong>${input.photoCount} photo${input.photoCount === 1 ? '' : 's'}</strong>.</p>
   <p style="margin: 0 0 16px;">Batch code: <code style="background:#FAF8F4; padding:2px 6px; border-radius:4px;">${input.batchCode}</code></p>
   ${notesBlock}
-  <p style="margin: 24px 0;">
+  <p style="margin: 24px 0 8px;">
     <a href="${input.batchUrl}"
        style="display:inline-block; background:#1D6B44; color:#fff; padding:12px 22px; border-radius:8px; text-decoration:none; font-weight:700;">
-      View batch &amp; download photos
+      📦 Open batch · download CSV + photos
     </a>
   </p>
-  <p style="margin: 24px 0 0; font-size: 13px; color:#6b7280;">The CSV is attached. Photos are downloadable individually or all at once from the batch page linked above.</p>
-  <p style="margin: 12px 0 0; font-size: 12px; color:#9ca3af;">Reply to this email if anything looks off — we'll iterate quickly.</p>
+  <p style="margin: 8px 0 0; font-size: 13px; color:#6b7280;">
+    One click on the button above opens the batch page. From there you can download <strong>everything as a single ZIP</strong> (CSV + every photo) or grab the CSV on its own. Nothing's attached to this email — the share link is the single source of truth for the batch.
+  </p>
+  <p style="margin: 24px 0 0; font-size: 12px; color:#9ca3af;">Reply to this email if anything looks off — we'll iterate quickly.</p>
 </body></html>`
 }
 
