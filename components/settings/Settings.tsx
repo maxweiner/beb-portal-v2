@@ -24,6 +24,7 @@ import AddressAutocompleteInput from '@/components/ui/AddressAutocompleteInput'
 import CollapsibleCard from '@/components/ui/CollapsibleCard'
 import { getCenterModeOverride, setCenterModeOverride, type CenterModeOverride } from '@/lib/centerButtonMode'
 import TripTemplatesSettings from '@/components/expenses/TripTemplatesSettings'
+import SidebarVisibilityPanel from './SidebarVisibilityPanel'
 
 const BEB_THEMES: { id: Theme; label: string; color: string }[] = [
   { id: 'original',   label: 'Original',        color: '#1D6B44' },
@@ -441,6 +442,17 @@ export default function Settings() {
 
       {/* Mobile center button — visible to everyone since it's a per-user UI pref */}
       <CenterButtonSetting />
+
+      {/* 🧭 Sidebar Items — per-user hide/show, configurable per
+          (surface, brand) combo. Visible to everyone since it's a
+          per-user UI pref. */}
+      <CollapsibleCard
+        storageKey="settings-sidebar-visibility"
+        title="🧭 Sidebar Items"
+        subtitle="Hide modules you don't use. Configurable separately for Desktop / Mobile and BEB / Liberty. Dashboard is always visible."
+      >
+        <SidebarVisibilityPanel />
+      </CollapsibleCard>
 
       {/* Brand Logos (superadmin only) */}
       {user?.role === 'superadmin' && (

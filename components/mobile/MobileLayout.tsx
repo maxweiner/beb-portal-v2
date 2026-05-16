@@ -312,10 +312,27 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
     { id: 'buying-event-stores', label: 'Buying Event Stores', icon: '🏪' },
   ]
 
+  // Per-user mobile-side hide list. Mirrors the desktop Sidebar
+  // logic but reads the .mobile.<brand> slot. Users configure this
+  // from Settings (desktop) → 🧭 Sidebar Items → Mobile tab. The
+  // 'dashboard' page is always-visible regardless (matches the
+  // ALWAYS_VISIBLE_NAV pin on the desktop side).
+  const ALWAYS_VISIBLE_MOBILE: NavPage[] = ['dashboard']
+  const hiddenMobileSet = (() => {
+    const root = (user?.preferences as any)?.sidebar_hidden_modules
+    const arr = root?.mobile?.[brand as 'beb' | 'liberty']
+    return new Set<NavPage>(Array.isArray(arr) ? (arr as NavPage[]) : [])
+  })()
+  function isHiddenOnMobile(id?: NavPage): boolean {
+    if (!id) return false
+    if (ALWAYS_VISIBLE_MOBILE.includes(id)) return false
+    return hiddenMobileSet.has(id)
+  }
+
   // role_modules drives access. Hide everything until modules load
   // so we don't briefly flash an over-permissive list.
   const visiblePages = modulesLoaded
-    ? ALL_PAGES.filter(p => grantedModules.has(p.id))
+    ? ALL_PAGES.filter(p => grantedModules.has(p.id) && !isHiddenOnMobile(p.id))
     : []
 
   return (
