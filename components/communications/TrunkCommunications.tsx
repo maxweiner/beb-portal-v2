@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import { useApp } from '@/lib/context'
 import TemplateList from './TemplateList'
 import TemplateEditor from './TemplateEditor'
+import AiTemplateModal from './AiTemplateModal'
 import CommsLogPanel from './CommsLogPanel'
 import SendFlow from './SendFlow'
 import MasterChecklist from './MasterChecklist'
@@ -26,6 +27,16 @@ export default function TrunkCommunications() {
   const { user, commsSendIntent, setCommsSendIntent } = useApp()
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || !!user?.is_partner
   const [view, setView] = useState<View>({ kind: 'list' })
+  // AI generation modal — opened from "✨ New with AI" in the
+  // header or "✨ Refine with AI" on a list row. Lives at the
+  // shell layer so both entry points share one component instance.
+  const [aiModal, setAiModal] = useState<
+    | { mode: 'new' }
+    | { mode: 'refine'; existing: CommunicationTemplate }
+    | null
+  >(null)
+  // Forces TemplateList to refetch after a successful AI save.
+  const [listRefreshKey, setListRefreshKey] = useState(0)
 
   // Consume deep-link intent from the per-show "Resend" button.
   useEffect(() => {
@@ -99,6 +110,11 @@ export default function TrunkCommunications() {
           {isAdmin && (
             <>
               <button onClick={() => setView({ kind: 'master' })} className="btn-outline btn-sm">🗒 Master Checklist</button>
+              <button
+                onClick={() => setAiModal({ mode: 'new' })}
+                className="btn-outline btn-sm"
+                title="Generate a brand-new template from a description (Claude Haiku 4.5)"
+              >✨ New with AI</button>
               <button onClick={() => setView({ kind: 'edit', template: null })} className="btn-outline btn-sm">+ New Template</button>
             </>
           )}
@@ -106,9 +122,23 @@ export default function TrunkCommunications() {
       </div>
 
       <TemplateList
+        key={listRefreshKey}
         canEdit={isAdmin}
         onOpen={(t) => setView({ kind: 'edit', template: t })}
+        onRefineWithAi={isAdmin ? (t) => setAiModal({ mode: 'refine', existing: t }) : undefined}
       />
+
+      {aiModal && (
+        <AiTemplateModal
+          mode={aiModal.mode}
+          existing={aiModal.mode === 'refine' ? aiModal.existing : null}
+          onClose={() => setAiModal(null)}
+          onSaved={() => {
+            setAiModal(null)
+            setListRefreshKey(k => k + 1)
+          }}
+        />
+      )}
 
       <div style={{
         marginTop: 24, padding: 14, background: 'var(--cream2)',

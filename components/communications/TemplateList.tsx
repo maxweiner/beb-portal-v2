@@ -8,9 +8,13 @@ import Checkbox from '@/components/ui/Checkbox'
 interface Props {
   canEdit: boolean
   onOpen: (t: CommunicationTemplate) => void
+  /** When provided, each row shows a "✨ Refine" button that opens
+   *  the AI generation modal pre-loaded with this template. Only
+   *  admins / partners pass this in. */
+  onRefineWithAi?: (t: CommunicationTemplate) => void
 }
 
-export default function TemplateList({ canEdit, onOpen }: Props) {
+export default function TemplateList({ canEdit, onOpen, onRefineWithAi }: Props) {
   const [rows, setRows] = useState<CommunicationTemplate[]>([])
   const [showArchived, setShowArchived] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -56,7 +60,7 @@ export default function TemplateList({ canEdit, onOpen }: Props) {
       ) : (
         <div style={{ background: '#fff', border: '1px solid var(--cream2)', borderRadius: 10, overflow: 'hidden' }}>
           <div style={{
-            display: 'grid', gridTemplateColumns: '1.5fr 2fr 140px 100px 100px',
+            display: 'grid', gridTemplateColumns: '1.5fr 2fr 140px 100px 170px',
             background: 'var(--cream2)', padding: '8px 14px',
             fontSize: 11, fontWeight: 700, color: 'var(--ash)', textTransform: 'uppercase', letterSpacing: '.04em',
           }}>
@@ -68,11 +72,18 @@ export default function TemplateList({ canEdit, onOpen }: Props) {
           </div>
           {visible.map(t => (
             <div key={t.id} style={{
-              display: 'grid', gridTemplateColumns: '1.5fr 2fr 140px 100px 100px',
+              display: 'grid', gridTemplateColumns: '1.5fr 2fr 140px 100px 170px',
               padding: '10px 14px', borderTop: '1px solid var(--cream2)', alignItems: 'center',
               fontSize: 13,
             }}>
-              <div style={{ fontWeight: 700, color: 'var(--ink)' }}>{t.name}</div>
+              <div style={{ fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                {t.name}
+                {(t as any).created_by_ai && (
+                  <span title="Generated with AI"
+                    style={{ fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, background: '#F5F0E8', color: 'var(--ash)' }}
+                  >✨ AI</span>
+                )}
+              </div>
               <div style={{ color: 'var(--ash)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {t.subject_line}
               </div>
@@ -86,7 +97,14 @@ export default function TemplateList({ canEdit, onOpen }: Props) {
                   color: t.is_active ? 'var(--green-dark)' : 'var(--mist)',
                 }}>{t.is_active ? 'Active' : 'Archived'}</span>
               </div>
-              <div style={{ textAlign: 'right' }}>
+              <div style={{ textAlign: 'right', display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                {onRefineWithAi && (
+                  <button
+                    onClick={() => onRefineWithAi(t)}
+                    className="btn-outline btn-xs"
+                    title="Open AI modal to refine this template (e.g. shorter, more formal, add a P.S.)"
+                  >✨ Refine</button>
+                )}
                 <button onClick={() => onOpen(t)} className="btn-outline btn-xs">
                   {canEdit ? 'Edit' : 'View'}
                 </button>
