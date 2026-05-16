@@ -6,6 +6,7 @@ import { useApp } from '@/lib/context'
 import type { Event } from '@/types'
 import Checkbox from '@/components/ui/Checkbox'
 import TimePicker from '@/components/ui/TimePicker'
+import AiReportTemplateModal from './AiReportTemplateModal'
 
 export interface ReportDef {
   id: string                 // matches report_templates.id
@@ -106,6 +107,7 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
   const [savedAt, setSavedAt] = useState<Date | null>(null)
   const [sending, setSending] = useState(false)
   const [sendResult, setSendResult] = useState<string | null>(null)
+  const [aiOpen, setAiOpen] = useState(false)
 
   // Load template + active users (template is shared across brands)
   useEffect(() => {
@@ -396,11 +398,22 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
           <div className="card" style={{ marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)' }}>Template</div>
-              {savedAt && (
-                <span style={{ fontSize: 11, color: 'var(--green)', fontWeight: 700 }}>
-                  ✓ Saved {savedAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-                </span>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {savedAt && (
+                  <span style={{ fontSize: 11, color: 'var(--green)', fontWeight: 700 }}>
+                    ✓ Saved {savedAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setAiOpen(true)}
+                  className="btn-outline btn-xs"
+                  title="Write or refine this template with Claude — review as a PDF before save"
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  ✨ {template.subject || template.greeting ? 'Refine with AI' : 'New with AI'}
+                </button>
+              </div>
             </div>
 
             <div className="field">
@@ -657,6 +670,32 @@ export default function ReportEditView({ report, onBack }: { report: ReportDef; 
           </div>
           )}
         </div>
+
+        {aiOpen && (
+          <AiReportTemplateModal
+            reportId={report.id}
+            reportTitle={report.title}
+            reportDescription={report.description}
+            varHint={report.varHint}
+            sampleVars={report.sampleVars}
+            existing={{
+              subject:           template.subject,
+              greeting:          template.greeting,
+              header_subtitle:   template.header_subtitle,
+              footer:            template.footer,
+              shoutout_fallback: template.shoutout_fallback,
+            }}
+            currentUserId={user?.id ?? null}
+            onClose={() => setAiOpen(false)}
+            onSaved={async () => {
+              // Re-load the template so the editor reflects the AI-saved values.
+              const { data } = await supabase.from('report_templates').select('*').eq('id', report.id).maybeSingle()
+              if (data) setTemplate(data as TemplateRow)
+              setSavedAt(new Date())
+              setAiOpen(false)
+            }}
+          />
+        )}
 
         {/* RIGHT: live preview */}
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
