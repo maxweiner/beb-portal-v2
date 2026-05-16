@@ -13,6 +13,41 @@ type BoxStatus = 'pending' | 'labels_sent' | 'shipped' | 'received' | 'cancelled
 type ShipmentStatus = 'pending' | 'in_progress' | 'complete' | 'cancelled'
 type StatusFilter = 'default' | 'all' | 'pending' | 'labels_sent' | 'shipped' | 'received' | 'has_issue'
 
+// Top-level event-timing filter — drives what subset of shipments
+// the user is looking at before the per-status filter narrows it
+// further. Default is 'current': ongoing events OR events that
+// ended within the last 7 days AND still have shipping action.
+// 'past' = ended >7d ago, OR shipping marked complete/cancelled.
+// 'future' = event hasn't started yet.
+type EventTimingFilter = 'current' | 'past' | 'future'
+const CURRENT_WINDOW_DAYS_AFTER_END = 7
+// Events span 3 days (start_date through start_date + 2 inclusive).
+// Matches the event-shipments backfill math and the rest of the
+// app (cf. eventEndIso in lib/eventDates).
+const EVENT_LENGTH_DAYS = 3
+
+function isoAddDays(iso: string, n: number): string {
+  const d = new Date(iso + 'T12:00:00')
+  d.setDate(d.getDate() + n)
+  return d.toISOString().slice(0, 10)
+}
+
+function classifyTiming(s: { event_start_date: string; status: string }, todayIso: string): EventTimingFilter {
+  if (!s.event_start_date) return 'past'
+  const start = s.event_start_date
+  const end = isoAddDays(start, EVENT_LENGTH_DAYS - 1)
+  const windowEnd = isoAddDays(end, CURRENT_WINDOW_DAYS_AFTER_END)
+  const hasShippingAction = s.status !== 'complete' && s.status !== 'cancelled'
+
+  // Future: event hasn't started yet.
+  if (todayIso < start) return 'future'
+  // Current: today is within the event OR up to 7 days after it
+  // ended, AND there's still shipping work to do. Everything else
+  // (older, or already complete/cancelled) falls to past.
+  if (todayIso <= windowEnd && hasShippingAction) return 'current'
+  return 'past'
+}
+
 interface BoxSummary { type: 'jewelry' | 'silver'; status: BoxStatus }
 
 interface ShipmentEntry {
@@ -64,6 +99,9 @@ export default function EventReturnsTab() {
   const [rows, setRows] = useState<ShipmentEntry[]>([])
   const [loaded, setLoaded] = useState(false)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('default')
+  // Timing filter — default Current; narrows the whole list to the
+  // window of events the operator is actively shipping for.
+  const [timingFilter, setTimingFilter] = useState<EventTimingFilter>('current')
   const [eventFilter, setEventFilter] = useState<string>('all')
   const [search, setSearch] = useState<string>('')
   const [drawer, setDrawer] = useState<ShipmentEntry | null>(null)
@@ -114,6 +152,9 @@ export default function EventReturnsTab() {
     const needle = search.trim().toLowerCase()
 
     return rows.filter(s => {
+      // Top-level event-timing gate runs first — drops everything
+      // that isn't in the currently-selected window.
+      if (classifyTiming(s, todayStr) !== timingFilter) return false
       if (eventFilter !== 'all' && s.event_id !== eventFilter) return false
       if (needle && !s.store_name.toLowerCase().includes(needle)) return false
 
@@ -135,7 +176,7 @@ export default function EventReturnsTab() {
       return statusOfShipment(s) === statusFilter
     }).sort((a, b) => a.ship_date.localeCompare(b.ship_date))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, statusFilter, eventFilter, search])
+  }, [rows, timingFilter, statusFilter, eventFilter, search])
 
   // Event pulldown: "most recent → future" — today + upcoming first
   // (soonest at top), then past events at the bottom in DESC order
@@ -154,12 +195,58 @@ export default function EventReturnsTab() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows])
 
+  // Per-bucket counts for the timing pills. Cheap — same single
+  // pass over rows that filter() already does, just unfiltered by
+  // status / search / event-id.
+  const timingCounts = useMemo(() => {
+    let current = 0, past = 0, future = 0
+    for (const r of rows) {
+      const c = classifyTiming(r, todayStr)
+      if (c === 'current') current++
+      else if (c === 'past') past++
+      else future++
+    }
+    return { current, past, future }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows])
+
   return (
     <div>
-      {/* Page header lives in the parent Shipping.tsx shell now —
-          this tab only renders its own content. Counter chip on the
-          right replaces the inline title row. */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 10 }}>
+      {/* Top toolbar — timing pills on the left, total counter on
+          the right. Page header lives in the parent Shipping.tsx
+          shell now; this tab only renders its own content. */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 10, flexWrap: 'wrap', marginBottom: 10,
+      }}>
+        <div style={{
+          display: 'inline-flex', gap: 2, background: 'var(--cream2)',
+          padding: 2, borderRadius: 6,
+        }}>
+          {([
+            ['current', `Current (${timingCounts.current})`, "Ongoing or wrapped within the last 7 days, still has shipping work"],
+            ['future',  `Future (${timingCounts.future})`,   "Hasn't started yet"],
+            ['past',    `Past (${timingCounts.past})`,       "Already complete, cancelled, or wrapped >7 days ago"],
+          ] as const).map(([key, label, hint]) => {
+            const sel = timingFilter === key
+            return (
+              <button
+                key={key}
+                onClick={() => setTimingFilter(key)}
+                title={hint}
+                style={{
+                  fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
+                  padding: '5px 14px', border: 'none', borderRadius: 4,
+                  background: sel ? '#fff' : 'transparent',
+                  color: sel ? 'var(--green-dark)' : 'var(--mist)',
+                  cursor: 'pointer',
+                  boxShadow: sel ? '0 1px 2px rgba(0,0,0,.06)' : 'none',
+                }}>
+                {label}
+              </button>
+            )
+          })}
+        </div>
         <div style={{ fontSize: 12, color: 'var(--mist)' }}>{filtered.length} of {rows.length} shipments</div>
       </div>
 
