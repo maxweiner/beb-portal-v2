@@ -54,15 +54,26 @@ export function useRoleModules(): RoleModulesState {
 
   useEffect(() => {
     if (allRoles.length === 0) {
-      const modules = new Set<ModuleId>(ALWAYS_ALLOWED)
-      const readOnly = new Set<ModuleId>()
-      setState({
-        modules, readOnly, loaded: true,
-        canWrite: (id) => modules.has(id) && !readOnly.has(id),
-      })
+      // No user signed in — return to EMPTY_STATE (loaded:false). The
+      // previous behavior set loaded:true here with just ALWAYS_ALLOWED
+      // in `modules`, which leaked stale state into the brief gap
+      // after auth completed but before the role_modules fetch (below)
+      // resolved for the freshly-signed-in user. Any consumer gating on
+      // `loaded` then read the WRONG module set for one render — and
+      // the email deep-link useEffect in app/page.tsx fell through to
+      // the fallback page (Dashboard) instead of routing to ?nav=…
+      // because `grantedModules.has('marketing')` was false on that
+      // stale render.
+      setState(EMPTY_STATE)
       return
     }
     let cancelled = false
+    // Reset to loaded:false at the start of every fetch so downstream
+    // gates wait for THIS user's real module set. Without this, a
+    // stale `loaded:true` from the no-user branch above (or from a
+    // prior signed-in user) leaks into the gap before this async
+    // fetch resolves — same root cause as the comment above.
+    setState(s => s.loaded ? EMPTY_STATE : s)
     ;(async () => {
       const { data, error } = await supabase.from('role_modules')
         .select('module_id, can_write').in('role_id', allRoles)
