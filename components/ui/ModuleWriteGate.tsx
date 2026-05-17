@@ -27,19 +27,19 @@ interface Props {
 }
 
 export default function ModuleWriteGate({ moduleId, children }: Props) {
-  const { modules, readOnly, loaded } = useRoleModules()
+  const state = useRoleModules()
 
-  // Until loaded, render children un-gated to avoid flashing the
+  // Until ready, render children un-gated to avoid flashing the
   // banner on/off as state hydrates.
-  if (!loaded) return <>{children}</>
+  if (state.status !== 'ready') return <>{children}</>
 
   // No grant at all → ModuleGuard upstream should have already blocked
   // the page render. If we reach here without grant, treat as full
   // access (defensive — better to allow than silently break).
-  if (!modules.has(moduleId)) return <>{children}</>
+  if (!state.modules.has(moduleId)) return <>{children}</>
 
   // Read+write grant → no gating.
-  if (!readOnly.has(moduleId)) return <>{children}</>
+  if (!state.readOnly.has(moduleId)) return <>{children}</>
 
   // Read-only grant → banner + disabled fieldset.
   return (

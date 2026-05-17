@@ -121,7 +121,9 @@ function writeSet(prefs: any, surface: Surface, brand: Brand, next: Set<NavPage>
 
 export default function SidebarVisibilityPanel() {
   const { user } = useApp()
-  const { modules: grantedModules, loaded: modulesLoaded } = useRoleModules()
+  const roleModules = useRoleModules()
+  const modulesLoaded = roleModules.status === 'ready'
+  const grantedModules = roleModules.status === 'ready' ? roleModules.modules : new Set<string>()
 
   const [surface, setSurface] = useState<Surface>('desktop')
   const [brand, setBrand]     = useState<Brand>('beb')

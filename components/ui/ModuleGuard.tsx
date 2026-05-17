@@ -22,9 +22,9 @@ interface ModuleGuardProps {
 }
 
 export function ModuleGuard({ moduleId, children, fallback }: ModuleGuardProps) {
-  const { modules, loaded } = useRoleModules()
-  if (!loaded) return null
-  if (modules.has(moduleId)) return <>{children}</>
+  const state = useRoleModules()
+  if (state.status !== 'ready') return null
+  if (state.modules.has(moduleId)) return <>{children}</>
   if (fallback) return <>{fallback}</>
   return (
     <div className="p-12 text-center" style={{ color: 'var(--mist)' }}>

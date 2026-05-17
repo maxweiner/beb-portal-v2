@@ -58,7 +58,9 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
   // filtered against role_modules (DB-driven). Marketing / accounting
   // roles' tiny sidebars come "for free" because their seeded modules
   // only include those few entries.
-  const { modules: grantedModules, loaded: modulesLoaded } = useRoleModules()
+  const roleModules = useRoleModules()
+  const modulesLoaded = roleModules.status === 'ready'
+  const grantedModules = roleModules.status === 'ready' ? roleModules.modules : new Set<NavPage>()
   const NAV_ITEMS = isLiberty ? LIBERTY_NAV : BEB_NAV
 
   // Per-user sidebar visibility. Lives in users.preferences.

@@ -81,7 +81,12 @@ export default function Home() {
   const [nav, rawSetNav] = useState<NavPage>('dashboard')
   const setNav = (n: NavPage) => { rawSetNav(n); setNavKey(k => k + 1) }
   const [isMobile, setIsMobile] = useState(false)
-  const initialRoutedRef = useRef(false)
+  // Records the user.id we performed the one-time initial route for.
+  // Comparing against the current user.id lets sign-out / sign-back-in
+  // re-run the routing logic without the ref staying stuck on the old
+  // user. Was a `useRef<boolean>` until 2026-05-17 — flipped to a
+  // user-keyed ref so the lock can't survive a session change.
+  const routedForUserIdRef = useRef<string | null>(null)
 
   // Initial landing: every user starts on dashboard. If their role
   // doesn't grant dashboard, fall through to the first granted page
@@ -91,21 +96,31 @@ export default function Home() {
   // how to render an empty state. Runs once after user + modules load,
   // tracked via useRef so it doesn't fight subsequent nav clicks.
   // Skipped when an email deep-link (?report=…) is present.
-  const { modules: grantedModules, loaded: modulesLoaded } = useRoleModules()
+  //
+  // Critical: both effects gate on `roleModules.status === 'ready' &&
+  // roleModules.forUserId === user.id`. The union type makes the
+  // user-identity check mandatory — without it, a `ready` payload
+  // built for a previous user could satisfy the gate and lock in the
+  // wrong route via routedForUserIdRef. See lib/useRoleModules.ts.
+  const roleModules = useRoleModules()
   const FALLBACK_ORDER: NavPage[] = [
     'dashboard', 'appointments', 'marketing', 'expenses',
     'buying-events', 'calendar', 'travel', 'staff', 'shipping',
     'reports',
   ]
   useEffect(() => {
-    if (!user || !modulesLoaded || initialRoutedRef.current) return
+    if (!user) return
+    if (roleModules.status !== 'ready') return
+    if (roleModules.forUserId !== user.id) return
+    if (routedForUserIdRef.current === user.id) return
+    const grantedModules = roleModules.modules
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
       // Email deep-link: `?report=<id>` is handled in a separate
       // effect below — leave nav untouched here so the dedicated
       // Expenses handler can do its thing.
       if (params.has('report')) {
-        initialRoutedRef.current = true
+        routedForUserIdRef.current = user.id
         return
       }
       // Email deep-link: `?nav=<page>` — every marketing notification
@@ -116,7 +131,7 @@ export default function Home() {
       // intact so CampaignsList can read it (PR #701).
       const navParam = params.get('nav') as NavPage | null
       if (navParam && KNOWN_NAVS.has(navParam) && grantedModules.has(navParam)) {
-        initialRoutedRef.current = true
+        routedForUserIdRef.current = user.id
         rawSetNav(navParam)
         params.delete('nav')
         const newSearch = params.toString()
@@ -125,24 +140,26 @@ export default function Home() {
         return
       }
     }
-    initialRoutedRef.current = true
+    routedForUserIdRef.current = user.id
     const next = FALLBACK_ORDER.find(p => grantedModules.has(p)) ?? 'dashboard'
     rawSetNav(next)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, modulesLoaded, grantedModules])
+  }, [user, roleModules])
 
   // Generic deep-link guard: if the current nav target isn't in the
   // user's role_modules, redirect. Dashboard is the final fallback
   // (not settings) so a role_modules read failure doesn't dump users
   // into the gear-icon page. Settings stays reachable via the gear.
   useEffect(() => {
-    if (!modulesLoaded || !user) return
+    if (!user) return
+    if (roleModules.status !== 'ready') return
+    if (roleModules.forUserId !== user.id) return
     if (nav === 'settings') return  // respect manual gear-icon clicks
-    if (grantedModules.has(nav)) return
-    const next = FALLBACK_ORDER.find(p => grantedModules.has(p)) ?? 'dashboard'
+    if (roleModules.modules.has(nav)) return
+    const next = FALLBACK_ORDER.find(p => roleModules.modules.has(p)) ?? 'dashboard'
     rawSetNav(next)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modulesLoaded, grantedModules, nav, user])
+  }, [roleModules, nav, user])
 
   useEffect(() => {
     setIsMobile(shouldUseMobile())

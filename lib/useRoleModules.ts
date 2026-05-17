@@ -12,6 +12,18 @@
 // don't move often; if a role admin retoggles modules in the GUI,
 // affected users see the change on next page load. Live propagation
 // can be a future add (Postgres realtime or a manual refetch event).
+//
+// The return type is a discriminated union, NOT a `{ loaded: boolean,
+// modules, ... }` shape. The previous shape allowed a stale `loaded:
+// true` from a prior user (or from the no-user idle state) to leak
+// into the brief gap after auth completes but before the next
+// role_modules fetch resolves — any consumer gating on `loaded` then
+// read the wrong module set for one render, and irreversible state
+// (like the ?nav= deep-link router's ref guard in app/page.tsx) could
+// lock in the wrong decision. With the union, the only way to read
+// `modules` is to first narrow on `status === 'ready'`, and the
+// `forUserId` carried with that state lets user-specific gates verify
+// the modules belong to THIS user before acting on them.
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -21,27 +33,26 @@ export type ModuleId = string
 
 const ALWAYS_ALLOWED: ModuleId[] = ['settings']
 
-interface RoleModulesState {
-  modules: Set<ModuleId>
-  /** module_ids where the role is granted READ-ONLY access. */
-  readOnly: Set<ModuleId>
-  loaded: boolean
-  /** True when the user has read+write on the module (or per-user
-   *  bonus). False when read-only OR not granted at all. Defaults
-   *  to true for grants from rows missing can_write. */
-  canWrite: (moduleId: ModuleId) => boolean
-}
+export type RoleModulesState =
+  | { status: 'idle' }
+  | { status: 'loading'; forUserId: string }
+  | {
+      status: 'ready'
+      forUserId: string
+      modules: Set<ModuleId>
+      /** module_ids where the role is granted READ-ONLY access. */
+      readOnly: Set<ModuleId>
+      /** True when the user has read+write on the module (or per-user
+       *  bonus). False when read-only OR not granted at all. Defaults
+       *  to true for grants from rows missing can_write. */
+      canWrite: (moduleId: ModuleId) => boolean
+    }
 
-const EMPTY_STATE: RoleModulesState = {
-  modules: new Set(),
-  readOnly: new Set(),
-  loaded: false,
-  canWrite: () => false,
-}
+const IDLE_STATE: RoleModulesState = { status: 'idle' }
 
 export function useRoleModules(): RoleModulesState {
   const { user } = useApp()
-  const [state, setState] = useState<RoleModulesState>(EMPTY_STATE)
+  const [state, setState] = useState<RoleModulesState>(IDLE_STATE)
 
   // UNION across every role the user has (multi-role).
   // user.roles is populated by lib/context.tsx and always includes
@@ -53,27 +64,13 @@ export function useRoleModules(): RoleModulesState {
   const rolesKey = allRoles.slice().sort().join(',')
 
   useEffect(() => {
-    if (allRoles.length === 0) {
-      // No user signed in — return to EMPTY_STATE (loaded:false). The
-      // previous behavior set loaded:true here with just ALWAYS_ALLOWED
-      // in `modules`, which leaked stale state into the brief gap
-      // after auth completed but before the role_modules fetch (below)
-      // resolved for the freshly-signed-in user. Any consumer gating on
-      // `loaded` then read the WRONG module set for one render — and
-      // the email deep-link useEffect in app/page.tsx fell through to
-      // the fallback page (Dashboard) instead of routing to ?nav=…
-      // because `grantedModules.has('marketing')` was false on that
-      // stale render.
-      setState(EMPTY_STATE)
+    if (!user || allRoles.length === 0) {
+      setState(IDLE_STATE)
       return
     }
+    const userId = user.id
+    setState({ status: 'loading', forUserId: userId })
     let cancelled = false
-    // Reset to loaded:false at the start of every fetch so downstream
-    // gates wait for THIS user's real module set. Without this, a
-    // stale `loaded:true` from the no-user branch above (or from a
-    // prior signed-in user) leaks into the gap before this async
-    // fetch resolves — same root cause as the comment above.
-    setState(s => s.loaded ? EMPTY_STATE : s)
     ;(async () => {
       const { data, error } = await supabase.from('role_modules')
         .select('module_id, can_write').in('role_id', allRoles)
@@ -94,7 +91,10 @@ export function useRoleModules(): RoleModulesState {
       if (user?.marketing_access) { modules.add('marketing'); readOnly.delete('marketing') }
       if (user?.inventory_access) { modules.add('wholesale'); readOnly.delete('wholesale') }
       setState({
-        modules, readOnly, loaded: true,
+        status: 'ready',
+        forUserId: userId,
+        modules,
+        readOnly,
         canWrite: (id) => modules.has(id) && !readOnly.has(id),
       })
     })()
