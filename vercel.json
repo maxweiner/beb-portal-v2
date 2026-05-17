@@ -91,6 +91,10 @@
     {
       "path": "/api/cron/promote-events-completed?secret=bebportal2024",
       "schedule": "37 6 * * *"
+    },
+    {
+      "path": "/api/cron/ai-reports?secret=bebportal2024",
+      "schedule": "*/15 * * * *"
     }
   ]
 }
