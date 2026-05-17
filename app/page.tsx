@@ -178,6 +178,40 @@ export default function Home() {
     setIsMobile(shouldUseMobile())
   }, [])
 
+  // Preload the most-visited heavy modules during browser idle time
+  // after auth completes. The dynamic() declarations above only download
+  // their chunks when the user actually navigates — preloading the top
+  // hits in advance means the first click after sign-in doesn't blank
+  // the content area while the chunk downloads. Webpack dedupes: these
+  // import() calls reuse the same chunks the dynamic() loaders would
+  // pull, so no extra bytes are downloaded twice.
+  //
+  // Picks the 6 modules our usage data + role_modules grants show as
+  // most-likely-next: BuyingEventsView (Hub), Marketing, Expenses,
+  // Customers, Schedule, AppointmentsAdmin. Long-tail modules (Admin,
+  // Wholesale, Reconciliation, etc.) still pay the small first-click
+  // download cost; preloading them would cancel out the bundle savings.
+  useEffect(() => {
+    if (!user) return
+    if (typeof window === 'undefined') return
+    const schedule = (cb: () => void) => {
+      if ('requestIdleCallback' in window) {
+        ;(window as Window & { requestIdleCallback: (cb: () => void, opts?: { timeout: number }) => number })
+          .requestIdleCallback(cb, { timeout: 2000 })
+      } else {
+        setTimeout(cb, 1000)
+      }
+    }
+    schedule(() => {
+      void import('@/components/events/BuyingEventsView')
+      void import('@/components/marketing/Marketing')
+      void import('@/components/expenses/Expenses')
+      void import('@/components/customers/Customers')
+      void import('@/components/schedule/Schedule')
+      void import('@/components/appointments-admin/AppointmentsAdmin')
+    })
+  }, [user])
+
   // When the brand switch commits in context, jump back to dashboard. Listening
   // for the event (instead of putting setNav inside the Sidebar handler) keeps
   // the brand commit and the nav reset in the same render — no flash of the
