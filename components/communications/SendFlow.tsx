@@ -481,8 +481,9 @@ export default function SendFlow({
   )
 }
 
-// ── Helper: client-side context fetch (mirrors lib/communications/buildContext.ts
-//    server-side resolver but reads via the user's RLS-scoped supabase client) ──
+// ── Helper: client-side context fetch — resolves the real MergeContext for
+//    a trunk-show + rep pair via the user's RLS-scoped supabase client, so
+//    the preview reflects exactly what the send pipeline will produce. ──
 
 async function fetchContext(trunkShowId: string, repUserId?: string | null): Promise<{
   ctx: MergeContext

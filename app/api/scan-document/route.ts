@@ -93,8 +93,6 @@ Respond ONLY with valid JSON in this exact format, no other text:
     if (!base64Data || base64Data.length < 100) {
       return NextResponse.json({ error: 'Image data too small or invalid' }, { status: 400 })
     }
-    
-    console.log('Sending to Claude:', { mediaType, dataLength: base64Data.length })
 
     // Call Claude API
     const response = await fetch('https://api.anthropic.com/v1/messages', {
