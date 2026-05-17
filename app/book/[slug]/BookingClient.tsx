@@ -8,6 +8,7 @@ import type { Slot } from '@/lib/appointments/types'
 import PhoneInput from '@/components/ui/PhoneInput'
 import { formatPhoneDisplay } from '@/lib/phone'
 import AddAppointmentForm from '@/components/booking/AddAppointmentForm'
+import { publicLogoUrl } from '@/lib/storeLogos/url'
 
 // ---------- helpers ----------
 
@@ -374,7 +375,7 @@ export default function BookingClient({
             paddingTop: 'max(env(safe-area-inset-top), 16px)',
           }}>
           {store.store_image_url ? (
-            <img src={store.store_image_url} alt={`${store.name} logo`}
+            <img src={publicLogoUrl(store.store_image_url) ?? undefined} alt={`${store.name} logo`}
               className="h-10 w-auto max-w-[6rem] rounded-lg object-contain bg-white" />
           ) : (
             <div className="h-10 w-10 rounded-lg flex items-center justify-center"
@@ -450,7 +451,7 @@ export default function BookingClient({
           paddingTop: 'max(env(safe-area-inset-top), 16px)',
         }}>
         {store.store_image_url ? (
-          <img src={store.store_image_url} alt={`${store.name} logo`}
+          <img src={publicLogoUrl(store.store_image_url) ?? undefined} alt={`${store.name} logo`}
             className="h-10 w-auto max-w-[6rem] rounded-lg object-contain bg-white" />
         ) : (
           <div className="h-10 w-10 rounded-lg flex items-center justify-center"

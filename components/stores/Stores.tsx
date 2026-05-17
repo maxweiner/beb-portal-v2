@@ -15,6 +15,8 @@ import PhoneInput from '@/components/ui/PhoneInput'
 import { formatPhoneDisplay, rawDigits } from '@/lib/phone'
 import { StoreSearch, parsePlaceAddress, useGoogleMaps } from '@/lib/googlePlaces'
 import LeadProfileCard from '@/components/sales/LeadProfileCard'
+import StoreLogoManager from './StoreLogoManager'
+import { publicLogoUrl } from '@/lib/storeLogos/url'
 
 interface Employee { id: string; store_id: string; name: string; phone: string; email: string }
 
@@ -58,7 +60,7 @@ export default function Stores() {
     try {
       const { data } = await withTimeout(
         supabase.from('stores')
-          .select('id, name, city, state, active, store_image_url, color_primary')
+          .select('id, name, city, state, active, store_image_url, color_primary, store_logos, default_logo_index')
           .eq('brand', brand).order('name')
       )
       if (data) setStores(data as Store[])
@@ -133,7 +135,7 @@ export default function Stores() {
       // Re-fetch stores directly with a fresh slim query.
       const { data: freshStores } = await withTimeout(
         supabase.from('stores')
-          .select('id, name, city, state, active, store_image_url, color_primary')
+          .select('id, name, city, state, active, store_image_url, color_primary, store_logos, default_logo_index')
           .eq('brand', brand).order('name')
       )
       if (freshStores) setStores(freshStores as Store[])
@@ -266,7 +268,7 @@ export default function Stores() {
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         {s.store_image_url ? (
-                          <img src={s.store_image_url} alt=""
+                          <img src={publicLogoUrl(s.store_image_url) ?? undefined} alt=""
                             style={{ width: 28, height: 28, borderRadius: 4, objectFit: 'cover', flexShrink: 0, border: '1px solid var(--pearl)' }} />
                         ) : (
                           <span style={{
@@ -320,7 +322,6 @@ function StoreModal({ store, onClose, refetchStores, onDelete }: {
   const [details, setDetails] = useState({ ...store })
   const [feedUrl, setFeedUrl] = useState(store.calendar_feed_url || '')
   const [calendarOffset, setCalendarOffset] = useState<number>(store.calendar_offset_hours ?? 0)
-  const imgRef = useRef<HTMLInputElement>(null)
   const [imageOpen, setImageOpen] = useState(false)
 
   // Shipping settings.
@@ -421,16 +422,6 @@ function StoreModal({ store, onClose, refetchStores, onDelete }: {
     setEmployees(p => p.filter(e => e.id !== id))
   }
 
-  const uploadStoreImage = async (file: File) => {
-    const reader = new FileReader()
-    reader.onload = async (e) => {
-      const dataUrl = e.target?.result as string
-      await withTimeout(supabase.from('stores').update({ store_image_url: dataUrl }).eq('id', store.id))
-      alert('Image uploaded!')
-      await refetchStores()
-    }
-    reader.readAsDataURL(file)
-  }
 
   const fullAddress = [details.address, details.city, details.state, details.zip].filter(Boolean).join(', ')
   const mapUrl = fullAddress
@@ -542,7 +533,10 @@ function StoreModal({ store, onClose, refetchStores, onDelete }: {
                 style={{ resize: 'none' }} />
             </div>
 
-            {/* Store image — collapsed by default since it's set once and rarely changed. */}
+            {/* Store logos — multi-file manager. Default lives at
+                store_logos[default_logo_index]; everything else is
+                archived for future use. PDFs accepted (rasterized
+                to PNG client-side). */}
             <div style={{ borderTop: '1px solid var(--pearl)', marginTop: 6, paddingTop: 10 }}>
               <button
                 type="button"
@@ -551,37 +545,23 @@ function StoreModal({ store, onClose, refetchStores, onDelete }: {
                   display: 'flex', alignItems: 'center', gap: 6,
                   background: 'none', border: 'none', padding: 0, cursor: 'pointer',
                   fontSize: 12, fontWeight: 700, color: 'var(--ash)', fontFamily: 'inherit',
+                  marginBottom: 10,
                 }}
               >
                 <span style={{
                   display: 'inline-block', width: 10, transition: 'transform .15s ease',
                   transform: imageOpen ? 'rotate(90deg)' : 'rotate(0deg)',
                 }}>▶</span>
-                Store image{store.store_image_url ? '' : ' (none)'}
+                Store logos{(store as any).store_logos?.length ? ` (${(store as any).store_logos.length})` : ' (none)'}
               </button>
               {imageOpen && (
-                <div style={{ marginTop: 10 }}>
-                  {store.store_image_url ? (
-                    <>
-                      <img src={store.store_image_url} alt="Store" style={{ maxWidth: 200, borderRadius: 'var(--r)', border: '1px solid var(--pearl)', display: 'block', marginBottom: 10 }} />
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button className="btn-primary btn-sm" onClick={() => imgRef.current?.click()}>Replace Image</button>
-                        <button className="btn-danger btn-sm" onClick={async () => {
-                          if (!confirm('Remove store image?')) return
-                          await withTimeout(supabase.from('stores').update({ store_image_url: '' }).eq('id', store.id))
-                          await refetchStores()
-                        }}>Remove</button>
-                      </div>
-                    </>
-                  ) : (
-                    <div>
-                      <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 10 }}>No store image uploaded yet.</p>
-                      <button className="btn-primary btn-sm" onClick={() => imgRef.current?.click()}>Upload Image</button>
-                    </div>
-                  )}
-                  <input ref={imgRef} type="file" accept="image/*" style={{ display: 'none' }}
-                    onChange={e => { if (e.target.files?.[0]) uploadStoreImage(e.target.files[0]) }} />
-                </div>
+                <StoreLogoManager
+                  parentKind="buying"
+                  parentId={store.id}
+                  logos={((store as any).store_logos as any[]) || []}
+                  defaultIndex={((store as any).default_logo_index as number) ?? 0}
+                  onChange={refetchStores}
+                />
               )}
             </div>
           </div>

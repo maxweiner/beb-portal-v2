@@ -8,6 +8,9 @@ import PhoneInput from '@/components/ui/PhoneInput'
 import { rawDigits } from '@/lib/phone'
 import { StoreSearch, type PlaceData } from '@/lib/googlePlaces'
 import LeadProfileCard from '@/components/sales/LeadProfileCard'
+import StoreLogoManager from './StoreLogoManager'
+import { publicLogoUrl } from '@/lib/storeLogos/url'
+import type { StoreLogoEntry } from '@/lib/storeLogos/types'
 
 interface TrunkRep { id: string; name: string }
 
@@ -59,8 +62,13 @@ interface TrunkShowStore {
   primary_contact_email: string | null
   primary_contact_name: string | null
   contacts: TrunkShowStoreContact[]
-  /** Base-64 data URL — same shape buying-event stores use. */
+  /** DB-managed mirror of store_logos[default_logo_index].path —
+   *  the BEFORE trigger keeps this in sync so consumer surfaces
+   *  (booking pages, QR center, etc.) don't need to change. */
   store_image_url: string | null
+  /** Multi-logo storage. See lib/storeLogos/types.ts. */
+  store_logos: StoreLogoEntry[]
+  default_logo_index: number
   created_at?: string
   updated_at?: string
 }
@@ -69,7 +77,7 @@ const COLS = `id, trunk_shows, active, name, ts_reps, trunk_rep_user_id, comment
   address_1, address_2, city, state, zip, store_phone,
   contact_1, contact_2, contact_3, email_1, email_2, url,
   primary_contact_email, primary_contact_name, contacts,
-  store_image_url,
+  store_image_url, store_logos, default_logo_index,
   created_at, updated_at`
 
 export default function TrunkShowStores() {
@@ -494,7 +502,7 @@ export default function TrunkShowStores() {
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       {s.store_image_url ? (
-                        <img src={s.store_image_url} alt=""
+                        <img src={publicLogoUrl(s.store_image_url) ?? undefined} alt=""
                           style={{ width: 28, height: 28, borderRadius: 4, objectFit: 'cover', flexShrink: 0, border: '1px solid var(--pearl)' }} />
                       ) : (
                         <span style={{
@@ -759,7 +767,6 @@ function Modal({ store, trunkReps, orgs, memberOrgIds, onToggleOrg, onClose, onS
   onDelete: () => void | Promise<void>
 }) {
   const [details, setDetails] = useState<TrunkShowStore>({ ...store })
-  const imgRef = useRef<HTMLInputElement>(null)
   const [imageOpen, setImageOpen] = useState(false)
   const [copyOpen, setCopyOpen] = useState(false)
   const [copyMatches, setCopyMatches] = useState<Array<{ id: string; name: string; city: string | null; state: string | null; store_image_url: string }> | null>(null)
@@ -768,33 +775,24 @@ function Modal({ store, trunkReps, orgs, memberOrgIds, onToggleOrg, onClose, onS
   // Keep local copy in sync if parent swaps the selected store
   useEffect(() => { setDetails({ ...store }) }, [store.id])
 
-  // Logo upload — base-64 data URL, mirrors the buying-event side.
-  const uploadLogo = async (file: File) => {
-    const reader = new FileReader()
-    reader.onload = async (e) => {
-      const dataUrl = e.target?.result as string
-      const { data, error } = await supabase
-        .from('trunk_show_stores').update({ store_image_url: dataUrl }).eq('id', store.id)
-        .select(COLS).single()
-      if (error) { alert('Upload failed: ' + error.message); return }
-      onSaved(data as TrunkShowStore)
-      setDetails(p => ({ ...p, store_image_url: dataUrl }))
-    }
-    reader.readAsDataURL(file)
-  }
-
-  const removeLogo = async () => {
-    if (!confirm('Remove store logo?')) return
+  // Refresh this row from the DB after a logo mutation. The
+  // StoreLogoManager callback doesn't pass us the new state — easier
+  // to re-fetch the canonical row than to mirror the API's mutation
+  // logic on the client.
+  const refreshThisStore = async () => {
     const { data, error } = await supabase
-      .from('trunk_show_stores').update({ store_image_url: null }).eq('id', store.id)
-      .select(COLS).single()
-    if (error) { alert('Remove failed: ' + error.message); return }
+      .from('trunk_show_stores').select(COLS).eq('id', store.id).maybeSingle()
+    if (error || !data) return
+    setDetails(data as TrunkShowStore)
     onSaved(data as TrunkShowStore)
-    setDetails(p => ({ ...p, store_image_url: null }))
   }
 
-  // "Copy from buying stores" — looks for a public.stores row with the
-  // same (name, state) that has a logo. Multiple matches → user picks.
+  // "Copy from buying stores" — looks for a public.stores row with
+  // the same (name, state) that has a logo. Multiple matches → user
+  // picks. Copies are made INDEPENDENTLY by downloading the buying
+  // side's active default image and uploading it as a new entry on
+  // the trunk side via the store-logos API — that way deleting the
+  // buying-side logo later doesn't break the trunk copy.
   const findBuyingLogos = async () => {
     setCopyBusy(true)
     setCopyMatches(null)
@@ -813,15 +811,55 @@ function Modal({ store, trunkReps, orgs, memberOrgIds, onToggleOrg, onClose, onS
     }
   }
 
-  const copyLogoFrom = async (dataUrl: string) => {
-    const { data, error } = await supabase
-      .from('trunk_show_stores').update({ store_image_url: dataUrl }).eq('id', store.id)
-      .select(COLS).single()
-    if (error) { alert('Copy failed: ' + error.message); return }
-    onSaved(data as TrunkShowStore)
-    setDetails(p => ({ ...p, store_image_url: dataUrl }))
-    setCopyOpen(false)
-    setCopyMatches(null)
+  const copyLogoFrom = async (srcPath: string) => {
+    setCopyBusy(true)
+    try {
+      // Fetch the source bytes — either parse the legacy data URL or
+      // fetch the public Storage URL, then re-upload to the trunk
+      // store's namespace via the new API.
+      let dataUrl: string
+      let mime = 'image/png'
+      if (srcPath.startsWith('data:')) {
+        dataUrl = srcPath
+        const m = srcPath.match(/^data:([^;]+);base64,/)
+        if (m) mime = m[1]
+      } else {
+        const url = publicLogoUrl(srcPath)
+        if (!url) throw new Error('Could not resolve source logo URL')
+        const blob = await fetch(url).then(r => {
+          if (!r.ok) throw new Error(`Source logo fetch failed: ${r.status}`)
+          return r.blob()
+        })
+        mime = blob.type || 'image/png'
+        dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = () => reject(reader.error || new Error('FileReader error'))
+          reader.readAsDataURL(blob)
+        })
+      }
+
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/store-logos/upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token || ''}`,
+        },
+        body: JSON.stringify({
+          parentKind: 'trunk', parentId: store.id, dataUrl, mime,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error || `Copy failed (${res.status})`)
+      await refreshThisStore()
+      setCopyOpen(false)
+      setCopyMatches(null)
+    } catch (e: any) {
+      alert('Copy failed: ' + (e?.message || 'unknown error'))
+    } finally {
+      setCopyBusy(false)
+    }
   }
 
   // Single autosave watcher: any field change debounces a save of the
@@ -981,9 +1019,10 @@ function Modal({ store, trunkReps, orgs, memberOrgIds, onToggleOrg, onClose, onS
             <TA label="" value={details.comments} onChange={v => set('comments', v)} />
           </div>
 
-          {/* Store logo — collapsed by default. Upload a base-64
-              image, or copy a matching logo from the buying-event
-              side via the "Copy from buying stores" shortcut. */}
+          {/* Store logos — multi-file manager (same component as the
+              buying-side Stores admin). The "Copy from buying stores"
+              shortcut lives just below the upload zone since it's a
+              trunk-side-only convenience. */}
           <div style={{ borderTop: '1px solid var(--pearl)', paddingTop: 14 }}>
             <button
               type="button"
@@ -992,37 +1031,27 @@ function Modal({ store, trunkReps, orgs, memberOrgIds, onToggleOrg, onClose, onS
                 display: 'flex', alignItems: 'center', gap: 6,
                 background: 'none', border: 'none', padding: 0, cursor: 'pointer',
                 fontSize: 12, fontWeight: 700, color: 'var(--ash)', fontFamily: 'inherit',
+                marginBottom: 10,
               }}>
               <span style={{
                 display: 'inline-block', width: 10, transition: 'transform .15s ease',
                 transform: imageOpen ? 'rotate(90deg)' : 'rotate(0deg)',
               }}>▶</span>
-              Store logo{details.store_image_url ? '' : ' (none)'}
+              Store logos{details.store_logos?.length ? ` (${details.store_logos.length})` : ' (none)'}
             </button>
             {imageOpen && (
-              <div style={{ marginTop: 10 }}>
-                {details.store_image_url ? (
-                  <>
-                    <img src={details.store_image_url} alt="Store logo"
-                      style={{ maxWidth: 200, borderRadius: 'var(--r)', border: '1px solid var(--pearl)', display: 'block', marginBottom: 10 }} />
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <button className="btn-primary btn-sm" onClick={() => imgRef.current?.click()}>Replace</button>
-                      <button className="btn-outline btn-sm" onClick={findBuyingLogos}>📥 Copy from buying stores</button>
-                      <button className="btn-danger btn-sm" onClick={removeLogo}>Remove</button>
-                    </div>
-                  </>
-                ) : (
-                  <div>
-                    <p style={{ fontSize: 13, color: 'var(--mist)', marginBottom: 10 }}>No logo uploaded yet.</p>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <button className="btn-primary btn-sm" onClick={() => imgRef.current?.click()}>Upload Image</button>
-                      <button className="btn-outline btn-sm" onClick={findBuyingLogos}>📥 Copy from buying stores</button>
-                    </div>
-                  </div>
-                )}
-                <input ref={imgRef} type="file" accept="image/*" style={{ display: 'none' }}
-                  onChange={e => { if (e.target.files?.[0]) uploadLogo(e.target.files[0]) }} />
-              </div>
+              <>
+                <StoreLogoManager
+                  parentKind="trunk"
+                  parentId={store.id}
+                  logos={details.store_logos || []}
+                  defaultIndex={details.default_logo_index ?? 0}
+                  onChange={refreshThisStore}
+                />
+                <div style={{ marginTop: 10 }}>
+                  <button className="btn-outline btn-sm" onClick={findBuyingLogos}>📥 Copy from a buying store</button>
+                </div>
+              </>
             )}
           </div>
 
@@ -1052,7 +1081,7 @@ function Modal({ store, trunkReps, orgs, memberOrgIds, onToggleOrg, onClose, onS
                           background: '#fff', border: '1px solid var(--pearl)', borderRadius: 8,
                           cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
                         }}>
-                        <img src={m.store_image_url} alt=""
+                        <img src={publicLogoUrl(m.store_image_url) ?? undefined} alt=""
                           style={{ width: 44, height: 44, borderRadius: 4, objectFit: 'cover', flexShrink: 0, border: '1px solid var(--pearl)' }} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)' }}>{m.name}</div>

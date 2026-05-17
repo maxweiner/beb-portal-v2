@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Diamond } from 'lucide-react'
 import { formatPhoneDisplay } from '@/lib/phone'
+import { publicLogoUrl } from '@/lib/storeLogos/url'
 
 interface Appt {
   id: string
@@ -84,7 +85,7 @@ export default function ManageClient({
           paddingTop: 'max(env(safe-area-inset-top), 16px)',
         }}>
         {store.store_image_url ? (
-          <img src={store.store_image_url} alt={`${store.name} logo`}
+          <img src={publicLogoUrl(store.store_image_url) ?? undefined} alt={`${store.name} logo`}
             className="h-10 w-auto max-w-[6rem] rounded-lg object-contain bg-white" />
         ) : (
           <div className="h-10 w-10 rounded-lg flex items-center justify-center"

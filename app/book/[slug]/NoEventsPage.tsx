@@ -1,6 +1,7 @@
 import { Diamond } from 'lucide-react'
 import type { BookingStore } from '@/lib/appointments/types'
 import { formatPhoneDisplay } from '@/lib/phone'
+import { publicLogoUrl } from '@/lib/storeLogos/url'
 
 export default function NoEventsPage({ store }: { store: BookingStore }) {
   const primary = store.color_primary || '#1D6B44'
@@ -14,7 +15,7 @@ export default function NoEventsPage({ store }: { store: BookingStore }) {
           paddingTop: 'max(env(safe-area-inset-top), 16px)',
         }}>
         {store.store_image_url ? (
-          <img src={store.store_image_url} alt={`${store.name} logo`}
+          <img src={publicLogoUrl(store.store_image_url) ?? undefined} alt={`${store.name} logo`}
             className="h-10 w-auto max-w-[6rem] rounded-lg object-contain bg-white" />
         ) : (
           <div className="h-10 w-10 rounded-lg flex items-center justify-center"

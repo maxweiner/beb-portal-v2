@@ -10,6 +10,7 @@ import Checkbox from '@/components/ui/Checkbox'
 import { formatPhoneDisplay } from '@/lib/phone'
 import EditAppointmentModal from './EditAppointmentModal'
 import AddAppointmentForm from '@/components/booking/AddAppointmentForm'
+import { publicLogoUrl } from '@/lib/storeLogos/url'
 
 type FontScale = 'sm' | 'md' | 'lg'
 const FONT_SCALE_KEY = 'addApptFontScale'
@@ -215,7 +216,7 @@ export default function StorePortalClient({
         <div className="max-w-2xl mx-auto flex items-start gap-3">
           <div className="shrink-0">
             {store.store_image_url ? (
-              <img src={store.store_image_url} alt=""
+              <img src={publicLogoUrl(store.store_image_url) ?? undefined} alt=""
                 className="h-20 w-auto max-w-[8rem] rounded-xl object-contain bg-white" />
             ) : (
               <div className="h-20 w-20 rounded-xl flex items-center justify-center" style={{ background: '#f3f4f6', color: primary }}>
@@ -374,7 +375,7 @@ export default function StorePortalClient({
                 the page header. */}
             <div className="px-5 pt-4 pb-3 flex items-center gap-3" style={{ borderTop: `4px solid ${primary}` }}>
               {store.store_image_url ? (
-                <img src={store.store_image_url} alt=""
+                <img src={publicLogoUrl(store.store_image_url) ?? undefined} alt=""
                   className="h-10 w-auto max-w-[6rem] rounded-lg object-contain bg-white" />
               ) : (
                 <div className="h-10 w-10 rounded-lg flex items-center justify-center" style={{ background: '#f3f4f6', color: primary }}>
