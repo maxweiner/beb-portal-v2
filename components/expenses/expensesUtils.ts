@@ -33,7 +33,7 @@ export const STATUS_LABEL: Record<ExpenseReportStatus, string> = {
   submitted_pending_review: 'Pending review',
   approved: 'Approved',
   paid: 'Paid',
-  no_expenses: 'Already expensed',
+  no_expenses: 'Cleared',
 }
 
 export const STATUS_COLOR: Record<ExpenseReportStatus, { bg: string; fg: string }> = {

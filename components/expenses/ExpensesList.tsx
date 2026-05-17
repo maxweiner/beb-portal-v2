@@ -44,7 +44,7 @@ const STATUS_FILTERS: { id: 'all' | ExpenseReportStatus; label: string }[] = [
   { id: 'submitted_pending_review', label: 'Pending review' },
   { id: 'approved',                 label: 'Approved' },
   { id: 'paid',                     label: 'Paid' },
-  { id: 'no_expenses',              label: 'Already expensed' },
+  { id: 'no_expenses',              label: 'Cleared' },
 ]
 
 // Accounting role doesn't need to see drafts ("active") — those are
@@ -308,12 +308,14 @@ export default function ExpensesList({ onOpen, effectiveUserId: effectiveUserIdP
     await reload()
   }
 
-  // Soft-dismiss a draft as "already expensed elsewhere." Sets status
-  // to 'no_expenses' so the row stops cluttering the active queue but
-  // remains in the DB for audit. Reversible — see reactivateReport.
+  // Soft-dismiss a draft — used when the user doesn't intend to file
+  // any expenses for this trip (handled out-of-band, no costs, etc.).
+  // Sets status to 'no_expenses' so the row stops cluttering the
+  // active queue but remains in the DB for audit. Reversible — see
+  // reactivateReport. UI label is "Clear" / "Cleared".
   async function markNoExpenses(r: ReportRow) {
     if (r.status !== 'active') return
-    if (!confirm(`Mark "${r.event_name}" as already expensed? It'll be hidden from the default list. You can find it under the "Already expensed" filter.`)) return
+    if (!confirm(`Clear "${r.event_name}" from the list? You can reopen it later from the "Cleared" filter.`)) return
     const { error: updErr } = await supabase
       .from('expense_reports')
       .update({ status: 'no_expenses' })
@@ -340,10 +342,10 @@ export default function ExpensesList({ onOpen, effectiveUserId: effectiveUserIdP
 
   // From the picker: create a no_expenses report for an event the
   // user doesn't intend to expense, skipping the create-then-dismiss
-  // dance. The row goes straight to the "Already expensed" filter.
+  // dance. The row goes straight to the "Cleared" filter.
   async function dismissEventFromPicker(eventId: string, eventName: string) {
     if (!user) return
-    if (!confirm(`Skip "${eventName}" — mark as already expensed? You can reactivate it later from the "Already expensed" filter.`)) return
+    if (!confirm(`Skip "${eventName}" and clear it from your list? You can reopen it later from the "Cleared" filter.`)) return
     const { error: insertErr } = await supabase
       .from('expense_reports')
       .insert({ event_id: eventId, user_id: effectiveUserId, status: 'no_expenses' })
@@ -386,8 +388,8 @@ export default function ExpensesList({ onOpen, effectiveUserId: effectiveUserIdP
       // haven't been submitted yet and aren't ready for AP.
       if (isAccounting && r.status === 'active') return false
       // 'no_expenses' is a soft-dismiss; only show on the explicit
-      // "Already expensed" filter (or via 'all'-style explicit pick).
-      // The 'all' chip is still considered an "active queue" view.
+      // "Cleared" filter (or via 'all'-style explicit pick). The
+      // 'all' chip is still considered an "active queue" view.
       if (statusFilter === 'all' && r.status === 'no_expenses') return false
       if (statusFilter !== 'all' && r.status !== statusFilter) return false
       // Time gate: past = event already started (incl. running),
@@ -566,14 +568,14 @@ export default function ExpensesList({ onOpen, effectiveUserId: effectiveUserIdP
                     {canDismiss && (
                       <button
                         onClick={e => { e.stopPropagation(); markNoExpenses(r) }}
-                        title="Mark as already expensed (hide from list)"
+                        title="Clear from the list (reopen later from the Cleared filter)"
                         style={{
                           background: 'transparent', border: '1px solid var(--cream2)',
                           borderRadius: 6, padding: '4px 10px', cursor: 'pointer',
                           color: 'var(--mist)', fontSize: 11, lineHeight: 1.3,
                           fontFamily: 'inherit', whiteSpace: 'nowrap',
                         }}
-                      >Already expensed</button>
+                      >Clear</button>
                     )}
                     {canDelete && (
                       <button
@@ -654,14 +656,14 @@ export default function ExpensesList({ onOpen, effectiveUserId: effectiveUserIdP
                         <>
                           <button
                             onClick={e => { e.stopPropagation(); markNoExpenses(r) }}
-                            title="Mark as already expensed (hide from list)"
+                            title="Clear from the list (reopen later from the Cleared filter)"
                             style={{
                               marginLeft: 6, background: 'transparent',
                               border: '1px solid var(--cream2)', borderRadius: 6,
                               padding: '4px 8px', cursor: 'pointer', color: 'var(--mist)',
                               fontSize: 12, lineHeight: 1, fontFamily: 'inherit',
                             }}
-                          >Already expensed</button>
+                          >Clear</button>
                           <button
                             onClick={e => { e.stopPropagation(); deleteReport(r) }}
                             title="Delete this report"
@@ -854,7 +856,7 @@ function PickList({ items, disabled, onPick, onDismiss }: {
               <button
                 onClick={() => onDismiss(it.id)}
                 disabled={disabled}
-                title="Skip — mark as already expensed"
+                title="Skip — clear from the list"
                 style={{
                   background: 'transparent', border: '1px solid var(--cream2)',
                   borderRadius: 6, padding: '4px 8px',
