@@ -497,7 +497,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     const dataPromise = reloadRef.current(b)
-    const minSpinnerPromise = new Promise<void>(r => setTimeout(r, 1500))
+    // 500ms minimum so the overlay registers as an intentional
+    // transition rather than a glitch. Was 1500ms historically when
+    // the boot fetch could legitimately take that long; after the
+    // stores-fetch + boot-cache perf work (PRs #737 / #734) most
+    // brand switches resolve in under 200ms.
+    const minSpinnerPromise = new Promise<void>(r => setTimeout(r, 500))
     // Safety net: if the data fetch hangs > 10s, bail out anyway so we
     // don't trap the user in the spinner forever.
     const timeoutPromise = new Promise<void>(r => setTimeout(r, 10000))
