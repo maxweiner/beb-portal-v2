@@ -463,6 +463,65 @@ tr:last-child td { border-bottom: none; }
   animation: bebJewelPulse 1.4s ease-in-out infinite, bebJewelShine 2.8s ease-in-out infinite;
 }
 
+/* Vault dial loader — safe-style combination dial with a gold pointer
+   ticking through positions. Implies "unlocking your data." */
+.beb-vault-loader {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #2A2A2A, #0A0A0A);
+  box-shadow:
+    inset -3px -3px 8px rgba(0,0,0,.5),
+    inset 3px 3px 6px rgba(255,255,255,.1),
+    0 4px 10px rgba(0,0,0,.25);
+}
+.beb-vault-loader::before {
+  content: '';
+  position: absolute;
+  inset: 12px;
+  border-radius: 50%;
+  border: 2px dashed rgba(255,255,255,.3);
+  animation: bebVaultDial 2.4s linear infinite;
+}
+.beb-vault-loader::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 24px;
+  margin: -12px 0 0 -2px;
+  background: #C9A84C;
+  transform-origin: bottom center;
+  animation: bebVaultPointer 2.4s steps(8) infinite;
+  box-shadow: 0 0 6px #C9A84C;
+}
+@keyframes bebVaultDial    { from { transform: rotate(0deg); }  to { transform: rotate(360deg);  } }
+@keyframes bebVaultPointer { from { transform: rotate(0deg); }  to { transform: rotate(-360deg); } }
+
+/* Pearl strand loader — 7 beads drop in sequence, hold briefly, then
+   dissolve away. Elegant and on-brand for a jewelry-buying portal. */
+.beb-pearl-loader {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.beb-pearl-bead {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff, #F5E8D5 50%, #C9B894);
+  box-shadow: 0 1px 3px rgba(0,0,0,.15);
+  animation: bebPearlDrop 1.4s ease-in-out infinite;
+  opacity: 0;
+}
+@keyframes bebPearlDrop {
+  0%       { opacity: 0; transform: translateY(-20px) scale(.5); }
+  20%, 70% { opacity: 1; transform: translateY(0) scale(1); }
+  100%     { opacity: 0; transform: translateY(20px) scale(.5); }
+}
+
 /* Google Places Autocomplete dropdown — Google attaches `.pac-
  * container` to <body> with a default z-index of 1000, which sits
  * BELOW our modal overlays (z-index 1100). Without this override

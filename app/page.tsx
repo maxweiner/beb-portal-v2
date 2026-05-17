@@ -19,6 +19,7 @@ import MobileLayout from '@/components/mobile/MobileLayout'
 import MobileDashboard from '@/components/mobile/MobileDashboard'
 import BroadcastBanner from '@/components/broadcast/BroadcastBanner'
 import BrandSwitchOverlay from '@/components/layout/BrandSwitchOverlay'
+import LoadingSpinner from '@/components/layout/LoadingSpinner'
 import PendingApprovalsModal from '@/components/expenses/PendingApprovalsModal'
 import PendingW9Modal from '@/components/w9/PendingW9Modal'
 import { shouldUseMobile, setMobilePreference } from '@/lib/mobile'
@@ -260,19 +261,7 @@ export default function Home() {
   ) : null
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen" style={{ background: 'var(--page-bg)' }}>
-        <div className="flex flex-col items-center gap-5">
-          <div style={{ display: 'flex', gap: 18 }} aria-label="Loading">
-            <span className="beb-jewel-loader" style={{ animationDelay: '0s, 0s' }}>💎</span>
-            <span className="beb-jewel-loader" style={{ animationDelay: '.18s, .4s' }}>💍</span>
-            <span className="beb-jewel-loader" style={{ animationDelay: '.36s, .8s' }}>⌚</span>
-            <span className="beb-jewel-loader" style={{ animationDelay: '.54s, 1.2s' }}>👑</span>
-          </div>
-          <div className="text-sm font-semibold" style={{ color: 'var(--mist)' }}>Loading your portal…</div>
-        </div>
-      </div>
-    )
+    return <LoadingSpinner />
   }
 
   if (!user) return <Login />
