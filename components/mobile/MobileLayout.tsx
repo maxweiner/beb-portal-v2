@@ -203,7 +203,9 @@ export default function MobileLayout({ nav, setNav, children }: Props) {
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
   const hasLibertyAccess = user?.liberty_access === true
   const isLiberty = brand === 'liberty'
-  const { modules: grantedModules, loaded: modulesLoaded } = useRoleModules()
+  const roleModules = useRoleModules()
+  const modulesLoaded = roleModules.status === 'ready'
+  const grantedModules = roleModules.status === 'ready' ? roleModules.modules : new Set<NavPage>()
   const [menuOpen, setMenuOpen] = useState(false)
   const { count: pendingApprovalCount } = usePendingApprovals()
   const [scannerOpen, setScannerOpen] = useState(false)
