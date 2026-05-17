@@ -111,38 +111,9 @@ function buildEmailHtml(body: string, senderName: string): string {
 
 interface SmsOpts { sb: SupabaseClient; to: string; body: string }
 async function sendSms(opts: SmsOpts): Promise<{ ok: boolean; sid?: string; error?: string }> {
-  // Mirror the existing Twilio send pattern from app/api/morning-briefing
-  // and similar — load creds from settings.value.twilio.
-  const { data: cfg } = await opts.sb.from('settings').select('value').eq('key', 'twilio').maybeSingle()
-  const v: any = cfg?.value || {}
-  const sid = v.accountSid
-  const token = v.authToken
-  const from = v.fromNumber
-  if (!sid || !token || !from) return { ok: false, error: 'Twilio not configured in Admin → SMS Settings' }
-
-  const phone = String(opts.to || '').replace(/\D/g, '')
-  if (!phone) return { ok: false, error: 'invalid phone' }
-  const e164 = phone.length === 10 ? `+1${phone}` : `+${phone.replace(/^\+/, '')}`
-
-  try {
-    const auth = Buffer.from(`${sid}:${token}`).toString('base64')
-    const params = new URLSearchParams({
-      To: e164,
-      From: from,
-      Body: opts.body,
-    })
-    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${auth}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: params.toString(),
-    })
-    const j = await res.json().catch(() => ({}))
-    if (!res.ok) return { ok: false, error: j.message || res.statusText }
-    return { ok: true, sid: j.sid }
-  } catch (err: any) {
-    return { ok: false, error: err?.message || 'sms error' }
-  }
+  // Routes through the provider dispatcher so the Settings → SMS
+  // Providers switch decides which carrier handles chat replies.
+  // Chat is treated as 'internal' (staff↔customer one-to-one).
+  const { dispatchSms } = await import('@/lib/sms/dispatch')
+  return dispatchSms({ sb: opts.sb, to: opts.to, body: opts.body, purpose: 'internal' })
 }

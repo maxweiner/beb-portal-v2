@@ -12,6 +12,7 @@ import RoleManagerPanel from './RoleManagerPanel'
 import ExpenseDelegatesPanel from './ExpenseDelegatesPanel'
 import QuickBooksMappingPanel from './QuickBooksMappingPanel'
 import WhiteSheetSettingsPanel from './WhiteSheetSettingsPanel'
+import SmsProvidersPanel from './SmsProvidersPanel'
 import DatePicker from '@/components/ui/DatePicker'
 import ImpersonationLogPanel from '@/components/impersonation/ImpersonationLogPanel'
 import AdHocGCalEvents from './AdHocGCalEvents'
@@ -501,6 +502,19 @@ export default function Settings() {
           subtitle="Map each portal expense category to its QuickBooks account. The export reads this map when generating IIF (QBD) + CSV (QBO) files. Use Parent:Child syntax to match QB's sub-accounts."
         >
           <QuickBooksMappingPanel />
+        </CollapsibleCard>
+      )}
+
+      {/* SMS Providers — admin / superadmin / partner. Hot-swap
+          between Twilio and Telnyx per purpose slot; creds + test
+          send live in the panel. */}
+      {(user?.role === 'admin' || user?.role === 'superadmin' || user?.is_partner) && (
+        <CollapsibleCard
+          storageKey="settings-sms-providers"
+          title="📡 SMS Providers"
+          subtitle="Pick the active carrier for internal/transactional and marketing SMS. The dispatcher reads the setting on every send — swaps take effect immediately."
+        >
+          <SmsProvidersPanel />
         </CollapsibleCard>
       )}
 

@@ -1,25 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
+import { dispatchSms, type SmsPurpose } from '@/lib/sms/dispatch'
 
 const sb = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_KEY!,
 )
-
-/**
- * Twilio config lives in the same pattern as email — a JSON value
- * in the settings table under key='sms':
- *   { accountSid: 'ACxxx', authToken: 'xxx', fromNumber: '+1XXXXXXXXXX' }
- */
-interface SmsConfig {
-  accountSid?: string
-  authToken?: string
-  fromNumber?: string
-}
-
-async function loadConfig(): Promise<SmsConfig> {
-  const { data } = await sb.from('settings').select('value').eq('key', 'sms').maybeSingle()
-  return (data?.value || {}) as SmsConfig
-}
 
 /**
  * Normalize a phone number to E.164 (+1XXXXXXXXXX). Returns '' if
@@ -34,43 +19,25 @@ export function formatPhone(phone: string): string {
 }
 
 /**
- * Send a single SMS via Twilio. Silent no-op if no config is set
- * (matching the email utility's behaviour). Throws on Twilio errors
- * so callers can log/continue per-recipient without blocking a batch.
+ * Send a single SMS. Provider selection is read from the
+ * `sms_providers` settings row at send time so flipping the switch
+ * in Settings → SMS Providers takes effect immediately with no
+ * redeploy. Silent no-op if neither provider is configured, to keep
+ * parity with the email utility's behaviour.
+ *
+ * `purpose` defaults to 'internal'. Marketing-tagged callers can
+ * pass 'marketing' to route through the marketing slot.
  */
-export async function sendSMS(to: string, body: string): Promise<void> {
-  const cfg = await loadConfig()
-  if (!cfg.accountSid || !cfg.authToken || !cfg.fromNumber) return
-
-  const toE164 = formatPhone(to)
-  if (!toE164) throw new Error(`Invalid phone number: ${to}`)
-
-  const params = new URLSearchParams({
-    From: cfg.fromNumber,
-    To: toE164,
-    Body: body,
-  })
-
-  const authBytes = `${cfg.accountSid}:${cfg.authToken}`
-  // Buffer works on Node/Edge; avoid btoa for SSR safety.
-  const basic = typeof Buffer !== 'undefined'
-    ? Buffer.from(authBytes).toString('base64')
-    : btoa(authBytes)
-
-  const res = await fetch(
-    `https://api.twilio.com/2010-04-01/Accounts/${cfg.accountSid}/Messages.json`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${basic}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: params.toString(),
-    },
-  )
-
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Twilio ${res.status}: ${text}`)
+export async function sendSMS(
+  to: string,
+  body: string,
+  purpose: SmsPurpose = 'internal',
+): Promise<void> {
+  const result = await dispatchSms({ sb, to, body, purpose })
+  if (!result.ok) {
+    // Preserve the historic "silent no-op when unconfigured"
+    // behaviour so unrelated cron jobs don't start throwing.
+    if (result.error?.includes('not configured')) return
+    throw new Error(`SMS ${result.provider} failed: ${result.error}`)
   }
 }
