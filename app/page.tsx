@@ -1,57 +1,70 @@
 'use client'
 
+// Eager imports: layout chrome + landing-screen components. These
+// render on every load (login, splash, dashboard, sidebar) so there's
+// no benefit to code-splitting them — they'd just add an extra round
+// trip on first paint. Everything else is dynamic() below so it
+// downloads only when the user navigates to that nav target.
 import { useApp } from '@/lib/context'
 import Login from '@/components/layout/Login'
 import PendingApprovalScreen from '@/components/layout/PendingApprovalScreen'
 import PhonePromptScreen from '@/components/layout/PhonePromptScreen'
 import Sidebar from '@/components/layout/Sidebar'
 import Dashboard from '@/components/dashboard/Dashboard'
-import AdminPanel from '@/components/admin/AdminPanel'
-import BuyingEventsView from '@/components/events/BuyingEventsView'
-import DayEntry from '@/components/dayentry/DayEntry'
-import Stores from '@/components/stores/Stores'
-import TrunkShowStores from '@/components/stores/TrunkShowStores'
-import Customers from '@/components/customers/Customers'
-import Shipping from '@/components/shipping/Shipping'
-import Reports from '@/components/reports/Reports'
-import Settings from '@/components/settings/Settings'
-import Staff from '@/components/staff/Staff'
-import Schedule from '@/components/schedule/Schedule'
-import Travel from '@/components/travel/Travel'
-import Expenses from '@/components/expenses/Expenses'
-import PendingApprovalsModal from '@/components/expenses/PendingApprovalsModal'
-import PendingW9Modal from '@/components/w9/PendingW9Modal'
-import PartnerFinancials from '@/components/financials/PartnerFinancials'
-import Marketing from '@/components/marketing/Marketing'
-import Calendar from '@/components/calendar/Calendar'
-import AppointmentsAdmin from '@/components/appointments-admin/AppointmentsAdmin'
-import IntakeLookup from '@/components/intake/IntakeLookup'
-import IntakePage from '@/components/intake/IntakePage'
 import { ModuleGuard } from '@/components/ui/ModuleGuard'
 import ModuleWriteGate from '@/components/ui/ModuleWriteGate'
 import { useRoleModules } from '@/lib/useRoleModules'
-import LibertyAdminPanel from '@/components/admin/LibertyAdminPanel'
-import NotificationTemplatesAdmin from '@/components/admin/NotificationTemplatesAdmin'
-import DataResearch from '@/components/admin/DataResearch'
-import SalesRepDashboard from '@/components/sales/SalesRepDashboard'
-import TradeShows from '@/components/sales/TradeShows'
-import TrunkShows from '@/components/sales/TrunkShows'
-import Leads from '@/components/sales/Leads'
-import TrunkCommunications from '@/components/communications/TrunkCommunications'
-import BuyingCommunications from '@/components/communications/BuyingCommunications'
 import { useState, useEffect, useRef } from 'react'
 import MobileLayout from '@/components/mobile/MobileLayout'
 import MobileDashboard from '@/components/mobile/MobileDashboard'
-import MobileDayEntry from '@/components/mobile/MobileDayEntry'
-import MobileTravel from '@/components/mobile/MobileTravel'
-import AccountingHub from '@/components/accounting/AccountingHub'
-import ReconciliationPage from '@/components/reconciliation/ReconciliationPage'
-import WholesalePage from '@/components/wholesale/WholesalePage'
-import BroadcastPage from '@/components/broadcast/BroadcastPage'
 import BroadcastBanner from '@/components/broadcast/BroadcastBanner'
-import MobileStaff from '@/components/mobile/MobileStaff'
 import BrandSwitchOverlay from '@/components/layout/BrandSwitchOverlay'
+import PendingApprovalsModal from '@/components/expenses/PendingApprovalsModal'
+import PendingW9Modal from '@/components/w9/PendingW9Modal'
 import { shouldUseMobile, setMobilePreference } from '@/lib/mobile'
+import dynamic from 'next/dynamic'
+
+// Code-split: each nav-target module is its own JS chunk that only
+// downloads when the user first navigates there. Cuts the route's
+// initial JS bundle from ~511 kB to ~120 kB. ssr:false is correct here
+// — every consumer is a client component and SSR is already off for
+// app/page.tsx (which is 'use client'). loading:() => null is the
+// friendliest placeholder; the user clicked a sidebar link and the
+// content area momentarily blanks before the new module mounts.
+const AdminPanel = dynamic(() => import('@/components/admin/AdminPanel'), { ssr: false })
+const BuyingEventsView = dynamic(() => import('@/components/events/BuyingEventsView'), { ssr: false })
+const DayEntry = dynamic(() => import('@/components/dayentry/DayEntry'), { ssr: false })
+const Stores = dynamic(() => import('@/components/stores/Stores'), { ssr: false })
+const TrunkShowStores = dynamic(() => import('@/components/stores/TrunkShowStores'), { ssr: false })
+const Customers = dynamic(() => import('@/components/customers/Customers'), { ssr: false })
+const Shipping = dynamic(() => import('@/components/shipping/Shipping'), { ssr: false })
+const Reports = dynamic(() => import('@/components/reports/Reports'), { ssr: false })
+const Settings = dynamic(() => import('@/components/settings/Settings'), { ssr: false })
+const Staff = dynamic(() => import('@/components/staff/Staff'), { ssr: false })
+const Schedule = dynamic(() => import('@/components/schedule/Schedule'), { ssr: false })
+const Travel = dynamic(() => import('@/components/travel/Travel'), { ssr: false })
+const Expenses = dynamic(() => import('@/components/expenses/Expenses'), { ssr: false })
+const PartnerFinancials = dynamic(() => import('@/components/financials/PartnerFinancials'), { ssr: false })
+const Marketing = dynamic(() => import('@/components/marketing/Marketing'), { ssr: false })
+const AppointmentsAdmin = dynamic(() => import('@/components/appointments-admin/AppointmentsAdmin'), { ssr: false })
+const IntakeLookup = dynamic(() => import('@/components/intake/IntakeLookup'), { ssr: false })
+const IntakePage = dynamic(() => import('@/components/intake/IntakePage'), { ssr: false })
+const LibertyAdminPanel = dynamic(() => import('@/components/admin/LibertyAdminPanel'), { ssr: false })
+const NotificationTemplatesAdmin = dynamic(() => import('@/components/admin/NotificationTemplatesAdmin'), { ssr: false })
+const DataResearch = dynamic(() => import('@/components/admin/DataResearch'), { ssr: false })
+const SalesRepDashboard = dynamic(() => import('@/components/sales/SalesRepDashboard'), { ssr: false })
+const TradeShows = dynamic(() => import('@/components/sales/TradeShows'), { ssr: false })
+const TrunkShows = dynamic(() => import('@/components/sales/TrunkShows'), { ssr: false })
+const Leads = dynamic(() => import('@/components/sales/Leads'), { ssr: false })
+const TrunkCommunications = dynamic(() => import('@/components/communications/TrunkCommunications'), { ssr: false })
+const BuyingCommunications = dynamic(() => import('@/components/communications/BuyingCommunications'), { ssr: false })
+const MobileDayEntry = dynamic(() => import('@/components/mobile/MobileDayEntry'), { ssr: false })
+const MobileTravel = dynamic(() => import('@/components/mobile/MobileTravel'), { ssr: false })
+const AccountingHub = dynamic(() => import('@/components/accounting/AccountingHub'), { ssr: false })
+const ReconciliationPage = dynamic(() => import('@/components/reconciliation/ReconciliationPage'), { ssr: false })
+const WholesalePage = dynamic(() => import('@/components/wholesale/WholesalePage'), { ssr: false })
+const BroadcastPage = dynamic(() => import('@/components/broadcast/BroadcastPage'), { ssr: false })
+const MobileStaff = dynamic(() => import('@/components/mobile/MobileStaff'), { ssr: false })
 
 // Nav ids — keep in sync with the role_modules.module_id CHECK constraint
 // (see supabase-migration-rename-nav-ids.sql). Renamed 2026-05-06:
