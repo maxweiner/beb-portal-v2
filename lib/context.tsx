@@ -110,7 +110,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const [usersRes, userRolesRes, storesRes, trunkShowStoresRes, eventsRes, shipmentsRes] = await Promise.all([
           supabase.from('users').select('*').order('name'),
           supabase.from('user_roles').select('user_id, role_id'),
-          supabase.from('stores').select('*').eq('brand', currentBrand).order('name'),
+          // Skinny SELECT — explicitly excludes `store_image_url`,
+          // `store_logos`, and `default_logo_index`. The first is a
+          // legacy column that holds base64 `data:` URL logos from the
+          // pre-Storage era (PR #728 shipped the Storage-based system
+          // but left the existing data URLs in place); the others are
+          // the new multi-logo JSONB array + its default-index pointer.
+          // None of these are read from `context.stores` anywhere in
+          // the authenticated portal — the Stores page does its own
+          // fetch with logos, and public booking / waitlist / QR-pack
+          // routes do their own server-side fetches. Pulling all three
+          // here was the dominant cost of the boot fetch on BEB —
+          // measured at ~12 MB / 8.7 s for the stores response alone
+          // (DevTools, 2026-05-17). Skinny version is ~50 KB and lets
+          // the boot cache (PR #734) actually fit in localStorage so
+          // BEB gets the same cache-hit experience Liberty already had.
+          supabase.from('stores')
+            .select('id, name, city, state, address, zip, website, notes, owner_name, owner_mobile_phone, owner_email, store_phone, beb_scheduling_phone, calendar_feed_url, calendar_offset_hours, active, lat, lng, slug, color_primary, color_secondary, timezone, hold_time_days, hold_at_home_office, default_jewelry_box_count, default_silver_box_count, shipping_recipients, default_form_number_visible, brand, created_at')
+            .eq('brand', currentBrand)
+            .order('name'),
           // Trunk-show client list — not brand-scoped (we visit
           // these jewelers regardless of buying-brand context).
           supabase.from('trunk_show_stores').select('*').order('name'),
