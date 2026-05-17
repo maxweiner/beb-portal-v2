@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { User, Store, TrunkShowStore, Event, Shipment, Theme, Brand, AppState } from '@/types'
+import { readBootCache, writeBootCache, clearBootCacheFor } from '@/lib/bootCache'
 
 export type DayEntryIntent = {
   eventId: string
@@ -90,6 +91,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const brandRef = useRef(brand); brandRef.current = brand
   const themeRef = useRef(theme); themeRef.current = theme
+  // Auth user id (supabase.auth session.user.id). Captured once auth
+  // settles so reloadRef can attribute its writes to the right cache
+  // entry. Null before sign-in and after sign-out.
+  const authUidRef = useRef<string | null>(null)
 
   // reload returns the fetched users so callers can find the current user
   // without an extra single-row query (saves one round-trip on login).
@@ -152,11 +157,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (nextUsers.length > 0) setUsers(nextUsers)
         if (storesRes.data) setStoresState(storesRes.data)
         if (trunkShowStoresRes.data) setTrunkShowStoresState(trunkShowStoresRes.data as TrunkShowStore[])
-        if (eventsRes.data) {
-          setEventsState(eventsRes.data.map((e: any) => ({ ...e, days: e.days || [] })))
-        }
+        const nextEvents = eventsRes.data
+          ? eventsRes.data.map((e: any) => ({ ...e, days: e.days || [] })) as Event[]
+          : []
+        if (eventsRes.data) setEventsState(nextEvents)
         if (shipmentsRes.data) setShipments(shipmentsRes.data)
         setConnectionError(false)
+
+        // Boot cache write — next load of this (auth user, brand) combo
+        // will hydrate from this snapshot before the splash even shows.
+        // Only writes when we know who the auth user is (authUidRef gets
+        // populated in handleSession). Brand-switch reloads write under
+        // the NEW brand's key since brandRef.current already reflects
+        // the in-flight brand by the time this fetch resolves.
+        if (authUidRef.current && nextUsers.length > 0) {
+          writeBootCache({
+            authUid: authUidRef.current,
+            brand: currentBrand,
+            cachedAt: Date.now(),
+            users: nextUsers as User[],
+            stores: (storesRes.data || []) as Store[],
+            trunkShowStores: (trunkShowStoresRes.data || []) as TrunkShowStore[],
+            events: nextEvents,
+            shipments: (shipmentsRes.data || []) as Shipment[],
+          })
+        }
         return { users: nextUsers }
       } catch (err) {
         console.error('reload error:', err)
@@ -188,10 +213,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     // Dedupe: getSession() and onAuthStateChange('SIGNED_IN') can both fire
     // on page load when a session is restored from storage. Only handle once.
-    const handleSession = async (email: string) => {
+    const handleSession = async (email: string, authUid: string) => {
       if (!mounted || initialized) return
       initialized = true
+      authUidRef.current = authUid
       const cachedBrand = readLocal<Brand>('beb-brand', 'beb')
+
+      // Stale-while-revalidate: if we have a cached boot snapshot for
+      // this (auth user, brand) combo, hydrate state from it and drop
+      // the splash immediately. The live fetch still runs below and
+      // will overwrite state with fresh data when it lands. First-ever
+      // load on this device falls through to the original flow.
+      const lcEmail = email.toLowerCase()
+      const matchesEmail = <T extends { email: string; alternate_emails?: string[] | null }>(u: T) =>
+        u.email.toLowerCase() === lcEmail ||
+        (u.alternate_emails || []).some(a => (a || '').toLowerCase() === lcEmail)
+      const cached = readBootCache(authUid, cachedBrand)
+      const cachedUser = cached?.users.find(matchesEmail)
+      if (cached && cachedUser && (cachedUser.active || cachedUser.role === 'pending')) {
+        setUsers(cached.users)
+        setStoresState(cached.stores)
+        setTrunkShowStoresState(cached.trunkShowStores)
+        setEventsState(cached.events)
+        setShipments(cached.shipments)
+        setUserState(cachedUser)
+        setLoading(false)
+        // We intentionally do NOT short-circuit here — fall through to
+        // the live fetch so the user sees fresh data within a second
+        // or two. The brand/theme/impersonation resolution below also
+        // runs against the fresh user record (the cached row may be
+        // out of date on things like marketing_access flags).
+      }
 
       // First reload uses the cached brand so we get something on screen
       // fast. As soon as we have the user record we re-check against
@@ -203,11 +255,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // Case-insensitive primary-email match + alternate_emails match.
       // Google normalizes JWT emails to lowercase; existing user rows
       // may have mixed-case primary emails or list this email as an
-      // alternate (e.g. work + personal alias).
-      const lcEmail = email.toLowerCase()
-      const matchesEmail = (u: typeof loadedUsers[number]) =>
-        u.email.toLowerCase() === lcEmail ||
-        (u.alternate_emails || []).some(a => (a || '').toLowerCase() === lcEmail)
+      // alternate (e.g. work + personal alias). matchesEmail is defined
+      // earlier (above the cache-hit block) and reused here.
       let userData = loadedUsers.find(matchesEmail)
 
       // First-time Google sign-in (no public.users row yet) — self-provision
@@ -314,13 +363,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!mounted) return
-      if (!session?.user?.email) { setLoading(false); return }
-      handleSession(session.user.email)
+      if (!session?.user?.email || !session?.user?.id) { setLoading(false); return }
+      handleSession(session.user.email, session.user.id)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return
       if (event === 'SIGNED_OUT') {
+        // Drop this user's cached boot snapshot so a different user
+        // signing in on the same browser can't briefly read it. The
+        // cache key check already filters by authUid, but clearing on
+        // sign-out keeps disk usage low and removes any lingering
+        // sensitive data.
+        if (authUidRef.current) clearBootCacheFor(authUidRef.current)
+        authUidRef.current = null
         initialized = false
         setUserState(null)
         setImpersonationActor(null)
@@ -332,8 +388,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setLoading(false)
         return
       }
-      if (event === 'SIGNED_IN' && session?.user?.email) {
-        handleSession(session.user.email)
+      if (event === 'SIGNED_IN' && session?.user?.email && session?.user?.id) {
+        handleSession(session.user.email, session.user.id)
       }
     })
 
