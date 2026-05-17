@@ -15,6 +15,7 @@ import { useParams } from 'next/navigation'
 import { QRCodeSVG } from 'qrcode.react'
 import { supabase } from '@/lib/supabase'
 import { makeSquareLogoDataUrl } from '@/lib/qr/squareLogo'
+import { publicLogoUrl } from '@/lib/storeLogos/url'
 
 interface BookingToken {
   id: string
@@ -100,7 +101,7 @@ export default function TrunkShowQrPackPage() {
         if (storeRel) {
           try {
             const logo = await makeSquareLogoDataUrl({
-              logoUrl: storeRel.store_image_url || null,
+              logoUrl: publicLogoUrl(storeRel.store_image_url),
               storeName: storeRel.name || 'Store',
               color: storeRel.color_primary || '#1D6B44',
               size: 256,
@@ -177,7 +178,7 @@ export default function TrunkShowQrPackPage() {
                   {/* Branded header */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14, alignSelf: 'stretch' }}>
                     {show.store?.store_image_url ? (
-                      <img src={show.store.store_image_url} alt=""
+                      <img src={publicLogoUrl(show.store.store_image_url) ?? undefined} alt=""
                         style={{ height: 56, maxWidth: 140, objectFit: 'contain', background: '#fff' }} />
                     ) : (
                       <div style={{

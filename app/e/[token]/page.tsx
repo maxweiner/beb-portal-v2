@@ -26,6 +26,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { initials } from '@/lib/initials'
 import AutoRefresh from './AutoRefresh'
 import EventPickerPills from './EventPickerPills'
+import { publicLogoUrl } from '@/lib/storeLogos/url'
 
 export const dynamic = 'force-dynamic'
 
@@ -540,10 +541,12 @@ export default async function Page({
           boxShadow: '0 4px 12px rgba(30,58,138,.18)',
           display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap',
         }}>
-          {/* Logo: store_image_url is a base64 data URL when present;
-              fall back to a monogram disc with the store initials. */}
+          {/* Logo: store_image_url is the active default — either a
+              legacy base64 data URL or a Storage path. publicLogoUrl()
+              disambiguates. Falls back to a monogram disc with the
+              store initials. */}
           {store?.store_image_url
-            ? <img src={store.store_image_url} alt={storeName}
+            ? <img src={publicLogoUrl(store.store_image_url) ?? undefined} alt={storeName}
                 style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover',
                   background: '#fff', boxShadow: '0 2px 6px rgba(0,0,0,.15)', flexShrink: 0 }} />
             : <div style={{

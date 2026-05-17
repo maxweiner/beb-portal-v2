@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import SmsConsentCheckbox from '@/components/ui/SmsConsentCheckbox'
+import { publicLogoUrl } from '@/lib/storeLogos/url'
 
 interface ShowInfo {
   id: string
@@ -115,7 +116,7 @@ export default function TrunkShowBookPage() {
         <header className="px-5 pt-4 pb-3 bg-white flex items-center gap-3 max-w-md mx-auto"
           style={{ borderTop: `4px solid ${primary}`, paddingTop: 'max(env(safe-area-inset-top), 16px)' }}>
           {show?.store?.store_image_url ? (
-            <img src={show.store.store_image_url} alt={`${show.store.name} logo`}
+            <img src={publicLogoUrl(show.store.store_image_url) ?? undefined} alt={`${show.store.name} logo`}
               className="h-10 w-auto max-w-[6rem] rounded-lg object-contain bg-white" />
           ) : (
             <div className="h-10 w-10 rounded-lg flex items-center justify-center"
@@ -168,7 +169,7 @@ export default function TrunkShowBookPage() {
       <header className="px-5 pt-4 pb-3 bg-white flex items-center gap-3 max-w-md mx-auto"
         style={{ borderTop: `4px solid ${primary}`, paddingTop: 'max(env(safe-area-inset-top), 16px)' }}>
         {show?.store?.store_image_url ? (
-          <img src={show.store.store_image_url} alt={`${show.store.name} logo`}
+          <img src={publicLogoUrl(show.store.store_image_url) ?? undefined} alt={`${show.store.name} logo`}
             className="h-10 w-auto max-w-[6rem] rounded-lg object-contain bg-white" />
         ) : (
           <div className="h-10 w-10 rounded-lg flex items-center justify-center"
