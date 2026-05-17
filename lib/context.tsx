@@ -109,9 +109,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           // Trunk-show client list — not brand-scoped (we visit
           // these jewelers regardless of buying-brand context).
           supabase.from('trunk_show_stores').select('*').order('name'),
+          // buyer_entries(*) was joined here historically but nothing in
+          // the global events array reads ev.buyer_entries — eventSpend()
+          // and friends roll up from ev.days (event_days), and the only
+          // consumer that needs full buyer entries (lib/reports/eventRecap.ts)
+          // does its own per-event fetch. The join was the dominant cost
+          // of the boot splash, so it's been dropped. If a future caller
+          // needs buyer entries for an event, fetch them lazily on demand.
           supabase
             .from('events')
-            .select('*, days:event_days(*), buyer_entries(*)')
+            .select('*, days:event_days(*)')
             .eq('brand', currentBrand)
             .order('start_date', { ascending: false }),
           supabase
