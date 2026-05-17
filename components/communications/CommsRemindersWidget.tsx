@@ -15,6 +15,13 @@
 //   filter is here as defense-in-depth)
 // - due_date <= today + 7 days  (only stuff coming up in the
 //   next week, plus anything overdue but still actionable)
+// - Travel-titled tasks (Flight / Hotel / Car booked) are dropped
+//   from the widget for EVERY viewer, including the rep themselves.
+//   Trunk reps manage their own travel — the system shouldn't be
+//   prompting them about it. If a rep wants to track travel they
+//   can put it in Travel Share manually as a personal item, but
+//   that's opt-in; no dashboard notification nudges them.
+//   See isTravelTitle() + the filter just after the fetch.
 //
 // Layout: collapsible panel anchored to the top of the dashboard.
 // Header is always visible with a 🔔 badge showing the count.
@@ -39,6 +46,16 @@ interface Row {
   linked_action_type: CommunicationLinkedAction
   linked_template_id: string | null
   store_name: string | null
+}
+
+/** Returns true when the task title is travel-flavored: the rep's
+ *  flight/hotel/car booking step. These are dropped from the
+ *  widget for every viewer (including the rep themselves) — trunk
+ *  reps manage their own travel; the system shouldn't be prompting
+ *  them about it. If a rep wants to track their travel they can
+ *  put it in Travel Share manually as a personal item. */
+function isTravelTitle(title: string): boolean {
+  return /\b(flight|hotel|car)\b/i.test(title)
 }
 
 const URGENT_DAYS = 7
@@ -93,7 +110,19 @@ export default function CommsRemindersWidget({ setNav }: Props) {
         linked_template_id: r.linked_template_id,
         store_name: extractStoreName(r),
       })) as Row[]
-      setRows(mapped)
+      // Drop travel-titled tasks (Flight / Hotel / Car booked) for
+      // every viewer — including the assigned rep themselves. Trunk
+      // reps manage their own travel; the system shouldn't be
+      // prompting them about it on the dashboard. Reps who want to
+      // track travel can put it in Travel Share manually as a
+      // personal item (opt-in, no nudge).
+      //
+      // Non-travel checklist tasks (Confirmation Letter, postcard,
+      // marketing approvals, training, etc.) stay visible to every
+      // viewer who passes the role gate above — they're coordination
+      // tasks, not personal travel.
+      const filtered = mapped.filter(r => !isTravelTitle(r.title))
+      setRows(filtered)
       setLoading(false)
     })()
     return () => { cancelled = true }
