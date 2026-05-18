@@ -451,8 +451,8 @@ export default function Settings() {
       {/* Active brand — synced across devices */}
       {user?.liberty_access && <ActiveBrandNote />}
 
-      {/* Mobile center button — visible to everyone since it's a per-user UI pref */}
-      <CenterButtonSetting />
+      {/* Mobile center button — hidden for sales reps, who are locked to Travel Share. */}
+      {user?.role !== 'sales_rep' && <CenterButtonSetting />}
 
       {/* 🧭 Sidebar Items — per-user hide/show, configurable per
           (surface, brand) combo. Visible to everyone since it's a
@@ -460,7 +460,9 @@ export default function Settings() {
       <CollapsibleCard
         storageKey="settings-sidebar-visibility"
         title="🧭 Sidebar Items"
-        subtitle="Hide modules you don't use. Configurable separately for Desktop / Mobile and BEB / Liberty. Dashboard is always visible."
+        subtitle={user?.liberty_access
+          ? "Hide modules you don't use. Configurable separately for Desktop / Mobile and BEB / Liberty. Dashboard is always visible."
+          : "Hide modules you don't use. Configurable separately for Desktop / Mobile. Dashboard is always visible."}
       >
         <SidebarVisibilityPanel />
       </CollapsibleCard>

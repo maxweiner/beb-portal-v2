@@ -124,9 +124,16 @@ export default function SidebarVisibilityPanel() {
   const roleModules = useRoleModules()
   const modulesLoaded = roleModules.status === 'ready'
   const grantedModules = roleModules.status === 'ready' ? roleModules.modules : new Set<string>()
+  const hasLibertyAccess = user?.liberty_access === true
 
   const [surface, setSurface] = useState<Surface>('desktop')
   const [brand, setBrand]     = useState<Brand>('beb')
+
+  // Users without liberty_access only see BEB — the brand picker is
+  // hidden and the active brand is force-locked to BEB.
+  useEffect(() => {
+    if (!hasLibertyAccess && brand !== 'beb') setBrand('beb')
+  }, [hasLibertyAccess, brand])
 
   // Hidden set for the active (surface, brand) combo — re-derived
   // whenever the toggle changes or the user object updates.
@@ -212,15 +219,17 @@ export default function SidebarVisibilityPanel() {
           value={surface}
           onChange={v => setSurface(v as Surface)}
         />
-        <ChipStrip
-          label="Brand"
-          options={[
-            { id: 'beb',     label: 'BEB' },
-            { id: 'liberty', label: 'Liberty' },
-          ]}
-          value={brand}
-          onChange={v => setBrand(v as Brand)}
-        />
+        {hasLibertyAccess && (
+          <ChipStrip
+            label="Brand"
+            options={[
+              { id: 'beb',     label: 'BEB' },
+              { id: 'liberty', label: 'Liberty' },
+            ]}
+            value={brand}
+            onChange={v => setBrand(v as Brand)}
+          />
+        )}
       </div>
 
       <div style={{
@@ -229,7 +238,8 @@ export default function SidebarVisibilityPanel() {
         background: '#fff', borderRadius: 8, border: '1px solid var(--pearl)',
       }}>
         <div style={{ fontSize: 12, color: 'var(--ash)' }}>
-          Editing: <strong>{surface === 'desktop' ? '🖥 Desktop' : '📱 Mobile'}</strong> · <strong>{brand === 'beb' ? 'BEB' : 'Liberty'}</strong>
+          Editing: <strong>{surface === 'desktop' ? '🖥 Desktop' : '📱 Mobile'}</strong>
+          {hasLibertyAccess && <> · <strong>{brand === 'beb' ? 'BEB' : 'Liberty'}</strong></>}
           {' · '}
           <span>{totalCount - hiddenCount} of {totalCount} shown</span>
           {hiddenCount > 0 && <span style={{ color: 'var(--mist)' }}> · {hiddenCount} hidden</span>}
@@ -259,7 +269,12 @@ export default function SidebarVisibilityPanel() {
       )}
 
       <p style={{ fontSize: 12, color: 'var(--mist)', marginBottom: 14, lineHeight: 1.5 }}>
-        Pick which modules show in your <strong>{surface}</strong> sidebar for the <strong>{brand === 'beb' ? 'BEB' : 'Liberty'}</strong> brand. Hiding only affects what you see — your underlying access is unchanged. The other surface/brand combos are independent — switch the chips above to configure them.
+        Pick which modules show in your <strong>{surface}</strong> sidebar
+        {hasLibertyAccess && <> for the <strong>{brand === 'beb' ? 'BEB' : 'Liberty'}</strong> brand</>}.
+        Hiding only affects what you see — your underlying access is unchanged.
+        {hasLibertyAccess
+          ? ' The other surface/brand combos are independent — switch the chips above to configure them.'
+          : ' Desktop and Mobile are independent — switch the chip above to configure the other.'}
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -323,7 +338,10 @@ export default function SidebarVisibilityPanel() {
       </div>
 
       <p style={{ fontSize: 11, color: 'var(--mist)', marginTop: 14, fontStyle: 'italic', lineHeight: 1.5 }}>
-        Saved changes take effect on the next page load (or reload this page). Each combo of (surface, brand) is independent — useful when, say, you want a slimmer mobile menu while keeping the full desktop sidebar.
+        Saved changes take effect on the next page load (or reload this page).
+        {hasLibertyAccess
+          ? ' Each combo of (surface, brand) is independent — useful when, say, you want a slimmer mobile menu while keeping the full desktop sidebar.'
+          : ' Desktop and Mobile are independent — useful when, say, you want a slimmer mobile menu while keeping the full desktop sidebar.'}
       </p>
     </div>
   )

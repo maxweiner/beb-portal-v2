@@ -11,6 +11,7 @@
 // event whose running window contains today.
 
 import { useEffect, useState } from 'react'
+import { useApp } from '@/lib/context'
 import type { Event } from '@/types'
 
 export type CenterMode = 'travel' | 'scan'
@@ -50,6 +51,7 @@ function isOnRunningEventDay(events: Event[], userId?: string): boolean {
 }
 
 export function useCenterButtonMode(events: Event[], userId?: string): CenterMode {
+  const { user } = useApp()
   const [override, setOverrideState] = useState<CenterModeOverride>('auto')
   useEffect(() => {
     setOverrideState(getCenterModeOverride())
@@ -61,6 +63,11 @@ export function useCenterButtonMode(events: Event[], userId?: string): CenterMod
       window.removeEventListener('storage', onChange)
     }
   }, [])
+
+  // Sales reps are locked to Travel Share — Scan is irrelevant to
+  // their workflow and the Settings card that picks the mode is
+  // hidden for them.
+  if (user?.role === 'sales_rep') return 'travel'
 
   if (override === 'always-travel') return 'travel'
   if (override === 'always-scan') return 'scan'
