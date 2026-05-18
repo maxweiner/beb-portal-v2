@@ -33,6 +33,7 @@ function getBuyerEventsThisYear(buyerId: string, allEvents: any[]): any[] {
 export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void }) {
   const { user, users, stores, events, year, setYear } = useApp()
   const [expandedBuyerId, setExpandedBuyerId] = useState<string | null>(null)
+  const [storesExpanded, setStoresExpanded] = useState(false)
 
   const YEARS = Array.from(
     { length: new Date().getFullYear() - 2017 },
@@ -486,9 +487,16 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
         {/* Store performance — partners only. */}
         {user?.is_partner && (
         <div className="lg:col-span-2 rounded-xl overflow-hidden" style={{ background: 'var(--card-bg)', border: '1px solid var(--pearl)', boxShadow: '0 2px 10px rgba(0,0,0,.04)' }}>
-          <div style={{ background: 'var(--green-pale)', padding: '12px 20px', borderBottom: '1px solid var(--green3)', fontWeight: 900, fontSize: 13, color: 'var(--green-dark)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
-            Store Performance — {year}
-          </div>
+          <button
+            type="button"
+            onClick={() => setStoresExpanded(v => !v)}
+            className="w-full flex items-center justify-between text-left"
+            style={{ background: 'var(--green-pale)', padding: '12px 20px', borderBottom: '1px solid var(--green3)', fontWeight: 900, fontSize: 13, color: 'var(--green-dark)', textTransform: 'uppercase', letterSpacing: '.04em', cursor: 'pointer' }}
+            aria-expanded={storesExpanded}
+          >
+            <span>Store Performance — {year}</span>
+            <span aria-hidden style={{ fontSize: 11, transform: storesExpanded ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>▼</span>
+          </button>
           {storeRows.length === 0 ? (
             <div className="text-center py-10" style={{ color: 'var(--mist)' }}>No data for {year}</div>
           ) : (
@@ -502,7 +510,7 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
                   </tr>
                 </thead>
                 <tbody>
-                  {storeRows.map(({ store, evs, purchases, customers, dollars, cr }) => (
+                  {(storesExpanded ? storeRows : storeRows.slice(0, 5)).map(({ store, evs, purchases, customers, dollars, cr }) => (
                     <tr key={store.id} style={{ borderBottom: '1px solid var(--cream2)' }}>
                       <td className="px-5 py-3 font-semibold" style={{ color: 'var(--ink)' }}>{store.name}</td>
                       <td className="px-5 py-3" style={{ color: 'var(--mist)' }}>{evs}</td>
@@ -520,6 +528,16 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
                   ))}
                 </tbody>
               </table>
+              {storeRows.length > 5 && (
+                <button
+                  type="button"
+                  onClick={() => setStoresExpanded(v => !v)}
+                  className="w-full text-xs font-bold uppercase tracking-wide py-2.5"
+                  style={{ borderTop: '1px solid var(--cream2)', color: 'var(--green-dark)', background: 'var(--cream2)', cursor: 'pointer' }}
+                >
+                  {storesExpanded ? 'Show less ▲' : `Show all ${storeRows.length} stores ▼`}
+                </button>
+              )}
             </div>
           )}
         </div>
