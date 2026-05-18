@@ -112,7 +112,7 @@ export async function sendTelnyxSms(opts: {
 }): Promise<SmsSendResult> {
   const cfg = opts.cfg || (await loadTelnyxConfig(opts.sb))
   if (!cfg.apiKey || !cfg.fromNumber) {
-    return { ok: false, error: 'Telnyx not configured in Admin → SMS Settings' }
+    return { ok: false, error: 'Telnyx not configured (set credentials in Settings → SMS Providers)' }
   }
   const e164 = toE164(opts.to)
   if (!e164) return { ok: false, error: 'invalid phone' }

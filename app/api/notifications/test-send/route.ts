@@ -17,7 +17,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email'
 import { sendSMS } from '@/lib/sms'
-import { loadTwilioConfig } from '@/lib/sms/twilio'
+import { isSmsConfigured } from '@/lib/sms/dispatch'
 import { buildMergeVars, substitute, type MergeVarsContext } from '@/lib/notifications/mergeVars'
 import { checkRateLimit } from '@/lib/notifications/rateLimit'
 import { blockIfImpersonating } from '@/lib/impersonation/server'
@@ -136,11 +136,13 @@ export async function POST(req: Request) {
     if (!gate.allowed) {
       results.push({ channel: 'sms', ok: false, skipped: 'rate_limited' })
     } else {
-      // Pre-flight: sendSMS silently no-ops if Twilio creds missing — check
-      // directly so we can report it instead of pretending we sent.
-      const cfg = await loadTwilioConfig(sb)
-      if (!cfg.accountSid || !cfg.authToken || !cfg.fromNumber) {
-        results.push({ channel: 'sms', ok: false, error: 'Twilio not configured (set credentials in Settings → SMS Providers)' })
+      // Pre-flight: sendSMS silently no-ops if the active provider's
+      // creds are missing — check directly so we can report it instead
+      // of pretending we sent. Test sends route through the 'internal'
+      // slot like all admin tooling.
+      const ready = await isSmsConfigured(sb, 'internal')
+      if (!ready.ok) {
+        results.push({ channel: 'sms', ok: false, error: ready.error })
       } else {
         try {
           const body = '[TEST] ' + substitute(tpl.sms_body || '(no body)', vars)

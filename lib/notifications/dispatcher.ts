@@ -18,7 +18,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email'
 import { sendSMS } from '@/lib/sms'
-import { loadTwilioConfig } from '@/lib/sms/twilio'
+import { isSmsConfigured } from '@/lib/sms/dispatch'
 import { buildMergeVars, substitute, type MergeVarsContext } from './mergeVars'
 import { inQuietHours, nextQuietHoursEnd, type QuietHoursWindow } from './quietHours'
 import { checkRateLimit, type SendChannel } from './rateLimit'
@@ -199,12 +199,13 @@ export async function dispatchOne(
       if (!gate.allowed) {
         smsOutcome = 'rate_limited'
       } else {
-        // Pre-flight check for Twilio config so a silent no-op doesn't get
-        // marked as sent.
-        const cfg = await loadTwilioConfig(sb)
-        if (!cfg.accountSid || !cfg.authToken || !cfg.fromNumber) {
+        // Pre-flight check for the active provider so a silent no-op
+        // doesn't get marked as sent. Scheduled notifications route
+        // through the 'internal' slot.
+        const ready = await isSmsConfigured(sb, 'internal')
+        if (!ready.ok) {
           smsOutcome = 'failed'
-          errors.push('sms: Twilio not configured (set credentials in Settings → SMS Providers)')
+          errors.push(`sms: ${ready.error}`)
         } else {
           try {
             const body = substitute(tpl.sms_body || '', mergeData)
