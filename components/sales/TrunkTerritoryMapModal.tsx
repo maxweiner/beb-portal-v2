@@ -13,6 +13,7 @@
 //    just get no star, which is fine)
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { US_STATE_PATHS, US_MAP_VIEWBOX } from '@/lib/sales/usStatesSvg'
 import { US_STATES } from '@/lib/sales/territories'
 import { buildRepColorMap, type RepLike } from '@/lib/sales/repColors'
@@ -110,6 +111,10 @@ export default function TrunkTerritoryMapModal({ rows, reps, onClose }: Props) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  // Portaled to body so the `body > *:not(.ttmm-overlay)` print rule isolates it.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+
   async function copyStateList(rep: RepLike, states: string[]) {
     const code = (s: string) => US_STATES.find(x => x.code === s)?.name || s
     const csv = states.map(code).join(', ')
@@ -122,7 +127,9 @@ export default function TrunkTerritoryMapModal({ rows, reps, onClose }: Props) {
 
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
 
-  return (
+  if (!mounted) return null
+
+  return createPortal(
     <div
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
       className="ttmm-overlay"
@@ -253,7 +260,8 @@ export default function TrunkTerritoryMapModal({ rows, reps, onClose }: Props) {
           @page { margin: 12mm; }
         }
       `}</style>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
