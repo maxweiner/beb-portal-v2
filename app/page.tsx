@@ -89,7 +89,8 @@ const KNOWN_NAVS = new Set<NavPage>([
 ])
 
 export default function Home() {
-  const { user, loading, connectionError, reload } = useApp()
+  const { user, loading, connectionError, reload, theme } = useApp()
+  const isBench = theme === 'bench' || theme === 'liberty-bench'
   const [navKey, setNavKey] = useState(0)
   const [nav, rawSetNav] = useState<NavPage>('dashboard')
   const setNav = (n: NavPage) => { rawSetNav(n); setNavKey(k => k + 1) }
@@ -260,6 +261,57 @@ export default function Home() {
   ) : null
 
   if (loading) {
+    // Bench boot splash — V1 mark on a warm walnut wash, Fraunces
+    // wordmark, italic loading line. Replaces the gem-pulse loader
+    // when either Bench variant is active so the brand reads from
+    // the very first paint instead of generic emoji jewelry.
+    if (isBench) {
+      return (
+        <div className="flex items-center justify-center h-screen" style={{
+          background: 'radial-gradient(circle at 50% 30%, #5A3622 0%, #2A1810 70%, #1A0E08 100%)',
+        }} aria-label="Loading the Bench">
+          <div className="flex flex-col items-center" style={{ gap: 22 }}>
+            <div className="bench-mark-loader" style={{ width: 96, height: 96, borderRadius: 22, overflow: 'hidden' }}>
+              <svg viewBox="0 0 100 100" width="100%" height="100%" aria-hidden="true">
+                <defs>
+                  <radialGradient id="bench-splash-bg" cx="50%" cy="26%" r="80%">
+                    <stop offset="0" stopColor="#7A4A28"/>
+                    <stop offset="100%" stopColor="#1A0E08"/>
+                  </radialGradient>
+                  <linearGradient id="bench-splash-brass" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stopColor="#F0D58A"/>
+                    <stop offset="0.45" stopColor="#C9A55C"/>
+                    <stop offset="1" stopColor="#7A5A2C"/>
+                  </linearGradient>
+                </defs>
+                <rect width="100" height="100" rx="22" fill="url(#bench-splash-bg)"/>
+                <text x="50" y="72" textAnchor="middle" fontFamily="Fraunces, Georgia, serif" fontWeight="700" fontSize="68" fill="url(#bench-splash-brass)">B</text>
+                <line x1="22" y1="84" x2="78" y2="84" stroke="url(#bench-splash-brass)" strokeWidth="2" strokeLinecap="round" opacity="0.8"/>
+              </svg>
+            </div>
+            <div style={{
+              fontFamily: '"Fraunces", Georgia, serif',
+              fontSize: 30,
+              fontWeight: 600,
+              color: '#F1E7D2',
+              letterSpacing: '-0.02em',
+              lineHeight: 1,
+            }}>
+              <span style={{ fontStyle: 'italic', fontWeight: 400, opacity: 0.5, fontSize: '0.5em', marginRight: '0.15em', verticalAlign: '0.4em' }}>the</span>
+              Bench
+            </div>
+            <div style={{
+              fontFamily: '"Fraunces", Georgia, serif',
+              fontStyle: 'italic',
+              fontSize: 13,
+              color: 'rgba(241,231,210,0.55)',
+            }}>
+              Pulling the day's work…
+            </div>
+          </div>
+        </div>
+      )
+    }
     return (
       <div className="flex items-center justify-center h-screen" style={{ background: 'var(--page-bg)' }}>
         <div className="flex flex-col items-center gap-5">

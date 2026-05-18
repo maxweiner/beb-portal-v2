@@ -594,6 +594,17 @@ tr:last-child td { border-bottom: none; }
   animation: bebJewelPulse 1.4s ease-in-out infinite, bebJewelShine 2.8s ease-in-out infinite;
 }
 
+/* Bench boot splash — slow brass-glow pulse on the squircle mark.
+   Deliberately slower + subtler than the gem loader so it reads as
+   "considered workshop" rather than "look at me." */
+@keyframes benchMarkPulse {
+  0%, 100% { transform: scale(1);    box-shadow: 0 0 0 1px rgba(201,165,92,0.30), 0 12px 28px -8px rgba(0,0,0,0.55); }
+  50%      { transform: scale(1.03); box-shadow: 0 0 0 1px rgba(201,165,92,0.55), 0 0 28px rgba(201,165,92,0.28), 0 12px 28px -8px rgba(0,0,0,0.55); }
+}
+.bench-mark-loader {
+  animation: benchMarkPulse 2.4s ease-in-out infinite;
+}
+
 @keyframes beb-mic-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.55); }
   50%      { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
