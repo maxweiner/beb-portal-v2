@@ -315,11 +315,20 @@ export default function Home() {
     return (
       <div className="flex items-center justify-center h-screen" style={{ background: 'var(--page-bg)' }}>
         <div className="flex flex-col items-center gap-5">
-          <div style={{ display: 'flex', gap: 18 }} aria-label="Loading">
+          <div style={{ display: 'flex', gap: 22, alignItems: 'center' }} aria-label="Loading">
             <span className="beb-jewel-loader" style={{ animationDelay: '0s, 0s' }}>💎</span>
-            <span className="beb-jewel-loader" style={{ animationDelay: '.18s, .4s' }}>💍</span>
-            <span className="beb-jewel-loader" style={{ animationDelay: '.36s, .8s' }}>⌚</span>
-            <span className="beb-jewel-loader" style={{ animationDelay: '.54s, 1.2s' }}>👑</span>
+            <span className="beb-jewel-loader" style={{ animationDelay: '.23s, .47s' }}>📿</span>
+            <span className="beb-jewel-loader" style={{ animationDelay: '.46s, .94s', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ash)' }}>
+              <svg width="34" height="34" viewBox="0 0 100 100" aria-hidden="true">
+                <circle cx="50" cy="50" r="34" fill="none" stroke="currentColor" strokeWidth="6"/>
+                <circle cx="50" cy="50" r="20" fill="none" stroke="currentColor" strokeWidth="4"/>
+                <circle cx="50" cy="50" r="6" fill="currentColor"/>
+                <line x1="50" y1="14" x2="50" y2="6"  stroke="currentColor" strokeWidth="6" strokeLinecap="round"/>
+                <line x1="50" y1="86" x2="50" y2="94" stroke="currentColor" strokeWidth="6" strokeLinecap="round"/>
+                <line x1="14" y1="50" x2="6"  y2="50" stroke="currentColor" strokeWidth="6" strokeLinecap="round"/>
+                <line x1="86" y1="50" x2="94" y2="50" stroke="currentColor" strokeWidth="6" strokeLinecap="round"/>
+              </svg>
+            </span>
           </div>
           <div className="text-sm font-semibold" style={{ color: 'var(--mist)' }}>Loading your portal…</div>
         </div>
