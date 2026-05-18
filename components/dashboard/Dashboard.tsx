@@ -489,187 +489,201 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
         </div>
       )}
 
-      {/* Store Performance + Lead Sources. Store Performance is
-          partners-only (Max / Joe / Rich) — financial visibility
-          rule, not a role gate. Lead Sources stays for all
-          non-buyers. Grid layout collapses to 1-col when Store
-          Performance is hidden so Lead Sources doesn't sit in an
-          empty column. */}
+      {/* Row 1: Store Performance + Standings side-by-side, both
+          capped at ~8 rows of scroll. Row 2 below: Lead Sources as
+          a horizontal stacked-bar strip (full width). Store
+          Performance is partners-only (Max / Joe / Rich) — financial
+          visibility rule, not a role gate. Standings + Lead Sources
+          stay for all non-buyers. When Store Performance is hidden,
+          Standings spans the full row. */}
       {!isBuyer && (
-      <div className={user?.is_partner ? 'grid grid-cols-1 lg:grid-cols-3 gap-6' : 'grid grid-cols-1 gap-6'}>
-        {/* Store performance — partners only. */}
-        {user?.is_partner && (
-        <div className="lg:col-span-2 lg:self-start rounded-xl overflow-hidden" style={{ background: 'var(--card-bg)', border: '1px solid var(--pearl)', boxShadow: '0 2px 10px rgba(0,0,0,.04)' }}>
-          <div
-            className="w-full flex items-center justify-between"
-            style={{ background: 'var(--green-pale)', padding: '12px 20px', borderBottom: '1px solid var(--green3)', fontWeight: 900, fontSize: 13, color: 'var(--green-dark)', textTransform: 'uppercase', letterSpacing: '.04em' }}
-          >
-            <span>Store Performance — {year}</span>
-            {storeRows.length > 8 && (
-              <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.7 }}>{storeRows.length} stores · scroll</span>
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Store performance — partners only. */}
+          {user?.is_partner && (
+          <div className="lg:col-span-2 lg:self-start rounded-xl overflow-hidden" style={{ background: 'var(--card-bg)', border: '1px solid var(--pearl)', boxShadow: '0 2px 10px rgba(0,0,0,.04)' }}>
+            <div
+              className="w-full flex items-center justify-between"
+              style={{ background: 'var(--green-pale)', padding: '12px 20px', borderBottom: '1px solid var(--green3)', fontWeight: 900, fontSize: 13, color: 'var(--green-dark)', textTransform: 'uppercase', letterSpacing: '.04em' }}
+            >
+              <span>Store Performance — {year}</span>
+              {storeRows.length > 8 && (
+                <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.7 }}>{storeRows.length} stores · scroll</span>
+              )}
+            </div>
+            {storeRows.length === 0 ? (
+              <div className="text-center py-10" style={{ color: 'var(--mist)' }}>No data for {year}</div>
+            ) : (
+              <div style={{ maxHeight: 380, overflowY: 'auto', overflowX: 'auto' }}>
+                <table className="w-full text-sm">
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                    <tr style={{ borderBottom: '1px solid var(--cream2)', background: 'var(--cream2)' }}>
+                      {['Store', 'Events', 'Purchases', 'Close Rate', '💰 Amount Spent'].map(h => (
+                        <th key={h} className="text-left px-5 py-2.5 text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--mist)', background: 'var(--cream2)' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {storeRows.map(({ store, evs, purchases, customers, dollars, cr }) => (
+                      <tr key={store.id} style={{ borderBottom: '1px solid var(--cream2)' }}>
+                        <td className="px-5 py-3 font-semibold" style={{ color: 'var(--ink)' }}>{store.name}</td>
+                        <td className="px-5 py-3" style={{ color: 'var(--mist)' }}>{evs}</td>
+                        <td className="px-5 py-3 font-bold" style={{ color: 'var(--ink)' }}>{purchases.toLocaleString()}</td>
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-1.5 rounded-full overflow-hidden max-w-20" style={{ background: 'var(--cream2)' }}>
+                              <div className="h-full rounded-full" style={{ width: `${cr}%`, background: 'var(--green)' }} />
+                            </div>
+                            <span className="text-xs" style={{ color: 'var(--mist)' }}>{cr}%</span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3 font-bold" style={{ color: 'var(--green)' }}>{fmt(dollars)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
-          {storeRows.length === 0 ? (
-            <div className="text-center py-10" style={{ color: 'var(--mist)' }}>No data for {year}</div>
-          ) : (
-            // Fixed-height scroll viewport — shows ~8 rows worth
-            // before scrolling. The outer card uses `self-start` so
-            // it doesn't get stretched by the grid to match the
-            // taller Lead Sources sibling. Thead is sticky so column
-            // labels stay visible while scrolling.
-            <div style={{ maxHeight: 380, overflowY: 'auto', overflowX: 'auto' }}>
-              <table className="w-full text-sm">
-                <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
-                  <tr style={{ borderBottom: '1px solid var(--cream2)', background: 'var(--cream2)' }}>
-                    {['Store', 'Events', 'Purchases', 'Close Rate', '💰 Amount Spent'].map(h => (
-                      <th key={h} className="text-left px-5 py-2.5 text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--mist)', background: 'var(--cream2)' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {storeRows.map(({ store, evs, purchases, customers, dollars, cr }) => (
-                    <tr key={store.id} style={{ borderBottom: '1px solid var(--cream2)' }}>
-                      <td className="px-5 py-3 font-semibold" style={{ color: 'var(--ink)' }}>{store.name}</td>
-                      <td className="px-5 py-3" style={{ color: 'var(--mist)' }}>{evs}</td>
-                      <td className="px-5 py-3 font-bold" style={{ color: 'var(--ink)' }}>{purchases.toLocaleString()}</td>
-                      <td className="px-5 py-3">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-1.5 rounded-full overflow-hidden max-w-20" style={{ background: 'var(--cream2)' }}>
-                            <div className="h-full rounded-full" style={{ width: `${cr}%`, background: 'var(--green)' }} />
-                          </div>
-                          <span className="text-xs" style={{ color: 'var(--mist)' }}>{cr}%</span>
-                        </div>
-                      </td>
-                      <td className="px-5 py-3 font-bold" style={{ color: 'var(--green)' }}>{fmt(dollars)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
           )}
-        </div>
-        )}
 
-        {/* Lead sources */}
-        <div className="card">
-          <div className="font-black text-sm mb-4" style={{ color: 'var(--ink)' }}>Lead Sources — {year}</div>
-          <div className="space-y-3">
-            {sources.map(({ label, value, color }) => {
-              const pct = srcTotal > 0 ? Math.round(value / srcTotal * 100) : 0
-              return (
-                <div key={label}>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span style={{ color: 'var(--ash)' }}>{label}</span>
-                    <span className="font-bold" style={{ color: 'var(--ink)' }}>{pct}%</span>
-                  </div>
-                  <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--cream2)' }}>
-                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+          {/* Standings — own card, height-matched to Store Performance via the same 380px scroll viewport. */}
+          {buyers.length > 0 && (() => {
+            const standingsYear = String(new Date().getFullYear())
+            const currentYearEvents = events.filter(e => e.start_date?.startsWith(standingsYear))
+            const ranked = buyers.map(b => {
+              const eventDays = currentYearEvents.reduce((s, ev) =>
+                s + (isWorkerAssigned(ev, b.id) ? daysWorkedOnEvent(ev) : 0), 0)
+              const days = eventDays + (tradeShowDays.get(b.id) ?? 0)
+              return { ...b, days }
+            }).sort((a, b) => b.days - a.days)
+            const ineligible = ['joe', 'max', 'rich']
+            return (
+              <div className={`${user?.is_partner ? '' : 'lg:col-span-3'} lg:self-start rounded-xl overflow-hidden`} style={{ background: 'var(--card-bg)', border: '1px solid var(--pearl)', boxShadow: '0 2px 10px rgba(0,0,0,.04)' }}>
+                <div
+                  className="w-full flex items-center justify-between"
+                  style={{ background: 'var(--green-pale)', padding: '12px 20px', borderBottom: '1px solid var(--green3)', fontWeight: 900, fontSize: 13, color: 'var(--green-dark)', textTransform: 'uppercase', letterSpacing: '.04em' }}
+                >
+                  <span>🏆 {standingsYear} Standings</span>
+                  {ranked.length > 8 && (
+                    <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.7 }}>{ranked.length} buyers · scroll</span>
+                  )}
+                </div>
+                <div style={{ maxHeight: 380, overflowY: 'auto' }}>
+                  <div className="space-y-2 p-3">
+                    {(() => {
+                      let rank = 0; let lastDays = -1
+                      return ranked.map((b, i) => {
+                        if (b.days !== lastDays) { rank = i + 1; lastDays = b.days }
+                        const isIneligible = ineligible.some(n => b.name?.toLowerCase().includes(n))
+                        const tier = rank === 1 ? { label: 'Estate Elite', icon: '👑', color: '#B8860B', bg: 'rgba(184,134,11,.1)' }
+                          : rank === 2 ? { label: 'Platinum', icon: '💎', color: '#6B7FD4', bg: 'rgba(107,127,212,.1)' }
+                          : rank === 3 ? { label: 'Gold', icon: '🥇', color: '#C9A84C', bg: 'rgba(201,168,76,.1)' }
+                          : null
+                        const expanded = expandedBuyerId === b.id
+                        const buyerEvents = expanded ? getBuyerEventsThisYear(b.id, events) : []
+                        return (
+                          <div key={b.id}>
+                            <div
+                              onClick={() => setExpandedBuyerId(expanded ? null : b.id)}
+                              className="flex items-center justify-between text-sm"
+                              style={{
+                                padding: '4px 6px', borderRadius: 6,
+                                background: tier ? tier.bg : 'transparent',
+                                cursor: 'pointer',
+                              }}>
+                              <div className="flex items-center gap-2">
+                                <span aria-hidden style={{
+                                  width: 10, display: 'inline-block',
+                                  color: 'var(--mist)', fontSize: 10, lineHeight: 1,
+                                  transform: expanded ? 'rotate(90deg)' : 'none',
+                                  transition: 'transform .15s',
+                                }}>▸</span>
+                                <div style={{ width: 18, fontSize: 11, fontWeight: 900, color: tier ? tier.color : 'var(--mist)', textAlign: 'center' }}>
+                                  {rank}
+                                </div>
+                                {b.photo_url ? (
+                                  <img src={b.photo_url} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                                ) : (
+                                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black text-white"
+                                    style={{ background: tier ? tier.color : 'var(--green)', fontSize: 10 }}>
+                                    {b.name?.charAt(0)}
+                                  </div>
+                                )}
+                                <span style={{ color: 'var(--ash)', fontWeight: tier ? 700 : 400 }}>{b.name}</span>
+                                {tier && <span style={{ fontSize: 10, fontWeight: 700, color: tier.color }}>{tier.icon} {tier.label}</span>}
+                                {isIneligible && (
+                                  <span title="Not eligible for prize" style={{ fontSize: 10, color: 'var(--mist)', cursor: 'help' }}>*</span>
+                                )}
+                              </div>
+                              <span className="text-xs font-bold" style={{ color: tier ? tier.color : 'var(--mist)' }}>{b.days} days</span>
+                            </div>
+                            {expanded && (
+                              <div style={{
+                                margin: '4px 6px 8px 32px',
+                                background: 'var(--cream2)',
+                                border: '1px solid var(--pearl)',
+                                borderRadius: 6,
+                                padding: '10px 12px',
+                                animation: 'lbExpand .2s ease-out',
+                              }}>
+                                <style>{`@keyframes lbExpand { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+                                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', marginBottom: 6 }}>
+                                  {buyerEvents.length} event{buyerEvents.length === 1 ? '' : 's'}
+                                </div>
+                                {buyerEvents.length === 0 ? (
+                                  <div style={{ fontSize: 13, color: 'var(--mist)', fontStyle: 'italic' }}>No events yet this year</div>
+                                ) : (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                    {buyerEvents.map(ev => (
+                                      <div key={ev.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13 }}>
+                                        <span style={{ color: 'var(--ink)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                          {eventDisplayName(ev, stores)}
+                                        </span>
+                                        <span style={{ color: 'var(--mist)', flexShrink: 0 }}>{formatEventRange(ev.start_date)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })
+                    })()}
                   </div>
                 </div>
-              )
-            })}
-          </div>
-
-
-          {/* Leaderboard mini */}
-          {buyers.length > 0 && (
-            <div className="mt-6 pt-5" style={{ borderTop: '1px solid var(--cream2)' }}>
-              <div className="font-black text-sm mb-3" style={{ color: 'var(--ink)' }}>🏆 {new Date().getFullYear()} Standings</div>
-              <div className="space-y-2">
-                {(() => {
-                  const currentYear = String(new Date().getFullYear())
-                  const currentYearEvents = events.filter(e => e.start_date?.startsWith(currentYear))
-                  const ranked = buyers.map(b => {
-                    const eventDays = currentYearEvents.reduce((s, ev) => {
-                      const workedEvent = isWorkerAssigned(ev, b.id)
-                      return s + (workedEvent ? daysWorkedOnEvent(ev) : 0)
-                    }, 0)
-                    const days = eventDays + (tradeShowDays.get(b.id) ?? 0)
-                    return { ...b, days }
-                  }).sort((a, b) => b.days - a.days)
-
-                  const ineligible = ['joe', 'max', 'rich'].map(n => n.toLowerCase())
-                  let rank = 0; let lastDays = -1
-                  return ranked.map((b, i) => {
-                    if (b.days !== lastDays) { rank = i + 1; lastDays = b.days }
-                    const isIneligible = ineligible.some(n => b.name?.toLowerCase().includes(n))
-                    const tier = rank === 1 ? { label: 'Estate Elite', icon: '👑', color: '#B8860B', bg: 'rgba(184,134,11,.1)' }
-                      : rank === 2 ? { label: 'Platinum', icon: '💎', color: '#6B7FD4', bg: 'rgba(107,127,212,.1)' }
-                      : rank === 3 ? { label: 'Gold', icon: '🥇', color: '#C9A84C', bg: 'rgba(201,168,76,.1)' }
-                      : null
-                    const expanded = expandedBuyerId === b.id
-                    const buyerEvents = expanded ? getBuyerEventsThisYear(b.id, events) : []
-                    return (
-                      <div key={b.id}>
-                        <div
-                          onClick={() => setExpandedBuyerId(expanded ? null : b.id)}
-                          className="flex items-center justify-between text-sm"
-                          style={{
-                            padding: '4px 6px', borderRadius: 6,
-                            background: tier ? tier.bg : 'transparent',
-                            cursor: 'pointer',
-                          }}>
-                          <div className="flex items-center gap-2">
-                            <span aria-hidden style={{
-                              width: 10, display: 'inline-block',
-                              color: 'var(--mist)', fontSize: 10, lineHeight: 1,
-                              transform: expanded ? 'rotate(90deg)' : 'none',
-                              transition: 'transform .15s',
-                            }}>▸</span>
-                            <div style={{ width: 18, fontSize: 11, fontWeight: 900, color: tier ? tier.color : 'var(--mist)', textAlign: 'center' }}>
-                              {rank}
-                            </div>
-                            {b.photo_url ? (
-                              <img src={b.photo_url} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                            ) : (
-                              <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black text-white"
-                                style={{ background: tier ? tier.color : 'var(--green)', fontSize: 10 }}>
-                                {b.name?.charAt(0)}
-                              </div>
-                            )}
-                            <span style={{ color: 'var(--ash)', fontWeight: tier ? 700 : 400 }}>{b.name}</span>
-                            {tier && <span style={{ fontSize: 10, fontWeight: 700, color: tier.color }}>{tier.icon} {tier.label}</span>}
-                            {isIneligible && (
-                              <span title="Not eligible for prize" style={{ fontSize: 10, color: 'var(--mist)', cursor: 'help' }}>*</span>
-                            )}
-                          </div>
-                          <span className="text-xs font-bold" style={{ color: tier ? tier.color : 'var(--mist)' }}>{b.days} days</span>
-                        </div>
-                        {expanded && (
-                          <div style={{
-                            margin: '4px 6px 8px 32px',
-                            background: 'var(--cream2)',
-                            border: '1px solid var(--pearl)',
-                            borderRadius: 6,
-                            padding: '10px 12px',
-                            animation: 'lbExpand .2s ease-out',
-                          }}>
-                            <style>{`@keyframes lbExpand { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }`}</style>
-                            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--mist)', marginBottom: 6 }}>
-                              {buyerEvents.length} event{buyerEvents.length === 1 ? '' : 's'}
-                            </div>
-                            {buyerEvents.length === 0 ? (
-                              <div style={{ fontSize: 13, color: 'var(--mist)', fontStyle: 'italic' }}>No events yet this year</div>
-                            ) : (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                {buyerEvents.map(ev => (
-                                  <div key={ev.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13 }}>
-                                    <span style={{ color: 'var(--ink)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                      {eventDisplayName(ev, stores)}
-                                    </span>
-                                    <span style={{ color: 'var(--mist)', flexShrink: 0 }}>{formatEventRange(ev.start_date)}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })
-                })()}
               </div>
-            </div>
+            )
+          })()}
+        </div>
+
+        {/* Lead Sources — horizontal stacked-bar strip below the row above. */}
+        <div className="card">
+          <div className="font-black text-sm mb-3" style={{ color: 'var(--ink)' }}>Lead Sources — {year}</div>
+          {srcTotal === 0 ? (
+            <div className="text-xs" style={{ color: 'var(--mist)' }}>No lead sources tracked for {year} yet.</div>
+          ) : (
+            <>
+              <div className="h-2.5 rounded-full overflow-hidden flex mb-3" style={{ background: 'var(--cream2)' }}>
+                {sources.map(({ label, value, color }) => {
+                  const pct = value / srcTotal * 100
+                  return pct > 0 ? <div key={label} title={`${label} ${Math.round(pct)}%`} style={{ width: `${pct}%`, background: color }} /> : null
+                })}
+              </div>
+              <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs">
+                {sources.map(({ label, value, color }) => {
+                  const pct = Math.round(value / srcTotal * 100)
+                  return (
+                    <div key={label} className="flex items-center gap-1.5">
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                      <span style={{ color: 'var(--ash)' }}>{label}</span>
+                      <span className="font-bold" style={{ color: 'var(--ink)' }}>{pct}%</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
           )}
         </div>
       </div>
