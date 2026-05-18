@@ -529,14 +529,16 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
                 </tbody>
               </table>
               {storeRows.length > 5 && (
-                <button
-                  type="button"
-                  onClick={() => setStoresExpanded(v => !v)}
-                  className="w-full text-xs font-bold uppercase tracking-wide py-2.5"
-                  style={{ borderTop: '1px solid var(--cream2)', color: 'var(--green-dark)', background: 'var(--cream2)', cursor: 'pointer' }}
-                >
-                  {storesExpanded ? 'Show less ▲' : `Show all ${storeRows.length} stores ▼`}
-                </button>
+                <div className="flex justify-center py-3" style={{ borderTop: '1px solid var(--pearl)', background: 'var(--card-bg)' }}>
+                  <button
+                    type="button"
+                    onClick={() => setStoresExpanded(v => !v)}
+                    className="text-xs font-bold uppercase tracking-wide px-4 py-2 rounded-md"
+                    style={{ color: 'var(--green-dark)', background: 'var(--green-pale)', border: '1px solid var(--green3)', cursor: 'pointer' }}
+                  >
+                    {storesExpanded ? `Show less ▲` : `Show all ${storeRows.length} stores ▼`}
+                  </button>
+                </div>
               )}
             </div>
           )}
