@@ -34,7 +34,6 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
   const { user, users, stores, events, year, setYear, theme } = useApp()
   const isBench = theme === 'bench' || theme === 'liberty-bench'
   const [expandedBuyerId, setExpandedBuyerId] = useState<string | null>(null)
-  const [storesExpanded, setStoresExpanded] = useState(false)
 
   const YEARS = Array.from(
     { length: new Date().getFullYear() - 2017 },
@@ -495,30 +494,32 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
         {/* Store performance — partners only. */}
         {user?.is_partner && (
         <div className="lg:col-span-2 rounded-xl overflow-hidden" style={{ background: 'var(--card-bg)', border: '1px solid var(--pearl)', boxShadow: '0 2px 10px rgba(0,0,0,.04)' }}>
-          <button
-            type="button"
-            onClick={() => setStoresExpanded(v => !v)}
-            className="w-full flex items-center justify-between text-left"
-            style={{ background: 'var(--green-pale)', padding: '12px 20px', borderBottom: '1px solid var(--green3)', fontWeight: 900, fontSize: 13, color: 'var(--green-dark)', textTransform: 'uppercase', letterSpacing: '.04em', cursor: 'pointer' }}
-            aria-expanded={storesExpanded}
+          <div
+            className="w-full flex items-center justify-between"
+            style={{ background: 'var(--green-pale)', padding: '12px 20px', borderBottom: '1px solid var(--green3)', fontWeight: 900, fontSize: 13, color: 'var(--green-dark)', textTransform: 'uppercase', letterSpacing: '.04em' }}
           >
             <span>Store Performance — {year}</span>
-            <span aria-hidden style={{ fontSize: 11, transform: storesExpanded ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>▼</span>
-          </button>
+            {storeRows.length > 8 && (
+              <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.7 }}>{storeRows.length} stores · scroll</span>
+            )}
+          </div>
           {storeRows.length === 0 ? (
             <div className="text-center py-10" style={{ color: 'var(--mist)' }}>No data for {year}</div>
           ) : (
-            <div className="overflow-x-auto">
+            // Fixed-height scroll viewport — shows ~8 rows worth
+            // before scrolling. Thead is sticky so headers stay
+            // visible as you scroll the body.
+            <div style={{ maxHeight: 380, overflowY: 'auto', overflowX: 'auto' }}>
               <table className="w-full text-sm">
-                <thead>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
                   <tr style={{ borderBottom: '1px solid var(--cream2)', background: 'var(--cream2)' }}>
                     {['Store', 'Events', 'Purchases', 'Close Rate', '💰 Amount Spent'].map(h => (
-                      <th key={h} className="text-left px-5 py-2.5 text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--mist)' }}>{h}</th>
+                      <th key={h} className="text-left px-5 py-2.5 text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--mist)', background: 'var(--cream2)' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {(storesExpanded ? storeRows : storeRows.slice(0, 5)).map(({ store, evs, purchases, customers, dollars, cr }) => (
+                  {storeRows.map(({ store, evs, purchases, customers, dollars, cr }) => (
                     <tr key={store.id} style={{ borderBottom: '1px solid var(--cream2)' }}>
                       <td className="px-5 py-3 font-semibold" style={{ color: 'var(--ink)' }}>{store.name}</td>
                       <td className="px-5 py-3" style={{ color: 'var(--mist)' }}>{evs}</td>
@@ -536,18 +537,6 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
                   ))}
                 </tbody>
               </table>
-              {storeRows.length > 5 && (
-                <div className="flex justify-center py-3" style={{ borderTop: '1px solid var(--pearl)', background: 'var(--card-bg)' }}>
-                  <button
-                    type="button"
-                    onClick={() => setStoresExpanded(v => !v)}
-                    className="text-xs font-bold uppercase tracking-wide px-4 py-2 rounded-md"
-                    style={{ color: 'var(--green-dark)', background: 'var(--green-pale)', border: '1px solid var(--green3)', cursor: 'pointer' }}
-                  >
-                    {storesExpanded ? `Show less ▲` : `Show all ${storeRows.length} stores ▼`}
-                  </button>
-                </div>
-              )}
             </div>
           )}
         </div>
