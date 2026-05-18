@@ -9,8 +9,8 @@
 // provider they used before the dispatcher existed.
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { sendTwilioSms, type SmsSendResult } from './twilio'
-import { sendTelnyxSms } from './telnyx'
+import { sendTwilioSms, loadTwilioConfig, type SmsSendResult } from './twilio'
+import { sendTelnyxSms, loadTelnyxConfig } from './telnyx'
 
 export type SmsProvider = 'twilio' | 'telnyx'
 export type SmsPurpose = 'internal' | 'marketing'
@@ -56,6 +56,33 @@ export interface DispatchSmsOpts {
 
 export interface DispatchSmsResult extends SmsSendResult {
   provider: SmsProvider
+}
+
+/**
+ * Pre-flight check: is the configured provider for `purpose` ready to
+ * send? Use this before calling sendSMS in spots that need to
+ * distinguish "sent" from "silently no-op'd because creds were
+ * missing" — e.g. the test-send endpoint and the scheduled
+ * notification dispatcher.
+ */
+export async function isSmsConfigured(
+  sb: SupabaseClient,
+  purpose: SmsPurpose = 'internal',
+): Promise<{ ok: boolean; provider: SmsProvider; error?: string }> {
+  const config = await loadSmsProviderConfig(sb).catch(() => DEFAULT_PROVIDER_CONFIG)
+  const provider = config[purpose]
+  if (provider === 'telnyx') {
+    const cfg = await loadTelnyxConfig(sb)
+    if (!cfg.apiKey || !cfg.fromNumber) {
+      return { ok: false, provider, error: 'Telnyx not configured (set credentials in Settings → SMS Providers)' }
+    }
+    return { ok: true, provider }
+  }
+  const cfg = await loadTwilioConfig(sb)
+  if (!cfg.accountSid || !cfg.authToken || !cfg.fromNumber) {
+    return { ok: false, provider, error: 'Twilio not configured (set credentials in Settings → SMS Providers)' }
+  }
+  return { ok: true, provider }
 }
 
 export async function dispatchSms(opts: DispatchSmsOpts): Promise<DispatchSmsResult> {
