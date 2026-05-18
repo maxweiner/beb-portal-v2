@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useApp } from '@/lib/context'
 import type { NavPage } from '@/app/page'
 import { leaderboardBuyers } from '@/lib/leaderboard'
+import { useTradeShowDays } from '@/lib/useTradeShowDays'
 import { eventStaffing } from '@/lib/eventStaffing'
 import { eventDisplayName } from '@/lib/eventName'
 import { fmtMoney } from '@/lib/format'
@@ -146,6 +147,10 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
   // Roster = active buyers assigned to at least one current-year event in
   // the active brand. Brand-scoping happens upstream via context.events.
   const buyers = leaderboardBuyers(users, events)
+  // Map of buyer.id → completed-trade-show days for this year. Added
+  // to the per-buyer day total at every standings render site so
+  // trade-show attendance counts the same as buying-event days.
+  const tradeShowDays = useTradeShowDays(new Date().getFullYear())
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
@@ -237,9 +242,10 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
               const currentYear = String(new Date().getFullYear())
               const currentYearEvents = events.filter(e => e.start_date?.startsWith(currentYear))
               const ranked = buyers.map(b => {
-                const days = currentYearEvents.reduce((s, ev) => {
+                const eventDays = currentYearEvents.reduce((s, ev) => {
                   return s + (isWorkerAssigned(ev, b.id) ? daysWorkedOnEvent(ev) : 0)
                 }, 0)
+                const days = eventDays + (tradeShowDays.get(b.id) ?? 0)
                 return { ...b, days }
               }).sort((a, b) => b.days - a.days)
               const ineligible = ['joe', 'max', 'rich'].map(n => n.toLowerCase())
@@ -572,10 +578,11 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
                   const currentYear = String(new Date().getFullYear())
                   const currentYearEvents = events.filter(e => e.start_date?.startsWith(currentYear))
                   const ranked = buyers.map(b => {
-                    const days = currentYearEvents.reduce((s, ev) => {
+                    const eventDays = currentYearEvents.reduce((s, ev) => {
                       const workedEvent = isWorkerAssigned(ev, b.id)
                       return s + (workedEvent ? daysWorkedOnEvent(ev) : 0)
                     }, 0)
+                    const days = eventDays + (tradeShowDays.get(b.id) ?? 0)
                     return { ...b, days }
                   }).sort((a, b) => b.days - a.days)
 
@@ -668,7 +675,7 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
 
       {/* Full Leaderboard — visible to everyone. Motivational
           podium with no $; fits both buyer and admin contexts. */}
-      <Leaderboard events={events} users={users} buyers={buyers} />
+      <Leaderboard events={events} users={users} buyers={buyers} tradeShowDays={tradeShowDays} />
     </div>
   )
 }
@@ -809,7 +816,7 @@ function BuyerWeekCard({
 }
 
 /* ── LEADERBOARD ── */
-function Leaderboard({ events, users, buyers }: { events: any[]; users: any[]; buyers: any[] }) {
+function Leaderboard({ events, users, buyers, tradeShowDays }: { events: any[]; users: any[]; buyers: any[]; tradeShowDays: Map<string, number> }) {
   const currentYear = String(new Date().getFullYear())
   const currentYearEvents = events.filter(e => e.start_date?.startsWith(currentYear))
   const ineligible = ['joe', 'max', 'rich'].map(n => n.toLowerCase())
@@ -827,10 +834,11 @@ function Leaderboard({ events, users, buyers }: { events: any[]; users: any[]; b
   ]
 
   const ranked = buyers.map(b => {
-    const days = currentYearEvents.reduce((s, ev) => {
+    const eventDays = currentYearEvents.reduce((s, ev) => {
       const workedEvent = isWorkerAssigned(ev, b.id)
       return s + (workedEvent ? daysWorkedOnEvent(ev) : 0)
     }, 0)
+    const days = eventDays + (tradeShowDays.get(b.id) ?? 0)
     const isIneligible = ineligible.some(n => b.name?.toLowerCase().includes(n))
     return { ...b, days, isIneligible }
   }).sort((a, b) => b.days - a.days)

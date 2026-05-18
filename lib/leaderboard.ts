@@ -47,3 +47,57 @@ export function leaderboardBuyers<T extends UserLite>(users: T[], events: EventL
   const eligible = eligibleBuyerIds(events, year)
   return users.filter(u => u.active && u.is_buyer !== false && eligible.has(u.id))
 }
+
+// ── Trade-show day credit ───────────────────────────────────────
+// Buyers earn standings days for every completed trade show they
+// were staffed on (trade_show_staff join). Each show contributes its
+// full inclusive date span (end - start + 1 days). Mirrors the
+// buying-event policy in daysWorkedOnEvent(): completed events
+// award their full span; in-progress / future shows don't count.
+
+interface TradeShowLite {
+  id: string
+  start_date: string
+  end_date: string
+}
+
+interface TradeShowStaffLite {
+  user_id: string
+  trade_show_id: string
+}
+
+/**
+ * Days credit per user from completed trade shows in `year`.
+ *
+ * "Completed" = end_date strictly before today's start-of-day.
+ * Year matching uses start_date (same convention as the buying-event
+ * filter in Dashboard.tsx, which scopes by `start_date.startsWith(year)`).
+ * A staffed user gets credit for the show's full inclusive span.
+ *
+ * Returns a Map so callers can do `(map.get(userId) ?? 0)` without
+ * worrying about missing entries.
+ */
+export function tradeShowDaysByBuyer(
+  staff: TradeShowStaffLite[],
+  shows: TradeShowLite[],
+  year: number,
+  now: Date = new Date(),
+): Map<string, number> {
+  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0)
+  const yearStr = String(year)
+  const dayMs = 1000 * 60 * 60 * 24
+  const byId = new Map(shows.map(s => [s.id, s]))
+  const out = new Map<string, number>()
+  for (const row of staff) {
+    const show = byId.get(row.trade_show_id)
+    if (!show?.start_date || !show?.end_date) continue
+    if (!show.start_date.startsWith(yearStr)) continue
+    const endStart = new Date(show.end_date + 'T00:00:00')
+    if (endStart >= todayStart) continue   // not yet completed
+    const startStart = new Date(show.start_date + 'T00:00:00')
+    const span = Math.round((endStart.getTime() - startStart.getTime()) / dayMs) + 1
+    if (span <= 0) continue
+    out.set(row.user_id, (out.get(row.user_id) ?? 0) + span)
+  }
+  return out
+}
