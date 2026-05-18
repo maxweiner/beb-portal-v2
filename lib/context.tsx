@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import type { User, Store, TrunkShowStore, Event, Shipment, Theme, Brand, AppState } from '@/types'
 import { readBootCache, writeBootCache, clearBootCacheFor } from '@/lib/bootCache'
 import { BENCH_FAVICON_DATA_URI, BENCH_FAVICON_LINK_ID } from '@/lib/themeFavicon'
+import { THEME_COLOR_MAP, THEME_COLOR_DEFAULT } from '@/lib/themeColor'
 
 export type DayEntryIntent = {
   eventId: string
@@ -599,6 +600,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } else if (existing) {
       existing.remove()
     }
+
+    // theme-color meta — keep the PWA window chrome / browser
+    // address-bar tint in sync with the active theme's sidebar-bg.
+    // Installed PWA windows may need a reload to pick this up
+    // (manifest theme_color is what's baked at install time), but
+    // browser tabs and freshly-opened PWA windows update live.
+    const tcColor = THEME_COLOR_MAP[themeClass] ?? THEME_COLOR_DEFAULT
+    let tcMeta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null
+    if (!tcMeta) {
+      tcMeta = document.createElement('meta')
+      tcMeta.name = 'theme-color'
+      document.head.appendChild(tcMeta)
+    }
+    tcMeta.content = tcColor
   }, [themeClass])
 
   const ctxValue = useMemo<AppContextType>(() => ({
