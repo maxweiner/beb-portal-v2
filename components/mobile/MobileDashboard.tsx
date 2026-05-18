@@ -5,6 +5,7 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { NavPage } from '@/app/page'
 import { leaderboardBuyers } from '@/lib/leaderboard'
+import { useTradeShowDays } from '@/lib/useTradeShowDays'
 import { eventStaffing } from '@/lib/eventStaffing'
 import { eventDisplayName } from '@/lib/eventName'
 import { fmtMoney } from '@/lib/format'
@@ -44,6 +45,10 @@ export default function MobileDashboard({ setNav }: Props) {
   // Roster = active buyers assigned to at least one current-year event in
   // the active brand. Brand-scoping happens upstream via context.events.
   const buyers = leaderboardBuyers(users, events)
+  // Completed-trade-show day credit per buyer for the current year.
+  // Added to both `myDays` and the ranked-list day totals so the
+  // mobile standings match the desktop figures.
+  const tradeShowDays = useTradeShowDays(Number(currentYear))
 
   /* ── Week calc ── */
   const { start: ws, end: we } = weekRange()
@@ -69,12 +74,14 @@ export default function MobileDashboard({ setNav }: Props) {
   /* ── Personal stats (for name-tap popup) ── */
   const myDays = yearEvents.reduce((s, ev) =>
     s + (isWorkerAssigned(ev, user?.id) ? daysWorkedOnEvent(ev) : 0), 0)
+    + (user?.id ? (tradeShowDays.get(user.id) ?? 0) : 0)
   const myEvents = yearEvents.filter(ev => isWorkerAssigned(ev, user?.id)).length
 
   let rank = 0; let lastDays = -1
   const ranked = buyers.map(b => {
-    const days = yearEvents.reduce((s, ev) =>
+    const eventDays = yearEvents.reduce((s, ev) =>
       s + (isWorkerAssigned(ev, b.id) ? daysWorkedOnEvent(ev) : 0), 0)
+    const days = eventDays + (tradeShowDays.get(b.id) ?? 0)
     return { ...b, days, isIneligible: INELIGIBLE.some(n => b.name?.toLowerCase().includes(n)) }
   }).sort((a, b) => b.days - a.days).map((b, i) => {
     if (b.days !== lastDays) { rank = i + 1; lastDays = b.days }
