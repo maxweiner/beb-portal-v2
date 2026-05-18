@@ -16,11 +16,33 @@ const nextConfig = {
     // archiver (and its lazystream sub-dep) ship a malformed
     // `exports` field that Webpack 5 chokes on with "Default
     // condition should be last one" during the prod build.
-    // Marking it server-external skips webpack bundling and loads
-    // it from node_modules at runtime — standard fix per
-    // https://github.com/vercel/next.js/issues/40647. Used by the
-    // Edge batch ZIP endpoints (/api/wholesale/edge/.../zip).
+    // serverComponentsExternalPackages was *supposed* to skip
+    // bundling and let the route handler require() it at runtime,
+    // but as of Next.js 14.2 the route-handler bundle still wraps
+    // the default import incorrectly — the prod build runs but the
+    // request crashes with `TypeError: (0, r.default) is not a
+    // function` at the archiver call site. We instead force the
+    // externalization at the webpack-config layer (see `webpack`
+    // below), which reliably emits `require('archiver')` so the
+    // CJS module.exports = fn factory is returned directly. Used
+    // by the Edge batch ZIP endpoints (/api/wholesale/edge/.../zip).
     serverComponentsExternalPackages: ['archiver'],
+  },
+  // Belt-and-suspenders externalization for archiver — see comment
+  // on serverComponentsExternalPackages above. Webpack-level
+  // externals are the canonical fix for CommonJS factory packages
+  // that webpack 5 mis-wraps under Next 14.
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      const existing = Array.isArray(config.externals) ? config.externals : (config.externals ? [config.externals] : [])
+      config.externals = [
+        ...existing,
+        // Tuple form: webpack emits `module.exports = require('archiver')`
+        // at the import site, fully bypassing the default-import wrapper.
+        { archiver: 'commonjs archiver' },
+      ]
+    }
+    return config
   },
 }
 
