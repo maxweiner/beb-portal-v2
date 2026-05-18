@@ -1,0 +1,18 @@
+/** Inline SVG favicon for the Bench theme — brass "B" on walnut.
+ *
+ *  Used by both:
+ *   • The boot script in app/layout.tsx (injected pre-hydration so a
+ *     cold reload paints the right tab icon without a BEB flash)
+ *   • The theme-sync effect in lib/context.tsx (added/removed when
+ *     the theme is changed at runtime)
+ *
+ *  Favicons can't pull from Google Fonts, so the SVG uses Georgia —
+ *  a system serif available on every platform — instead of Fraunces.
+ *  At 16×16 the bench-line under the B isn't legible, so this mark
+ *  drops it relative to the in-app sidebar version. */
+export const BENCH_FAVICON_DATA_URI =
+  "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%232A1810'/><text x='50' y='74' text-anchor='middle' font-family='Georgia,serif' font-weight='700' font-size='76' fill='%23C9A55C'>B</text></svg>"
+
+/** DOM id of the link element we inject + remove. Same id is used by
+ *  the boot script and the theme effect so they don't fight. */
+export const BENCH_FAVICON_LINK_ID = 'bench-favicon-override'

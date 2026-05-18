@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, useRef, useMemo, useCal
 import { supabase } from '@/lib/supabase'
 import type { User, Store, TrunkShowStore, Event, Shipment, Theme, Brand, AppState } from '@/types'
 import { readBootCache, writeBootCache, clearBootCacheFor } from '@/lib/bootCache'
+import { BENCH_FAVICON_DATA_URI, BENCH_FAVICON_LINK_ID } from '@/lib/themeFavicon'
 
 export type DayEntryIntent = {
   eventId: string
@@ -572,6 +573,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (c.startsWith('theme-')) root.classList.remove(c)
     })
     if (themeClass) root.classList.add(themeClass)
+
+    // Bench favicon: append our override <link rel="icon"> when the
+    // theme is active, remove it on any other theme. Browsers honor
+    // the last matching rel=icon, so adding the element (rather than
+    // mutating the originals) keeps Next's metadata.icons untouched.
+    const existing = document.getElementById(BENCH_FAVICON_LINK_ID) as HTMLLinkElement | null
+    if (themeClass === 'theme-liberty-bench') {
+      if (!existing) {
+        const link = document.createElement('link')
+        link.id = BENCH_FAVICON_LINK_ID
+        link.rel = 'icon'
+        link.type = 'image/svg+xml'
+        link.href = BENCH_FAVICON_DATA_URI
+        document.head.appendChild(link)
+      }
+    } else if (existing) {
+      existing.remove()
+    }
   }, [themeClass])
 
   const ctxValue = useMemo<AppContextType>(() => ({

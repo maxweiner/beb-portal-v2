@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { AppProvider } from '@/lib/context'
+import { BENCH_FAVICON_DATA_URI, BENCH_FAVICON_LINK_ID } from '@/lib/themeFavicon'
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -57,6 +58,19 @@ const THEME_BOOT_SCRIPT = `
       cls = (theme && theme !== 'original' && theme.indexOf('liberty') !== 0) ? ('theme-' + theme) : '';
     }
     if (cls) document.documentElement.classList.add(cls);
+    // Bench-theme favicon override. Appended *after* the default
+    // <link rel="icon"> tags Next.js rendered from metadata.icons —
+    // browsers use the last matching rel=icon, so this wins without
+    // us having to remove the originals. The runtime theme-sync effect
+    // in lib/context.tsx adds/removes this same element on toggle.
+    if (cls === 'theme-liberty-bench') {
+      var l = document.createElement('link');
+      l.id = ${JSON.stringify(BENCH_FAVICON_LINK_ID)};
+      l.rel = 'icon';
+      l.type = 'image/svg+xml';
+      l.href = ${JSON.stringify(BENCH_FAVICON_DATA_URI)};
+      document.head.appendChild(l);
+    }
   } catch (e) {}
 })();
 `.trim()
