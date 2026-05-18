@@ -856,6 +856,9 @@ function HubCard({
   orderedLaunchers: LauncherDef[]
   onLauncher: (k: LauncherKey) => void
 }) {
+  const { theme } = useApp()
+  const isBench = theme === 'bench' || theme === 'liberty-bench'
+  const isLibertyBench = theme === 'liberty-bench'
   const store = stores.find(s => s.id === ev.store_id)
   const display = eventDisplayName(ev, stores)
   const reserved = ev.status === 'reserved'
@@ -873,12 +876,23 @@ function HubCard({
   const phase: 'live' | 'soon' | 'upcoming' | 'reserved' | 'past' =
     reserved ? 'reserved' : past ? 'past' : live ? 'live' : soon ? 'soon' : 'upcoming'
 
-  const heroBg =
-    phase === 'live'      ? 'linear-gradient(160deg, #1E40AF 0%, #38BDF8 100%)' :
-    phase === 'soon'      ? 'linear-gradient(160deg, #1E40AF 0%, #38BDF8 100%)' :
-    phase === 'reserved'  ? 'linear-gradient(160deg, #92400E 0%, #D97706 100%)' :
-    phase === 'past'      ? 'linear-gradient(160deg, #1F2937 0%, #6B7280 100%)' :
-                            'linear-gradient(160deg, #14532D 0%, #1D6B44 100%)'
+  // Hero gradient — Bench themes use a walnut/brass (Liberty) or
+  // walnut/patina (BEB) palette so the hub event card chrome stays
+  // inside the five-color system. Non-Bench themes keep the
+  // original blue/amber/green/gray scheme tuned to the live/soon/
+  // reserved/past/upcoming phases.
+  const heroBg = isBench
+    ? (phase === 'reserved' ? 'linear-gradient(160deg, #4A2C18 0%, #B07A2C 100%)' :
+       phase === 'past'     ? 'linear-gradient(160deg, #2A1810 0%, #6B5544 100%)' :
+       // live / soon / upcoming all use the brand variant's primary
+       // accent; phase-pill copy still distinguishes them.
+       isLibertyBench       ? 'linear-gradient(160deg, #4A2C18 0%, #C9A55C 100%)' :
+                              'linear-gradient(160deg, #0F2E3A 0%, #3D7383 100%)')
+    : (phase === 'live'     ? 'linear-gradient(160deg, #1E40AF 0%, #38BDF8 100%)' :
+       phase === 'soon'     ? 'linear-gradient(160deg, #1E40AF 0%, #38BDF8 100%)' :
+       phase === 'reserved' ? 'linear-gradient(160deg, #92400E 0%, #D97706 100%)' :
+       phase === 'past'     ? 'linear-gradient(160deg, #1F2937 0%, #6B7280 100%)' :
+                              'linear-gradient(160deg, #14532D 0%, #1D6B44 100%)')
 
   const daysSinceEnd = past && endIso ? daysBetween(endIso, todayIso) : 0
   const phasePill =
