@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { AppProvider } from '@/lib/context'
 import { BENCH_FAVICON_DATA_URI, BENCH_FAVICON_LINK_ID } from '@/lib/themeFavicon'
+import { THEME_COLOR_MAP, THEME_COLOR_DEFAULT } from '@/lib/themeColor'
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -71,6 +72,18 @@ const THEME_BOOT_SCRIPT = `
       l.href = ${JSON.stringify(BENCH_FAVICON_DATA_URI)};
       document.head.appendChild(l);
     }
+    // <meta name="theme-color"> drives the PWA window chrome /
+    // browser address-bar tint. Inject (or update) it pre-hydration
+    // so the top bar matches the theme on first paint.
+    var colorMap = ${JSON.stringify(THEME_COLOR_MAP)};
+    var tc = colorMap[cls] || ${JSON.stringify(THEME_COLOR_DEFAULT)};
+    var existingTC = document.querySelector('meta[name="theme-color"]');
+    if (!existingTC) {
+      existingTC = document.createElement('meta');
+      existingTC.setAttribute('name', 'theme-color');
+      document.head.appendChild(existingTC);
+    }
+    existingTC.setAttribute('content', tc);
   } catch (e) {}
 })();
 `.trim()

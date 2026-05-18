@@ -415,7 +415,11 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
       {/* Footer */}
       <div className="sidebar-footer">
         {isLiberty && (
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#93C5FD', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>
+          <div style={{
+            fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+            letterSpacing: '.08em', marginBottom: 6,
+            color: isBench ? '#C9A55C' : '#93C5FD',
+          }}>
             ★ Liberty Estate Buyers
           </div>
         )}
