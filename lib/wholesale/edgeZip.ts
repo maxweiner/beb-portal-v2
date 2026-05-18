@@ -13,9 +13,22 @@
 // only difference is which lookup field they use to resolve the
 // batch row (id vs public_token).
 
-import archiver from 'archiver'
 import { Readable } from 'stream'
 import { pdfAdmin, PHOTO_BUCKET } from './pdfHelpers'
+
+// archiver is a CommonJS module that exports its factory function as
+// `module.exports = fn`. Next.js 14's webpack bundles it with the
+// ESM-default-import wrapper anyway (despite `archiver` being listed
+// in next.config.js `serverComponentsExternalPackages`), producing
+// the runtime error `TypeError: (0, r.default) is not a function` on
+// the prod build of /api/wholesale/edge/public/[token]/zip.
+//
+// Switching to a plain `require` sidesteps the wrapper entirely and
+// loads the function directly from node_modules at runtime. The
+// `typeof import('archiver')` cast preserves the same type as the
+// previous default import would have given us.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const archiver = require('archiver') as typeof import('archiver')
 
 export interface BatchZipResolution {
   ok: true
