@@ -12,6 +12,8 @@ import {
   listTerritories, setTerritory, clearTerritory, US_STATES,
   type TerritoryAssignment,
 } from '@/lib/sales/territories'
+import { buildRepColorMap } from '@/lib/sales/repColors'
+import TrunkTerritoryMapModal from './TrunkTerritoryMapModal'
 
 const UNASSIGNED = '__unassigned__'
 
@@ -21,6 +23,7 @@ export default function SalesRepTerritoriesPanel() {
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [mapOpen, setMapOpen] = useState(false)
 
   async function reload() {
     setError(null)
@@ -73,6 +76,10 @@ export default function SalesRepTerritoriesPanel() {
     return m
   }, [rows])
 
+  // Stable color per rep — same map used by the Print Map modal so
+  // the small swatches in this grid agree with the big map's fills.
+  const colorByRepId = useMemo(() => buildRepColorMap(repOptions), [repOptions])
+
   return (
     <div>
       {error && (
@@ -91,6 +98,13 @@ export default function SalesRepTerritoriesPanel() {
         <span style={{ fontSize: 11, color: 'var(--mist)' }}>
           {rows.length} of {US_STATES.length} states assigned
         </span>
+        <button
+          type="button"
+          onClick={() => setMapOpen(true)}
+          className="btn-outline btn-xs"
+          disabled={rows.length === 0}
+          title={rows.length === 0 ? 'Assign at least one state first' : 'View / print color-coded territory map'}
+        >🖨️ Print Map</button>
       </div>
 
       {/* Rep workload summary */}
@@ -118,6 +132,7 @@ export default function SalesRepTerritoriesPanel() {
         }}>
           {visible.map(s => {
             const current = byState.get(s.code)
+            const repColor = current ? colorByRepId.get(current.rep_user_id) : null
             return (
               <div key={s.code}
                 style={{
@@ -130,6 +145,18 @@ export default function SalesRepTerritoriesPanel() {
                 <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {s.name}
                 </div>
+                {/* Color swatch — matches the rep's color in the
+                    Print Map modal. Empty (dashed) when unassigned
+                    so the column stays visually aligned. */}
+                <span
+                  aria-hidden
+                  style={{
+                    width: 10, height: 10, borderRadius: 3,
+                    background: repColor || 'transparent',
+                    border: repColor ? 'none' : '1.5px dashed var(--pearl)',
+                    flexShrink: 0,
+                  }}
+                />
                 <select
                   value={current?.rep_user_id || UNASSIGNED}
                   onChange={e => handleChange(s.code, e.target.value)}
@@ -150,6 +177,14 @@ export default function SalesRepTerritoriesPanel() {
         New leads with a state matching one of these rows are auto-assigned to that rep on creation.
         Reassignment here does NOT retroactively re-route existing leads (per spec).
       </div>
+
+      {mapOpen && (
+        <TrunkTerritoryMapModal
+          rows={rows}
+          reps={repOptions}
+          onClose={() => setMapOpen(false)}
+        />
+      )}
     </div>
   )
 }
