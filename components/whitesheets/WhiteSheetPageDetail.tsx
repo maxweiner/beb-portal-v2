@@ -87,6 +87,7 @@ export default function WhiteSheetPageDetail({
   const ocrRaw: any = page.ocr_raw || {}
   const reasons: WhiteSheetReviewReason[] = page.review_reasons || []
   const isUnmatched = reasons.includes('unmatched_form')
+  const isErrored = page.status === 'errored'
 
   // ── Signed-URL fetch (30-min TTL) ────────────────────────────
   const [signedUrl, setSignedUrl] = useState<string | null>(null)
@@ -200,6 +201,31 @@ export default function WhiteSheetPageDetail({
     }
   }
 
+  async function doRetry() {
+    if (busy) return
+    setBusy(true); setError(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) throw new Error('Not authenticated')
+      const res = await fetch('/api/white-sheets/pages/retry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ page_id: page.id }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || `${res.status}`)
+      // Page is now 'pending' and disappears from the review pile
+      // until the next cron tick re-processes it. Advance to the
+      // next row in the queue — same pattern as confirm/promote.
+      onResolved(page.id)
+    } catch (e: any) {
+      setError(e?.message || 'Retry failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function doPromote() {
     if (busy) return
     if (!buyForm.trim() || !checkNum.trim() || !amount) {
@@ -292,6 +318,33 @@ export default function WhiteSheetPageDetail({
         display: 'flex', flexDirection: 'column', gap: 10,
         overflow: 'auto', paddingRight: 4,
       }}>
+        {/* Errored-page banner: surfaces last_error so the operator
+            can tell if Claude flagged the scan as blank/illegible
+            vs. a transient API failure, and offers a one-click retry
+            that flips the row back to 'pending' for the next cron. */}
+        {isErrored && (
+          <div style={{
+            padding: '10px 12px', borderRadius: 8,
+            background: '#FEF2F2', border: '1px solid #FCA5A5',
+            display: 'flex', flexDirection: 'column', gap: 6,
+          }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#991B1B', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+              ⚠ OCR errored
+            </div>
+            <div style={{ fontSize: 12, color: '#7F1D1D', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', wordBreak: 'break-word' }}>
+              {page.last_error || 'No error detail recorded.'}
+            </div>
+            {page.attempts > 1 && (
+              <div style={{ fontSize: 10, color: '#991B1B', opacity: 0.75 }}>
+                {page.attempts} attempt{page.attempts === 1 ? '' : 's'} so far
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: '#7F1D1D' }}>
+              Re-run OCR (use this for transient errors or after a re-scan), or fill in the fields below and confirm to save manually.
+            </div>
+          </div>
+        )}
+
         {/* Reason badges */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
           {reasons.map(r => {
@@ -438,12 +491,22 @@ export default function WhiteSheetPageDetail({
 
         {/* Bottom action bar — primary action depends on flags. */}
         <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+          {isErrored && (
+            <button
+              onClick={doRetry}
+              disabled={busy}
+              className="btn-outline"
+              style={{ flex: 1 }}
+              title="Re-queue this page so the cron re-runs OCR on the next tick"
+            >{busy ? 'Saving…' : '🔄 Retry OCR'}</button>
+          )}
           {!isUnmatched && (
             <button
               onClick={doConfirm}
               disabled={busy}
               className="btn-primary"
               style={{ flex: 1 }}
+              title={isErrored ? 'Save the fields below as the customer record without re-running OCR' : undefined}
             >{busy ? 'Saving…' : '✓ Confirm & save customer'}</button>
           )}
           {isUnmatched && !showPromote && (
