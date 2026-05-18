@@ -18,6 +18,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email'
 import { sendSMS } from '@/lib/sms'
+import { loadTwilioConfig } from '@/lib/sms/twilio'
 import { buildMergeVars, substitute, type MergeVarsContext } from './mergeVars'
 import { inQuietHours, nextQuietHoursEnd, type QuietHoursWindow } from './quietHours'
 import { checkRateLimit, type SendChannel } from './rateLimit'
@@ -200,11 +201,10 @@ export async function dispatchOne(
       } else {
         // Pre-flight check for Twilio config so a silent no-op doesn't get
         // marked as sent.
-        const cfgRes = await sb.from('settings').select('value').eq('key', 'sms').maybeSingle()
-        const cfg = (cfgRes.data?.value || {}) as { accountSid?: string; authToken?: string; fromNumber?: string }
+        const cfg = await loadTwilioConfig(sb)
         if (!cfg.accountSid || !cfg.authToken || !cfg.fromNumber) {
           smsOutcome = 'failed'
-          errors.push('sms: Twilio not configured (missing settings.sms accountSid/authToken/fromNumber)')
+          errors.push('sms: Twilio not configured (set credentials in Settings → SMS Providers)')
         } else {
           try {
             const body = substitute(tpl.sms_body || '', mergeData)
