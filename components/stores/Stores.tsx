@@ -48,19 +48,18 @@ export default function Stores() {
   const [sort, setSort] = useState<'name' | 'state' | 'spent'>('name')
 
   // ── Direct fetch — fresh query builder each time ──
-  // List query is slim — only the columns the row needs to render
-  // (incl. store_image_url for the new logo thumbnail). Skipping the
-  // big detail-only columns (notes, hold_*, shipping_recipients,
-  // calendar_*, lat/lng, etc.) cuts the list payload from megabytes
-  // to a few hundred KB on accounts with many stores.
-  // We do NOT push this slim list back into AppContext — context
-  // expects full Store rows for other consumers. Context refreshes
-  // independently on app load + brand switch.
+  // List query is slim — only the columns the row needs to render.
+  // store_image_url is the thumbnail source; store_logos +
+  // default_logo_index are detail-view-only (the per-row click
+  // triggers its own select('*') maybeSingle for the editor).
+  // For legacy rows the JSONB embeds the same base64 data URL that
+  // already lives in store_image_url — pulling both doubled the
+  // payload on BEB. The detail-view fetch still gets them.
   const fetchStores = useCallback(async () => {
     try {
       const { data } = await withTimeout(
         supabase.from('stores')
-          .select('id, name, city, state, active, store_image_url, color_primary, store_logos, default_logo_index')
+          .select('id, name, city, state, active, store_image_url, color_primary')
           .eq('brand', brand).order('name')
       )
       if (data) setStores(data as Store[])
@@ -135,7 +134,7 @@ export default function Stores() {
       // Re-fetch stores directly with a fresh slim query.
       const { data: freshStores } = await withTimeout(
         supabase.from('stores')
-          .select('id, name, city, state, active, store_image_url, color_primary, store_logos, default_logo_index')
+          .select('id, name, city, state, active, store_image_url, color_primary')
           .eq('brand', brand).order('name')
       )
       if (freshStores) setStores(freshStores as Store[])
