@@ -214,21 +214,25 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
 
   return (
     <aside className="sidebar">
-      {/* Brand Switcher — only for liberty-enabled users */}
+      {/* Brand Switcher — only for liberty-enabled users.
+          Pill colors swap to the Bench palette when either Bench
+          variant is active. The active pill previews the chrome of
+          the brand you'd be switching to (patina for BEB, brass for
+          Liberty), so the toggle itself becomes a brand-color cue. */}
       {hasLibertyAccess && (
         <div style={{ margin: '10px 12px 0', background: 'rgba(0,0,0,.25)', borderRadius: 10, padding: 3, display: 'flex', gap: 2 }}>
           <button onClick={() => setBrand('beb')} style={{
             flex: 1, padding: '5px 0', border: 'none', borderRadius: 7, cursor: 'pointer',
             fontWeight: 900, fontSize: 11, letterSpacing: '.05em',
-            background: !isLiberty ? '#7EC8A0' : 'transparent',
-            color: !isLiberty ? '#0F2D1F' : 'rgba(255,255,255,.45)',
+            background: !isLiberty ? (isBench ? '#1F4E5F' : '#7EC8A0') : 'transparent',
+            color: !isLiberty ? (isBench ? '#F1E7D2' : '#0F2D1F') : 'rgba(255,255,255,.45)',
             transition: 'all .15s',
           }}>BEB</button>
           <button onClick={() => setBrand('liberty')} style={{
             flex: 1, padding: '5px 0', border: 'none', borderRadius: 7, cursor: 'pointer',
             fontWeight: 900, fontSize: 11, letterSpacing: '.05em',
-            background: isLiberty ? '#93C5FD' : 'transparent',
-            color: isLiberty ? '#0F172A' : 'rgba(255,255,255,.45)',
+            background: isLiberty ? (isBench ? '#C9A55C' : '#93C5FD') : 'transparent',
+            color: isLiberty ? (isBench ? '#2A1810' : '#0F172A') : 'rgba(255,255,255,.45)',
             transition: 'all .15s',
           }}>LIBERTY</button>
         </div>
