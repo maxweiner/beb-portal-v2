@@ -533,23 +533,34 @@ tr:last-child td { border-bottom: none; }
   font-family: 'Inter', -apple-system, sans-serif;
 }
 
-/* Headings + card titles + sidebar (logo, nav items, footer) use
-   Fraunces. The sidebar selector is what carries the brand into the
-   left rail — without it the chrome stayed Lato/Inter while the rest
-   of the page sat in serif, which read as a different app glued onto
-   Bench colors. */
+/* Headings + card titles + tabs + stat values + sidebar (logo, nav
+   items, footer) use Fraunces. The `.sidebar *` universal-descendant
+   is what carries the brand into the left rail — scoping to the
+   container alone lost the specificity fight against the global
+   `button { font-family: 'Lato' }` rule, so nav items stayed Lato.
+   The two-class selector beats button's one-element specificity. */
 .theme-bench h1,
 .theme-bench h2,
 .theme-bench h3,
 .theme-bench h4,
+.theme-bench h5,
+.theme-bench h6,
 .theme-bench .card-title,
+.theme-bench .stat-val,
+.theme-bench .tab,
 .theme-bench .sidebar,
+.theme-bench .sidebar *,
 .theme-liberty-bench h1,
 .theme-liberty-bench h2,
 .theme-liberty-bench h3,
 .theme-liberty-bench h4,
+.theme-liberty-bench h5,
+.theme-liberty-bench h6,
 .theme-liberty-bench .card-title,
-.theme-liberty-bench .sidebar {
+.theme-liberty-bench .stat-val,
+.theme-liberty-bench .tab,
+.theme-liberty-bench .sidebar,
+.theme-liberty-bench .sidebar * {
   font-family: 'Fraunces', Georgia, serif;
   font-weight: 600;
   letter-spacing: -0.01em;
