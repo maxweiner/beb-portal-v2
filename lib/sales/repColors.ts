@@ -20,6 +20,15 @@ export const REP_COLOR_PALETTE = [
   '#65A30D', // lime
 ] as const
 
+/** Per-rep color overrides, keyed by lowercased first name (same
+ *  convention as HOME_STATES in TrunkTerritoryMapModal). Wins over
+ *  the palette so an operator can lock a specific rep to a specific
+ *  hue without disturbing anyone else's assignment. Add an entry
+ *  here when a rep needs a hand-picked color. */
+const NAME_COLOR_OVERRIDES: Record<string, string> = {
+  tanya: '#EAB308', // yellow
+}
+
 export interface RepLike {
   id: string
   name?: string | null
@@ -27,14 +36,17 @@ export interface RepLike {
 
 /** Maps rep id → color. Order is determined by alphabetical name
  *  so a rotation through the rep roster doesn't reshuffle colors
- *  for everyone else. */
+ *  for everyone else. Names matching NAME_COLOR_OVERRIDES skip the
+ *  palette and use their override instead. */
 export function buildRepColorMap<T extends RepLike>(reps: T[]): Map<string, string> {
   const sorted = [...reps].sort((a, b) =>
     (a.name || '').localeCompare(b.name || ''),
   )
   const out = new Map<string, string>()
   sorted.forEach((rep, i) => {
-    out.set(rep.id, REP_COLOR_PALETTE[i % REP_COLOR_PALETTE.length])
+    const firstName = (rep.name || '').split(' ')[0].toLowerCase()
+    const override = NAME_COLOR_OVERRIDES[firstName]
+    out.set(rep.id, override || REP_COLOR_PALETTE[i % REP_COLOR_PALETTE.length])
   })
   return out
 }
