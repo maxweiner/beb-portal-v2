@@ -31,7 +31,8 @@ function getBuyerEventsThisYear(buyerId: string, allEvents: any[]): any[] {
 
 
 export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void }) {
-  const { user, users, stores, events, year, setYear } = useApp()
+  const { user, users, stores, events, year, setYear, theme } = useApp()
+  const isBench = theme === 'bench' || theme === 'liberty-bench'
   const [expandedBuyerId, setExpandedBuyerId] = useState<string | null>(null)
   const [storesExpanded, setStoresExpanded] = useState(false)
 
@@ -94,7 +95,14 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
 
   const fmtNextWeek = `${nextMonday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${nextSunday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
 
-  const storeColors = ['#1D6B44', '#E67E22', '#9B59B6', '#3498DB', '#E74C3C', '#1ABC9C', '#F39C12', '#2C3E50']
+  // Tile left-border accent palette. Default set is the original
+  // 8-color hashed-store rainbow (BEB green / oranges / purples /
+  // teals). On Bench the same slot count picks from the Bench
+  // five-color palette plus its tints so the tiles stay inside the
+  // workshop chrome without losing per-store distinguishability.
+  const storeColors = isBench
+    ? ['#1F4E5F', '#C9A55C', '#4A2C18', '#3D7383', '#9C7E3E', '#6B3F1F', '#2C6175', '#7A5A2C']
+    : ['#1D6B44', '#E67E22', '#9B59B6', '#3498DB', '#E74C3C', '#1ABC9C', '#F39C12', '#2C3E50']
   const fmtWeek = `${monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${sunday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
 
   const totals = yearEvents.reduce((acc, ev) => {
