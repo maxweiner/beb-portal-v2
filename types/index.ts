@@ -465,7 +465,7 @@ export interface Shipment {
   created_by?: string
 }
 
-export type Theme = 'original' | 'salesforce' | 'apple' | 'liberty' | 'liberty-gold' | 'liberty-slate' | 'liberty-patriot'
+export type Theme = 'original' | 'salesforce' | 'apple' | 'liberty' | 'liberty-gold' | 'liberty-slate' | 'liberty-patriot' | 'liberty-bench'
 export type Brand = 'beb' | 'liberty'
 
 export interface AppState {

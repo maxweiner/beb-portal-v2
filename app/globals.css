@@ -1,4 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap');
+/* Bench theme (Max-only, gated in Settings). Loaded for all users so the
+   theme switch is instant when picked — display=swap means no FOIT. */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -445,6 +448,68 @@ tr:last-child td { border-bottom: none; }
   --card-bg: #FFFFFF;
   --gradient-primary: linear-gradient(135deg, #3C3B6E 0%, #B22234 100%);
   --gradient-primary-hover: linear-gradient(135deg, #2C2B5E 0%, #3C3B6E 100%);
+}
+
+/* ── THE BENCH (Walnut/Brass/Paper, Liberty-side, Max-only) ──
+   Workshop-warm palette: walnut chrome, brass accents, paper bodies,
+   patina teal for secondary links. Fraunces serif on headings + card
+   titles, Inter for UI, JetBrains Mono for tabular data (e.g. times +
+   amounts). Picker is gated to max@bebllp.com in Settings.tsx for now. */
+.theme-liberty-bench {
+  --cream: #FAF6EB;
+  --cream2: #F1E7D2;
+  --pearl: #D4C6A3;
+  --fog: #B8A887;
+  --silver: #8B7558;
+  --mist: #6B5544;
+  --ash: #4A2C18;
+  --ink: #2A1810;
+  --green: #C9A55C;
+  --green2: #9C7E3E;
+  --green-dark: #7A5A2C;
+  --green3: #E8D5A0;
+  --green-pale: #F7EFD9;
+  --red: #9B3B2A;
+  --red-pale: #FAEEEA;
+  --amber: #B07A2C;
+  --amber-pale: #FBF1DD;
+  --blue: #1F4E5F;
+  --blue-pale: #E5EEF1;
+  --page-bg: #F4EFE0;
+  --sidebar-bg: #1A0E08;
+  --sidebar-active: #4A2C18;
+  --sidebar-text: rgba(241,231,210,.80);
+  --sidebar-muted: rgba(241,231,210,.30);
+  --card-bg: #FFFFFF;
+  --gradient-primary: linear-gradient(135deg, #C9A55C 0%, #E8D5A0 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #9C7E3E 0%, #C9A55C 100%);
+}
+
+/* Body font swap — Inter for UI density, replaces Lato when Bench is active. */
+.theme-liberty-bench,
+.theme-liberty-bench body {
+  font-family: 'Inter', -apple-system, sans-serif;
+}
+
+/* Headings + card titles use Fraunces. Scoping to common heading
+   selectors + .card-title catches most surfaces without invading
+   buttons / pills / table cells. Adjust as needed if a page looks off. */
+.theme-liberty-bench h1,
+.theme-liberty-bench h2,
+.theme-liberty-bench h3,
+.theme-liberty-bench h4,
+.theme-liberty-bench .card-title {
+  font-family: 'Fraunces', Georgia, serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Tabular numerics — times, amounts, IDs — in mono. */
+.theme-liberty-bench .mono,
+.theme-liberty-bench .tabular,
+.theme-liberty-bench code,
+.theme-liberty-bench pre {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
 }
 
 /* Portal loading animation — jewelry icons pulse in sequence. */

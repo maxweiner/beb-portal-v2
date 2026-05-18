@@ -40,9 +40,19 @@ const LIBERTY_THEMES: { id: Theme; label: string; color: string }[] = [
   { id: 'liberty-patriot', label: 'Red White Blue', color: '#B22234' },
 ]
 
+// Max-only themes (gated by user email at render time). Appended to the
+// Liberty list when the signed-in user is max@bebllp.com. Same pattern as
+// the Role Manager / Impersonation panels — narrow email gate while a
+// new surface is in flight.
+const MAX_ONLY_LIBERTY_THEMES: { id: Theme; label: string; color: string }[] = [
+  { id: 'liberty-bench', label: 'the Bench', color: '#C9A55C' },
+]
+
 export default function Settings() {
   const { user, stores, theme, setTheme, reload, brand } = useApp()
-  const THEMES = brand === 'liberty' ? LIBERTY_THEMES : BEB_THEMES
+  const isMax = user?.email === 'max@bebllp.com'
+  const libertyThemes = isMax ? [...LIBERTY_THEMES, ...MAX_ONLY_LIBERTY_THEMES] : LIBERTY_THEMES
+  const THEMES = brand === 'liberty' ? libertyThemes : BEB_THEMES
   const [profile, setProfile] = useState({
     name: user?.name || '',
     phone: user?.phone || '',

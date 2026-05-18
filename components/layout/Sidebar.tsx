@@ -45,13 +45,14 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ nav, setNav }: SidebarProps) {
-  const { user, brand, setBrand } = useApp()
+  const { user, brand, setBrand, theme } = useApp()
   // Pinned-reports loader still uses an isAdmin guard; replaced when
   // PR D sweeps page-level guards. Sidebar item visibility now flows
   // entirely through role_modules below.
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
   const hasLibertyAccess = user?.liberty_access === true
   const isLiberty = brand === 'liberty'
+  const isBench = theme === 'liberty-bench'
   // Sidebar items come from the brand's full nav list; access is then
   // filtered against role_modules (DB-driven). Marketing / accounting
   // roles' tiny sidebars come "for free" because their seeded modules
@@ -236,13 +237,15 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
       {/* Logo */}
       <div className="sidebar-logo">
         <div className="sidebar-logo-row">
-          {isLiberty
-            ? <svg width="14" height="14" viewBox="0 0 14 14" fill="#93C5FD"><polygon points="7,0 8.8,5 14,5 9.8,8 11.5,14 7,10.5 2.5,14 4.2,8 0,5 5.2,5"/></svg>
-            : <svg width="14" height="14" viewBox="0 0 14 14" fill="#7EC8A0"><path d="M7 0l2.5 4.5H14L10.5 7 12 12 7 9 2 12l1.5-5L0 4.5h4.5L7 0z"/></svg>
+          {isBench
+            ? <svg width="14" height="14" viewBox="0 0 14 14"><text x="7" y="11.5" textAnchor="middle" fontFamily="Fraunces, Georgia, serif" fontWeight="700" fontSize="13" fill="#C9A55C">B</text></svg>
+            : isLiberty
+              ? <svg width="14" height="14" viewBox="0 0 14 14" fill="#93C5FD"><polygon points="7,0 8.8,5 14,5 9.8,8 11.5,14 7,10.5 2.5,14 4.2,8 0,5 5.2,5"/></svg>
+              : <svg width="14" height="14" viewBox="0 0 14 14" fill="#7EC8A0"><path d="M7 0l2.5 4.5H14L10.5 7 12 12 7 9 2 12l1.5-5L0 4.5h4.5L7 0z"/></svg>
           }
-          <span className="app-name">{isLiberty ? 'LibertyOS' : 'BeneficialOS'}</span>
+          <span className="app-name">{isBench ? 'the Bench' : isLiberty ? 'LibertyOS' : 'BeneficialOS'}</span>
         </div>
-        <span className="app-sub">{isLiberty ? 'Liberty Portal' : 'Buyer Portal'}</span>
+        <span className="app-sub">{isBench ? 'Where the work happens' : isLiberty ? 'Liberty Portal' : 'Buyer Portal'}</span>
       </div>
 
       {/* 3-visit teaching banner — discoverability for Settings →
