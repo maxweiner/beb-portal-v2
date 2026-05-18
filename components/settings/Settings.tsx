@@ -437,14 +437,68 @@ export default function Settings() {
       {/* Theme */}
       <CollapsibleCard storageKey="settings-appearance" title="Appearance">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-          {THEMES.map(t => (
-            <button key={t.id} onClick={() => setTheme(t.id)}
-              style={{ border: `2px solid ${theme === t.id ? t.color : 'var(--pearl)'}`, background: theme === t.id ? `${t.color}18` : 'var(--cream2)', borderRadius: 'var(--r)', padding: 16, textAlign: 'left', cursor: 'pointer', transition: 'all .15s' }}>
-              <div style={{ width: 32, height: 32, borderRadius: '50%', background: t.color, marginBottom: 8 }} />
-              <div style={{ fontSize: 13, fontWeight: 700, color: theme === t.id ? t.color : 'var(--ash)' }}>{t.label}</div>
-              {theme === t.id && <div style={{ fontSize: 11, color: t.color, marginTop: 2 }}>Active</div>}
-            </button>
-          ))}
+          {THEMES.map(t => {
+            // The Bench tile renders a real brand preview — V1 favicon
+            // mark + Fraunces wordmark on a paper-warm card — so the
+            // picker actually shows what selecting it does. The other
+            // tiles keep the generic color-dot treatment.
+            if (t.id === 'liberty-bench') {
+              const active = theme === t.id
+              return (
+                <button key={t.id} onClick={() => setTheme(t.id)}
+                  style={{
+                    border: `2px solid ${active ? '#C9A55C' : '#D4C6A3'}`,
+                    background: active
+                      ? 'linear-gradient(135deg, #FAF6EB 0%, #F1E7D2 100%)'
+                      : 'linear-gradient(135deg, #FAF6EB 0%, #ECE0C4 100%)',
+                    borderRadius: 'var(--r)',
+                    padding: 16,
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    transition: 'all .15s',
+                    boxShadow: active ? '0 2px 10px rgba(201,165,92,0.22)' : '0 1px 0 rgba(74,44,24,0.04)',
+                  }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 8, marginBottom: 10, overflow: 'hidden', boxShadow: '0 2px 6px rgba(42,24,16,0.28)' }}>
+                    <svg viewBox="0 0 100 100" width="100%" height="100%" aria-hidden="true">
+                      <defs>
+                        <radialGradient id="bench-tile-bg" cx="50%" cy="26%" r="80%">
+                          <stop offset="0" stopColor="#7A4A28"/>
+                          <stop offset="100%" stopColor="#1A0E08"/>
+                        </radialGradient>
+                        <linearGradient id="bench-tile-brass" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0" stopColor="#F0D58A"/>
+                          <stop offset="0.45" stopColor="#C9A55C"/>
+                          <stop offset="1" stopColor="#7A5A2C"/>
+                        </linearGradient>
+                      </defs>
+                      <rect width="100" height="100" rx="22" fill="url(#bench-tile-bg)"/>
+                      <text x="50" y="72" textAnchor="middle" fontFamily="Fraunces, Georgia, serif" fontWeight="700" fontSize="68" fill="url(#bench-tile-brass)">B</text>
+                      <line x1="22" y1="84" x2="78" y2="84" stroke="url(#bench-tile-brass)" strokeWidth="2" strokeLinecap="round" opacity="0.8"/>
+                    </svg>
+                  </div>
+                  <div style={{
+                    fontFamily: '"Fraunces", Georgia, serif',
+                    fontSize: 17,
+                    fontWeight: 600,
+                    color: '#2A1810',
+                    letterSpacing: '-0.01em',
+                    lineHeight: 1,
+                  }}>
+                    <span style={{ fontStyle: 'italic', fontWeight: 400, opacity: 0.5, fontSize: '0.72em', marginRight: '0.18em' }}>the</span>Bench
+                  </div>
+                  {active && <div style={{ fontSize: 10, color: '#9C7E3E', marginTop: 7, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Active</div>}
+                </button>
+              )
+            }
+            return (
+              <button key={t.id} onClick={() => setTheme(t.id)}
+                style={{ border: `2px solid ${theme === t.id ? t.color : 'var(--pearl)'}`, background: theme === t.id ? `${t.color}18` : 'var(--cream2)', borderRadius: 'var(--r)', padding: 16, textAlign: 'left', cursor: 'pointer', transition: 'all .15s' }}>
+                <div style={{ width: 32, height: 32, borderRadius: '50%', background: t.color, marginBottom: 8 }} />
+                <div style={{ fontSize: 13, fontWeight: 700, color: theme === t.id ? t.color : 'var(--ash)' }}>{t.label}</div>
+                {theme === t.id && <div style={{ fontSize: 11, color: t.color, marginTop: 2 }}>Active</div>}
+              </button>
+            )
+          })}
         </div>
       </CollapsibleCard>
 
