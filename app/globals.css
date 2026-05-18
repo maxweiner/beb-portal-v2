@@ -583,6 +583,11 @@ tr:last-child td { border-bottom: none; }
   animation: bebJewelPulse 1.4s ease-in-out infinite, bebJewelShine 2.8s ease-in-out infinite;
 }
 
+@keyframes beb-mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.55); }
+  50%      { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+}
+
 /* Google Places Autocomplete dropdown — Google attaches `.pac-
  * container` to <body> with a default z-index of 1000, which sits
  * BELOW our modal overlays (z-index 1100). Without this override
