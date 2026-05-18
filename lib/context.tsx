@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, useRef, useMemo, useCal
 import { supabase } from '@/lib/supabase'
 import type { User, Store, TrunkShowStore, Event, Shipment, Theme, Brand, AppState } from '@/types'
 import { readBootCache, writeBootCache, clearBootCacheFor } from '@/lib/bootCache'
+import { clearStoresListCacheFor } from '@/lib/storesListCache'
 import { BENCH_FAVICON_DATA_URI, BENCH_FAVICON_LINK_ID } from '@/lib/themeFavicon'
 import { THEME_COLOR_MAP, THEME_COLOR_DEFAULT } from '@/lib/themeColor'
 
@@ -395,7 +396,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // cache key check already filters by authUid, but clearing on
         // sign-out keeps disk usage low and removes any lingering
         // sensitive data.
-        if (authUidRef.current) clearBootCacheFor(authUidRef.current)
+        if (authUidRef.current) {
+          clearBootCacheFor(authUidRef.current)
+          clearStoresListCacheFor(authUidRef.current)
+        }
         authUidRef.current = null
         initialized = false
         setUserState(null)

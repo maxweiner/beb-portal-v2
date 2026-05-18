@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { useAutosave, AutosaveIndicator } from '@/lib/useAutosave'
+import { readStoresListCache, writeStoresListCache } from '@/lib/storesListCache'
 import type { Store } from '@/types'
 import Checkbox from '@/components/ui/Checkbox'
 import BookingConfigCard from './BookingConfigCard'
@@ -36,6 +37,10 @@ export default function Stores() {
 
   const [stores, setStores] = useState<Store[]>([])
   const [storesLoaded, setStoresLoaded] = useState(false)
+  // Auth UID is captured once on mount so cache reads/writes can scope
+  // by signed-in user (matches the bootCache key scheme). supabase-js
+  // serves session from memory so this resolves in a single tick.
+  const authUidRef = useRef<string | null>(null)
   const [selected, setSelected] = useState<Store | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [search, setSearch] = useState('')
@@ -62,16 +67,44 @@ export default function Stores() {
           .select('id, name, city, state, active, store_image_url, color_primary')
           .eq('brand', brand).order('name')
       )
-      if (data) setStores(data as Store[])
+      if (data) {
+        const fresh = data as Store[]
+        setStores(fresh)
+        if (authUidRef.current) writeStoresListCache(authUidRef.current, brand, fresh)
+      }
     } catch (err) {
       console.error('fetchStores error:', err)
     }
     setStoresLoaded(true)
   }, [brand])
 
+  // ── Boot: paint from cache, then revalidate ──
+  // Stale-while-revalidate. The cache holds the prior visit's list
+  // (incl. logo paths for thumbnails) so the page paints instantly.
+  // The network fetch runs in parallel and patches state when it
+  // returns; if the data is unchanged the array reference still
+  // updates but React skips the render via shallow row equality at
+  // the table level.
   useEffect(() => {
-    fetchStores()
-  }, [fetchStores])
+    let cancelled = false
+    ;(async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const authUid = session?.user?.id ?? null
+      authUidRef.current = authUid
+      if (cancelled) return
+
+      if (authUid) {
+        const cached = readStoresListCache(authUid, brand)
+        if (cached && cached.stores.length > 0) {
+          setStores(cached.stores)
+          setStoresLoaded(true)
+        }
+      }
+      // Always revalidate after cache paint — fresh data wins.
+      fetchStores()
+    })()
+    return () => { cancelled = true }
+  }, [brand, fetchStores])
 
   const storeSpend = (storeId: string) => {
     return events
@@ -131,13 +164,19 @@ export default function Stores() {
       setNewStore({ name: '', address: '', city: '', state: '', zip: '', lat: 0, lng: 0, website: '', store_phone: '' })
       setPlacePicked(false)
 
-      // Re-fetch stores directly with a fresh slim query.
+      // Re-fetch stores directly with a fresh slim query, and sync
+      // the cache so the next visit's instant paint includes the new
+      // row instead of going stale until the background refetch.
       const { data: freshStores } = await withTimeout(
         supabase.from('stores')
           .select('id, name, city, state, active, store_image_url, color_primary')
           .eq('brand', brand).order('name')
       )
-      if (freshStores) setStores(freshStores as Store[])
+      if (freshStores) {
+        const fresh = freshStores as Store[]
+        setStores(fresh)
+        if (authUidRef.current) writeStoresListCache(authUidRef.current, brand, fresh)
+      }
     } catch (err: any) {
       alert('Error creating store: ' + (err?.message || 'unknown'))
     } finally {
@@ -151,8 +190,10 @@ export default function Stores() {
 
     // Optimistic: remove from UI immediately
     const prev = stores
-    setStores(s => s.filter(x => x.id !== id))
-    setContextStores(prev.filter(x => x.id !== id))
+    const next = prev.filter(x => x.id !== id)
+    setStores(next)
+    setContextStores(next)
+    if (authUidRef.current) writeStoresListCache(authUidRef.current, brand, next)
     if (selected?.id === id) setSelected(null)
 
     try {
@@ -163,11 +204,13 @@ export default function Stores() {
         // Revert on failure
         setStores(prev)
         setContextStores(prev)
+        if (authUidRef.current) writeStoresListCache(authUidRef.current, brand, prev)
         alert('Delete failed: ' + error.message)
       }
     } catch (err: any) {
       setStores(prev)
       setContextStores(prev)
+      if (authUidRef.current) writeStoresListCache(authUidRef.current, brand, prev)
       alert('Delete failed: ' + (err?.message || 'timeout'))
     }
   }
