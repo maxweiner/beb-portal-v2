@@ -499,7 +499,7 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
       <div className={user?.is_partner ? 'grid grid-cols-1 lg:grid-cols-3 gap-6' : 'grid grid-cols-1 gap-6'}>
         {/* Store performance — partners only. */}
         {user?.is_partner && (
-        <div className="lg:col-span-2 rounded-xl overflow-hidden flex flex-col" style={{ background: 'var(--card-bg)', border: '1px solid var(--pearl)', boxShadow: '0 2px 10px rgba(0,0,0,.04)' }}>
+        <div className="lg:col-span-2 lg:self-start rounded-xl overflow-hidden" style={{ background: 'var(--card-bg)', border: '1px solid var(--pearl)', boxShadow: '0 2px 10px rgba(0,0,0,.04)' }}>
           <div
             className="w-full flex items-center justify-between"
             style={{ background: 'var(--green-pale)', padding: '12px 20px', borderBottom: '1px solid var(--green3)', fontWeight: 900, fontSize: 13, color: 'var(--green-dark)', textTransform: 'uppercase', letterSpacing: '.04em' }}
@@ -512,11 +512,12 @@ export default function Dashboard({ setNav }: { setNav?: (n: NavPage) => void })
           {storeRows.length === 0 ? (
             <div className="text-center py-10" style={{ color: 'var(--mist)' }}>No data for {year}</div>
           ) : (
-            // Scroll viewport flex-fills the card so it matches the
-            // height of the Lead Sources card next to it instead of
-            // capping at a fixed pixel height and leaving whitespace.
-            // Thead is sticky so headers stay visible while scrolling.
-            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}>
+            // Fixed-height scroll viewport — shows ~8 rows worth
+            // before scrolling. The outer card uses `self-start` so
+            // it doesn't get stretched by the grid to match the
+            // taller Lead Sources sibling. Thead is sticky so column
+            // labels stay visible while scrolling.
+            <div style={{ maxHeight: 380, overflowY: 'auto', overflowX: 'auto' }}>
               <table className="w-full text-sm">
                 <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
                   <tr style={{ borderBottom: '1px solid var(--cream2)', background: 'var(--cream2)' }}>
