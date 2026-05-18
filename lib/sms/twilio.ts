@@ -1,9 +1,5 @@
-// Twilio outbound sender. Reads credentials from settings table.
-//
-// Historic state: two callsites had inline Twilio impls — one in
-// `lib/sms.ts` reading settings.key='sms', one in `lib/chat/sender.ts`
-// reading settings.key='twilio'. This module unifies them: it reads
-// 'twilio' first, falls back to 'sms', so both legacy rows still work.
+// Twilio outbound sender. Reads credentials from settings.key='twilio',
+// which is written by Settings → SMS Providers.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -14,12 +10,9 @@ export interface TwilioConfig {
 }
 
 export async function loadTwilioConfig(sb: SupabaseClient): Promise<TwilioConfig> {
-  const { data: twilioRow } = await sb
+  const { data } = await sb
     .from('settings').select('value').eq('key', 'twilio').maybeSingle()
-  if (twilioRow?.value) return twilioRow.value as TwilioConfig
-  const { data: smsRow } = await sb
-    .from('settings').select('value').eq('key', 'sms').maybeSingle()
-  return (smsRow?.value || {}) as TwilioConfig
+  return (data?.value || {}) as TwilioConfig
 }
 
 export function toE164(phone: string): string {

@@ -17,6 +17,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email'
 import { sendSMS } from '@/lib/sms'
+import { loadTwilioConfig } from '@/lib/sms/twilio'
 import { buildMergeVars, substitute, type MergeVarsContext } from '@/lib/notifications/mergeVars'
 import { checkRateLimit } from '@/lib/notifications/rateLimit'
 import { blockIfImpersonating } from '@/lib/impersonation/server'
@@ -137,10 +138,9 @@ export async function POST(req: Request) {
     } else {
       // Pre-flight: sendSMS silently no-ops if Twilio creds missing — check
       // directly so we can report it instead of pretending we sent.
-      const cfgRes = await sb.from('settings').select('value').eq('key', 'sms').maybeSingle()
-      const cfg = (cfgRes.data?.value || {}) as { accountSid?: string; authToken?: string; fromNumber?: string }
+      const cfg = await loadTwilioConfig(sb)
       if (!cfg.accountSid || !cfg.authToken || !cfg.fromNumber) {
-        results.push({ channel: 'sms', ok: false, error: 'Twilio not configured (missing settings.sms accountSid/authToken/fromNumber)' })
+        results.push({ channel: 'sms', ok: false, error: 'Twilio not configured (set credentials in Settings → SMS Providers)' })
       } else {
         try {
           const body = '[TEST] ' + substitute(tpl.sms_body || '(no body)', vars)

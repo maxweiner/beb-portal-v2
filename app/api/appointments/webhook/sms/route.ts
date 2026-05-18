@@ -5,8 +5,9 @@
 //   https://beb-portal-v2.vercel.app/api/appointments/webhook/sms  (POST)
 //
 // Security: verifies the X-Twilio-Signature HMAC against your Twilio auth
-// token (loaded from public.settings key='sms'). To skip during local dev,
-// set SKIP_TWILIO_SIG_CHECK=true in .env.local.
+// token (loaded from public.settings key='twilio' — written by
+// Settings → SMS Providers). To skip during local dev, set
+// SKIP_TWILIO_SIG_CHECK=true in .env.local.
 //
 // Reserved keywords: STOP / HELP / etc. are intercepted by Twilio itself
 // (carrier-mandated). We only act on plain "CANCEL" / "C".
@@ -14,6 +15,7 @@
 import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 import { formatPhone } from '@/lib/sms'
+import { loadTwilioConfig } from '@/lib/sms/twilio'
 import { sendCancellation } from '@/lib/appointments/notifications'
 
 export const dynamic = 'force-dynamic'
@@ -44,8 +46,7 @@ async function verifySignature(req: Request, params: URLSearchParams, sb: Return
   if (process.env.SKIP_TWILIO_SIG_CHECK === 'true') return true
   const sig = req.headers.get('x-twilio-signature')
   if (!sig) return false
-  const { data } = await sb.from('settings').select('value').eq('key', 'sms').maybeSingle()
-  const authToken = data?.value?.authToken as string | undefined
+  const { authToken } = await loadTwilioConfig(sb)
   if (!authToken) return false
   // Twilio signs URL + sorted "key+value" concatenation of POST params.
   // The URL must be the *exact* one Twilio is calling — Vercel forwards the

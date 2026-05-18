@@ -16,15 +16,15 @@ async function main() {
   // ── 1. Read the settings row ────────────────────────────
   const { data: row, error } = await sb.from('settings')
     .select('value, updated_at')
-    .eq('key', 'sms').maybeSingle()
+    .eq('key', 'twilio').maybeSingle()
   if (error) { console.error('settings read failed:', error.message); process.exit(1) }
   if (!row) {
-    console.error('❌ No settings row with key="sms". Twilio config is missing.')
+    console.error('❌ No settings row with key="twilio". Set credentials in Settings → SMS Providers.')
     process.exit(1)
   }
 
   const cfg = (row.value || {}) as { accountSid?: string; authToken?: string; fromNumber?: string }
-  console.log('settings.value (key="sms"):')
+  console.log('settings.value (key="twilio"):')
   console.log(`  accountSid:  ${cfg.accountSid ? cfg.accountSid.slice(0, 8) + '…' + cfg.accountSid.slice(-4) : '(missing)'}`)
   console.log(`  authToken:   ${cfg.authToken ? '(present, ' + cfg.authToken.length + ' chars)' : '(missing)'}`)
   console.log(`  fromNumber:  ${cfg.fromNumber ?? '(missing)'}`)
