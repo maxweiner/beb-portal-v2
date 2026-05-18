@@ -5,7 +5,12 @@ import { supabase } from '@/lib/supabase'
 import type { User, Store, TrunkShowStore, Event, Shipment, Theme, Brand, AppState } from '@/types'
 import { readBootCache, writeBootCache, clearBootCacheFor } from '@/lib/bootCache'
 import { clearStoresListCacheFor } from '@/lib/storesListCache'
-import { BENCH_FAVICON_DATA_URI, BENCH_FAVICON_LINK_ID } from '@/lib/themeFavicon'
+import {
+  BENCH_FAVICON_DATA_URI,
+  BENCH_FAVICON_LINK_ID,
+  BENCH_APPLE_TOUCH_ICON_HREF,
+  BENCH_APPLE_TOUCH_LINK_ID,
+} from '@/lib/themeFavicon'
 import { THEME_COLOR_MAP, THEME_COLOR_DEFAULT } from '@/lib/themeColor'
 
 export type DayEntryIntent = {
@@ -592,6 +597,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // the last matching rel=icon, so adding the element (rather than
     // mutating the originals) keeps Next's metadata.icons untouched.
     const existing = document.getElementById(BENCH_FAVICON_LINK_ID) as HTMLLinkElement | null
+    const existingApple = document.getElementById(BENCH_APPLE_TOUCH_LINK_ID) as HTMLLinkElement | null
     if (themeClass === 'theme-liberty-bench' || themeClass === 'theme-bench') {
       if (!existing) {
         const link = document.createElement('link')
@@ -601,8 +607,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         link.href = BENCH_FAVICON_DATA_URI
         document.head.appendChild(link)
       }
-    } else if (existing) {
-      existing.remove()
+      if (!existingApple) {
+        // apple-touch-icon override — picked up by iOS at "Add to
+        // Home Screen" time. Already-installed home screen shortcuts
+        // keep their old icon until the user removes + re-adds them.
+        const al = document.createElement('link')
+        al.id = BENCH_APPLE_TOUCH_LINK_ID
+        al.rel = 'apple-touch-icon'
+        al.href = BENCH_APPLE_TOUCH_ICON_HREF
+        document.head.appendChild(al)
+      }
+    } else {
+      if (existing) existing.remove()
+      if (existingApple) existingApple.remove()
     }
 
     // theme-color meta — keep the PWA window chrome / browser
