@@ -52,7 +52,7 @@ export default function Sidebar({ nav, setNav }: SidebarProps) {
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin'
   const hasLibertyAccess = user?.liberty_access === true
   const isLiberty = brand === 'liberty'
-  const isBench = theme === 'liberty-bench'
+  const isBench = theme === 'liberty-bench' || theme === 'bench'
   // Sidebar items come from the brand's full nav list; access is then
   // filtered against role_modules (DB-driven). Marketing / accounting
   // roles' tiny sidebars come "for free" because their seeded modules

@@ -40,10 +40,13 @@ const LIBERTY_THEMES: { id: Theme; label: string; color: string }[] = [
   { id: 'liberty-patriot', label: 'Red White Blue', color: '#B22234' },
 ]
 
-// Max-only themes (gated by user email at render time). Appended to the
-// Liberty list when the signed-in user is max@bebllp.com. Same pattern as
+// Max-only themes (gated by user email at render time). Same pattern as
 // the Role Manager / Impersonation panels — narrow email gate while a
-// new surface is in flight.
+// new surface is in flight. The Bench has paired BEB and Liberty variants
+// so toggling brand stays on Bench (see setBrand in lib/context.tsx).
+const MAX_ONLY_BEB_THEMES: { id: Theme; label: string; color: string }[] = [
+  { id: 'bench', label: 'the Bench', color: '#1F4E5F' },
+]
 const MAX_ONLY_LIBERTY_THEMES: { id: Theme; label: string; color: string }[] = [
   { id: 'liberty-bench', label: 'the Bench', color: '#C9A55C' },
 ]
@@ -51,8 +54,9 @@ const MAX_ONLY_LIBERTY_THEMES: { id: Theme; label: string; color: string }[] = [
 export default function Settings() {
   const { user, stores, theme, setTheme, reload, brand } = useApp()
   const isMax = user?.email === 'max@bebllp.com'
+  const bebThemes = isMax ? [...BEB_THEMES, ...MAX_ONLY_BEB_THEMES] : BEB_THEMES
   const libertyThemes = isMax ? [...LIBERTY_THEMES, ...MAX_ONLY_LIBERTY_THEMES] : LIBERTY_THEMES
-  const THEMES = brand === 'liberty' ? libertyThemes : BEB_THEMES
+  const THEMES = brand === 'liberty' ? libertyThemes : bebThemes
   const [profile, setProfile] = useState({
     name: user?.name || '',
     phone: user?.phone || '',
@@ -438,12 +442,21 @@ export default function Settings() {
       <CollapsibleCard storageKey="settings-appearance" title="Appearance">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
           {THEMES.map(t => {
-            // The Bench tile renders a real brand preview — V1 favicon
-            // mark + Fraunces wordmark on a paper-warm card — so the
-            // picker actually shows what selecting it does. The other
-            // tiles keep the generic color-dot treatment.
-            if (t.id === 'liberty-bench') {
+            // The Bench tiles preview the actual iOS-style app mark
+            // rendered against this variant's chrome color (walnut for
+            // Liberty, patina for BEB), so the picker shows both *what*
+            // selecting it does and *which* brand variant you're on.
+            if (t.id === 'liberty-bench' || t.id === 'bench') {
               const active = theme === t.id
+              const isLibertyVariant = t.id === 'liberty-bench'
+              // Squircle gradient previews the variant's sidebar chrome.
+              const chromeStop0 = isLibertyVariant ? '#7A4A28' : '#3D7383'
+              const chromeStop1 = isLibertyVariant ? '#1A0E08' : '#0F2E3A'
+              // Unique def ids per variant — both variants don't appear
+              // in the same picker (themes are brand-scoped) but the
+              // defs are document-global so we namespace just in case.
+              const bgId = `bench-tile-bg-${t.id}`
+              const brassId = `bench-tile-brass-${t.id}`
               return (
                 <button key={t.id} onClick={() => setTheme(t.id)}
                   style={{
@@ -461,19 +474,19 @@ export default function Settings() {
                   <div style={{ width: 36, height: 36, borderRadius: 8, marginBottom: 10, overflow: 'hidden', boxShadow: '0 2px 6px rgba(42,24,16,0.28)' }}>
                     <svg viewBox="0 0 100 100" width="100%" height="100%" aria-hidden="true">
                       <defs>
-                        <radialGradient id="bench-tile-bg" cx="50%" cy="26%" r="80%">
-                          <stop offset="0" stopColor="#7A4A28"/>
-                          <stop offset="100%" stopColor="#1A0E08"/>
+                        <radialGradient id={bgId} cx="50%" cy="26%" r="80%">
+                          <stop offset="0" stopColor={chromeStop0}/>
+                          <stop offset="100%" stopColor={chromeStop1}/>
                         </radialGradient>
-                        <linearGradient id="bench-tile-brass" x1="0" y1="0" x2="0" y2="1">
+                        <linearGradient id={brassId} x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0" stopColor="#F0D58A"/>
                           <stop offset="0.45" stopColor="#C9A55C"/>
                           <stop offset="1" stopColor="#7A5A2C"/>
                         </linearGradient>
                       </defs>
-                      <rect width="100" height="100" rx="22" fill="url(#bench-tile-bg)"/>
-                      <text x="50" y="72" textAnchor="middle" fontFamily="Fraunces, Georgia, serif" fontWeight="700" fontSize="68" fill="url(#bench-tile-brass)">B</text>
-                      <line x1="22" y1="84" x2="78" y2="84" stroke="url(#bench-tile-brass)" strokeWidth="2" strokeLinecap="round" opacity="0.8"/>
+                      <rect width="100" height="100" rx="22" fill={`url(#${bgId})`}/>
+                      <text x="50" y="72" textAnchor="middle" fontFamily="Fraunces, Georgia, serif" fontWeight="700" fontSize="68" fill={`url(#${brassId})`}>B</text>
+                      <line x1="22" y1="84" x2="78" y2="84" stroke={`url(#${brassId})`} strokeWidth="2" strokeLinecap="round" opacity="0.8"/>
                     </svg>
                   </div>
                   <div style={{

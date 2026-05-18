@@ -63,7 +63,7 @@ const THEME_BOOT_SCRIPT = `
     // browsers use the last matching rel=icon, so this wins without
     // us having to remove the originals. The runtime theme-sync effect
     // in lib/context.tsx adds/removes this same element on toggle.
-    if (cls === 'theme-liberty-bench') {
+    if (cls === 'theme-liberty-bench' || cls === 'theme-bench') {
       var l = document.createElement('link');
       l.id = ${JSON.stringify(BENCH_FAVICON_LINK_ID)};
       l.rel = 'icon';

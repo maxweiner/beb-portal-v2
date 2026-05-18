@@ -450,11 +450,17 @@ tr:last-child td { border-bottom: none; }
   --gradient-primary-hover: linear-gradient(135deg, #2C2B5E 0%, #3C3B6E 100%);
 }
 
-/* ── THE BENCH (Walnut/Brass/Paper, Liberty-side, Max-only) ──
-   Workshop-warm palette: walnut chrome, brass accents, paper bodies,
-   patina teal for secondary links. Fraunces serif on headings + card
-   titles, Inter for UI, JetBrains Mono for tabular data (e.g. times +
-   amounts). Picker is gated to max@bebllp.com in Settings.tsx for now. */
+/* ── THE BENCH (Max-only, paired across both brands) ──
+   Workshop-warm palette: walnut / leather / brass / paper-warm / patina.
+   Two variants share the palette but rearrange chrome + primary accent
+   so a brand switch reads as a real visual change without losing the
+   "Bench" feel:
+     • .theme-liberty-bench → walnut chrome, brass primary, patina secondary
+     • .theme-bench         → patina chrome, patina primary, brass secondary
+   Both swap the body font to Inter + headings to Fraunces + tabular data
+   to JetBrains Mono. setBrand() in lib/context.tsx auto-pairs them when
+   the brand toggle flips, so toggling Liberty↔BEB while on Bench stays
+   on Bench. Picker tiles are gated to max@bebllp.com in Settings.tsx. */
 .theme-liberty-bench {
   --cream: #FAF6EB;
   --cream2: #F1E7D2;
@@ -485,26 +491,75 @@ tr:last-child td { border-bottom: none; }
   --gradient-primary-hover: linear-gradient(135deg, #9C7E3E 0%, #C9A55C 100%);
 }
 
-/* Body font swap — Inter for UI density, replaces Lato when Bench is active. */
+/* BEB-side Bench: same five colors, chrome flips to patina-teal and the
+   primary/secondary accents swap (brass ↔ patina). Sidebar going from
+   warm walnut to cool patina is the dominant "I switched brands" cue. */
+.theme-bench {
+  --cream: #FAF6EB;
+  --cream2: #F1E7D2;
+  --pearl: #D4C6A3;
+  --fog: #B8A887;
+  --silver: #8B7558;
+  --mist: #6B5544;
+  --ash: #4A2C18;
+  --ink: #2A1810;
+  --green: #1F4E5F;
+  --green2: #163E4D;
+  --green-dark: #0F2E3A;
+  --green3: #A8C7CF;
+  --green-pale: #E5EEF1;
+  --red: #9B3B2A;
+  --red-pale: #FAEEEA;
+  --amber: #B07A2C;
+  --amber-pale: #FBF1DD;
+  --blue: #C9A55C;
+  --blue-pale: #F7EFD9;
+  --page-bg: #F4EFE0;
+  --sidebar-bg: #0F2E3A;
+  --sidebar-active: #1F4E5F;
+  --sidebar-text: rgba(241,231,210,.82);
+  --sidebar-muted: rgba(241,231,210,.34);
+  --card-bg: #FFFFFF;
+  --gradient-primary: linear-gradient(135deg, #1F4E5F 0%, #3D7383 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #163E4D 0%, #1F4E5F 100%);
+}
+
+/* Body font swap — Inter for UI density, replaces Lato when either
+   Bench variant is active. */
+.theme-bench,
+.theme-bench body,
 .theme-liberty-bench,
 .theme-liberty-bench body {
   font-family: 'Inter', -apple-system, sans-serif;
 }
 
-/* Headings + card titles use Fraunces. Scoping to common heading
-   selectors + .card-title catches most surfaces without invading
-   buttons / pills / table cells. Adjust as needed if a page looks off. */
+/* Headings + card titles + sidebar (logo, nav items, footer) use
+   Fraunces. The sidebar selector is what carries the brand into the
+   left rail — without it the chrome stayed Lato/Inter while the rest
+   of the page sat in serif, which read as a different app glued onto
+   Bench colors. */
+.theme-bench h1,
+.theme-bench h2,
+.theme-bench h3,
+.theme-bench h4,
+.theme-bench .card-title,
+.theme-bench .sidebar,
 .theme-liberty-bench h1,
 .theme-liberty-bench h2,
 .theme-liberty-bench h3,
 .theme-liberty-bench h4,
-.theme-liberty-bench .card-title {
+.theme-liberty-bench .card-title,
+.theme-liberty-bench .sidebar {
   font-family: 'Fraunces', Georgia, serif;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 
 /* Tabular numerics — times, amounts, IDs — in mono. */
+.theme-bench .mono,
+.theme-bench .tabular,
+.theme-bench code,
+.theme-bench pre,
 .theme-liberty-bench .mono,
 .theme-liberty-bench .tabular,
 .theme-liberty-bench code,

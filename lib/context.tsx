@@ -472,9 +472,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const currentTheme = themeRef.current
     let newTheme = currentTheme
     if (b === 'liberty' && !currentTheme.startsWith('liberty')) {
-      newTheme = (localStorage.getItem('beb-liberty-theme') as Theme) || LIBERTY_DEFAULT_THEME
+      // Bench-pair: BEB Bench → Liberty Bench (don't fall through to the
+      // cached Liberty theme — toggling brand while on Bench should keep
+      // you on Bench).
+      newTheme = currentTheme === 'bench'
+        ? 'liberty-bench'
+        : (localStorage.getItem('beb-liberty-theme') as Theme) || LIBERTY_DEFAULT_THEME
     } else if (b === 'beb' && currentTheme.startsWith('liberty')) {
-      newTheme = (localStorage.getItem('beb-beb-theme') as Theme) || 'original'
+      // Bench-pair: Liberty Bench → BEB Bench.
+      newTheme = currentTheme === 'liberty-bench'
+        ? 'bench'
+        : (localStorage.getItem('beb-beb-theme') as Theme) || 'original'
     }
     if (b === 'liberty') localStorage.setItem('beb-beb-theme', currentTheme)
     if (b === 'beb') localStorage.setItem('beb-liberty-theme', currentTheme)
@@ -579,7 +587,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // the last matching rel=icon, so adding the element (rather than
     // mutating the originals) keeps Next's metadata.icons untouched.
     const existing = document.getElementById(BENCH_FAVICON_LINK_ID) as HTMLLinkElement | null
-    if (themeClass === 'theme-liberty-bench') {
+    if (themeClass === 'theme-liberty-bench' || themeClass === 'theme-bench') {
       if (!existing) {
         const link = document.createElement('link')
         link.id = BENCH_FAVICON_LINK_ID
