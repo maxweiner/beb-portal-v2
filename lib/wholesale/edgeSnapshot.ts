@@ -40,7 +40,10 @@ export function buildSnapshot({ item, vendor, stones }: SnapshotInput): EdgeBatc
     item_number: item.item_number,
     category: item.category,
     description: buildDescription({ item, primary, vendor }),
-    vendor_name: vendor?.company_name ?? null,
+    // Vendor is scrubbed from Edge sends entirely — CSV (edgeCsv.ts),
+    // public batch page, and now the snapshot itself. Kept as a nullable
+    // field on the type for legacy snapshots; new sends store null.
+    vendor_name: null,
     vendor_stock_number: item.vendor_stock_number ?? null,
     cost_cents: item.cost_cents ?? null,
     edge_price_cents: item.edge_price_cents ?? null,
@@ -139,6 +142,8 @@ function buildDescription({
     s = `${s} with ${count}${ct}${shape}${primary.stone_type}`.trim()
   }
   if (item.jewelry_designer) s = `${s} by ${item.jewelry_designer}`
-  if (vendor?.company_name && !s) s = vendor.company_name
+  // Vendor company_name is intentionally NOT used as a fallback — Edge
+  // sends are vendor-free. If the auto-compose is empty the caller
+  // falls back to item_number in the public renderer.
   return s || null
 }

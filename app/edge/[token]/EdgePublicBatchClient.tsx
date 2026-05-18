@@ -147,7 +147,7 @@ function ItemCard({ item, batchCode }: { item: PublicItem; batchCode: string }) 
           {s.description || s.item_number}
         </div>
         <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>
-          {[s.vendor_name, s.metal_karat, s.metal_color, s.metal_type].filter(Boolean).join(' · ')}
+          {[s.metal_karat, s.metal_color, s.metal_type].filter(Boolean).join(' · ')}
         </div>
         {s.stones_summary && (
           <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>💎 {s.stones_summary}</div>
