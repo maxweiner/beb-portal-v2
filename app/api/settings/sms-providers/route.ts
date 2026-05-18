@@ -41,21 +41,29 @@ async function authorize(req: Request) {
   return ok ? { sb, user } : null
 }
 
+// .maybeSingle() returns data=null when >1 row exists, which silently
+// hid duplicated settings rows from the UI. Take limit(1) instead so a
+// duplicated key still loads something.
+async function readSetting(sb: any, key: string): Promise<any> {
+  const { data } = await sb.from('settings').select('value').eq('key', key).limit(1)
+  return data?.[0]?.value ?? null
+}
+
 export async function GET(req: Request) {
   const session = await authorize(req)
   if (!session) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   const sb = session.sb
 
-  const [providersRow, telnyxRow, twilioRow, smsRow] = await Promise.all([
-    sb.from('settings').select('value').eq('key', 'sms_providers').maybeSingle(),
-    sb.from('settings').select('value').eq('key', 'telnyx').maybeSingle(),
-    sb.from('settings').select('value').eq('key', 'twilio').maybeSingle(),
-    sb.from('settings').select('value').eq('key', 'sms').maybeSingle(),
+  const [providersVal, telnyxVal, twilioVal, smsVal] = await Promise.all([
+    readSetting(sb, 'sms_providers'),
+    readSetting(sb, 'telnyx'),
+    readSetting(sb, 'twilio'),
+    readSetting(sb, 'sms'),
   ])
 
-  const providers: any = providersRow.data?.value || { internal: 'twilio', marketing: 'twilio' }
-  const telnyx: any = telnyxRow.data?.value || {}
-  const twilio: any = twilioRow.data?.value || smsRow.data?.value || {}
+  const providers: any = providersVal || { internal: 'twilio', marketing: 'twilio' }
+  const telnyx: any = telnyxVal || {}
+  const twilio: any = twilioVal || smsVal || {}
 
   return NextResponse.json({
     providers: {
@@ -101,9 +109,8 @@ export async function PUT(req: Request) {
   if (body.telnyx) {
     // Merge — never wipe a field by omission. Only set fields the
     // client actually sent. Empty string clears.
-    const { data: existing } = await sb
-      .from('settings').select('value').eq('key', 'telnyx').maybeSingle()
-    const merged: any = { ...(existing?.value || {}) }
+    const existing = await readSetting(sb, 'telnyx')
+    const merged: any = { ...(existing || {}) }
     for (const k of ['apiKey', 'publicKey', 'fromNumber', 'messagingProfileId']) {
       if (k in body.telnyx) merged[k] = body.telnyx[k] || ''
     }
@@ -115,9 +122,8 @@ export async function PUT(req: Request) {
   }
 
   if (body.twilio) {
-    const { data: existing } = await sb
-      .from('settings').select('value').eq('key', 'twilio').maybeSingle()
-    const merged: any = { ...(existing?.value || {}) }
+    const existing = await readSetting(sb, 'twilio')
+    const merged: any = { ...(existing || {}) }
     for (const k of ['accountSid', 'authToken', 'fromNumber']) {
       if (k in body.twilio) merged[k] = body.twilio[k] || ''
     }
