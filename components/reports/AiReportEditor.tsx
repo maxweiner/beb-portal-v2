@@ -7,7 +7,7 @@
 // The chat extracts any "DRAFT: ..." line from Claude's reply and
 // shows it as a one-click "Use this draft" button below the message.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import type { AiReportRow, Brand, ScheduleType, TimeWindow } from '@/lib/ai-reports/types'
@@ -48,6 +48,10 @@ export default function AiReportEditor({ report, onClose, onSaved }: Props) {
   const [chat, setChat] = useState<ChatMsg[]>([])
   const [chatInput, setChatInput] = useState('')
   const [chatBusy, setChatBusy] = useState(false)
+
+  // Voice dictation — appends spoken phrases into the target field.
+  const promptMic = useDictation(chunk => setPrompt(p => (p ? p + ' ' : '') + chunk))
+  const chatMic = useDictation(chunk => setChatInput(p => (p ? p + ' ' : '') + chunk))
 
   // Save / preview state
   const [busy, setBusy] = useState(false)
@@ -219,11 +223,22 @@ export default function AiReportEditor({ report, onClose, onSaved }: Props) {
           </Section>
 
           <Section title="What should Claude write about?">
-            <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={6}
-              placeholder='e.g. "Summarize last week. Lead with total spend, call out top 3 stores, end with anything unusual."'
-              style={{ width: '100%', fontFamily: 'inherit', resize: 'vertical' }} />
+            <div style={{ position: 'relative' }}>
+              <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={6}
+                placeholder='e.g. "Summarize last week. Lead with total spend, call out top 3 stores, end with anything unusual."'
+                style={{ width: '100%', fontFamily: 'inherit', resize: 'vertical', paddingRight: 40 }} />
+              <div style={{ position: 'absolute', top: 6, right: 6 }}>
+                <MicButton
+                  listening={promptMic.listening}
+                  supported={promptMic.supported}
+                  onClick={promptMic.toggle}
+                  title="Dictate prompt"
+                />
+              </div>
+            </div>
             <div style={{ fontSize: 11, color: 'var(--mist)', marginTop: 4 }}>
               Use the chat on the right to brainstorm — Claude will offer drafts you can copy into this field.
+              {promptMic.supported && ' Tap 🎤 to dictate.'}
             </div>
           </Section>
 
@@ -427,20 +442,106 @@ export default function AiReportEditor({ report, onClose, onSaved }: Props) {
             )}
           </div>
 
-          <textarea
-            value={chatInput}
-            onChange={e => setChatInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void sendChat() } }}
-            placeholder="Ask Claude to help draft your prompt…"
-            rows={2}
-            style={{ width: '100%', fontFamily: 'inherit', resize: 'vertical' }}
-          />
-          <button onClick={sendChat} disabled={chatBusy || !chatInput.trim()} className="btn-primary btn-sm" style={{ marginTop: 6 }}>
-            {chatBusy ? 'Sending…' : 'Send'}
-          </button>
+          <div style={{ position: 'relative' }}>
+            <textarea
+              value={chatInput}
+              onChange={e => setChatInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void sendChat() } }}
+              placeholder={chatMic.listening ? 'Listening… speak now' : 'Ask Claude to help draft your prompt…'}
+              rows={2}
+              style={{ width: '100%', fontFamily: 'inherit', resize: 'vertical', paddingRight: 40 }}
+            />
+            <div style={{ position: 'absolute', top: 6, right: 6 }}>
+              <MicButton
+                listening={chatMic.listening}
+                supported={chatMic.supported}
+                onClick={chatMic.toggle}
+                title="Dictate to Claude"
+              />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'center' }}>
+            <button onClick={sendChat} disabled={chatBusy || !chatInput.trim()} className="btn-primary btn-sm">
+              {chatBusy ? 'Sending…' : 'Send'}
+            </button>
+            {chatMic.listening && (
+              <span style={{ fontSize: 11, color: 'var(--ruby, #dc2626)', fontWeight: 600 }}>● Listening</span>
+            )}
+          </div>
         </div>
       </div>
     </div>
+  )
+}
+
+// Browser-native voice input via the Web Speech API. Chrome / Edge / Safari support it;
+// Firefox does not — the button is hidden when unsupported.
+function useDictation(append: (chunk: string) => void) {
+  const [listening, setListening] = useState(false)
+  const [supported, setSupported] = useState(false)
+  const recRef = useRef<unknown>(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const w = window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown }
+    setSupported(!!(w.SpeechRecognition || w.webkitSpeechRecognition))
+  }, [])
+
+  function toggle() {
+    if (typeof window === 'undefined') return
+    const w = window as unknown as { SpeechRecognition?: new () => unknown; webkitSpeechRecognition?: new () => unknown }
+    const SR = w.SpeechRecognition || w.webkitSpeechRecognition
+    if (!SR) return
+    const current = recRef.current as { stop: () => void } | null
+    if (current) { current.stop(); return }
+    const rec = new SR() as {
+      lang: string; interimResults: boolean; continuous: boolean
+      onresult: (e: { resultIndex: number; results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }> }) => void
+      onend: () => void; onerror: () => void; start: () => void; stop: () => void
+    }
+    rec.lang = 'en-US'
+    rec.interimResults = false
+    rec.continuous = true
+    rec.onresult = (e) => {
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i]
+        if (r.isFinal) append(r[0].transcript.trim())
+      }
+    }
+    rec.onend = () => { recRef.current = null; setListening(false) }
+    rec.onerror = () => { recRef.current = null; setListening(false) }
+    recRef.current = rec
+    rec.start()
+    setListening(true)
+  }
+
+  return { listening, supported, toggle }
+}
+
+function MicButton({ listening, supported, onClick, title }: {
+  listening: boolean; supported: boolean; onClick: () => void; title: string
+}) {
+  if (!supported) return null
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={listening ? 'Stop dictation' : title}
+      aria-label={listening ? 'Stop dictation' : title}
+      style={{
+        border: '1px solid var(--pearl)',
+        background: listening ? 'var(--ruby, #dc2626)' : '#fff',
+        color: listening ? '#fff' : 'var(--ink)',
+        borderRadius: 6,
+        padding: '4px 8px',
+        fontSize: 14,
+        lineHeight: 1,
+        cursor: 'pointer',
+        animation: listening ? 'beb-mic-pulse 1.2s ease-in-out infinite' : undefined,
+      }}
+    >
+      {listening ? '⏺︎' : '🎤'}
+    </button>
   )
 }
 
