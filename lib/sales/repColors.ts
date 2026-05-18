@@ -26,7 +26,7 @@ export const REP_COLOR_PALETTE = [
  *  hue without disturbing anyone else's assignment. Add an entry
  *  here when a rep needs a hand-picked color. */
 const NAME_COLOR_OVERRIDES: Record<string, string> = {
-  tanya: '#EAB308', // yellow
+  tanya: '#CA8A04', // yellow (darker — keeps white state labels readable)
 }
 
 export interface RepLike {
